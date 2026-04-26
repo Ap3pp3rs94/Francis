@@ -811,7 +811,13 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
 
     failed_operation = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.continuity.failed"})
     assert failed_operation.status_code == 200
-    assert failed_operation.json()["status"] == "failed"
+    failed_operation_body = failed_operation.json()
+    assert failed_operation_body["status"] == "failed"
+    assert failed_operation_body["memory_receipt"]["operation_status"] == "failed"
+    assert failed_operation_body["memory_receipt"]["references"] == {
+        "mission_id": mission_id,
+        "operation_id": operation_id,
+    }
 
     ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "test.continuity.failed"})
     assert ticked.status_code == 200
@@ -850,6 +856,18 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert body["briefing"]["failed_preview"][0]["latest_history_event"] == "recovery_review"
     assert body["briefing"]["failed_preview"][0]["current_task"]["operation_id"] == operation_id
     assert body["briefing"]["failed_preview"][0]["current_task"]["handoff_action"] == "retry_or_deadletter"
+    assert body["briefing"]["failed_preview"][0]["memory_receipt_count"] >= 1
+    assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["mission_id"] == mission_id
+    assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["operation_id"] == operation_id
+    assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["operation_status"] == "failed"
+    failed_receipts = [
+        item
+        for item in body["briefing"]["memory_receipts"]
+        if item.get("mission_id") == mission_id
+        and item.get("operation_id") == operation_id
+        and item.get("operation_status") == "failed"
+    ]
+    assert failed_receipts
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
     assert body["briefing"]["readiness"]["blocked_criteria_ids"] == ["idempotent_ticks", "deadletter_cleanly"]
     assert body["briefing"]["readiness"]["attention_criteria_ids"] == ["deadletter_cleanly"]
@@ -869,6 +887,9 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     }
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["unresolved_failed_ids"] == [mission_id]
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["replacement_reviewed_failed_ids"] == []
+    assert mission_readiness_by_id["session_continuity"]["evidence"]["memory_receipt_count"] >= 1
+    assert mission_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_memory_receipts"]
+    assert operation_id in mission_readiness_by_id["session_continuity"]["evidence"]["memory_receipt_operation_ids"]
 
 
 def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tmp_path: Path) -> None:

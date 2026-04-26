@@ -363,8 +363,9 @@ As of `2026-04-25`, the mission continuity/world-state projection now carries
 those terminal mission operation receipts as bounded memory evidence. Stage 3
 mission readiness evidence exposes sampled missions with memory receipts,
 receipt-backed operation and trace ids, and memory-backed reconstruction context;
-mission briefing/recent-completion payloads expose the latest receipt without
-changing readiness status semantics or creating new execution behavior.
+mission briefing failed-preview and recent-completion payloads expose the latest
+receipt without changing readiness status semantics or creating new execution
+behavior.
 
 As of `2026-04-26`, mission detail projections carry the same terminal-operation
 memory receipts without requiring a world-state or briefing lookup. The
@@ -2960,6 +2961,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 failed mission detail me
 - `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\memory\mission_receipts.py src\francis\api\routes\missions.py tests\test_api_missions.py`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\memory\mission_receipts.py src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed mission continuity receipt projection slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache tests\test_api_continuity.py`
+  Result: `1 file left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache tests\test_api_continuity.py`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
