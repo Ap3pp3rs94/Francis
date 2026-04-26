@@ -3259,7 +3259,13 @@ handoff slice:
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m ruff format --check src\francis\operations\runtime.py tests\test_api_operations.py tests\test_mission_receipts.py`
   Result: `passed`
-- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_mission_receipts.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m mypy src`
+  Result: `Success: no issues found in 475 source files`
+- `.\scripts\check.ps1`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
