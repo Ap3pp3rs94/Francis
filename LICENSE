@@ -28,6 +28,21 @@ transferable, and sublicensable license to use, reproduce, modify, distribute,
 prepare derivative works from, publicly display, publicly perform, commercialize,
 and otherwise exploit the submitted materials for any purpose.
 
+Contributor ownership consideration: only clean additions that Austin Peppers
+fully accepts and incorporates into Francis, and that materially improve Francis
+by creating measurable build momentum or acceleration, are eligible for
+ownership consideration of up to one percent (1%) of Francis project ownership.
+Submission, review, discussion, partial acceptance, experimental use, temporary
+use, or rejection of a contribution does not qualify for ownership
+consideration. Contributions that create advantages beyond Austin Peppers' own
+current implementation capacity may open a broader ownership conversation. No
+ownership right, equity interest, partnership, employment relationship,
+compensation obligation, or transfer is created automatically by submitting a
+contribution, by full acceptance of a contribution, or by this public license
+text. Any ownership grant, transfer, exception, or compensation arrangement must
+be documented in a separate written agreement signed by Austin Peppers and the
+contributor.
+
 Third-party dependencies, vendored materials, and external packages referenced by
 Francis remain governed by their own licenses. This license does not grant rights
 to those third-party materials, and third-party licenses do not grant rights to
