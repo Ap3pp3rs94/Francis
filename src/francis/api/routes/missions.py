@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from francis.api.routes._operator_posture import posture_write_guard
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
 from francis.memory.mission_receipts import mission_operation_receipts
 from francis.missions import runtime as mission_runtime
@@ -14,6 +15,8 @@ from francis.missions.store import MissionCreateRequest
 from francis.operations import runtime as operations_runtime
 
 router = APIRouter()
+
+_MISSION_WRITE_SCOPE = "missions.write"
 
 
 def _safe_str(value: Any) -> str:
@@ -39,6 +42,29 @@ def _queue_run_request(actor: Any, note: Any, limit: int) -> dict[str, object]:
 
 def _mission_write_posture_guard(action_label: str) -> str:
     return posture_write_guard(action_label)
+
+
+def _mission_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_MISSION_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_advancing_missions",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _stage_timestamp(value: Any) -> str:
@@ -1275,11 +1301,28 @@ def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
 
 
 @router.post("/run_once")
-def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
+def run_queue_once(request: Request, payload: MissionRunOnceIn) -> dict[str, object]:
     safe_limit = max(1, min(int(payload.limit), 5000))
     actor = _safe_str(payload.actor).strip() or "missions.runner"
     note = _safe_str(payload.note).strip() or "mission_queue_run_once"
-    request = _queue_run_request(actor, note, safe_limit)
+    run_request = _queue_run_request(actor, note, safe_limit)
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        denied = _permission_denied(permission)
+        return {
+            **denied,
+            "items": [],
+            "failed": [],
+            "deadletter": [],
+            "total": 0,
+            "applied": 0,
+            "advanced": 0,
+            "results": [],
+            "processed": 0,
+            "errors": [{"error": denied["error"], "governance": denied["governance"]}],
+            "counts": {},
+            "request": run_request,
+        }
     blocked_reason = _mission_write_posture_guard("running the mission queue")
     if blocked_reason:
         return {
@@ -1296,11 +1339,11 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "counts": {},
             "status": "blocked",
             "error": blocked_reason,
-            "request": request,
+            "request": run_request,
         }
     try:
         result = mission_runtime.run_queue_once(limit=safe_limit, actor=actor, note=note)
-        result["request"] = request
+        result["request"] = run_request
         result_items = result.get("results") if isinstance(result.get("results"), list) else []
         projection_cache: dict[str, dict[str, Any]] = {}
         for item in result_items:
@@ -1329,7 +1372,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "counts": {},
             "status": "failed",
             "error": error,
-            "request": request,
+            "request": run_request,
         }
 
 
@@ -1495,7 +1538,10 @@ def replace_mission(mission_id: str, payload: MissionReplaceIn) -> dict[str, obj
 
 
 @router.post("/{mission_id}/advance")
-def advance_mission(mission_id: str, payload: MissionAdvanceIn) -> dict[str, object]:
+def advance_mission(mission_id: str, request: Request, payload: MissionAdvanceIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return {**_permission_denied(permission), "applied": False}
     blocked_reason = _mission_write_posture_guard("advancing a mission")
     if blocked_reason:
         return {"ok": False, "applied": False, "error": blocked_reason, "status": "blocked"}

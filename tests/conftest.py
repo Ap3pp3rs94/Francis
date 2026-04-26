@@ -43,6 +43,38 @@ PLUGIN_WRITE_TEST_ACTORS = (
     "chat_ui.plugins",
     "plugin_browser_api",
 )
+MISSION_WRITE_TEST_SCOPE = "missions.write"
+MISSION_WRITE_TEST_ACTORS = (
+    "test.missions.write",
+    "test.missions.queue",
+    "test.missions.dependencies",
+    "test.missions.advance",
+    "test.continuity.briefing",
+    "test.continuity.stage3.ready",
+    "test.continuity.failed",
+    "test.system.briefing",
+    "test.system.orb",
+    "test.system.operator_mode",
+    "tests",
+    "chat_ui.orb",
+)
+
+
+def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], scope: str) -> None:
+    for actor in actors:
+        scopes = policy.setdefault(actor, [])
+        if scope not in scopes:
+            scopes.append(scope)
+
+
+def _test_actor_scope_policy() -> dict[str, list[str]]:
+    policy: dict[str, list[str]] = {APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE]}
+    _add_actor_scopes(policy, TRUST_WRITE_TEST_ACTORS, TRUST_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, CREDENTIAL_WRITE_TEST_ACTORS, CREDENTIAL_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, SYSTEM_WRITE_TEST_ACTORS, SYSTEM_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, PLUGIN_WRITE_TEST_ACTORS, PLUGIN_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, MISSION_WRITE_TEST_ACTORS, MISSION_WRITE_TEST_SCOPE)
+    return policy
 
 
 def _slug(value: str, *, default: str = "case") -> str:
@@ -100,13 +132,5 @@ def tmp_path(request: pytest.FixtureRequest, tmp_path_factory: RepoTmpPathFactor
 def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "FRANCIS_API_ACTOR_SCOPES",
-        json.dumps(
-            {
-                APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE],
-                **{actor: [TRUST_WRITE_TEST_SCOPE] for actor in TRUST_WRITE_TEST_ACTORS},
-                **{actor: [CREDENTIAL_WRITE_TEST_SCOPE] for actor in CREDENTIAL_WRITE_TEST_ACTORS},
-                **{actor: [SYSTEM_WRITE_TEST_SCOPE] for actor in SYSTEM_WRITE_TEST_ACTORS},
-                **{actor: [PLUGIN_WRITE_TEST_SCOPE] for actor in PLUGIN_WRITE_TEST_ACTORS},
-            }
-        ),
+        json.dumps(_test_actor_scope_policy()),
     )

@@ -170,6 +170,16 @@ backend permission denials as mutation errors instead of successful lifecycle
 responses. This is another narrow route integration, not a claim of API-wide
 permission enforcement.
 
+As of `2026-04-26`, mission execution-capable routes are also wired to the API
+permission gate. `POST /missions/run_once` and
+`POST /missions/{mission_id}/advance` deny before reconciling or advancing
+mission execution unless the request actor is present in the server-side
+`FRANCIS_API_ACTOR_SCOPES` policy with the `missions.write` scope. Mission read
+surfaces and mission declaration/update/recovery routes are unchanged in this
+slice and remain governed by their existing operator-posture, history, and
+receipt contracts. This is a narrow execution-gate integration for Stage 3
+mission flow, not a claim of API-wide mission permission enforcement.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2938,6 +2948,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `45 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` mission execution permission-gate slice:
+
+- `python -m ruff check --no-cache src\francis\api\routes\missions.py tests\conftest.py tests\test_api_missions_permission_gate.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\api\routes\missions.py tests\conftest.py tests\test_api_missions_permission_gate.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions_permission_gate.py tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `10 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
 
 Latest targeted validation for the `2026-04-26` chat mission ingress first-operation slice:
 
