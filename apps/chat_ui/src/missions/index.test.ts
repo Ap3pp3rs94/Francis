@@ -491,6 +491,39 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
   }
 });
 
+test("MissionsClient.advance preserves permission-gate denial details", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      ok: false,
+      applied: false,
+      status: "denied",
+      error: "api_permission_denied",
+      governance: {
+        gate: "permission_gate",
+        reason: "missing_actor",
+        next_step: "configure_actor_scope_before_advancing_missions",
+        evidence: { required_scope_count: 1 },
+      },
+    }),
+  );
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.advance("mission_denied", {}, { timeoutMs: 50 });
+
+    assert.equal(response.ok, false);
+    assert.equal(response.applied, false);
+    assert.equal(response.status, "denied");
+    assert.equal(response.error, "api_permission_denied");
+    assert.equal(response.governance?.gate, "permission_gate");
+    assert.equal(response.governance?.reason, "missing_actor");
+    assert.equal(response.governance?.next_step, "configure_actor_scope_before_advancing_missions");
+    assert.deepEqual(response.governance?.evidence, { required_scope_count: 1 });
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("MissionsClient.replace posts a bounded replacement declaration and preserves source/replacement envelopes", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {
@@ -1058,6 +1091,62 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.status, "failed");
     assert.deepEqual(response.request, { actor: "chat_ui.operations", limit: 1 });
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("MissionsClient.runOnce preserves permission-gate denial details", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      ok: false,
+      status: "denied",
+      error: "api_permission_denied",
+      items: [],
+      failed: [],
+      deadletter: [],
+      total: 0,
+      applied: 0,
+      advanced: 0,
+      processed: 0,
+      results: [],
+      errors: [
+        {
+          error: "api_permission_denied",
+          governance: {
+            gate: "permission_gate",
+            reason: "missing_scopes",
+            next_step: "configure_actor_scope_before_advancing_missions",
+          },
+        },
+      ],
+      governance: {
+        gate: "permission_gate",
+        reason: "missing_scopes",
+        next_step: "configure_actor_scope_before_advancing_missions",
+        evidence: { required_scope_count: 1, actor_scope_count: 0 },
+      },
+      request: { actor: "chat_ui.orb", limit: 6 },
+    }),
+  );
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.runOnce({ actor: "chat_ui.orb", limit: 6 }, { timeoutMs: 50 });
+
+    assert.equal(response.ok, false);
+    assert.equal(response.status, "denied");
+    assert.equal(response.error, "api_permission_denied");
+    assert.equal(response.governance?.gate, "permission_gate");
+    assert.equal(response.governance?.reason, "missing_scopes");
+    assert.equal(response.governance?.next_step, "configure_actor_scope_before_advancing_missions");
+    assert.deepEqual(response.governance?.evidence, { required_scope_count: 1, actor_scope_count: 0 });
+    assert.equal(response.errors?.[0]?.error, "api_permission_denied");
+    assert.deepEqual(response.errors?.[0]?.governance, {
+      gate: "permission_gate",
+      reason: "missing_scopes",
+      next_step: "configure_actor_scope_before_advancing_missions",
+    });
   } finally {
     restoreFetch();
   }

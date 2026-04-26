@@ -12,7 +12,14 @@ import {
   missionRecoveryTargetId,
   presentMissionQueue,
 } from "./missions";
-import type { MissionCurrentTask, MissionDetail, MissionLoopState, MissionQueueItem, MissionReceiptSummary } from "./missions";
+import type {
+  MissionCurrentTask,
+  MissionDetail,
+  MissionGovernanceDecision,
+  MissionLoopState,
+  MissionQueueItem,
+  MissionReceiptSummary,
+} from "./missions";
 import {
   buildMemoryEvidenceQueries,
   memoryEvidenceQueryKey,
@@ -179,6 +186,19 @@ function normalizeBaseUrl(url: string): string {
 
 function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
+}
+
+function missionGovernanceNotice(governance: MissionGovernanceDecision | undefined, fallback = ""): string {
+  if (!governance) return fallback;
+  const gate = safeString(governance.gate).trim();
+  const reason = safeString(governance.reason).trim();
+  const nextStep = safeString(governance.next_step).trim();
+  const parts = [
+    gate ? `gate=${gate}` : "",
+    reason ? `reason=${reason}` : "",
+    nextStep ? `next=${nextStep}` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" / ") : fallback;
 }
 
 function safeNumber(v: unknown, fallback = 0): number {
@@ -4329,9 +4349,14 @@ function SystemPanel(props: {
         const approvalId = safeString(responseCurrentTask?.approval_id).trim() || operationApprovalId(resolvedOperation);
         const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
         if (!response.ok) {
+          const governanceText = missionGovernanceNotice(response.governance);
           setMissionActionNotice({
             tone: "error",
-            text: response.error || response.message || `Mission advance failed with status ${nextStatus}.`,
+            text:
+              governanceText ||
+              response.error ||
+              response.message ||
+              `Mission advance failed with status ${nextStatus}.`,
           });
           return;
         }
@@ -4460,27 +4485,39 @@ function SystemPanel(props: {
           runLedgerCount: item.run_ledger_count,
           message: item.message,
         })),
-        errors: (response.errors ?? []).slice(0, 4).map((item) => ({
-          missionId: safeString(item.mission_id).trim(),
-          operationId: safeString(item.operation_id).trim() || safeString(item.task_id).trim(),
-          approvalId: safeString(item.approval_id).trim(),
-          action: safeString(item.action).trim(),
-          status: safeString(item.status).trim(),
-          gate: safeString(item.gate).trim(),
-          nextStep: safeString(item.next_step).trim(),
-          traceId: safeString(item.trace_id).trim() || safeString(item.traceId).trim(),
-          runId: safeString(item.run_id).trim() || safeString(item.runId).trim(),
-          artifactDir: safeString(item.artifact_dir).trim() || safeString(item.artifact_path).trim(),
-          error: safeString(item.error).trim(),
-          message: safeString(item.message).trim(),
-        })),
+        errors: (response.errors ?? []).slice(0, 4).map((item) => {
+          const governance = isRecord(item.governance) ? item.governance : {};
+          const governanceDecision: MissionGovernanceDecision = {
+            gate: safeString(governance.gate).trim(),
+            reason: safeString(governance.reason).trim(),
+            next_step: safeString(governance.next_step).trim(),
+          };
+          return {
+            missionId: safeString(item.mission_id).trim(),
+            operationId: safeString(item.operation_id).trim() || safeString(item.task_id).trim(),
+            approvalId: safeString(item.approval_id).trim(),
+            action: safeString(item.action).trim(),
+            status: safeString(item.status).trim(),
+            gate: safeString(item.gate).trim() || safeString(governanceDecision.gate).trim(),
+            nextStep: safeString(item.next_step).trim() || safeString(governanceDecision.next_step).trim(),
+            traceId: safeString(item.trace_id).trim() || safeString(item.traceId).trim(),
+            runId: safeString(item.run_id).trim() || safeString(item.runId).trim(),
+            artifactDir: safeString(item.artifact_dir).trim() || safeString(item.artifact_path).trim(),
+            error: safeString(item.error).trim(),
+            message:
+              safeString(item.message).trim() ||
+              missionGovernanceNotice(governanceDecision) ||
+              missionGovernanceNotice(response.governance),
+          };
+        }),
       });
 
       if (!response.ok) {
+        const governanceText = missionGovernanceNotice(response.governance);
         const firstError = isRecord(response.errors?.[0]) ? safeString(response.errors?.[0]?.error).trim() : "";
         setMissionActionNotice({
           tone: "error",
-          text: response.error || firstError || "Mission queue run did not complete cleanly.",
+          text: governanceText || response.error || firstError || "Mission queue run did not complete cleanly.",
         });
         return;
       }

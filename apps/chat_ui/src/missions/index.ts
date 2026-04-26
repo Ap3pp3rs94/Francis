@@ -234,6 +234,13 @@ export type MissionMemoryReceipt = {
   };
 };
 
+export type MissionGovernanceDecision = {
+  gate?: string;
+  reason?: string;
+  next_step?: string;
+  evidence?: Record<string, unknown>;
+};
+
 export type MissionDetail = {
   ok: boolean;
   mission?: MissionRecord;
@@ -247,6 +254,7 @@ export type MissionDetail = {
   memory_receipts?: MissionMemoryReceipt[];
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
+  governance?: MissionGovernanceDecision;
   error?: string;
 };
 
@@ -287,6 +295,7 @@ export type MissionCreateResponse = {
   memory_receipts?: MissionMemoryReceipt[];
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
+  governance?: MissionGovernanceDecision;
   message?: string;
   error?: string;
 };
@@ -382,6 +391,7 @@ export type MissionAdvanceResponse = {
   memory_receipts?: MissionMemoryReceipt[];
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
+  governance?: MissionGovernanceDecision;
   status?: string;
   message?: string;
   error?: string;
@@ -420,6 +430,7 @@ export type MissionRunOnceResult = {
   history_count?: number;
   linked_operation_count?: number;
   run_ledger_count?: number;
+  governance?: MissionGovernanceDecision;
   message?: string;
 };
 
@@ -438,6 +449,7 @@ export type MissionRunOnceResponse = {
   status?: string;
   error?: string;
   request?: MissionRunOnceRequest;
+  governance?: MissionGovernanceDecision;
 };
 
 export type MissionQueuePresentation = {
@@ -1059,6 +1071,18 @@ function parseMissionMemoryReceipts(raw: unknown): MissionMemoryReceipt[] {
   return raw.map(parseMissionMemoryReceipt).filter((item): item is MissionMemoryReceipt => item !== undefined);
 }
 
+function parseMissionGovernance(raw: unknown): MissionGovernanceDecision | undefined {
+  if (!isRecord(raw)) return undefined;
+  const governance: MissionGovernanceDecision = {
+    gate: safeString(raw.gate, "") || undefined,
+    reason: safeString(raw.reason, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    evidence: isRecord(raw.evidence) ? raw.evidence : undefined,
+  };
+  if (!governance.gate && !governance.reason && !governance.next_step && !governance.evidence) return undefined;
+  return governance;
+}
+
 function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
   if (!isRecord(json)) {
     return {
@@ -1115,6 +1139,7 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
       ? memory_receipt_count
       : memory_receipts.length || undefined,
     latest_memory_receipt,
+    governance: parseMissionGovernance(json.governance),
     error: safeString(json.error, "") || undefined,
   };
 }
@@ -1131,6 +1156,7 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
   | "memory_receipts"
   | "memory_receipt_count"
   | "latest_memory_receipt"
+  | "governance"
 > {
   const parsed = parseMissionDetail(json, missionId);
   return {
@@ -1144,6 +1170,7 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
     memory_receipts: parsed.memory_receipts,
     memory_receipt_count: parsed.memory_receipt_count,
     latest_memory_receipt: parsed.latest_memory_receipt,
+    governance: parsed.governance,
   };
 }
 
@@ -1183,6 +1210,7 @@ function parseMissionCreateResponse(json: unknown): MissionCreateResponse {
     status: safeString(json.status, "") || undefined,
     mission: parseMissionRecord(json.mission),
     ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
+    governance: parseMissionGovernance(json.governance),
     message: safeString(json.message, "") || undefined,
     error: safeString(json.error, "") || undefined,
   };
@@ -1205,6 +1233,7 @@ function parseMissionReplaceResponse(json: unknown): MissionReplaceResponse {
     source_mission: parseMissionRecord(json.source_mission),
     source_queue_item: parseMissionQueueItem(json.source_queue_item),
     ...parseMissionDetailParts(json, safeString(json.replacement_mission_id, "") || safeString(json.mission_id, "")),
+    governance: parseMissionGovernance(json.governance),
     message: safeString(json.message, "") || undefined,
     error: safeString(json.error, "") || undefined,
   };
@@ -1232,6 +1261,7 @@ function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
     run_id: safeString(json.run_id, "") || undefined,
     artifact_dir: safeString(json.artifact_dir, "") || undefined,
     ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
+    governance: parseMissionGovernance(json.governance),
     status: safeString(json.status, "") || undefined,
     message: safeString(json.message, "") || undefined,
     error: safeString(json.error, "") || undefined,
@@ -1264,6 +1294,7 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     memory_receipts: parseMissionMemoryReceipts(raw.memory_receipts),
     memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
     latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt),
+    governance: parseMissionGovernance(raw.governance),
     history_count: safeNumber(raw.history_count, 0) || undefined,
     linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
     run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
@@ -1331,6 +1362,7 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
     status: safeString(json.status, "") || undefined,
     error: safeString(json.error, "") || undefined,
     request,
+    governance: parseMissionGovernance(json.governance),
   };
 }
 

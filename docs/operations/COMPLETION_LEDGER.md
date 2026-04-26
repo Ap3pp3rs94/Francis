@@ -180,6 +180,15 @@ slice and remain governed by their existing operator-posture, history, and
 receipt contracts. This is a narrow execution-gate integration for Stage 3
 mission flow, not a claim of API-wide mission permission enforcement.
 
+As of `2026-04-26`, the chat UI mission client preserves those mission
+execution permission-gate denials instead of collapsing them to a bare error
+string. Mission advance and queue-run responses now retain the backend
+`governance` envelope with gate, reason, next step, and bounded evidence, and
+the ORB mission action notices/queue error cards can surface that exact
+permission posture when mission execution is denied. This is an interface truth
+slice only; it does not expand mission execution authority or add new backend
+mutation routes.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2946,6 +2955,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `11 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` mission execution permission-gate UI contract slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `13 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `57 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
