@@ -542,6 +542,77 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert any(item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"])
 
 
+def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Expose failed operation memory receipt",
+            "summary": "Failed mission-linked operation run should return the memory receipt handoff.",
+            "requester_id": "test.operations.failed_memory_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "direct failed operation memory receipt",
+            "mission_id": mission_id,
+            "input": {"action": "run", "input": "missing plugin id"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    run_now = client.post(
+        f"/operations/{operation_id}/run", json={"worker_id": "test.operations.failed_memory_receipt"}
+    )
+    assert run_now.status_code == 200
+    run_body = run_now.json()
+    assert run_body["ok"] is False
+    assert run_body["status"] == "failed"
+    assert run_body["operation"]["error"] == "plugin_id_required"
+
+    receipt = run_body["memory_receipt"]
+    assert receipt["source"] == "continuity.ledger"
+    assert receipt["kind"] == "ledger_append"
+    assert receipt["role"] == "system"
+    assert receipt["scope"] == "mission.loop"
+    assert receipt["operation_status"] == "failed"
+    assert receipt["subsystem"] == "operations.runtime"
+    assert "Mission operation failed" in receipt["message"]
+    assert receipt["references"] == {
+        "mission_id": mission_id,
+        "operation_id": operation_id,
+    }
+
+    listed = client.get(
+        "/memory/timeline/list",
+        params={"mission_id": mission_id, "operation_id": operation_id, "include_payload": 1},
+    )
+    assert listed.status_code == 200
+    receipts = [
+        item
+        for item in listed.json()["items"]
+        if item.get("kind") == "ledger_append"
+        and item.get("references", {}).get("mission_id") == mission_id
+        and item.get("references", {}).get("operation_id") == operation_id
+    ]
+    assert receipts
+    assert receipts[0]["payload"]["meta"]["operation_status"] == "failed"
+
+
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

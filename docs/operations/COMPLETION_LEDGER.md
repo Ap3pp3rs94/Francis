@@ -321,20 +321,22 @@ continuity receipts by the same real ids exposed in operation and mission loop
 surfaces, without requiring a separate manual `/memory/timeline/record` write for
 ledger-backed continuity evidence.
 
-As of `2026-04-25`, completed mission-linked operation runs now append a bounded
+As of `2026-04-26`, terminal mission-linked operation runs now append a bounded
 continuity receipt that the memory timeline can retrieve by mission,
-operation, and trace id. `operations.runtime.run_operation` records this only
-after an actual mission-linked operation returns the `succeeded` operation
-status, preserving the execution -> trace -> memory link without inventing
-memory state for blocked, failed, unlinked, or merely queued work.
+operation, and available trace/run/artifact handles.
+`operations.runtime.run_operation` records this only after an actual
+mission-linked operation returns `succeeded` or `failed`, preserving the
+execution -> trace -> memory link for both results and failures without
+inventing memory state for blocked, unlinked, or merely queued work.
 
-As of `2026-04-25`, direct mission-linked operation execution responses surface
-that completed-operation memory handoff when the continuity ledger append
-actually succeeds. `POST /operations/{operation_id}/run` now returns a bounded
+As of `2026-04-26`, direct mission-linked operation execution responses surface
+that terminal-operation memory handoff when the continuity ledger append
+actually succeeds. `POST /operations/{operation_id}/run` returns a bounded
 `memory_receipt` projection with the ledger source, role, message, scope,
-operation status, subsystem, and real mission/operation/trace/run references,
-so callers can move from execution result to receipt-backed memory retrieval
-without claiming memory for non-mission or non-succeeded runs.
+operation status, subsystem, and real mission/operation/trace/run/artifact
+references when those handles exist, so callers can move from execution result
+or failure to receipt-backed memory retrieval without claiming memory for
+non-mission or non-terminal runs.
 
 As of `2026-04-25`, the chat UI operations client preserves that direct
 operation-run memory handoff. `OperationsClient.run` now keeps the returned
@@ -2948,6 +2950,21 @@ Latest targeted validation for the `2026-04-25` Stage 3 completed mission operat
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed mission operation memory receipt slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\operations\runtime.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\operations\runtime.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 memory evidence UI contract slice:

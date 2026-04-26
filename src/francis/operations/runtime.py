@@ -414,13 +414,13 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
     return projection
 
 
-def _append_completed_mission_operation_receipt(
+def _append_terminal_mission_operation_receipt(
     task: dict[str, Any], operation: dict[str, Any]
 ) -> dict[str, Any] | None:
     mission_id = _task_mission_id(task)
     operation_id = _safe_str(operation.get("id")).strip() or _safe_str(task.get("task_id")).strip()
     operation_status = _safe_str(operation.get("status")).strip().lower()
-    if not mission_id or not operation_id or operation_status != "succeeded":
+    if not mission_id or not operation_id or operation_status not in {"succeeded", "failed"}:
         return None
 
     trace_id = _safe_str(operation.get("trace_id")).strip()
@@ -439,9 +439,10 @@ def _append_completed_mission_operation_receipt(
         "capability": capability or None,
         "subsystem": "operations.runtime",
     }
+    outcome = "completed" if operation_status == "succeeded" else "failed"
     entry = append_continuity_ledger(
         "system",
-        f"Mission operation completed: mission={mission_id} operation={operation_id} status={operation_status}",
+        f"Mission operation {outcome}: mission={mission_id} operation={operation_id} status={operation_status}",
         {key: value for key, value in meta.items() if value is not None},
     )
     return _memory_receipt_projection(entry)
@@ -680,7 +681,7 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
     operation = _task_to_operation(updated)
     memory_receipt = None
     if isinstance(updated, dict):
-        memory_receipt = _append_completed_mission_operation_receipt(updated, operation)
+        memory_receipt = _append_terminal_mission_operation_receipt(updated, operation)
     response: dict[str, object] = {
         "ok": _operation_request_ok(operation.get("status")),
         "status": operation.get("status", "unknown"),
