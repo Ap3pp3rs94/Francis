@@ -3793,6 +3793,8 @@ Latest targeted validation for the `2026-04-26` Stage 3 structured memory timeli
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
   Result: `passed` with non-blocking `.ruff_cache` write warnings
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:
 
