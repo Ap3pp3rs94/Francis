@@ -309,6 +309,13 @@ checkpoint count, the client exposes those fields as `plan_summary` while
 leaving the raw output intact. This is a parser/interface contract only; it does
 not add UI claims, create plans, execute work, or write memory.
 
+As of `2026-04-26`, the chat UI Operation Detail view consumes that typed
+`plan_summary` contract as a read-only plan receipt block. Selected operations
+that carry backend-provided plan status, current step id/title, step count, or
+checkpoint count render those fields alongside existing trace/run/artifact
+handles while leaving the raw input/output payload visible. Operations without a
+real plan summary render no synthetic plan receipt.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2705,6 +2712,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation plan receipt detail slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation plan summary interface slice:
 

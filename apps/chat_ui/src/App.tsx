@@ -9750,6 +9750,18 @@ function OperationsPanel(props: {
   const selectedStatus = safeString(selectedOperation?.status).trim().toLowerCase();
   const selectedMeta = isRecord(selectedOperation?.meta) ? selectedOperation.meta : {};
   const selectedOutput = isRecord(selectedOperation?.output) ? selectedOperation.output : {};
+  const selectedPlanSummary = selectedOperation?.plan_summary;
+  const selectedPlanStatus = safeString(selectedPlanSummary?.status).trim();
+  const selectedPlanCurrentStepId = safeString(selectedPlanSummary?.current_step_id).trim();
+  const selectedPlanCurrentStepTitle = safeString(selectedPlanSummary?.current_step_title).trim();
+  const selectedPlanStepCount =
+    typeof selectedPlanSummary?.step_count === "number" && Number.isFinite(selectedPlanSummary.step_count)
+      ? selectedPlanSummary.step_count
+      : undefined;
+  const selectedPlanCheckpointCount =
+    typeof selectedPlanSummary?.checkpoint_count === "number" && Number.isFinite(selectedPlanSummary.checkpoint_count)
+      ? selectedPlanSummary.checkpoint_count
+      : undefined;
   const selectedGovernance = isRecord(selectedMeta.governance) ? selectedMeta.governance : {};
   const selectedApprovalId =
     safeString(selectedMeta.approval_id) || safeString(selectedOutput.approval_id) || "";
@@ -10707,6 +10719,39 @@ function OperationsPanel(props: {
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
+              {selectedPlanSummary ? (
+                <div style={{ fontSize: 12, display: "grid", gap: 4, overflowWrap: "anywhere" }}>
+                  <div style={{ fontWeight: 600 }}>Plan Receipt</div>
+                  {selectedPlanStatus ? (
+                    <div>
+                      Status: <code>{selectedPlanStatus}</code>
+                    </div>
+                  ) : null}
+                  {(selectedPlanCurrentStepId || selectedPlanCurrentStepTitle) ? (
+                    <div>
+                      Current step:{" "}
+                      {selectedPlanCurrentStepId ? <code>{selectedPlanCurrentStepId}</code> : null}
+                      {selectedPlanCurrentStepId && selectedPlanCurrentStepTitle ? " / " : null}
+                      {selectedPlanCurrentStepTitle ? <code>{selectedPlanCurrentStepTitle}</code> : null}
+                    </div>
+                  ) : null}
+                  {(selectedPlanStepCount !== undefined || selectedPlanCheckpointCount !== undefined) ? (
+                    <div>
+                      {selectedPlanStepCount !== undefined ? (
+                        <>
+                          Steps: <code>{String(selectedPlanStepCount)}</code>
+                        </>
+                      ) : null}
+                      {selectedPlanStepCount !== undefined && selectedPlanCheckpointCount !== undefined ? " / " : null}
+                      {selectedPlanCheckpointCount !== undefined ? (
+                        <>
+                          Checkpoints: <code>{String(selectedPlanCheckpointCount)}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {selectedArtifactDir ? (
                 <ArtifactInspectionPanel
                   baseUrl={resolvedBaseUrl}
