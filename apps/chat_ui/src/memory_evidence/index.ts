@@ -14,6 +14,8 @@ export type MemoryEvidenceQueryInput = {
   operationId?: string;
   fallbackOperationId?: string;
   traceId?: string;
+  runId?: string;
+  artifactDir?: string;
 };
 
 function cleanId(value: string | undefined): string {
@@ -34,11 +36,15 @@ export function buildMemoryEvidenceQueries(input: MemoryEvidenceQueryInput): Mem
   const operationId = cleanId(input.operationId);
   const fallbackOperationId = cleanId(input.fallbackOperationId);
   const traceId = cleanId(input.traceId);
+  const runId = cleanId(input.runId);
+  const artifactDir = cleanId(input.artifactDir);
 
   if (missionId) push(`mission=${missionId}`, { mission_id: missionId });
   if (operationId) push(`task=${operationId}`, { operation_id: operationId });
   else if (fallbackOperationId) push(`task=${fallbackOperationId}`, { operation_id: fallbackOperationId });
   if (traceId) push(`trace=${traceId}`, { trace_id: traceId });
+  if (runId) push(`run=${runId}`, { run_id: runId });
+  if (artifactDir) push(`artifact=${artifactDir}`, { artifact_dir: artifactDir });
 
   return queries;
 }

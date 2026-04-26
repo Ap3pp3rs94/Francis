@@ -93,6 +93,8 @@ export type MemoryTimelineListFilters = Pagination &
     trace_id?: string;
     mission_id?: string;
     operation_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
 
     search?: string; // backend-dependent full text search
     tags?: string[];
@@ -555,6 +557,8 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         trace_id: q?.trace_id,
         mission_id: q?.mission_id,
         operation_id: q?.operation_id,
+        run_id: q?.run_id,
+        artifact_dir: q?.artifact_dir,
         search: q?.search,
         include_payload: q?.include_payload ? "1" : undefined,
         tags: q?.tags,
@@ -579,6 +583,8 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         trace_id: q?.trace_id,
         mission_id: q?.mission_id,
         operation_id: q?.operation_id,
+        run_id: q?.run_id,
+        artifact_dir: q?.artifact_dir,
         search: q?.search,
         tags: q?.tags,
         kinds: q?.kinds,

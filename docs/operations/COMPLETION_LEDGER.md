@@ -165,6 +165,12 @@ do not appear in the local timeline registry or API/export payloads, while
 `apps/chat_ui/src/memory_timeline/index.test.ts` proves the browser client keeps
 the returned provenance, retention, and reference contract.
 
+As of `2026-04-25`, memory timeline retrieval can also filter by receipt
+`run_id` and `artifact_dir`. The API already preserved those references on
+timeline events; the list/export routes and chat UI memory timeline client now
+carry the same run and artifact filters, and the memory-evidence helper can
+build bounded run/artifact receipt queries without including payloads.
+
 As of `2026-04-25`, the operations detail surface can use that memory timeline
 contract from the mission loop bridge. When a selected operation exposes a real
 mission id, linked operation id, or trace id, the chat UI can issue bounded
@@ -2368,6 +2374,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 memory timeline run/artifact retrieval slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue operation projection slice:
 

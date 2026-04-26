@@ -400,6 +400,8 @@ def _filter_events(
     trace_id: str = "",
     mission_id: str = "",
     operation_id: str = "",
+    run_id: str = "",
+    artifact_dir: str = "",
     tags: list[str] | None = None,
     start_ts: int | None = None,
     end_ts: int | None = None,
@@ -414,6 +416,8 @@ def _filter_events(
     trace_filter = trace_id.strip().lower()
     mission_filter = mission_id.strip().lower()
     operation_filter = operation_id.strip().lower()
+    run_filter = run_id.strip().lower()
+    artifact_filter = artifact_dir.strip().lower()
     tag_filter = {entry.strip().lower() for entry in (tags or []) if entry.strip()}
     search_filter = search.strip().lower()
 
@@ -440,6 +444,10 @@ def _filter_events(
         if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
             continue
         if operation_filter and _safe_str(item.get("operation_id")).strip().lower() != operation_filter:
+            continue
+        if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
+            continue
+        if artifact_filter and _safe_str(item.get("artifact_dir")).strip().lower() != artifact_filter:
             continue
 
         if tag_filter:
@@ -582,6 +590,8 @@ def list_timeline(
     trace_id: str | None = None,
     mission_id: str | None = None,
     operation_id: str | None = None,
+    run_id: str | None = None,
+    artifact_dir: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = False,
@@ -599,6 +609,8 @@ def list_timeline(
             trace_id=_safe_str(trace_id),
             mission_id=_safe_str(mission_id),
             operation_id=_safe_str(operation_id),
+            run_id=_safe_str(run_id),
+            artifact_dir=_safe_str(artifact_dir),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,
@@ -662,6 +674,8 @@ def export_timeline(
     trace_id: str | None = None,
     mission_id: str | None = None,
     operation_id: str | None = None,
+    run_id: str | None = None,
+    artifact_dir: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = True,
@@ -687,6 +701,8 @@ def export_timeline(
             trace_id=_safe_str(trace_id),
             mission_id=_safe_str(mission_id),
             operation_id=_safe_str(operation_id),
+            run_id=_safe_str(run_id),
+            artifact_dir=_safe_str(artifact_dir),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,

@@ -135,6 +135,16 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert operation_listed.status_code == 200
     assert [item["id"] for item in operation_listed.json()["items"]] == ["evt-a"]
 
+    run_listed = client.get("/memory/timeline/list?run_id=run-memory-a")
+    assert run_listed.status_code == 200
+    assert [item["id"] for item in run_listed.json()["items"]] == ["evt-a"]
+
+    artifact_listed = client.get(
+        "/memory/timeline/list", params={"artifact_dir": "D:/francis/data/artifacts/memory-a"}
+    )
+    assert artifact_listed.status_code == 200
+    assert [item["id"] for item in artifact_listed.json()["items"]] == ["evt-a"]
+
     listed_no_payload = client.get("/memory/timeline/list?kinds=memory_write")
     assert listed_no_payload.status_code == 200
     no_payload_item = next(item for item in listed_no_payload.json()["items"] if str(item.get("id")) == "evt-a")
@@ -178,6 +188,14 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     csv_ids = {str(row.get("id")) for row in rows}
     assert "evt-c" in csv_ids
     assert "evt-a" not in csv_ids
+
+    export_json = client.get(
+        "/memory/timeline/export", params={"format": "json", "artifact_dir": "D:/francis/data/artifacts/memory-a"}
+    )
+    assert export_json.status_code == 200
+    json_ids = {str(item.get("id")) for item in export_json.json()["items"]}
+    assert "evt-a" in json_ids
+    assert "evt-b" not in json_ids
 
 
 def test_memory_timeline_create_alias_and_persistence(monkeypatch, tmp_path: Path) -> None:
@@ -276,6 +294,10 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     assert operation_listed.status_code == 200
     assert [event["id"] for event in operation_listed.json()["items"]] == [item["id"]]
 
+    run_listed = client.get("/memory/timeline/list?run_id=run-ledger-memory")
+    assert run_listed.status_code == 200
+    assert [event["id"] for event in run_listed.json()["items"]] == [item["id"]]
+
 
 def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -353,6 +375,12 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert receipt["references"]["run_id"] == run_id
     assert receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
     assert receipt["payload"]["meta"]["operation_status"] == "succeeded"
+
+    run_listed = client.get(f"/memory/timeline/list?run_id={run_id}")
+    assert run_listed.status_code == 200
+    assert any(
+        item.get("references", {}).get("operation_id") == operation_id for item in run_listed.json()["items"]
+    )
 
 
 def test_memory_timeline_redacts_secrets_from_persistence_and_api(monkeypatch, tmp_path: Path) -> None:

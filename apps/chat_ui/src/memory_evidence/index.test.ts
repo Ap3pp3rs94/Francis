@@ -13,6 +13,8 @@ test("buildMemoryEvidenceQueries builds bounded mission, task, and trace filters
     operationId: "task_alpha",
     fallbackOperationId: "task_fallback",
     traceId: "trace_alpha",
+    runId: "run_alpha",
+    artifactDir: "D:/francis/data/artifacts/alpha",
   });
 
   assert.deepEqual(queries, [
@@ -28,8 +30,19 @@ test("buildMemoryEvidenceQueries builds bounded mission, task, and trace filters
       label: "trace=trace_alpha",
       filters: { trace_id: "trace_alpha", limit: 8, include_payload: false },
     },
+    {
+      label: "run=run_alpha",
+      filters: { run_id: "run_alpha", limit: 8, include_payload: false },
+    },
+    {
+      label: "artifact=D:/francis/data/artifacts/alpha",
+      filters: { artifact_dir: "D:/francis/data/artifacts/alpha", limit: 8, include_payload: false },
+    },
   ]);
-  assert.equal(memoryEvidenceQueryKey(queries), "mission=mission_alpha|task=task_alpha|trace=trace_alpha");
+  assert.equal(
+    memoryEvidenceQueryKey(queries),
+    "mission=mission_alpha|task=task_alpha|trace=trace_alpha|run=run_alpha|artifact=D:/francis/data/artifacts/alpha",
+  );
 });
 
 test("buildMemoryEvidenceQueries uses fallback operation id only when no linked task exists", () => {

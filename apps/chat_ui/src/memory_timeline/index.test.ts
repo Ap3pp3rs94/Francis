@@ -37,6 +37,8 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
     missionId: string | null;
     operationId: string | null;
     traceId: string | null;
+    runId: string | null;
+    artifactDir: string | null;
   }> = [];
   const restoreFetch = installFetch(async (url) => {
     const parsed = new URL(url);
@@ -46,6 +48,8 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
       missionId: parsed.searchParams.get("mission_id"),
       operationId: parsed.searchParams.get("operation_id"),
       traceId: parsed.searchParams.get("trace_id"),
+      runId: parsed.searchParams.get("run_id"),
+      artifactDir: parsed.searchParams.get("artifact_dir"),
     });
 
     return jsonResponse({
@@ -101,6 +105,8 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
         mission_id: "mission_memory_context",
         operation_id: "tsk_memory_context",
         trace_id: "trace_memory_context",
+        run_id: "run_memory_context",
+        artifact_dir: "D:/francis/data/artifacts/memory-context",
       },
       { timeoutMs: 50 },
     );
@@ -112,6 +118,8 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
         missionId: "mission_memory_context",
         operationId: "tsk_memory_context",
         traceId: "trace_memory_context",
+        runId: "run_memory_context",
+        artifactDir: "D:/francis/data/artifacts/memory-context",
       },
     ]);
     assert.equal(response.total, 1);
