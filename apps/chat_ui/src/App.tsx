@@ -20,7 +20,7 @@ import {
 import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
-import type { OperationDetail, OperationRecord } from "./operations";
+import type { OperationDetail, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import {
@@ -287,6 +287,18 @@ function missionMemoryReceiptReferenceLine(receipt: MissionMemoryReceipt): strin
   if (receipt.trace_id) parts.push(`trace ${receipt.trace_id}`);
   if (receipt.run_id) parts.push(`run ${receipt.run_id}`);
   if (receipt.artifact_dir) parts.push(`artifact ${receipt.artifact_dir}`);
+  return parts.join(" / ");
+}
+
+function operationMemoryReceiptReferenceLine(receipt: OperationMemoryReceipt | null | undefined): string {
+  const refs = receipt?.references;
+  const parts: string[] = [];
+  if (refs?.mission_id) parts.push(`mission ${refs.mission_id}`);
+  if (refs?.operation_id) parts.push(`task ${refs.operation_id}`);
+  if (refs?.trace_id) parts.push(`trace ${refs.trace_id}`);
+  if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
+  if (refs?.run_id) parts.push(`run ${refs.run_id}`);
+  if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
   return parts.join(" / ");
 }
 
@@ -9941,12 +9953,18 @@ function OperationsPanel(props: {
         });
         return;
       }
+      const memoryReceiptRefs = operationMemoryReceiptReferenceLine(response.memory_receipt);
+      const memoryReceiptText = memoryReceiptRefs
+        ? ` Memory receipt: ${memoryReceiptRefs}.`
+        : response.memory_receipt
+          ? " Memory receipt recorded."
+          : "";
       setActionNotice({
         tone: "info",
         text:
           response.message === "already_terminal"
             ? `Operation is already ${nextStatus}.`
-            : `Operation status is now ${nextStatus}.`,
+            : `Operation status is now ${nextStatus}.${memoryReceiptText}`,
       });
     } catch (err) {
       setActionNotice({ tone: "error", text: operationsError(err) });

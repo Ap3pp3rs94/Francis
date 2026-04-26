@@ -221,6 +221,12 @@ capability/subsystem, and real mission/operation/trace/run/artifact references,
 so interface code consuming direct operation execution results no longer drops
 the execution-to-memory receipt bridge.
 
+As of `2026-04-25`, the chat UI operation run completion notice can surface that
+direct memory handoff when the backend returns it. The selected operation `Run
+now` flow appends only the receipt-backed mission, operation, trace, approval,
+run, and artifact references from `memory_receipt`; it does not claim memory
+when the run response has no receipt projection.
+
 As of `2026-04-25`, mission advance and bounded mission queue-run responses
 preserve that same completed-operation `memory_receipt` handoff when mission
 progression executes a linked operation through the governed runtime. Direct
@@ -2404,6 +2410,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation run memory receipt notice slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation run/artifact memory evidence slice:
 
