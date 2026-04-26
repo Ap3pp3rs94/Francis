@@ -924,6 +924,14 @@ operation name, operation ORB plane, and advance action alongside the existing
 current-task operation id. This is client contract preservation only; it does not
 add UI rendering, mutate mission state, or infer missing receipt fields.
 
+As of `2026-04-26`, the chat UI operations client preserves that same
+current-task operation identity on operation memory receipts. Direct operation
+run `memory_receipt` responses, operation detail `latest_memory_receipt`, and
+operation detail `memory_receipts` arrays now keep operation name, operation ORB
+plane, and advance action alongside existing receipt references. This is client
+contract preservation only; it does not add UI rendering, execute operations, or
+infer missing receipt fields.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -4016,6 +4024,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 missions memory-receipt 
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
   Result: `14 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receipt current-task identity client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
 - `cd apps\chat_ui; npm run build`

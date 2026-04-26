@@ -279,6 +279,9 @@ export type OperationMemoryReceipt = {
   approval_status?: string;
   capability?: string;
   subsystem?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
+  current_task_advance_action?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -871,6 +874,9 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     approval_status: safeString(raw.approval_status) || undefined,
     capability: safeString(raw.capability) || undefined,
     subsystem: safeString(raw.subsystem) || undefined,
+    current_task_operation_name: safeString(raw.current_task_operation_name) || undefined,
+    current_task_operation_plane: safeString(raw.current_task_operation_plane) || undefined,
+    current_task_advance_action: safeString(raw.current_task_advance_action) || undefined,
   };
 
   if (Object.values(references).some((value) => value)) receipt.references = references;

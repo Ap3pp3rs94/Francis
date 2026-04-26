@@ -202,6 +202,9 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         approval_status: "approved",
         capability: "plan.create",
         subsystem: "operations.runtime",
+        current_task_operation_name: "plugin.run",
+        current_task_operation_plane: "P7_EXECUTION",
+        current_task_advance_action: "run_operation",
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_alpha",
@@ -247,6 +250,9 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.memory_receipt?.approval_status, "approved");
     assert.equal(response.memory_receipt?.capability, "plan.create");
     assert.equal(response.memory_receipt?.subsystem, "operations.runtime");
+    assert.equal(response.memory_receipt?.current_task_operation_name, "plugin.run");
+    assert.equal(response.memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
+    assert.equal(response.memory_receipt?.current_task_advance_action, "run_operation");
     assert.equal(response.memory_receipt?.references?.mission_id, "mission_alpha");
     assert.equal(response.memory_receipt?.references?.operation_id, "task_alpha");
     assert.equal(response.memory_receipt?.references?.trace_id, "trace_task_alpha");
@@ -286,6 +292,9 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
         source: "continuity.ledger",
         kind: "ledger_append",
         operation_status: "succeeded",
+        current_task_operation_name: "plugin.run",
+        current_task_operation_plane: "P7_EXECUTION",
+        current_task_advance_action: "run_operation",
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_memory_alpha",
@@ -297,6 +306,9 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
           source: "continuity.ledger",
           kind: "ledger_append",
           operation_status: "succeeded",
+          current_task_operation_name: "plugin.run",
+          current_task_operation_plane: "P7_EXECUTION",
+          current_task_advance_action: "run_operation",
           references: {
             mission_id: "mission_alpha",
             operation_id: "task_memory_alpha",
@@ -317,7 +329,13 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.latest_memory_receipt?.references?.mission_id, "mission_alpha");
     assert.equal(detail?.latest_memory_receipt?.references?.operation_id, "task_memory_alpha");
     assert.equal(detail?.latest_memory_receipt?.references?.run_id, "run_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_operation_name, "plugin.run");
+    assert.equal(detail?.latest_memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
+    assert.equal(detail?.latest_memory_receipt?.current_task_advance_action, "run_operation");
     assert.equal(detail?.memory_receipts?.[0]?.references?.operation_id, "task_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_name, "plugin.run");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_plane, "P7_EXECUTION");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_advance_action, "run_operation");
   } finally {
     restoreFetch();
   }
