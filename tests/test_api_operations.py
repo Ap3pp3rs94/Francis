@@ -605,6 +605,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
     task_id = "tsk_metadata_handles"
+    mission_id = "msn_metadata_handles"
     trace_id = "trace_metadata_handles"
     run_id = "run_metadata_handles"
     approval_id = "apr_metadata_handles"
@@ -622,6 +623,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
                 "updated_at": "2024-03-09T16:00:01+00:00",
                 "inputs": {
                     "meta": {
+                        "mission_id": mission_id,
                         "run_id": run_id,
                         "approval_id": approval_id,
                         "artifact_dir": artifact_dir,
@@ -651,9 +653,11 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     listed = client.get("/operations/list")
     assert listed.status_code == 200
     listed_operation = next(item for item in listed.json()["items"] if item["id"] == task_id)
+    assert listed_operation["mission_id"] == mission_id
     assert listed_operation["trace_id"] == trace_id
     assert listed_operation["run_id"] == run_id
     assert listed_operation["artifact_dir"] == artifact_dir
+    assert listed_operation["meta"]["mission_id"] == mission_id
     assert listed_operation["meta"]["approval_id"] == approval_id
     assert listed_operation["meta"]["trace_id"] == trace_id
     assert listed_operation["meta"]["run_id"] == run_id
@@ -675,16 +679,22 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     assert listed_by_approval.status_code == 200
     assert [item["id"] for item in listed_by_approval.json()["items"]] == [task_id]
 
+    listed_by_mission = client.get("/operations/list", params={"mission_id": mission_id})
+    assert listed_by_mission.status_code == 200
+    assert [item["id"] for item in listed_by_mission.json()["items"]] == [task_id]
+
     fetched = client.get(f"/operations/{task_id}")
     assert fetched.status_code == 200
     fetched_operation = fetched.json()["operation"]
+    assert fetched_operation["mission_id"] == mission_id
     assert fetched_operation["trace_id"] == trace_id
     assert fetched_operation["run_id"] == run_id
     assert fetched_operation["artifact_dir"] == artifact_dir
 
-    exported_json = client.get("/operations/export", params={"format": "json", "run_id": run_id})
+    exported_json = client.get("/operations/export", params={"format": "json", "mission_id": mission_id})
     assert exported_json.status_code == 200
     assert [item["id"] for item in exported_json.json()["items"]] == [task_id]
+    assert exported_json.json()["items"][0]["mission_id"] == mission_id
     assert exported_json.json()["items"][0]["trace_id"] == trace_id
 
     exported_approval_json = client.get("/operations/export", params={"format": "json", "approval_id": approval_id})
@@ -696,6 +706,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     assert exported_csv.status_code == 200
     rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
     assert [row["id"] for row in rows] == [task_id]
+    assert rows[0]["mission_id"] == mission_id
     assert rows[0]["approval_id"] == approval_id
     assert rows[0]["trace_id"] == trace_id
     assert rows[0]["run_id"] == run_id

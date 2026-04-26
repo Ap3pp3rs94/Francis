@@ -640,6 +640,14 @@ inventing receipt state. This makes execution -> approval/trace/artifact
 inspection reachable from operations read models without changing worker
 execution or approvals.
 
+As of `2026-04-26`, operation readback also treats mission linkage as a
+first-class read handle. Operation projections now expose top-level
+`mission_id` when the task already carries it, `/operations/list` and
+`/operations/export` accept a bounded `mission_id` filter, and CSV export
+includes the same mission id column. This is read-model reachability only; it
+does not create mission links, mutate missions, execute operations, or infer
+missing mission state.
+
 As of `2026-04-26`, operation records also preserve trace/run/artifact handles
 when those handles are only stored in task metadata or input metadata. The API
 operation projection and runtime mirror keep receipt/output handles as the first
@@ -4521,6 +4529,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations approval rece
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations mission-link readback slice:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_list_get_and_export_preserve_metadata_only_trace_handles -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_operations.py tests\test_api_mission_loop_contract.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `2 files already formatted`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation receipt filter slice:
