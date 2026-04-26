@@ -295,6 +295,13 @@ preserving the same details inside `output`/`meta`. This makes the operation
 audit trail line up with the operation result trace without changing execution,
 approval, scheduling, or memory-write behavior.
 
+As of `2026-04-26`, world-state mission activity projections preserve those
+operation-log receipt handles. Mission `latest_activity` now carries real
+`trace_id`, `run_id`, and `artifact_dir` values from the selected run-ledger log
+or operation state, and the derived `current_task` projection keeps the same
+handles for chat UI settings/world-state clients. This is a read-model/interface
+handoff only; it does not create traces, mutate missions, or write memory.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2691,6 +2698,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 world-state activity trace-handle slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_reports_mission_counts_and_continuity -q`
+  Result: `passed`
+- `python -m ruff check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `11 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation audit trace handles slice:
 

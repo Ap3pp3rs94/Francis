@@ -626,7 +626,12 @@ def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, t
 
     executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.system.world_state"})
     assert executed.status_code == 200
-    assert executed.json()["ok"] is True
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    trace_id = str(executed_body["operation"].get("trace_id") or "")
+    run_id = str(executed_body["operation"].get("run_id") or "")
+    assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
 
     response = client.get("/system/world_state")
     assert response.status_code == 200
@@ -650,6 +655,11 @@ def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, t
     assert latest_activity["operation_id"] == operation_id
     assert latest_activity["name"] == "status_updated"
     assert latest_activity["status"] == "succeeded"
+    assert latest_activity["trace_id"] == trace_id
+    assert latest_activity["run_id"] == run_id
+    current_task = body["overview"]["recent_missions"][0]["current_task"]
+    assert current_task["trace_id"] == trace_id
+    assert current_task["run_id"] == run_id
 
 
 def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkeypatch, tmp_path: Path) -> None:

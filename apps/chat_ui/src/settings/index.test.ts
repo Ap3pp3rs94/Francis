@@ -407,6 +407,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 source: "run_ledger",
                 name: "created",
                 status: "queued",
+                trace_id: "trace_activity_alpha",
+                run_id: "run_activity_alpha",
                 ts: 1_710_000_654,
               },
               current_task: {
@@ -414,6 +416,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 source: "mission_meta",
                 operation_id: "tsk_alpha",
                 task_status: "accepted",
+                trace_id: "trace_activity_alpha",
+                run_id: "run_activity_alpha",
+                artifact_dir: "D:/francis/data/artifacts/activity_alpha",
                 latest_receipt_event: "created",
                 latest_receipt_status: "queued",
               },
@@ -782,6 +787,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.name, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_id, "tsk_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.trace_id, "trace_activity_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.run_id, "run_activity_alpha");
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.current_task?.artifact_dir,
+      "D:/francis/data/artifacts/activity_alpha",
+    );
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_event, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipt_count, 1);

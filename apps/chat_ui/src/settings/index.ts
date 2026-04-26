@@ -270,6 +270,9 @@ export type WorldStateMissionCurrentTask = {
   reason?: string;
   approval_id?: string;
   approval_status?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   handoff_action?: string;
   latest_receipt_event?: string;
   latest_receipt_status?: string;
@@ -1992,6 +1995,9 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     reason: safeString(raw.reason, "") || undefined,
     approval_id: safeString(raw.approval_id, "") || undefined,
     approval_status: safeString(raw.approval_status, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
     latest_receipt_event: safeString(raw.latest_receipt_event, "") || undefined,
     latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
@@ -2008,6 +2014,9 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     !task.next_step &&
     !task.reason &&
     !task.approval_id &&
+    !task.trace_id &&
+    !task.run_id &&
+    !task.artifact_dir &&
     !task.handoff_action &&
     !task.latest_receipt_event &&
     !task.latest_receipt_status

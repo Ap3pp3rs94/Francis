@@ -894,6 +894,11 @@ def _operation_latest_activity(
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
+            "trace_id": _first_text(log.get("trace_id"), meta.get("trace_id"), operation.get("trace_id")),
+            "run_id": _first_text(log.get("run_id"), meta.get("run_id"), operation.get("run_id")),
+            "artifact_dir": _first_text(
+                log.get("artifact_dir"), meta.get("artifact_dir"), operation.get("artifact_dir")
+            ),
             "id": str(log.get("id") or "").strip(),
             "kind": str(log.get("kind") or "").strip(),
             "name": str(log.get("name") or "").strip(),
@@ -915,6 +920,9 @@ def _operation_latest_activity(
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
+            "trace_id": _safe_str(operation.get("trace_id")).strip(),
+            "run_id": _safe_str(operation.get("run_id")).strip(),
+            "artifact_dir": _safe_str(operation.get("artifact_dir")).strip(),
             "id": f"{op_id}:state",
             "kind": str(operation.get("kind") or "").strip() or "delegated_task",
             "name": "operation_state",
@@ -1049,6 +1057,9 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         ),
         "approval_id": _first_text(existing.get("approval_id"), item.get("last_task_approval_id")),
         "approval_status": _first_text(item.get("last_task_approval_status"), existing.get("approval_status")),
+        "trace_id": _first_text(existing.get("trace_id"), latest_activity.get("trace_id")),
+        "run_id": _first_text(existing.get("run_id"), latest_activity.get("run_id")),
+        "artifact_dir": _first_text(existing.get("artifact_dir"), latest_activity.get("artifact_dir")),
         "handoff_action": _first_text(
             existing.get("handoff_action"), item.get("recommended_action"), _mission_default_handoff_action(item)
         ),
