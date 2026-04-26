@@ -52,6 +52,24 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert "chatmissionsecret123" not in history_text
     assert "chatmissionsecret123" not in ledger_text
     assert "[REDACTED:secret]" in ledger_text
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(
+        item
+        for item in reversed(ledger_entries)
+        if item["role"] == "assistant" and item["meta"]["mode"] == "mission_ingress"
+    )
+    assistant_meta = assistant_entry["meta"]
+    assert assistant_meta["mission_id"] == mission_id
+    assert assistant_meta["ingress_plane"] == "P1_INTERFACE"
+    assert assistant_meta["active_stage"] == "plan"
+    assert assistant_meta["handoff_stage"] == "plan"
+    assert assistant_meta["handoff_action"] == "link_operation"
+    assert assistant_meta["handoff_next_step"] == body["loop_state"]["handoff"]["next_step"]
+    assert assistant_meta["current_task_source"] == "mission_handoff"
+    assert assistant_meta["current_task_next_step"] == body["current_task"]["next_step"]
+    assert assistant_meta["linked_operation_count"] == 0
+    assert assistant_meta["run_ledger_count"] == 0
+    assert assistant_meta["memory_receipt_count"] == 0
 
 
 def test_chat_mission_command_respects_observe_mode(monkeypatch, tmp_path: Path) -> None:

@@ -225,6 +225,14 @@ evidence items carry `approval_id`, `mission_id`, `operation_id`, `gate`,
 exist in the pending approval projection. No approval decision behavior,
 execution path, policy rule, or memory-write path is changed.
 
+As of `2026-04-26`, chat mission ingress continuity entries preserve bounded ORB
+loop metadata for newly declared missions. The assistant ledger entry written by
+`POST /chat/send` or websocket mission ingress now carries the real mission id,
+ingress plane, active loop stage, handoff stage/action/next step, current-task
+source/next step, and receipt counts from the mission detail projection. The
+conversation ledger still redacts the operator objective before persistence and
+does not add execution, approval, or memory-timeline writes.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2499,6 +2507,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:
+
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py -q`
+  Result: `3 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:
 

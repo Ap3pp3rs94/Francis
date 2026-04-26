@@ -81,6 +81,38 @@ def _mission_ingress_ws_event(payload: dict[str, object]) -> str:
     )
 
 
+def _compact_mission_ingress_meta(
+    *,
+    record: mission_store.MissionRecord,
+    loop_state: dict[str, object],
+    current_task: dict[str, object],
+    receipt_summary: dict[str, object],
+) -> dict[str, object]:
+    handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    meta: dict[str, object] = {
+        "mode": "mission_ingress",
+        "status": record.status.value,
+        "mission_id": record.mission_id,
+        "ingress_plane": "P1_INTERFACE",
+        "active_stage": str(loop_state.get("active_stage") or "").strip(),
+        "handoff_stage": str(handoff.get("stage") or "").strip(),
+        "handoff_action": str(handoff.get("action") or "").strip(),
+        "handoff_gate": str(handoff.get("gate") or "").strip(),
+        "handoff_approval_id": str(handoff.get("approval_id") or "").strip(),
+        "handoff_operation_id": str(handoff.get("operation_id") or "").strip(),
+        "handoff_trace_id": str(handoff.get("trace_id") or "").strip(),
+        "handoff_next_step": str(handoff.get("next_step") or "").strip(),
+        "current_task_source": str(current_task.get("source") or "").strip(),
+        "current_task_operation_id": str(current_task.get("operation_id") or "").strip(),
+        "current_task_gate": str(current_task.get("gate") or "").strip(),
+        "current_task_next_step": str(current_task.get("next_step") or "").strip(),
+        "linked_operation_count": int(receipt_summary.get("linked_operation_count") or 0),
+        "run_ledger_count": int(receipt_summary.get("run_ledger_count") or 0),
+        "memory_receipt_count": int(receipt_summary.get("memory_receipt_count") or 0),
+    }
+    return {key: value for key, value in meta.items() if value not in {"", None}}
+
+
 def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
     intent = parse_mission_ingress(payload.message)
     if intent is None:
@@ -133,18 +165,20 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
     detail = mission_routes._mission_detail_projection(record)
     queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
     loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
+    current_task = detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {}
+    receipt_summary = detail.get("receipt_summary") if isinstance(detail.get("receipt_summary"), dict) else {}
     handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
     action = str(handoff.get("action") or "link_operation").strip()
     reply = f"Mission {record.mission_id} declared. Next: {action}."
     append(
         "assistant",
         reply,
-        {
-            "mode": "mission_ingress",
-            "status": record.status.value,
-            "mission_id": record.mission_id,
-            "handoff_action": action,
-        },
+        _compact_mission_ingress_meta(
+            record=record,
+            loop_state=loop_state,
+            current_task=current_task,
+            receipt_summary=receipt_summary,
+        ),
     )
 
     response: dict[str, Any] = {
