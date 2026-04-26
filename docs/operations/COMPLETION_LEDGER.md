@@ -1051,6 +1051,14 @@ keeps operation name, operation ORB plane, and advance action when the backend
 already supplies those fields. This is typed interface preservation only; it does
 not add new rendering, infer missing operation records, or widen backend state.
 
+As of `2026-04-26`, the chat UI settings/world-state client also preserves compact
+mission receipt-summary operation identity and plan fields on world-state mission
+projections. `WorldStateMissionReceiptSummary` now keeps current operation name,
+ORB plane, advance action, plan status, current plan step, and plan/checkpoint
+counts when the backend supplies them. This is typed overview-contract
+preservation only; it does not add rendering, infer missing operation records, or
+widen backend state.
+
 As of `2026-04-26`, the chat UI missions client preserves the same current-task
 operation identity on mission memory receipts. Mission detail receipt summaries,
 latest memory receipt projections, and receipt arrays now keep current-task
@@ -3951,6 +3959,15 @@ Latest targeted validation for the `2026-04-26` mission receipt-summary operatio
 
 Latest targeted validation for the `2026-04-26` mission client receipt-summary identity slice:
 
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` world-state receipt-summary identity slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/settings/index.test.ts`
+  Result: `12 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`

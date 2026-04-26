@@ -463,7 +463,10 @@ export type WorldStateMissionReceiptSummary = {
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
   current_operation_id?: string;
+  current_operation_name?: string;
+  current_operation_plane?: string;
   current_operation_status?: string;
+  current_advance_action?: string;
   current_gate?: string;
   current_approval_id?: string;
   current_trace_id?: string;
@@ -474,6 +477,11 @@ export type WorldStateMissionReceiptSummary = {
   latest_run_ts?: string;
   latest_history_event?: string;
   latest_history_ts?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
 };
 
 export type WorldStateMissionQueueItem = {
@@ -2365,7 +2373,10 @@ function parseWorldStateMissionReceiptSummary(raw: unknown): WorldStateMissionRe
     memory_receipt_count: safeOptionalNumber(raw.memory_receipt_count),
     latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt) ?? undefined,
     current_operation_id: safeString(raw.current_operation_id, "") || undefined,
+    current_operation_name: safeString(raw.current_operation_name, "") || undefined,
+    current_operation_plane: safeString(raw.current_operation_plane, "") || undefined,
     current_operation_status: safeString(raw.current_operation_status, "") || undefined,
+    current_advance_action: safeString(raw.current_advance_action, "") || undefined,
     current_gate: safeString(raw.current_gate, "") || undefined,
     current_approval_id: safeString(raw.current_approval_id, "") || undefined,
     current_trace_id: safeString(raw.current_trace_id, "") || undefined,
@@ -2376,6 +2387,11 @@ function parseWorldStateMissionReceiptSummary(raw: unknown): WorldStateMissionRe
     latest_run_ts: safeString(raw.latest_run_ts, "") || undefined,
     latest_history_event: safeString(raw.latest_history_event, "") || undefined,
     latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,
+    plan_status: safeString(raw.plan_status, "") || undefined,
+    plan_current_step_id: safeString(raw.plan_current_step_id, "") || undefined,
+    plan_current_step_title: safeString(raw.plan_current_step_title, "") || undefined,
+    plan_step_count: safeOptionalNumber(raw.plan_step_count),
+    plan_checkpoint_count: safeOptionalNumber(raw.plan_checkpoint_count),
   };
   if (
     summary.linked_operation_count === undefined &&
@@ -2384,14 +2400,22 @@ function parseWorldStateMissionReceiptSummary(raw: unknown): WorldStateMissionRe
     summary.memory_receipt_count === undefined &&
     !summary.latest_memory_receipt &&
     !summary.current_operation_id &&
+    !summary.current_operation_name &&
+    !summary.current_operation_plane &&
     !summary.current_operation_status &&
+    !summary.current_advance_action &&
     !summary.current_gate &&
     !summary.current_approval_id &&
     !summary.current_trace_id &&
     !summary.current_run_id &&
     !summary.current_artifact_dir &&
     !summary.latest_run_event &&
-    !summary.latest_history_event
+    !summary.latest_history_event &&
+    !summary.plan_status &&
+    !summary.plan_current_step_id &&
+    !summary.plan_current_step_title &&
+    summary.plan_step_count === undefined &&
+    summary.plan_checkpoint_count === undefined
   ) {
     return undefined;
   }

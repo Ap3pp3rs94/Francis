@@ -572,13 +572,21 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 history_count: 2,
                 memory_receipt_count: 0,
                 current_operation_id: "tsk_blocked",
+                current_operation_name: "plan.create",
+                current_operation_plane: "P9_OBSERVABILITY",
                 current_operation_status: "blocked",
+                current_advance_action: "run_linked_operation",
                 current_gate: "trust_gate",
                 current_approval_id: "apr_queue_exact",
                 latest_run_event: "governance_hold",
                 latest_run_status: "blocked",
                 latest_history_event: "mission_ticked",
                 latest_history_ts: "2026-04-14T07:45:00Z",
+                plan_status: "in_progress",
+                plan_current_step_id: "understand",
+                plan_current_step_title: "Understand goal + constraints",
+                plan_step_count: 4,
+                plan_checkpoint_count: 3,
               },
               loop_state: {
                 active_stage: "gate",
@@ -956,8 +964,19 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.interface?.status, "available");
     assert.equal(worldState.overview?.mission_queue?.[0]?.handoff?.operation_id, "tsk_blocked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.current_operation_id, "tsk_blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.current_operation_name, "plan.create");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.current_operation_plane, "P9_OBSERVABILITY");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.current_advance_action, "run_linked_operation");
     assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.latest_run_event, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.history_count, 2);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.plan_status, "in_progress");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.plan_current_step_id, "understand");
+    assert.equal(
+      worldState.overview?.mission_queue?.[0]?.receipt_summary?.plan_current_step_title,
+      "Understand goal + constraints",
+    );
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.plan_step_count, 4);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.plan_checkpoint_count, 3);
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_action, "retry_or_deadletter");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_target_id, "tsk_failed_source");
