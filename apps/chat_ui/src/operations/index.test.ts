@@ -133,12 +133,14 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         message: "Mission operation completed: mission=mission_alpha operation=task_alpha status=succeeded",
         scope: "mission.loop",
         operation_status: "succeeded",
+        approval_status: "approved",
         capability: "plan.create",
         subsystem: "operations.runtime",
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_alpha",
           trace_id: "trace_task_alpha",
+          approval_id: "apr_task_alpha",
           run_id: "run_task_alpha",
           artifact_dir: "D:/francis/data/artifacts/task_alpha",
         },
@@ -169,11 +171,13 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.memory_receipt?.kind, "ledger_append");
     assert.equal(response.memory_receipt?.scope, "mission.loop");
     assert.equal(response.memory_receipt?.operation_status, "succeeded");
+    assert.equal(response.memory_receipt?.approval_status, "approved");
     assert.equal(response.memory_receipt?.capability, "plan.create");
     assert.equal(response.memory_receipt?.subsystem, "operations.runtime");
     assert.equal(response.memory_receipt?.references?.mission_id, "mission_alpha");
     assert.equal(response.memory_receipt?.references?.operation_id, "task_alpha");
     assert.equal(response.memory_receipt?.references?.trace_id, "trace_task_alpha");
+    assert.equal(response.memory_receipt?.references?.approval_id, "apr_task_alpha");
     assert.equal(response.memory_receipt?.references?.run_id, "run_task_alpha");
     assert.equal(response.memory_receipt?.references?.artifact_dir, "D:/francis/data/artifacts/task_alpha");
   } finally {

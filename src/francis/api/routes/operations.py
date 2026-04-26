@@ -247,6 +247,23 @@ def _result_approval_id(task: dict[str, Any]) -> str:
     return _safe_str(payload.get("approval_id")).strip()
 
 
+def _input_approval_id(task: dict[str, Any]) -> str:
+    inputs = task.get("inputs")
+    if not isinstance(inputs, dict):
+        return ""
+    approval_id = _safe_str(inputs.get("approval_id")).strip()
+    if approval_id:
+        return approval_id
+    meta = inputs.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("approval_id")).strip()
+    return ""
+
+
+def _operation_approval_id(task: dict[str, Any]) -> str:
+    return _result_approval_id(task) or _input_approval_id(task)
+
+
 def _task_mission_id(task: dict[str, Any]) -> str:
     inputs = task.get("inputs")
     if not isinstance(inputs, dict):
@@ -300,7 +317,7 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
 
     inputs = dict(updated.get("inputs") or {}) if isinstance(updated.get("inputs"), dict) else {}
     input_meta = dict(inputs.get("meta") or {}) if isinstance(inputs.get("meta"), dict) else {}
-    approval_id = _result_approval_id(task)
+    approval_id = _operation_approval_id(task)
 
     if result_status in {"pending", "needs_approval"} and approval_id:
         inputs["approval_id"] = approval_id
@@ -398,7 +415,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     )
     result_status = _result_status(task)
     governance = _result_governance(task)
-    approval_id = _result_approval_id(task)
+    approval_id = _operation_approval_id(task)
     error = redact_operation_optional_text(task.get("status_reason"))
     if not error:
         error = redact_operation_optional_text(

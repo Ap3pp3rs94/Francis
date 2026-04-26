@@ -261,6 +261,7 @@ export type OperationMemoryReceipt = {
   message?: string;
   scope?: string;
   operation_status?: string;
+  approval_status?: string;
   capability?: string;
   subsystem?: string;
   references?: {
@@ -761,6 +762,7 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     message: safeString(raw.message) || undefined,
     scope: safeString(raw.scope) || undefined,
     operation_status: safeString(raw.operation_status) || undefined,
+    approval_status: safeString(raw.approval_status) || undefined,
     capability: safeString(raw.capability) || undefined,
     subsystem: safeString(raw.subsystem) || undefined,
   };

@@ -332,11 +332,14 @@ policy decisions, or advance mission execution.
 
 As of `2026-04-26`, terminal mission-linked operation receipts can now feed that
 approval posture into memory evidence. When a completed or failed mission-linked
-operation already carries a real approval id, `operations.runtime` records the
-approval id and resolved local approval status in the continuity receipt metadata,
-including handoff/current-task loop fields that `/memory/timeline/list` projects
-as structured loop evidence. This does not change approval decisions, policy
-gates, operation execution, or mission advancement.
+operation carries a real approval id in the operation result or retained task
+input context, `operations.runtime` records the approval id and resolved local
+approval status in the continuity receipt metadata, including
+handoff/current-task loop fields that `/memory/timeline/list` projects as
+structured loop evidence. The operation API projection and chat UI operations
+client preserve that receipt approval status for the returned execution handoff.
+This does not change approval decisions, policy gates, operation execution, or
+mission advancement.
 
 As of `2026-04-26`, mission advance receipts preserve the identity of the real
 operation they just created or ran. The mission record, queue item, current-task
@@ -2673,6 +2676,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 approved mission operation receipt posture slice:
+
+- `python -m ruff check src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_approved_mission_run_receipt_preserves_approval_posture -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory receipt approval-status client slice:
 

@@ -763,6 +763,107 @@ def test_operations_governance_holds_are_visible_and_rerunnable(monkeypatch, tmp
     assert len(governance_holds) >= 2
 
 
+def test_operations_approved_mission_run_receipt_preserves_approval_posture(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Preserve approved operation posture",
+            "summary": "Approved mission-linked execution should keep approval posture in receipts.",
+            "requester_id": "test.operations.approved_mission_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/ops-approved-mission",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Deploy to a target environment.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    assert installed.json()["ok"] is True
+    plugin_id = str(installed.json()["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "operations-approved-mission-receipt"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "approved mission operation",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["ok"] is True
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.approved"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.approved"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    assert executed_body["operation"]["meta"]["approval_id"] == approval_id
+
+    receipt = executed_body["memory_receipt"]
+    assert receipt["operation_status"] == "succeeded"
+    assert receipt["approval_status"] == "approved"
+    assert receipt["references"]["mission_id"] == mission_id
+    assert receipt["references"]["operation_id"] == operation_id
+    assert receipt["references"]["approval_id"] == approval_id
+
+    detail = client.get(f"/operations/{operation_id}")
+    assert detail.status_code == 200
+    assert detail.json()["operation"]["meta"]["approval_id"] == approval_id
+
+    listed = client.get(
+        "/memory/timeline/list",
+        params={"mission_id": mission_id, "operation_id": operation_id, "include_payload": 1},
+    )
+    assert listed.status_code == 200
+    receipts = [
+        item for item in listed.json()["items"] if item.get("references", {}).get("operation_id") == operation_id
+    ]
+    assert receipts
+    assert receipts[0]["loop"]["handoff_approval_id"] == approval_id
+    assert receipts[0]["loop"]["handoff_approval_status"] == "approved"
+
+
 def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
