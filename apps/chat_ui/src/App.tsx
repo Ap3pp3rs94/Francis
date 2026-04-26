@@ -9375,7 +9375,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       const res = await fetch(`${resolvedBaseUrl}/plugins/build`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, description: description.trim() }),
+        body: JSON.stringify({ name: trimmed, description: description.trim(), actor: "chat_ui.plugins" }),
       });
       if (!res.ok) {
         setError(`HTTP ${res.status}`);

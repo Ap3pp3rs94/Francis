@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_PLUGIN_ACTOR = "test.plugins.write"
+
 
 def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -742,7 +744,10 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
     assert mission.status_code == 200
     mission_id = str(mission.json()["mission_id"])
 
-    built = client.post("/plugins/build", json={"name": "Mission Trace Plugin", "description": "mission trace"})
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Mission Trace Plugin", "description": "mission trace", "actor": _PLUGIN_ACTOR},
+    )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
 
@@ -886,6 +891,7 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1011,6 +1017,7 @@ def test_mission_loop_state_uses_current_task_when_multiple_operations_are_linke
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1153,6 +1160,7 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1420,6 +1428,7 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1847,6 +1856,7 @@ def test_mission_advance_respects_governance_blockers(monkeypatch, tmp_path: Pat
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1926,6 +1936,7 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -2037,6 +2048,7 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

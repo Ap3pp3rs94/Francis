@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_PLUGIN_ACTOR = "test.plugins.write"
+
 
 def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -14,7 +16,10 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
 
     client = TestClient(create_app())
 
-    built = client.post("/plugins/build", json={"name": "Echo Plugin", "description": "Simple echo"})
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Echo Plugin", "description": "Simple echo", "actor": _PLUGIN_ACTOR},
+    )
     assert built.status_code == 200
     built_body = built.json()
     assert built_body["ok"] is True
@@ -42,7 +47,7 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert fetched_body["item"]["runtime"]["spec_exists"] is True
     assert fetched_body["item"]["runtime"]["registry_snapshot_exists"] is True
 
-    disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable"})
+    disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable", "actor": _PLUGIN_ACTOR})
     assert disabled.status_code == 200
     disabled_body = disabled.json()
     assert disabled_body["ok"] is True
@@ -55,7 +60,7 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert run_disabled_body["ok"] is False
     assert run_disabled_body["status"] == "disabled"
 
-    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable"})
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
     assert enabled.status_code == 200
     enabled_body = enabled.json()
     assert enabled_body["ok"] is True
@@ -101,6 +106,7 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
             "source_ref": "acme/toolkit",
             "version": "1.2.3",
             "reason": "integration_test",
+            "actor": _PLUGIN_ACTOR,
         },
     )
     assert installed.status_code == 200
@@ -124,7 +130,7 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     filtered_ids = {str(item.get("id")) for item in filtered.json()["items"]}
     assert plugin_id in filtered_ids
 
-    disabled = client.post("/plugins/disable", json={"id": plugin_id})
+    disabled = client.post("/plugins/disable", json={"id": plugin_id, "actor": _PLUGIN_ACTOR})
     assert disabled.status_code == 200
     assert disabled.json()["ok"] is True
 
@@ -133,7 +139,7 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     disabled_ids = {str(item.get("id")) for item in disabled_list.json()["items"]}
     assert plugin_id in disabled_ids
 
-    uninstalled = client.post("/plugins/uninstall", json={"id": plugin_id, "reason": "cleanup"})
+    uninstalled = client.post("/plugins/uninstall", json={"id": plugin_id, "reason": "cleanup", "actor": _PLUGIN_ACTOR})
     assert uninstalled.status_code == 200
     uninstalled_body = uninstalled.json()
     assert uninstalled_body["ok"] is True
@@ -143,7 +149,7 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     assert fetched_after_delete.status_code == 200
     assert fetched_after_delete.json()["ok"] is False
 
-    reloaded = client.post("/plugins/reload")
+    reloaded = client.post("/plugins/reload", json={"reason": "test_reload", "actor": _PLUGIN_ACTOR})
     assert reloaded.status_code == 200
     reloaded_body = reloaded.json()
     assert reloaded_body["ok"] is True
@@ -161,7 +167,10 @@ def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path
 
     client = TestClient(create_app())
 
-    built = client.post("/plugins/build", json={"name": "Catalog Plugin", "description": "Tool catalog coverage"})
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Catalog Plugin", "description": "Tool catalog coverage", "actor": _PLUGIN_ACTOR},
+    )
     assert built.status_code == 200
     built_body = built.json()
     assert built_body["ok"] is True
@@ -213,6 +222,7 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -329,6 +339,7 @@ def test_plugins_run_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: 
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -412,6 +423,7 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -541,6 +553,7 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
         json={
             "source_kind": "registry",
             "source_ref": "acme/ops",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -656,6 +669,7 @@ def test_plugins_run_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> 
         json={
             "source_kind": "registry",
             "source_ref": "acme/missing-approval",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

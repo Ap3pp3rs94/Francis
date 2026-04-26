@@ -37,6 +37,12 @@ SYSTEM_WRITE_TEST_ACTORS = (
     "chat_ui_alias_test",
     "tests",
 )
+PLUGIN_WRITE_TEST_SCOPE = "plugins.write"
+PLUGIN_WRITE_TEST_ACTORS = (
+    "test.plugins.write",
+    "chat_ui.plugins",
+    "plugin_browser_api",
+)
 
 
 def _slug(value: str, *, default: str = "case") -> str:
@@ -100,6 +106,7 @@ def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
                 **{actor: [TRUST_WRITE_TEST_SCOPE] for actor in TRUST_WRITE_TEST_ACTORS},
                 **{actor: [CREDENTIAL_WRITE_TEST_SCOPE] for actor in CREDENTIAL_WRITE_TEST_ACTORS},
                 **{actor: [SYSTEM_WRITE_TEST_SCOPE] for actor in SYSTEM_WRITE_TEST_ACTORS},
+                **{actor: [PLUGIN_WRITE_TEST_SCOPE] for actor in PLUGIN_WRITE_TEST_ACTORS},
             }
         ),
     )

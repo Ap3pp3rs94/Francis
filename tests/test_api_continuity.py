@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+_PLUGIN_ACTOR = "test.plugins.write"
+
 
 def _without_dynamic_observed_at(value: Any) -> Any:
     if isinstance(value, dict):
@@ -333,6 +335,7 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -591,6 +594,7 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -995,6 +999,7 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
         json={
             "source_kind": "registry",
             "source_ref": "acme/reviewable",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1096,6 +1101,7 @@ def test_continuity_briefing_refreshes_approved_gate_into_rerun_handoff(monkeypa
         json={
             "source_kind": "registry",
             "source_ref": "acme/approved-rerun",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1201,6 +1207,7 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
         json={
             "source_kind": "registry",
             "source_ref": "acme/reviewable",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

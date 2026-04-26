@@ -6,6 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+_PLUGIN_ACTOR = "test.plugins.write"
+
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -366,7 +368,10 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
 
     client = TestClient(create_app())
 
-    built = client.post("/plugins/build", json={"name": "Ops Plugin", "description": "operation plugin action"})
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Ops Plugin", "description": "operation plugin action", "actor": _PLUGIN_ACTOR},
+    )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
 
@@ -516,7 +521,11 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
 
     built = client.post(
         "/plugins/build",
-        json={"name": "Ops Memory Receipt Plugin", "description": "operation memory receipt"},
+        json={
+            "name": "Ops Memory Receipt Plugin",
+            "description": "operation memory receipt",
+            "actor": _PLUGIN_ACTOR,
+        },
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
@@ -644,7 +653,10 @@ def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> Non
 
     client = TestClient(create_app())
 
-    built = client.post("/plugins/build", json={"name": "Ops Tool Plugin", "description": "operation tool action"})
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Ops Tool Plugin", "description": "operation tool action", "actor": _PLUGIN_ACTOR},
+    )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
 
@@ -699,6 +711,7 @@ def test_operations_governance_holds_are_visible_and_rerunnable(monkeypatch, tmp
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -814,6 +827,7 @@ def test_operations_approved_mission_run_receipt_preserves_approval_posture(monk
         json={
             "source_kind": "registry",
             "source_ref": "acme/ops-approved-mission",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -908,6 +922,7 @@ def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_
         json={
             "source_kind": "registry",
             "source_ref": "acme/ops-governed",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

@@ -155,6 +155,21 @@ responses as mutation errors instead of presenting them as successful changes.
 This is another narrow route integration, not a claim of API-wide permission
 enforcement.
 
+As of `2026-04-26`, plugin catalog and lifecycle mutation routes are also wired
+to the API permission gate. `POST /plugins/build`, `POST /plugins/enable`,
+`POST /plugins/disable`, `POST /plugins/install`, `POST /plugins/uninstall`,
+and `POST /plugins/reload` deny before changing generated plugin artifacts,
+plugin registry/catalog state, or lifecycle status unless the request actor is
+present in the server-side `FRANCIS_API_ACTOR_SCOPES` policy with the
+`plugins.write` scope. Plugin list/get/download/tool catalog/export routes
+remain read-only. `POST /plugins/run` and `POST /plugins/tools/run` are
+unchanged in this slice and remain governed by their existing trust,
+exact-action approval, receipt, and trace flow. The chat UI plugin browser now
+sends its bounded `chat_ui.plugins` actor for plugin lifecycle writes and treats
+backend permission denials as mutation errors instead of successful lifecycle
+responses. This is another narrow route integration, not a claim of API-wide
+permission enforcement.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2910,6 +2925,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `11 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` plugin lifecycle permission-gate slice:
+
+- `python -m ruff check src\francis\api\routes\plugins.py tests\conftest.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\conftest.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_approvals.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_plugins_permission_gate.py tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `9 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_plugins.py tests\test_api_operations.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `55 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 

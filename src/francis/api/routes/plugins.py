@@ -11,11 +11,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
     redact_governed_display_value,
     redact_governed_metadata,
@@ -41,6 +42,7 @@ router = APIRouter()
 _PLUGIN_LOADER = PluginLoader()
 _PLUGIN_VALIDATOR = PluginValidator()
 _RISK_ORDER = {"readonly": 0, "normal": 1, "critical": 2, "safety_critical": 3}
+_PLUGIN_WRITE_SCOPE = "plugins.write"
 
 
 def _art_dir() -> Path:
@@ -77,6 +79,30 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_PLUGIN_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "applied": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_mutating_plugins",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _now_s() -> int:
@@ -1399,11 +1425,13 @@ def _find_plugin_by_source(registry: dict[str, Any], source_kind: str, source_re
 class PluginBuildIn(BaseModel):
     name: str
     description: str = ""
+    actor: str = ""
 
 
 class PluginToggleIn(BaseModel):
     id: str
     reason: str = "requested"
+    actor: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1415,6 +1443,7 @@ class PluginInstallIn(BaseModel):
     sha256: str | None = None
     capabilities: list[dict[str, Any]] = Field(default_factory=list)
     reason: str = "requested"
+    actor: str = ""
     dry_run: bool = False
     force: bool = False
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -1423,7 +1452,14 @@ class PluginInstallIn(BaseModel):
 class PluginUninstallIn(BaseModel):
     id: str
     reason: str = "requested"
+    actor: str = ""
     force: bool = False
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class PluginReloadIn(BaseModel):
+    reason: str = "requested"
+    actor: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1460,8 +1496,12 @@ def status() -> dict[str, object]:
 
 
 @router.post("/build")
-def build(payload: PluginBuildIn) -> dict[str, object]:
+def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         res = build_plugin(payload.name, payload.description)
         plugin_id = _validate_plugin_id(_safe_str(res.get("plugin_id")).strip())
 
@@ -1783,8 +1823,12 @@ def run_plugin_tool(payload: PluginToolRunIn) -> dict[str, object]:
 
 
 @router.post("/enable")
-def enable_plugin(payload: PluginToggleIn) -> dict[str, object]:
+def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         plugin_id = _validate_plugin_id(payload.id)
         registry = _load_registry()
         _sync_generated_plugins(registry)
@@ -1811,8 +1855,12 @@ def enable_plugin(payload: PluginToggleIn) -> dict[str, object]:
 
 
 @router.post("/disable")
-def disable_plugin(payload: PluginToggleIn) -> dict[str, object]:
+def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         plugin_id = _validate_plugin_id(payload.id)
         registry = _load_registry()
         _sync_generated_plugins(registry)
@@ -1839,8 +1887,12 @@ def disable_plugin(payload: PluginToggleIn) -> dict[str, object]:
 
 
 @router.post("/install")
-def install_plugin(payload: PluginInstallIn) -> dict[str, object]:
+def install_plugin(payload: PluginInstallIn, request: Request) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         source_kind = _safe_str(payload.source_kind).strip().lower()
         source_ref = _safe_str(payload.source_ref).strip()
         if not source_kind:
@@ -1938,8 +1990,12 @@ def install_plugin(payload: PluginInstallIn) -> dict[str, object]:
 
 
 @router.post("/uninstall")
-def uninstall_plugin(payload: PluginUninstallIn) -> dict[str, object]:
+def uninstall_plugin(payload: PluginUninstallIn, request: Request) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         plugin_id = _validate_plugin_id(payload.id)
         registry = _load_registry()
         _sync_generated_plugins(registry)
@@ -2269,8 +2325,13 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
 
 
 @router.post("/reload")
-def reload_plugins() -> dict[str, object]:
+def reload_plugins(request: Request, payload: PluginReloadIn | None = None) -> dict[str, object]:
     try:
+        actor = payload.actor if payload is not None else ""
+        permission = _write_permission(actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         registry = _load_registry()
         synced = _sync_generated_plugins(registry)
         catalog = _save_registry_and_catalog(registry)

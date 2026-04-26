@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 _APPROVAL_ACTOR = "test.approvals.decision"
+_PLUGIN_ACTOR = "test.plugins.write"
 
 
 def test_approval_decision_requires_local_client(monkeypatch, tmp_path: Path) -> None:
@@ -239,6 +240,7 @@ def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch,
         json={
             "source_kind": "registry",
             "source_ref": "acme/reviewable",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

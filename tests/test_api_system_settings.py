@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+_PLUGIN_ACTOR = "test.plugins.write"
+
 
 def _without_dynamic_observed_at(value: Any) -> Any:
     if isinstance(value, dict):
@@ -724,6 +726,7 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -896,6 +899,7 @@ def test_system_world_state_mission_activity_prefers_current_task(monkeypatch, t
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -975,6 +979,7 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
         json={
             "source_kind": "registry",
             "source_ref": "acme/reviewable",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1082,6 +1087,7 @@ def test_system_world_state_deadletter_preview_preserves_pending_approval_linkag
         json={
             "source_kind": "registry",
             "source_ref": "acme/reviewable",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1310,6 +1316,7 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1677,6 +1684,7 @@ controls:
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",
@@ -1898,6 +1906,7 @@ ui:
         json={
             "source_kind": "registry",
             "source_ref": "acme/risky",
+            "actor": _PLUGIN_ACTOR,
             "capabilities": [
                 {
                     "id": "acme.deploy",

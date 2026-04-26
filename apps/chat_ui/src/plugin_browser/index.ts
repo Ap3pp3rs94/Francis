@@ -43,6 +43,8 @@
  * Types
  * ------------------------------------------------------------------------------------------------- */
 
+const DEFAULT_PLUGIN_MUTATION_ACTOR = "chat_ui.plugins";
+
 export type PluginStatus =
   | "enabled"
   | "disabled"
@@ -192,6 +194,7 @@ export type PluginGetResponse = {
 export type PluginToggleRequest = {
   id: string;
   reason?: string;
+  actor?: string;
   meta?: Record<string, unknown>;
 };
 
@@ -229,6 +232,7 @@ export type PluginInstallRequest = {
    * Human justification (audit + approvals).
    */
   reason?: string;
+  actor?: string;
 
   /**
    * If true, backend may validate/fetch but not activate/install.
@@ -257,6 +261,7 @@ export type PluginInstallResponse = {
 export type PluginUninstallRequest = {
   id: string;
   reason?: string;
+  actor?: string;
   force?: boolean;
   meta?: Record<string, unknown>;
 };
@@ -436,6 +441,19 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
+}
+
+function pluginMutationActor(actor?: string): string {
+  return actor?.trim() || DEFAULT_PLUGIN_MUTATION_ACTOR;
+}
+
+function assertPluginMutationAllowed(json: unknown, fallback: string, url: string): void {
+  if (!isRecord(json)) return;
+  const status = safeString(json.status, "");
+  const error = safeString(json.error, "");
+  if (status === "denied" || error === "api_permission_denied") {
+    throw new PluginBrowserApiError(error || safeString(json.message, "") || fallback, { url });
+  }
 }
 
 function safeNumber(v: unknown, fallback = 0): number {
@@ -1320,13 +1338,15 @@ export class PluginBrowserClient {
     if (!id) throw new Error("PluginBrowserClient.enable requires req.id");
 
     const url = this.url(this.endpoints.enable());
+    const body = { ...req, id, actor: pluginMutationActor(req.actor) };
     const json = await this.fetchJson(url, {
       method: "POST",
-      body: JSON.stringify({ ...req, id }),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs,
     });
 
+    assertPluginMutationAllowed(json, "Plugin enable denied.", url);
     if (!isRecord(json)) return { ok: true, id, enabled: true, status: "enabled" };
 
     const enabled = safeBool((json as Record<string, unknown>).enabled, true);
@@ -1353,13 +1373,15 @@ export class PluginBrowserClient {
     if (!id) throw new Error("PluginBrowserClient.disable requires req.id");
 
     const url = this.url(this.endpoints.disable());
+    const body = { ...req, id, actor: pluginMutationActor(req.actor) };
     const json = await this.fetchJson(url, {
       method: "POST",
-      body: JSON.stringify({ ...req, id }),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs,
     });
 
+    assertPluginMutationAllowed(json, "Plugin disable denied.", url);
     if (!isRecord(json)) return { ok: true, id, enabled: false, status: "disabled" };
 
     const enabled = safeBool((json as Record<string, unknown>).enabled, false);
@@ -1387,13 +1409,15 @@ export class PluginBrowserClient {
     if (!kind || !ref) throw new Error("PluginBrowserClient.install requires source_kind and source_ref");
 
     const url = this.url(this.endpoints.install());
+    const body = { ...req, source_kind: kind, source_ref: ref, actor: pluginMutationActor(req.actor) };
     const json = await this.fetchJson(url, {
       method: "POST",
-      body: JSON.stringify({ ...req, source_kind: kind, source_ref: ref }),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs,
     });
 
+    assertPluginMutationAllowed(json, "Plugin install denied.", url);
     if (!isRecord(json)) return { ok: true };
 
     return {
@@ -1420,13 +1444,15 @@ export class PluginBrowserClient {
     if (!id) throw new Error("PluginBrowserClient.uninstall requires req.id");
 
     const url = this.url(this.endpoints.uninstall());
+    const body = { ...req, id, actor: pluginMutationActor(req.actor) };
     const json = await this.fetchJson(url, {
       method: "POST",
-      body: JSON.stringify({ ...req, id }),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs,
     });
 
+    assertPluginMutationAllowed(json, "Plugin uninstall denied.", url);
     if (!isRecord(json)) return { ok: true, id, status: "uninstalling" };
 
     return {
@@ -1469,7 +1495,7 @@ export class PluginBrowserClient {
    * Reload plugin registry / re-scan (optional endpoint).
    */
   async reload(
-    opts?: { signal?: AbortSignal; timeoutMs?: number },
+    opts?: { reason?: string; actor?: string; signal?: AbortSignal; timeoutMs?: number },
   ): Promise<PluginReloadResponse> {
     const ep = this.endpoints.reload;
     if (!ep) {
@@ -1477,8 +1503,18 @@ export class PluginBrowserClient {
     }
 
     const url = this.url(ep());
-    const json = await this.fetchJson(url, { method: "POST", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    const body = {
+      actor: pluginMutationActor(opts?.actor),
+      reason: opts?.reason?.trim() || "reload",
+    };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
 
+    assertPluginMutationAllowed(json, "Plugin reload denied.", url);
     if (!isRecord(json)) return { ok: true };
 
     return {
