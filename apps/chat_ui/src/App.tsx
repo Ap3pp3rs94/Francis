@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArtifactsApiError, ArtifactsClient } from "./artifacts";
-import type { ArtifactInspectResponse } from "./artifacts";
+import { ArtifactInspectionPanel } from "./artifacts/ArtifactInspectionPanel";
 import { parseChatSendResponse, type ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
@@ -6610,6 +6609,20 @@ function SystemPanel(props: {
                       {missionLatestMemoryReceiptRefs ? <>{" / "}{missionLatestMemoryReceiptRefs}</> : null}
                     </div>
                   ) : null}
+                  {missionReceiptArtifactDir ? (
+                    <div style={{ marginTop: 8 }}>
+                      <ArtifactInspectionPanel
+                        baseUrl={resolvedBaseUrl}
+                        artifactDir={missionReceiptArtifactDir}
+                        title="Receipt Artifact"
+                        buttonLabel="Inspect receipt artifact"
+                        buttonStyle={buttonStyle}
+                        badgeStyle={badgeStyle}
+                        borderColor={THEME.panelBorder}
+                        mutedColor={THEME.muted}
+                      />
+                    </div>
+                  ) : null}
                   {(missionReceiptApprovalId ||
                     missionReceiptOperationId ||
                     missionReceiptTraceId ||
@@ -9467,7 +9480,6 @@ function OperationsPanel(props: {
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const memoryTimelineClient = useMemo(() => new MemoryTimelineClient(resolvedBaseUrl), [resolvedBaseUrl]);
-  const artifactsClient = useMemo(() => new ArtifactsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
   const [selectedOperationId, setSelectedOperationId] = useState("");
   const [detail, setDetail] = useState<OperationDetail | null>(null);
@@ -9485,10 +9497,6 @@ function OperationsPanel(props: {
   const [selectedMemoryEvidenceBusy, setSelectedMemoryEvidenceBusy] = useState(false);
   const [selectedMemoryEvidenceError, setSelectedMemoryEvidenceError] = useState<string | null>(null);
   const [selectedMemoryEvidenceLoadedAt, setSelectedMemoryEvidenceLoadedAt] = useState<number | null>(null);
-  const [selectedArtifactInspection, setSelectedArtifactInspection] = useState<ArtifactInspectResponse | null>(null);
-  const [selectedArtifactInspectionBusy, setSelectedArtifactInspectionBusy] = useState(false);
-  const [selectedArtifactInspectionError, setSelectedArtifactInspectionError] = useState<string | null>(null);
-  const [selectedArtifactInspectionLoadedAt, setSelectedArtifactInspectionLoadedAt] = useState<number | null>(null);
   const [composerObjective, setComposerObjective] = useState("Create a governed plan for the current operator objective");
   const [composerReason, setComposerReason] = useState("operator_requested");
   const [composerAction, setComposerAction] = useState("plan.create");
@@ -9786,41 +9794,6 @@ function OperationsPanel(props: {
     setSelectedMemoryEvidenceError(null);
     setSelectedMemoryEvidenceLoadedAt(null);
   }, [selectedMemoryEvidenceQueryKey]);
-
-  useEffect(() => {
-    setSelectedArtifactInspection(null);
-    setSelectedArtifactInspectionError(null);
-    setSelectedArtifactInspectionLoadedAt(null);
-  }, [selectedArtifactDir]);
-
-  const loadSelectedArtifactInspection = useCallback(async () => {
-    if (!selectedArtifactDir) {
-      setSelectedArtifactInspection(null);
-      setSelectedArtifactInspectionLoadedAt(null);
-      setSelectedArtifactInspectionError("No artifact directory is available for the selected operation.");
-      return;
-    }
-
-    setSelectedArtifactInspectionBusy(true);
-    setSelectedArtifactInspectionError(null);
-    try {
-      const response = await artifactsClient.inspect(selectedArtifactDir, { limit: 50, timeoutMs: 10_000 });
-      setSelectedArtifactInspection(response);
-      setSelectedArtifactInspectionLoadedAt(nowUnixSeconds());
-    } catch (err) {
-      const msg =
-        err instanceof ArtifactsApiError
-          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-          : err instanceof Error
-            ? err.message
-            : "Artifact inspection request failed.";
-      setSelectedArtifactInspection(null);
-      setSelectedArtifactInspectionLoadedAt(null);
-      setSelectedArtifactInspectionError(msg);
-    } finally {
-      setSelectedArtifactInspectionBusy(false);
-    }
-  }, [artifactsClient, selectedArtifactDir]);
 
   const loadSelectedMemoryEvidence = useCallback(async () => {
     if (!selectedMemoryEvidenceQueries.length) {
@@ -10551,113 +10524,14 @@ function OperationsPanel(props: {
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
               {selectedArtifactDir ? (
-                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#101214" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>Artifact Inspection</div>
-                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                        artifact=<code>{selectedArtifactDir}</code>
-                      </div>
-                    </div>
-                    <button
-                      style={{ ...buttonStyle, padding: "4px 8px", fontSize: 11 }}
-                      disabled={selectedArtifactInspectionBusy}
-                      onClick={() => void loadSelectedArtifactInspection()}
-                    >
-                      {selectedArtifactInspectionBusy ? "Inspecting." : "Inspect artifact"}
-                    </button>
-                  </div>
-                  {selectedArtifactInspectionBusy ? (
-                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>Loading artifact metadata.</div>
-                  ) : selectedArtifactInspectionError ? (
-                    <div style={{ fontSize: 11, color: "#ffaaaa", marginTop: 8 }}>
-                      Artifact inspection unavailable: {selectedArtifactInspectionError}
-                    </div>
-                  ) : selectedArtifactInspection ? (
-                    <>
-                      <div style={{ fontSize: 11, color: selectedArtifactInspection.ok ? THEME.muted : "#ffcf9d", marginTop: 8 }}>
-                        status=<code>{selectedArtifactInspection.ok ? "available" : selectedArtifactInspection.error || "unavailable"}</code>
-                        {selectedArtifactInspection.exists !== undefined ? (
-                          <>
-                            {" / "}exists=<code>{String(selectedArtifactInspection.exists)}</code>
-                          </>
-                        ) : null}
-                        {selectedArtifactInspection.kind ? (
-                          <>
-                            {" / "}kind=<code>{selectedArtifactInspection.kind}</code>
-                          </>
-                        ) : null}
-                        {selectedArtifactInspection.bytes !== undefined ? (
-                          <>
-                            {" / "}bytes=<code>{String(selectedArtifactInspection.bytes)}</code>
-                          </>
-                        ) : null}
-                        {selectedArtifactInspection.entry_count !== undefined ? (
-                          <>
-                            {" / "}entries=<code>{String(selectedArtifactInspection.entry_count)}</code>
-                          </>
-                        ) : null}
-                        {selectedArtifactInspection.truncated !== undefined ? (
-                          <>
-                            {" / "}truncated=<code>{String(selectedArtifactInspection.truncated)}</code>
-                          </>
-                        ) : null}
-                      </div>
-                      {selectedArtifactInspectionLoadedAt !== null ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                          inspected_at=<code>{toLocaleTime(selectedArtifactInspectionLoadedAt)}</code>
-                          {selectedArtifactInspection.relative_path ? (
-                            <>
-                              {" / "}relative_path=<code>{selectedArtifactInspection.relative_path}</code>
-                            </>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {selectedArtifactInspection.entries.length > 0 ? (
-                        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-                          {selectedArtifactInspection.entries.slice(0, 8).map((entry) => {
-                            const modifiedAt =
-                              entry.modified_ts !== undefined && entry.modified_ts !== null
-                                ? mixedLocaleTime(entry.modified_ts)
-                                : "";
-                            return (
-                              <div
-                                key={`${entry.relative_path || entry.name}:${entry.kind}`}
-                                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, fontSize: 11 }}
-                              >
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                                  <code>{entry.name}</code>
-                                  <span style={badgeStyle(entry.kind)}>{entry.kind}</span>
-                                </div>
-                                <div style={{ color: THEME.muted, marginTop: 4 }}>
-                                  {entry.relative_path ? (
-                                    <>
-                                      path=<code>{entry.relative_path}</code>
-                                    </>
-                                  ) : null}
-                                  {entry.bytes !== undefined ? (
-                                    <>
-                                      {entry.relative_path ? " / " : ""}bytes=<code>{String(entry.bytes)}</code>
-                                    </>
-                                  ) : null}
-                                  {modifiedAt ? (
-                                    <>
-                                      {(entry.relative_path || entry.bytes !== undefined) ? " / " : ""}modified=<code>{modifiedAt}</code>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : selectedArtifactInspectionLoadedAt !== null && selectedArtifactInspection.ok ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
-                          No child artifact entries returned for this handle.
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
+                <ArtifactInspectionPanel
+                  baseUrl={resolvedBaseUrl}
+                  artifactDir={selectedArtifactDir}
+                  buttonStyle={buttonStyle}
+                  badgeStyle={badgeStyle}
+                  borderColor={THEME.panelBorder}
+                  mutedColor={THEME.muted}
+                />
               ) : null}
               {selectedMissionId ? (
                 <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819" }}>

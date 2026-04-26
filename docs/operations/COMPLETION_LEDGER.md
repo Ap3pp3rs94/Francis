@@ -284,6 +284,13 @@ and directory-entry metadata. Missing or unreadable artifact handles remain
 visible as backend failure state instead of being converted into a UI success
 claim, and file contents are not requested or displayed.
 
+As of `2026-04-26`, selected mission continuity receipts can use the same
+metadata-only artifact inspection path. When the selected mission receipt summary
+exposes a real current `artifact_dir`, the Continuity Receipts panel offers a
+manual receipt-artifact inspection action backed by `ArtifactsClient.inspect`.
+The operation detail artifact inspector now uses the same shared panel component,
+so both surfaces preserve the same backend failure-state and no-content boundary.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -2452,6 +2459,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission receipt artifact inspection interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `38 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation artifact inspection interface slice:
 
