@@ -709,6 +709,14 @@ not present. This keeps receipt-backed evidence lookup aligned with the visible
 `loop` projection without broad search, inferred linkage, execution, or
 approval authority.
 
+As of `2026-04-26`, the chat UI selected-operation memory evidence cards render
+those loop-only handles when memory timeline events do not include normalized
+top-level references. The reference line now falls back to event `loop`
+current-task and handoff operation, trace, approval, run, and artifact handles,
+so evidence found by the backend loop-handle filters does not appear
+unlinked in the operator surface. This is display-only; it does not change
+queries, execution, approvals, or receipt writes.
+
 As of `2026-04-26`, memory timeline loop projections also preserve
 `current_task_trace_id` from mission-loop continuity metadata. This keeps
 current-task trace handles aligned with the existing handoff trace, run, and
@@ -3692,6 +3700,13 @@ Latest targeted validation for the `2026-04-26` memory timeline loop-handle filt
 - `python -m pytest tests\test_api_mission_loop_contract.py -q`
   Result: `1 passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` selected memory evidence loop-handle display slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` terminal mission receipt current-task trace slice:

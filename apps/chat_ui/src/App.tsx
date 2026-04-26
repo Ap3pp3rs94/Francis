@@ -408,13 +408,21 @@ function memoryTimelineEventSummary(event: MemoryTimelineEvent): string {
 
 function memoryTimelineEventReferenceLine(event: MemoryTimelineEvent): string {
   const refs = event.references;
+  const loop = event.loop;
   const parts: string[] = [];
   if (refs?.mission_id) parts.push(`mission ${refs.mission_id}`);
-  if (refs?.operation_id) parts.push(`task ${refs.operation_id}`);
-  if (refs?.trace_id) parts.push(`trace ${refs.trace_id}`);
-  if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
-  if (refs?.run_id) parts.push(`run ${refs.run_id}`);
-  if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
+  const operationId =
+    refs?.operation_id || loop?.current_task_operation_id || loop?.handoff_operation_id;
+  const traceId = refs?.trace_id || loop?.current_task_trace_id || loop?.handoff_trace_id;
+  const approvalId = refs?.approval_id || loop?.current_task_approval_id || loop?.handoff_approval_id;
+  const runId = refs?.run_id || loop?.current_task_run_id || loop?.handoff_run_id || loop?.run_id;
+  const artifactDir =
+    refs?.artifact_dir || loop?.current_task_artifact_dir || loop?.handoff_artifact_dir || loop?.artifact_dir;
+  if (operationId) parts.push(`task ${operationId}`);
+  if (traceId) parts.push(`trace ${traceId}`);
+  if (approvalId) parts.push(`approval ${approvalId}`);
+  if (runId) parts.push(`run ${runId}`);
+  if (artifactDir) parts.push(`artifact ${artifactDir}`);
   return parts.join(" / ");
 }
 
