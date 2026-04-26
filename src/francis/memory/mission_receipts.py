@@ -61,6 +61,29 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return cast(dict[str, Any], value) if isinstance(value, dict) else {}
 
 
+def _reference_handles(meta: dict[str, Any]) -> dict[str, str]:
+    references = {
+        "mission_id": _first_text(
+            meta.get("mission_id"), meta.get("current_task_mission_id"), meta.get("handoff_mission_id")
+        ),
+        "operation_id": _first_text(
+            meta.get("operation_id"),
+            meta.get("task_id"),
+            meta.get("current_task_operation_id"),
+            meta.get("handoff_operation_id"),
+        ),
+        "trace_id": _first_text(meta.get("trace_id"), meta.get("current_task_trace_id"), meta.get("handoff_trace_id")),
+        "approval_id": _first_text(
+            meta.get("approval_id"), meta.get("current_task_approval_id"), meta.get("handoff_approval_id")
+        ),
+        "run_id": _first_text(meta.get("run_id"), meta.get("current_task_run_id"), meta.get("handoff_run_id")),
+        "artifact_dir": _first_text(
+            meta.get("artifact_dir"), meta.get("current_task_artifact_dir"), meta.get("handoff_artifact_dir")
+        ),
+    }
+    return {key: value for key, value in references.items() if value}
+
+
 def _operation_receipts_from_continuity(
     *,
     limit: int = 1000,
@@ -87,8 +110,9 @@ def _operation_receipts_from_continuity(
         if operation_status not in _TERMINAL_OPERATION_STATUSES:
             continue
 
-        mission_id = _safe_str(meta.get("mission_id")).strip()
-        operation_id = _first_text(meta.get("operation_id"), meta.get("task_id"))
+        references = _reference_handles(meta)
+        mission_id = references.get("mission_id", "")
+        operation_id = references.get("operation_id", "")
         if not mission_id or not operation_id:
             continue
 
@@ -96,15 +120,6 @@ def _operation_receipts_from_continuity(
         content = _safe_str(item.get("content")).strip()
         ts_raw = item.get("ts")
         digest = hashlib.sha1(f"{ts_raw}:{role}:{content}".encode("utf-8", errors="ignore")).hexdigest()[:12]
-        references = {
-            "mission_id": mission_id,
-            "operation_id": operation_id,
-            "trace_id": _safe_str(meta.get("trace_id")).strip(),
-            "approval_id": _safe_str(meta.get("approval_id")).strip(),
-            "run_id": _safe_str(meta.get("run_id")).strip(),
-            "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
-        }
-        references = {key: value for key, value in references.items() if value}
         receipt: dict[str, Any] = {
             "id": f"ledger_{digest}",
             "source": "continuity.ledger",
@@ -119,7 +134,11 @@ def _operation_receipts_from_continuity(
             "operation_error": _safe_str(meta.get("operation_error")).strip(),
             "result_message": _safe_str(meta.get("result_message")).strip(),
             "recovery_next_step": _safe_str(meta.get("recovery_next_step")).strip(),
-            "approval_status": _safe_str(meta.get("approval_status")).strip().lower(),
+            "approval_status": _first_text(
+                meta.get("approval_status"),
+                meta.get("current_task_approval_status"),
+                meta.get("handoff_approval_status"),
+            ).lower(),
             "capability": _safe_str(meta.get("capability")).strip(),
             "domain": "operations",
             "scope": "mission.loop",

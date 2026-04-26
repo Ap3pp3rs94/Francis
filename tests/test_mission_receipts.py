@@ -177,3 +177,57 @@ def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatc
     assert receipts[0]["current_task_run_id"] == "run_failure_refs"
     assert receipts[0]["current_task_next_step"] == "review_operation_detail"
     assert receipts[0]["memory_receipt_count"] == 1
+
+
+def test_mission_operation_receipts_promote_handoff_reference_fallbacks(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.chat.continuity.ledger import append
+    from francis.memory.mission_receipts import mission_operation_receipts, operation_memory_receipts
+
+    append(
+        "system",
+        "Mission operation completed with handoff-only receipt handles.",
+        {
+            "domain": "operations",
+            "scope": "mission.loop",
+            "subsystem": "operations.runtime",
+            "operation_status": "succeeded",
+            "capability": "plugin.run",
+            "active_stage": "interface",
+            "handoff_stage": "interface",
+            "handoff_action": "review_result",
+            "handoff_gate": "operator_review",
+            "handoff_mission_id": "msn_handoff_refs",
+            "handoff_operation_id": "tsk_handoff_refs",
+            "handoff_trace_id": "trace_handoff_refs",
+            "handoff_approval_id": "apr_handoff_refs",
+            "handoff_approval_status": "approved",
+            "handoff_run_id": "run_handoff_refs",
+            "handoff_artifact_dir": "D:/francis/data/artifacts/handoff-refs",
+            "handoff_next_step": "review_completed_mission",
+        },
+    )
+
+    receipts = mission_operation_receipts("msn_handoff_refs")
+
+    assert len(receipts) == 1
+    assert receipts[0]["mission_id"] == "msn_handoff_refs"
+    assert receipts[0]["operation_id"] == "tsk_handoff_refs"
+    assert receipts[0]["trace_id"] == "trace_handoff_refs"
+    assert receipts[0]["approval_id"] == "apr_handoff_refs"
+    assert receipts[0]["approval_status"] == "approved"
+    assert receipts[0]["run_id"] == "run_handoff_refs"
+    assert receipts[0]["artifact_dir"] == "D:/francis/data/artifacts/handoff-refs"
+    assert receipts[0]["references"] == {
+        "mission_id": "msn_handoff_refs",
+        "operation_id": "tsk_handoff_refs",
+        "trace_id": "trace_handoff_refs",
+        "approval_id": "apr_handoff_refs",
+        "run_id": "run_handoff_refs",
+        "artifact_dir": "D:/francis/data/artifacts/handoff-refs",
+    }
+
+    operation_receipts = operation_memory_receipts("tsk_handoff_refs", mission_id="msn_handoff_refs")
+    assert operation_receipts == receipts

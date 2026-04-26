@@ -804,6 +804,15 @@ projection and the mission receipt reader preserve it. This keeps the memory
 handoff aligned with the same operation trace already exposed by the mission loop
 without creating traces, changing execution, or expanding memory writes.
 
+As of `2026-04-26`, mission operation memory receipt readback also promotes
+existing handoff/current-task receipt handles into normalized receipt
+references. When continuity-ledger metadata carries mission, operation,
+approval, trace, run, or artifact handles only in `handoff_*` or
+`current_task_*` fields, the mission receipt reader now preserves those handles
+on the top-level receipt and `references` block so mission and operation memory
+lookups remain reachable. This is readback normalization only; it does not write
+new receipts, create memory, execute work, or change approval state.
+
 As of `2026-04-26`, mission detail loop state also uses terminal operation
 memory receipts to carry approved execution posture through the memory and
 interface handoff stages. When an approved supervised execution completes, the
@@ -5493,6 +5502,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission tick timestamp-i
   Result: `26 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `93 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt handoff-reference fallback slice:
+
+- `python -m pytest tests\test_mission_receipts.py::test_mission_operation_receipts_promote_handoff_reference_fallbacks -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_mission_receipts.py -q`
+  Result: `3 passed`
+- `python -m ruff check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt approval-status projection slice:
 
