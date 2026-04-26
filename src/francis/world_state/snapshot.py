@@ -1997,12 +1997,15 @@ def _incident_evidence_item(
     ts: float = 0.0,
     approval_id: str = "",
     operation_id: str = "",
+    operation_name: str = "",
+    operation_plane: str = "",
     mission_id: str = "",
     gate: str = "",
     next_step: str = "",
     trace_id: str = "",
     run_id: str = "",
     artifact_dir: str = "",
+    advance_action: str = "",
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "kind": str(kind or "").strip(),
@@ -2013,12 +2016,15 @@ def _incident_evidence_item(
         "path": str(path or "").strip(),
         "approval_id": str(approval_id or "").strip(),
         "operation_id": str(operation_id or "").strip(),
+        "operation_name": str(operation_name or "").strip(),
+        "operation_plane": str(operation_plane or "").strip(),
         "mission_id": str(mission_id or "").strip(),
         "gate": str(gate or "").strip(),
         "next_step": str(next_step or "").strip(),
         "trace_id": str(trace_id or "").strip(),
         "run_id": str(run_id or "").strip(),
         "artifact_dir": str(artifact_dir or "").strip(),
+        "advance_action": str(advance_action or "").strip(),
     }
     if ts > 0:
         item["ts"] = ts
@@ -2036,12 +2042,15 @@ def _pending_approval_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
         ts=_parse_ts(item.get("ts")),
         approval_id=approval_id,
         operation_id=str(item.get("operation_id") or "").strip(),
+        operation_name=str(item.get("operation_name") or "").strip(),
+        operation_plane=str(item.get("operation_plane") or "").strip(),
         mission_id=str(item.get("mission_id") or "").strip(),
         gate=str(item.get("gate") or "").strip(),
         next_step=str(item.get("next_step") or "").strip(),
         trace_id=str(item.get("trace_id") or "").strip(),
         run_id=str(item.get("run_id") or "").strip(),
         artifact_dir=str(item.get("artifact_dir") or "").strip(),
+        advance_action=str(item.get("advance_action") or "").strip(),
     )
 
 

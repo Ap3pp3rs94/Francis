@@ -137,6 +137,8 @@ export type WorldStateApprovalSummary = {
   replacement_previous_payload_keys?: string[];
   replacement_changed_keys?: string[];
   operation_id?: string;
+  operation_name?: string;
+  operation_plane?: string;
   mission_id?: string;
   operation_status?: string;
   operation_result_status?: string;
@@ -145,6 +147,7 @@ export type WorldStateApprovalSummary = {
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
+  advance_action?: string;
   payload_summary?: WorldStateApprovalPayloadSummary;
 };
 
@@ -207,6 +210,17 @@ export type WorldStateIncidentSummary = {
     detail?: string;
     path?: string;
     ts?: number;
+    approval_id?: string;
+    operation_id?: string;
+    operation_name?: string;
+    operation_plane?: string;
+    mission_id?: string;
+    gate?: string;
+    next_step?: string;
+    trace_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
+    advance_action?: string;
   }>;
 };
 
@@ -2228,6 +2242,8 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         replacement_previous_payload_keys: safeStringArray(item.replacement_previous_payload_keys),
         replacement_changed_keys: safeStringArray(item.replacement_changed_keys),
         operation_id: safeString(item.operation_id, ""),
+        operation_name: safeString(item.operation_name, ""),
+        operation_plane: safeString(item.operation_plane, ""),
         mission_id: safeString(item.mission_id, ""),
         operation_status: safeString(item.operation_status, ""),
         operation_result_status: safeString(item.operation_result_status, ""),
@@ -2236,6 +2252,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         trace_id: safeString(item.trace_id, ""),
         run_id: safeString(item.run_id, ""),
         artifact_dir: safeString(item.artifact_dir, ""),
+        advance_action: safeString(item.advance_action, ""),
         payload_summary: isRecord(item.payload_summary)
           ? parseWorldStateApprovalPayloadSummary(item.payload_summary)
           : undefined,
@@ -2884,8 +2901,40 @@ function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary
       detail: safeString(item["detail"], ""),
       path: safeString(item["path"], ""),
       ts: safeNumber(item["ts"], 0),
+      approval_id: safeString(item["approval_id"], ""),
+      operation_id: safeString(item["operation_id"], ""),
+      operation_name: safeString(item["operation_name"], ""),
+      operation_plane: safeString(item["operation_plane"], ""),
+      mission_id: safeString(item["mission_id"], ""),
+      gate: safeString(item["gate"], ""),
+      next_step: safeString(item["next_step"], ""),
+      trace_id: safeString(item["trace_id"], ""),
+      run_id: safeString(item["run_id"], ""),
+      artifact_dir: safeString(item["artifact_dir"], ""),
+      advance_action: safeString(item["advance_action"], ""),
     }))
-    .filter((item) => Boolean(item.kind || item.id || item.label || item.status || item.detail || item.path || item.ts));
+    .filter((item) =>
+      Boolean(
+        item.kind ||
+          item.id ||
+          item.label ||
+          item.status ||
+          item.detail ||
+          item.path ||
+          item.ts ||
+          item.approval_id ||
+          item.operation_id ||
+          item.operation_name ||
+          item.operation_plane ||
+          item.mission_id ||
+          item.gate ||
+          item.next_step ||
+          item.trace_id ||
+          item.run_id ||
+          item.artifact_dir ||
+          item.advance_action,
+      ),
+    );
 
   const summary: WorldStateIncidentSummary = {
     id,

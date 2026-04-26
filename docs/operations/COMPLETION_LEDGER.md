@@ -770,6 +770,14 @@ evidence items carry `approval_id`, `mission_id`, `operation_id`, `gate`,
 exist in the pending approval projection. No approval decision behavior,
 execution path, policy rule, or memory-write path is changed.
 
+As of `2026-04-26`, those world-state pending approval and governance incident
+readbacks also preserve the held task's operation identity. Pending approval
+overview items and governance incident evidence can carry `operation_name`,
+`operation_plane`, and backend-provided `advance_action`, and the chat UI
+settings/world-state client preserves those fields for read-only operator
+review. This is projection truth only; it does not change approval decisions,
+execution, policy gates, or mission mutation.
+
 As of `2026-04-26`, mission loop gate and execute projections preserve trace
 handles when the linked operation already exposes one. `/missions/{mission_id}`
 now carries `trace_id` through the active gate handoff plus gate and execute
@@ -4144,6 +4152,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 world-state approval task identity evidence slice:
+
+- `python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `ruff check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `ruff format --check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

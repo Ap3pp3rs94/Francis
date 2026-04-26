@@ -1020,6 +1020,7 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
             "reason": "world state approval projection",
             "mission_id": blocked_id,
             "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+            "meta": {"advance_action": "run_linked_operation"},
         },
     )
     assert operation.status_code == 200
@@ -1049,6 +1050,9 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert pending_approval["action"] == "plugin.run"
     assert pending_approval["status"] == "pending"
     assert pending_approval["request_kind"] == "plugin.run.request"
+    assert pending_approval["operation_name"] == "plugin.run"
+    assert pending_approval["operation_plane"] == "P3_GOVERNANCE"
+    assert pending_approval["advance_action"] == "run_linked_operation"
     assert pending_approval["payload_summary"]["plugin_id"] == plugin_id
     assert pending_approval["payload_summary"]["requested_action"] == "deploy"
     assert pending_approval["payload_summary"]["risk_tier"] == "critical"
@@ -1063,6 +1067,9 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert approval_evidence["approval_id"] == approval_id
     assert approval_evidence["mission_id"] == blocked_id
     assert approval_evidence["operation_id"] == operation_id
+    assert approval_evidence["operation_name"] == "plugin.run"
+    assert approval_evidence["operation_plane"] == "P3_GOVERNANCE"
+    assert approval_evidence["advance_action"] == "run_linked_operation"
     assert approval_evidence["gate"] == "approvals_gate"
     assert approval_evidence["next_step"] == pending_approval["next_step"]
 

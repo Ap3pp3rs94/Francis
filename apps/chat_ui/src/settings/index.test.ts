@@ -375,6 +375,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               replacement_previous_payload_keys: ["action", "input", "plugin_id"],
               replacement_changed_keys: ["input"],
               operation_id: "tsk_plugin_refresh",
+              operation_name: "plugin.run",
+              operation_plane: "P3_GOVERNANCE",
               mission_id: "mission_plugin_refresh",
               operation_status: "queued",
               operation_result_status: "needs_approval",
@@ -383,6 +385,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               trace_id: "trace_plugin_refresh",
               run_id: "run_plugin_refresh",
               artifact_dir: "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
+              advance_action: "run_linked_operation",
               payload_summary: {
                 requested_action: "deploy",
                 plugin_id: "plugin.deploy",
@@ -720,7 +723,39 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               ],
             },
           },
-          incidents: [],
+          incidents: [
+            {
+              id: "governance.pending_approvals",
+              severity: "warning",
+              category: "governance",
+              status: "active",
+              title: "Approvals are waiting on operator review",
+              detail: "1 pending approval is queued for a decision.",
+              source: "approvals",
+              count: 1,
+              approval_id: "apr_plugin_refresh",
+              probe: "approval_queue",
+              evidence: [
+                {
+                  kind: "approval",
+                  id: "apr_plugin_refresh",
+                  label: "plugin.run",
+                  status: "pending",
+                  approval_id: "apr_plugin_refresh",
+                  mission_id: "mission_plugin_refresh",
+                  operation_id: "tsk_plugin_refresh",
+                  operation_name: "plugin.run",
+                  operation_plane: "P3_GOVERNANCE",
+                  gate: "approvals_gate",
+                  next_step: "approve_exact_action",
+                  trace_id: "trace_plugin_refresh",
+                  run_id: "run_plugin_refresh",
+                  artifact_dir: "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
+                  advance_action: "run_linked_operation",
+                },
+              ],
+            },
+          ],
         },
         trust: { global_level: 0.6 },
       });
@@ -977,6 +1012,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     ]);
     assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.replacement_changed_keys, ["input"]);
     assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_id, "tsk_plugin_refresh");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_name, "plugin.run");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_plane, "P3_GOVERNANCE");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.mission_id, "mission_plugin_refresh");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_status, "queued");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_result_status, "needs_approval");
@@ -988,6 +1025,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       worldState.overview?.pending_approvals?.[0]?.artifact_dir,
       "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
     );
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.advance_action, "run_linked_operation");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.approval_id, "apr_plugin_refresh");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_id, "tsk_plugin_refresh");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_name, "plugin.run");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_plane, "P3_GOVERNANCE");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.advance_action, "run_linked_operation");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.plugin_id, "plugin.deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.required_trust, 5);
