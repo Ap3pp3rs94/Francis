@@ -258,6 +258,14 @@ receipts, while preserving operation, approval, trace, run, and artifact handles
 This keeps direct advance and queue-run responses aligned without changing
 execution authority, queue eligibility, or approval behavior.
 
+As of `2026-04-26`, read-only mission queue responses carry the receipt-backed
+mission loop projection. `GET /missions/queue` enriches visible queue, failed,
+and deadletter items with the existing `loop_state`, `handoff`,
+`receipt_summary`, receipt-backed `current_task` fields, and bounded
+history/linked-operation/run-ledger counts. This is a read projection only; it
+does not advance missions, run operations, widen approvals, or replace the full
+mission detail/log inspection route.
+
 As of `2026-04-26`, the explanation registry can preserve and query the same
 mission loop handles used by the Stage 3 trace and memory surfaces. Explanation
 records now lift `mission_id` and `operation_id` from either top-level fields or
@@ -3370,6 +3378,20 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission queue loop
+projection slice:
+
+- `python -m pytest tests\test_api_missions.py::test_mission_linked_governance_hold_updates_blocked_state -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `2 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` observer scan permission-gate
 slice:

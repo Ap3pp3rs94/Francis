@@ -1082,6 +1082,22 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert fetched_body["current_task"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["memory"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["memory"]["latest_ts"] == fetched_body["history"][-1]["ts"]
+
+    queue = client.get("/missions/queue", params={"limit": 10})
+    assert queue.status_code == 200
+    queue_item = next(item for item in queue.json()["items"] if item["id"] == mission_id)
+    assert queue_item["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert queue_item["loop_state"]["active_stage"] == "gate"
+    assert queue_item["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert queue_item["handoff"]["operation_id"] == operation_id
+    assert queue_item["receipt_summary"]["current_operation_id"] == operation_id
+    assert queue_item["receipt_summary"]["current_gate"] == "trust_gate"
+    assert queue_item["current_task"]["operation_id"] == operation_id
+    assert queue_item["current_task"]["gate"] == "trust_gate"
+    assert queue_item["current_task"]["latest_receipt_status"] == run_ledger[0]["status"]
+    assert queue_item["run_ledger_count"] >= 1
+    assert queue_item["loop_state"]["interface"]["status"] == "available"
+
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
     assert transition_events
     assert transition_events[-1]["details"]["gate"] == "trust_gate"

@@ -1195,6 +1195,39 @@ def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
     }
 
 
+def _enrich_mission_queue_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    projection_cache: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        payload = dict(item)
+        mission_id = _safe_str(payload.get("id")).strip()
+        if mission_id:
+            if mission_id not in projection_cache:
+                projection_cache[mission_id] = _mission_queue_result_projection(mission_id)
+            projection = projection_cache[mission_id]
+            if "mission_error" in projection:
+                payload["projection_error"] = projection["mission_error"]
+            else:
+                for key in ("loop_state", "handoff", "receipt_summary"):
+                    value = projection.get(key)
+                    if isinstance(value, dict) and value:
+                        payload[key] = value
+                projected_current_task = projection.get("current_task")
+                if isinstance(projected_current_task, dict) and projected_current_task:
+                    existing_current_task = payload.get("current_task")
+                    merged_current_task = dict(existing_current_task) if isinstance(existing_current_task, dict) else {}
+                    merged_current_task.update(projected_current_task)
+                    payload["current_task"] = merged_current_task
+                for key in ("history_count", "linked_operation_count", "run_ledger_count"):
+                    value = projection.get(key)
+                    if isinstance(value, int):
+                        payload[key] = value
+        enriched.append(payload)
+    return enriched
+
+
 class MissionCreateIn(BaseModel):
     objective: str
     summary: str = ""
@@ -1321,9 +1354,11 @@ def list_missions(limit: int = 200, status: str | None = None) -> dict[str, obje
 def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, object]:
     try:
         safe_limit = max(1, min(int(limit), 5000))
-        items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=include_terminal)
-        failed = mission_store.failed_queue_items(limit=min(safe_limit, 20))
-        deadletter = mission_store.deadletter_queue_items(limit=min(safe_limit, 20))
+        items = _enrich_mission_queue_items(
+            mission_store.mission_queue_items(limit=safe_limit, include_terminal=include_terminal)
+        )
+        failed = _enrich_mission_queue_items(mission_store.failed_queue_items(limit=min(safe_limit, 20)))
+        deadletter = _enrich_mission_queue_items(mission_store.deadletter_queue_items(limit=min(safe_limit, 20)))
         return {
             "ok": True,
             "items": items,
