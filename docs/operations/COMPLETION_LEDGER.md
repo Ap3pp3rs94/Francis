@@ -318,6 +318,16 @@ read-only evidence display. This is trace/evidence readback only; it does not
 write memory, create explanation records, execute work, or synthesize missing
 task identity.
 
+As of `2026-04-26`, explanation evidence also preserves bounded recovery
+context from receipt-backed execution records. Explanation records can promote
+`operation_error`, `result_message`, and `recovery_next_step` from top-level
+fields, `loop`, `references`, or metadata into list/get/export summaries, and
+those values are passed through the governed operation free-text redaction
+boundary before persistence or return. The chat UI explanation client preserves
+those fields as read-only evidence. This is recovery evidence readback only; it
+does not create retry authority, deadletter authority, execution state, or new
+operator controls.
+
 As of `2026-04-26`, the chat UI explanation evidence path can use those
 mission and operation explanation filters. The selected operation/mission audit
 evidence helper now sends bounded `mission_id` and `operation_id` queries before
@@ -4623,6 +4633,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata run
   Result: `passed`
 - `cd apps\chat_ui; npm run test`
   Result: `62 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation recovery-context readback slice:
+
+- `python -m pytest tests\test_api_explanation.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `2 files already formatted`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `2 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 

@@ -60,6 +60,9 @@ export type ExplanationRecord = {
   mission_id?: string;
   operation_id?: string;
   operation_status?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
   domain?: string;
   conversation_id?: string;
   approval_id?: string;
@@ -466,6 +469,20 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
 
   const operationStatus = firstString(raw.operation_status, raw.operationStatus, loop.operation_status, meta.operation_status);
   if (operationStatus) rec.operation_status = operationStatus;
+
+  const operationError = firstString(raw.operation_error, raw.operationError, loop.operation_error, meta.operation_error);
+  if (operationError) rec.operation_error = operationError;
+
+  const resultMessage = firstString(raw.result_message, raw.resultMessage, loop.result_message, meta.result_message);
+  if (resultMessage) rec.result_message = resultMessage;
+
+  const recoveryNextStep = firstString(
+    raw.recovery_next_step,
+    raw.recoveryNextStep,
+    loop.recovery_next_step,
+    meta.recovery_next_step,
+  );
+  if (recoveryNextStep) rec.recovery_next_step = recoveryNextStep;
 
   const domain = safeString(raw.domain, "");
   if (domain) rec.domain = domain;

@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import Response
 
+from francis.governance.operation_redaction import redact_operation_text
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -32,6 +33,11 @@ _CURRENT_TASK_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "current_task_run_id": ("current_task_run_id", "currentTaskRunId"),
     "current_task_artifact_dir": ("current_task_artifact_dir", "currentTaskArtifactDir"),
     "current_task_next_step": ("current_task_next_step", "currentTaskNextStep"),
+}
+_RECEIPT_CONTEXT_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "operation_error": ("operation_error", "operationError"),
+    "result_message": ("result_message", "resultMessage"),
+    "recovery_next_step": ("recovery_next_step", "recoveryNextStep"),
 }
 
 
@@ -137,6 +143,22 @@ def _current_task_fields(*sources: Any) -> dict[str, str]:
     return out
 
 
+def _receipt_context_fields(*sources: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for field, aliases in _RECEIPT_CONTEXT_FIELD_ALIASES.items():
+        for source in sources:
+            raw = _meta(source)
+            value = ""
+            for alias in aliases:
+                value = redact_operation_text(raw.get(alias))
+                if value:
+                    break
+            if value:
+                out[field] = value
+                break
+    return out
+
+
 def _validate_id(value: str, field: str = "id") -> str:
     text = value.strip()
     if not text:
@@ -171,6 +193,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     references = _reference_handles(raw_references)
     loop = _meta(raw.get("loop"))
     current_task_fields = _current_task_fields(raw, loop, raw_references, meta)
+    receipt_context_fields = _receipt_context_fields(raw, loop, raw_references, meta)
     trace_id = (
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
         or references.get("trace_id", "")
@@ -254,6 +277,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "meta": meta,
     }
     normalized.update(current_task_fields)
+    normalized.update(receipt_context_fields)
     return normalized
 
 
@@ -279,6 +303,10 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "meta": record.get("meta") if isinstance(record.get("meta"), dict) else {},
     }
     for key in _CURRENT_TASK_FIELD_ALIASES:
+        value = _safe_str(record.get(key)).strip()
+        if value:
+            summary[key] = value
+    for key in _RECEIPT_CONTEXT_FIELD_ALIASES:
         value = _safe_str(record.get(key)).strip()
         if value:
             summary[key] = value
@@ -461,6 +489,9 @@ def _csv(records: list[dict[str, Any]]) -> str:
             "mission_id",
             "operation_id",
             "operation_status",
+            "operation_error",
+            "result_message",
+            "recovery_next_step",
             "current_task_source",
             "current_task_approval_id",
             "current_task_approval_status",
@@ -497,6 +528,9 @@ def _csv(records: list[dict[str, Any]]) -> str:
                 "mission_id": item.get("mission_id"),
                 "operation_id": item.get("operation_id"),
                 "operation_status": item.get("operation_status"),
+                "operation_error": item.get("operation_error"),
+                "result_message": item.get("result_message"),
+                "recovery_next_step": item.get("recovery_next_step"),
                 "current_task_source": item.get("current_task_source"),
                 "current_task_approval_id": item.get("current_task_approval_id"),
                 "current_task_approval_status": item.get("current_task_approval_status"),
@@ -780,6 +814,13 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             existing_obj, existing_obj.get("loop"), existing_obj.get("references"), existing_meta
         )
         current_task_fields = {**existing_current_task, **payload_current_task}
+        payload_receipt_context = _receipt_context_fields(
+            payload, payload.get("loop"), payload.get("references"), payload_meta
+        )
+        existing_receipt_context = _receipt_context_fields(
+            existing_obj, existing_obj.get("loop"), existing_obj.get("references"), existing_meta
+        )
+        receipt_context_fields = {**existing_receipt_context, **payload_receipt_context}
         trace_id = (
             _safe_str(payload.get("trace_id") or payload.get("traceId")).strip()
             or _safe_str(existing_obj.get("trace_id") or existing_obj.get("traceId")).strip()
@@ -850,6 +891,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
         merged = {
             **existing_obj,
             **current_task_fields,
+            **receipt_context_fields,
             "id": explanation_id,
             "ts": ts,
             "kind": kind or _safe_str(existing_obj.get("kind")).strip() or "audit",

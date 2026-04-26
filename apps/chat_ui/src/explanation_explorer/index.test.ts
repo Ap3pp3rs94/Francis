@@ -66,6 +66,9 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
           operation_status: "succeeded",
+          operation_error: "plugin_id_required",
+          result_message: "Plugin id is required.",
+          recovery_next_step: "review_operation_detail",
           current_task_source: "terminal_operation_receipt",
           current_task_operation_name: "plan.create",
           current_task_operation_plane: "P9_OBSERVABILITY",
@@ -124,6 +127,9 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.equal(response.items[0]?.approval_id, "apr_alpha");
     assert.equal(response.items[0]?.artifact_dir, "runs/run_alpha/artifacts");
     assert.equal(response.items[0]?.operation_status, "succeeded");
+    assert.equal(response.items[0]?.operation_error, "plugin_id_required");
+    assert.equal(response.items[0]?.result_message, "Plugin id is required.");
+    assert.equal(response.items[0]?.recovery_next_step, "review_operation_detail");
     assert.equal(response.items[0]?.current_task_source, "terminal_operation_receipt");
     assert.equal(response.items[0]?.current_task_operation_id, "tsk_alpha");
     assert.equal(response.items[0]?.current_task_operation_name, "plan.create");
@@ -183,6 +189,11 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
         kind: "audit",
         trace_id: "trace_detail",
         artifact_dir: "runs/run_detail/artifacts",
+        loop: {
+          operation_error: "approval_pending",
+          result_message: "Operation is waiting on approval.",
+          recovery_next_step: "review_pending_approval",
+        },
         current_task_operation_name: "plan.create",
         current_task_operation_plane: "P9_OBSERVABILITY",
         current_task_advance_action: "run_linked_operation",
@@ -216,6 +227,9 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     assert.equal(detail?.current_task_operation_name, "plan.create");
     assert.equal(detail?.current_task_operation_plane, "P9_OBSERVABILITY");
     assert.equal(detail?.current_task_advance_action, "run_linked_operation");
+    assert.equal(detail?.operation_error, "approval_pending");
+    assert.equal(detail?.result_message, "Operation is waiting on approval.");
+    assert.equal(detail?.recovery_next_step, "review_pending_approval");
     assert.deepEqual(requests, [
       {
         path: "/explanations/get",
