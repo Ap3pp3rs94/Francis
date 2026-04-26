@@ -385,6 +385,14 @@ when mission metadata or run-ledger activity does not already provide those
 fields. This does not create retry authority; it keeps the existing recovery
 handoff tied to a receipt-backed operation detail review.
 
+As of `2026-04-26`, ORB status handback state now carries the concrete
+continuity item that triggered a handback even when the normal continuity focus
+list is empty. Failed, deadletter, and recently-completed previews can become
+`handback_state.focus` with a `focus_source`, preserving existing mission,
+current-task, trace, run, artifact, and memory-receipt handles from backend
+truth. This is read-model focus selection only; it does not create retry,
+deadletter, execution, memory, or UI state.
+
 As of `2026-04-26`, mission advance and queue-run handoff results preserve that
 receipt-backed recovery context when linked operation execution fails. The
 mission runtime projects `operation_error`, `result_message` when present, and
@@ -3592,6 +3600,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission recovery handoff
 - `cd apps\chat_ui; npm run test`
   Result: `60 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 ORB failed handback focus slice:
+
+- `python -m pytest tests\unit\test_kernel_contracts.py::test_orb_snapshot_handback_uses_failed_preview_as_receipt_focus -q`
+  Result: `1 passed`
+- `python -m ruff check src\francis\world_state\orb.py tests\unit\test_kernel_contracts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\orb.py tests\unit\test_kernel_contracts.py`
+  Result: `2 files already formatted` (cache warning only: `.ruff_cache` access denied)
+- `python -m pytest tests\unit\test_kernel_contracts.py tests\test_api_system_settings.py -q`
+  Result: `33 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 completed mission interface handoff slice:

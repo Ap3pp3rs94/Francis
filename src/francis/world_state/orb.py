@@ -316,14 +316,21 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
     deadletter_preview = [item for item in _as_list(continuity.get("deadletter_preview")) if isinstance(item, dict)]
 
     focus_item = dict(focus_items[0]) if focus_items else {}
+    focus_source = "focus" if focus_item else ""
     if focus_item:
         status = _safe_str(focus_item.get("status")).strip().lower()
         state = "operator_action_required" if status in {"blocked", "failed", "deadlettered"} else "continuity_ready"
     elif failed_preview:
+        focus_item = dict(failed_preview[0])
+        focus_source = "failed_preview"
         state = "failed_recovery"
     elif deadletter_preview:
+        focus_item = dict(deadletter_preview[0])
+        focus_source = "deadletter_preview"
         state = "deadletter_review"
     elif recently_completed:
+        focus_item = dict(recently_completed[0])
+        focus_source = "recently_completed"
         state = "completion_review"
     else:
         state = "none"
@@ -332,6 +339,7 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
         "state": state,
         "headline": headline,
         "focus": focus_item,
+        "focus_source": focus_source,
         "recently_completed_count": len(recently_completed),
         "failed_count": len(failed_preview),
         "deadletter_count": len(deadletter_preview),

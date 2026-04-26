@@ -402,6 +402,51 @@ controls:
     assert focus_item["latest_activity"]["name"] == "governance_hold"
 
 
+def test_orb_snapshot_handback_uses_failed_preview_as_receipt_focus() -> None:
+    from francis.world_state.orb import _handback_state
+
+    handback = _handback_state(
+        {
+            "headline": "Failed mission needs receipt-backed recovery review",
+            "focus": [],
+            "recently_completed": [],
+            "failed_preview": [
+                {
+                    "id": "msn_failed_receipt",
+                    "status": "failed",
+                    "recommended_action": "retry_or_deadletter",
+                    "current_task": {
+                        "operation_id": "tsk_failed_receipt",
+                        "trace_id": "trace_failed_receipt",
+                        "run_id": "run_failed_receipt",
+                        "artifact_dir": "D:/Francis/.data/artifacts/run_failed_receipt",
+                        "handoff_action": "retry_or_deadletter",
+                        "next_step": "review_operation_detail",
+                    },
+                    "latest_memory_receipt": {
+                        "mission_id": "msn_failed_receipt",
+                        "operation_id": "tsk_failed_receipt",
+                        "operation_status": "failed",
+                        "operation_error": "plan_missing",
+                        "recovery_next_step": "review_operation_detail",
+                    },
+                }
+            ],
+            "deadletter_preview": [],
+        }
+    )
+
+    assert handback["state"] == "failed_recovery"
+    assert handback["focus_source"] == "failed_preview"
+    assert handback["failed_count"] == 1
+    assert handback["focus"]["id"] == "msn_failed_receipt"
+    assert handback["focus"]["recommended_action"] == "retry_or_deadletter"
+    assert handback["focus"]["current_task"]["operation_id"] == "tsk_failed_receipt"
+    assert handback["focus"]["current_task"]["trace_id"] == "trace_failed_receipt"
+    assert handback["focus"]["latest_memory_receipt"]["operation_status"] == "failed"
+    assert handback["focus"]["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
+
+
 def test_stack_and_services_report_known_surfaces(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
