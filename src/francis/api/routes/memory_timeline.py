@@ -244,6 +244,7 @@ def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
         "current_task_approval_status",
         "current_task_operation_id",
         "current_task_gate",
+        "current_task_trace_id",
         "current_task_run_id",
         "current_task_artifact_dir",
         "current_task_next_step",

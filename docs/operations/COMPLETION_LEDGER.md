@@ -596,6 +596,14 @@ instead of reducing gate evidence to adjacent receipt ids. This is still a
 read-model/client contract change only; it does not create approvals, alter
 policy decisions, or advance mission execution.
 
+As of `2026-04-26`, memory timeline loop projections also preserve
+`current_task_trace_id` from mission-loop continuity metadata. This keeps
+current-task trace handles aligned with the existing handoff trace, run, and
+artifact handles when the operator follows memory evidence back to active or
+completed mission work. This is a read-model/client contract change only; it
+does not inspect artifacts, execute operations, mint memory receipts, or infer
+completion.
+
 As of `2026-04-26`, terminal mission-linked operation receipts can now feed that
 approval posture into memory evidence. When a completed or failed mission-linked
 operation carries a real approval id in the operation result or retained task
@@ -3431,6 +3439,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop pro
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 memory timeline current-task trace-handle slice:
+
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_ledger_by_references -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `62 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:

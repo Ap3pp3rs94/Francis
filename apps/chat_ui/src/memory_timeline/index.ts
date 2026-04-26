@@ -157,6 +157,7 @@ export type MemoryTimelineLoop = {
   current_task_approval_status?: string;
   current_task_operation_id?: string;
   current_task_gate?: string;
+  current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   current_task_next_step?: string;
@@ -523,6 +524,7 @@ function parseLoop(raw: unknown, fallback: Record<string, unknown>): MemoryTimel
     "current_task_approval_status",
     "current_task_operation_id",
     "current_task_gate",
+    "current_task_trace_id",
     "current_task_run_id",
     "current_task_artifact_dir",
     "current_task_next_step",

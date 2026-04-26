@@ -277,6 +277,7 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
             "handoff_approval_status": "pending",
             "current_task_approval_id": "apr-ledger-memory",
             "current_task_approval_status": "pending",
+            "current_task_trace_id": "trace-ledger-memory",
             "operation_status": "failed",
         },
     )
@@ -312,6 +313,7 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
         "handoff_approval_status": "pending",
         "current_task_approval_id": "apr-ledger-memory",
         "current_task_approval_status": "pending",
+        "current_task_trace_id": "trace-ledger-memory",
         "run_id": "run-ledger-memory",
         "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
     }
