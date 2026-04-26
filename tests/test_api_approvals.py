@@ -345,6 +345,7 @@ def test_approval_list_surfaces_credential_request_and_revoke_context(monkeypatc
             "type": "api_key",
             "label": "OpenAI Queue Visibility",
             "reason": "integration_test",
+            "actor": "test.credentials.write",
             "meta": {"ticket": "FR-901"},
         },
     )
@@ -378,7 +379,10 @@ def test_approval_list_surfaces_credential_request_and_revoke_context(monkeypatc
     active_items = [item for item in listed_active.json()["items"] if item.get("id") == credential_id]
     assert len(active_items) == 1
 
-    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    revoked = client.post(
+        "/credentials/revoke",
+        json={"id": credential_id, "reason": "cleanup", "actor": "test.credentials.write"},
+    )
     assert revoked.status_code == 200
     revoked_body = revoked.json()
     assert revoked_body["ok"] is True

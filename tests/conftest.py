@@ -23,6 +23,13 @@ TRUST_WRITE_TEST_ACTORS = (
     "api-test",
     "system-ui",
 )
+CREDENTIAL_WRITE_TEST_SCOPE = "credentials.write"
+CREDENTIAL_WRITE_TEST_ACTORS = (
+    "test.credentials.write",
+    "operator.credentials",
+    "operator.cleanup",
+    "credential_manager_api",
+)
 
 
 def _slug(value: str, *, default: str = "case") -> str:
@@ -84,6 +91,7 @@ def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
             {
                 APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE],
                 **{actor: [TRUST_WRITE_TEST_SCOPE] for actor in TRUST_WRITE_TEST_ACTORS},
+                **{actor: [CREDENTIAL_WRITE_TEST_SCOPE] for actor in CREDENTIAL_WRITE_TEST_ACTORS},
             }
         ),
     )

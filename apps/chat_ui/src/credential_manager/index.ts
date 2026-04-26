@@ -97,6 +97,7 @@ export type CredentialRequest = {
   provider?: string;
   type?: CredentialType;
   label?: string;
+  actor?: string;
 
   // Optional justification (often required for approvals)
   reason?: string;
@@ -115,6 +116,7 @@ export type CredentialRequestResponse = {
 export type CredentialRevokeRequest = {
   id: string;
   reason?: string;
+  actor?: string;
 };
 
 export type CredentialRevokeResponse = {
@@ -122,6 +124,8 @@ export type CredentialRevokeResponse = {
   id: string;
   status?: CredentialStatus;
 };
+
+const DEFAULT_CREDENTIAL_MUTATION_ACTOR = "chat_ui.credentials";
 
 export class CredentialManagerApiError extends Error {
   readonly status?: number;
@@ -152,6 +156,21 @@ function safeString(v: unknown, fallback = ""): string {
 
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function safeBool(v: unknown, fallback = false): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+function credentialMutationErrorMessage(json: Record<string, unknown>, fallback: string): string {
+  return safeString(json.error, "") || safeString(json.message, "") || fallback;
+}
+
+function assertCredentialMutationAllowed(json: unknown, fallback: string): void {
+  if (!isRecord(json)) return;
+  if (safeBool(json.ok, true) === false) {
+    throw new CredentialManagerApiError(credentialMutationErrorMessage(json, fallback));
+  }
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -436,17 +455,19 @@ export class CredentialManagerClient {
     opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<CredentialRequestResponse> {
     const url = this.url(this.endpoints.requestCredential());
+    const body = { ...req, actor: req.actor?.trim() || DEFAULT_CREDENTIAL_MUTATION_ACTOR };
     const json = await fetchJson(url, {
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
 
     if (!isRecord(json)) return { ok: true };
+    assertCredentialMutationAllowed(json, "Credential request failed.");
 
     return {
-      ok: Boolean((json as Record<string, unknown>).ok ?? true),
+      ok: safeBool((json as Record<string, unknown>).ok, true),
       request_id: safeString((json as Record<string, unknown>).request_id, ""),
       approval_id: safeString((json as Record<string, unknown>).approval_id, ""),
       status: safeString((json as Record<string, unknown>).status, ""),
@@ -462,17 +483,19 @@ export class CredentialManagerClient {
     opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<CredentialRevokeResponse> {
     const url = this.url(this.endpoints.revokeCredential());
+    const body = { ...req, actor: req.actor?.trim() || DEFAULT_CREDENTIAL_MUTATION_ACTOR };
     const json = await fetchJson(url, {
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify(body),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
 
     if (!isRecord(json)) return { ok: true, id: req.id };
+    assertCredentialMutationAllowed(json, "Credential revocation failed.");
 
     return {
-      ok: Boolean((json as Record<string, unknown>).ok ?? true),
+      ok: safeBool((json as Record<string, unknown>).ok, true),
       id: safeString((json as Record<string, unknown>).id, req.id),
       status: safeString((json as Record<string, unknown>).status, ""),
     };

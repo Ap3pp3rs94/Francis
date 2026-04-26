@@ -9,10 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
     redact_governed_display_value,
     redact_governed_metadata,
@@ -24,6 +25,7 @@ router = APIRouter()
 
 _CREDENTIAL_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _ALLOWED_STATUS = {"active", "revoked", "expired", "pending", "error"}
+_CREDENTIAL_WRITE_SCOPE = "credentials.write"
 
 
 def _credentials_dir() -> Path:
@@ -119,6 +121,29 @@ def _redact_reason(value: Any) -> str:
 
 def _receipt_actor(value: Any) -> str:
     return _redact_reason(value) or "credential_manager_api"
+
+
+def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_CREDENTIAL_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_mutating_credentials",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _default_registry() -> dict[str, Any]:
@@ -699,14 +724,14 @@ class CredentialRequestIn(BaseModel):
     type: str = "api_key"
     label: str = ""
     reason: str = "requested"
-    actor: str = "credential_manager_api"
+    actor: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class CredentialRevokeIn(BaseModel):
     id: str
     reason: str = "requested"
-    actor: str = "credential_manager_api"
+    actor: str = ""
 
 
 @router.get("/status")
@@ -811,8 +836,12 @@ def list_delegations(limit: int = 200) -> dict[str, object]:
 
 
 @router.post("/request")
-def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
+def request_credential(request: Request, payload: CredentialRequestIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         scope_id = _safe_str(payload.scope_id).strip()
         if not scope_id:
             return {"ok": False, "error": "scope_id_required"}
@@ -917,8 +946,12 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
 
 
 @router.post("/revoke")
-def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
+def revoke_credential(request: Request, payload: CredentialRevokeIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         credential_id = _validate_credential_id(payload.id)
         reason = _safe_str(payload.reason).strip() or "requested"
         display_reason = _redact_reason(reason) or "requested"

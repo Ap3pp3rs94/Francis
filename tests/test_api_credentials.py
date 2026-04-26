@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_CREDENTIAL_ACTOR = "test.credentials.write"
+
 
 def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -48,6 +50,19 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     assert "openai_readonly" in scope_ids
     assert "github_repo_readonly" in scope_ids
 
+    denied = client.post(
+        "/credentials/request",
+        json={"scope_id": "openai_readonly", "provider": "openai", "reason": "missing actor"},
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert denied_body["governance"]["reason"] == "missing_actor"
+    assert denied_body["governance"]["evidence"]["required_scope_count"] == 1
+
     requested = client.post(
         "/credentials/request",
         json={
@@ -81,6 +96,18 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     assert credential_id in pending_ids
     listed_credential = next(item for item in listed_pending_body["items"] if item.get("id") == credential_id)
     assert listed_credential["actor"] == "operator.credentials"
+
+    denied_revoke = client.post(
+        "/credentials/revoke",
+        json={"id": credential_id, "reason": "missing actor"},
+    )
+    assert denied_revoke.status_code == 200
+    denied_revoke_body = denied_revoke.json()
+    assert denied_revoke_body["ok"] is False
+    assert denied_revoke_body["status"] == "denied"
+    assert denied_revoke_body["error"] == "api_permission_denied"
+    assert denied_revoke_body["governance"]["gate"] == "permission_gate"
+    assert denied_revoke_body["governance"]["reason"] == "missing_actor"
 
     revoked = client.post(
         "/credentials/revoke",
@@ -135,6 +162,11 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     raw_password = "supersecret123"
     raw_reason_secret = "credentialreasonsecret123"
     raw_actor_secret = "credentialactorsecret123"
+    raw_actor = f"operator password={raw_actor_secret}"
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({raw_actor: ["credentials.write"]}),
+    )
 
     requested = client.post(
         "/credentials/request",
@@ -144,7 +176,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
             "type": "api_key",
             "label": "OpenAI Redacted",
             "reason": f"secret_redaction_contract password={raw_reason_secret}",
-            "actor": f"operator password={raw_actor_secret}",
+            "actor": raw_actor,
             "meta": {
                 "ticket": "FR-SEC",
                 "api_key": raw_openai_key,
@@ -233,6 +265,7 @@ def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_
             "type": "api_key",
             "label": "OpenAI Active",
             "reason": "integration_test",
+            "actor": _CREDENTIAL_ACTOR,
         },
     )
     assert requested.status_code == 200
@@ -280,6 +313,7 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
             "type": "api_key",
             "label": "OpenAI Revoked",
             "reason": "integration_test",
+            "actor": _CREDENTIAL_ACTOR,
         },
     )
     assert requested.status_code == 200
@@ -302,7 +336,7 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     raw_revoke_secret = "credentialrevokesecret456"
     revoked = client.post(
         "/credentials/revoke",
-        json={"id": credential_id, "reason": f"cleanup token={raw_revoke_secret}"},
+        json={"id": credential_id, "reason": f"cleanup token={raw_revoke_secret}", "actor": _CREDENTIAL_ACTOR},
     )
     assert revoked.status_code == 200
     revoked_body = revoked.json()
@@ -368,6 +402,7 @@ def test_credentials_request_missing_approval_reconciles_error_status(monkeypatc
             "type": "api_key",
             "label": "OpenAI Missing Approval",
             "reason": "integration_test",
+            "actor": _CREDENTIAL_ACTOR,
         },
     )
     assert requested.status_code == 200
@@ -411,6 +446,7 @@ def test_credentials_revocation_missing_approval_restores_previous_status(monkey
             "type": "api_key",
             "label": "OpenAI Missing Revoke Approval",
             "reason": "integration_test",
+            "actor": _CREDENTIAL_ACTOR,
         },
     )
     assert requested.status_code == 200
@@ -430,7 +466,9 @@ def test_credentials_revocation_missing_approval_restores_previous_status(monkey
     assert len(active_items) == 1
     assert active_items[0]["status"] == "active"
 
-    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    revoked = client.post(
+        "/credentials/revoke", json={"id": credential_id, "reason": "cleanup", "actor": _CREDENTIAL_ACTOR}
+    )
     assert revoked.status_code == 200
     revoked_body = revoked.json()
     revoke_approval_id = str(revoked_body["approval_id"])
