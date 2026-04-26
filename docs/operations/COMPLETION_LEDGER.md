@@ -352,7 +352,7 @@ run, and artifact references from `memory_receipt`; it does not claim memory
 when the run response has no receipt projection.
 
 As of `2026-04-25`, mission advance and bounded mission queue-run responses
-preserve that same completed-operation `memory_receipt` handoff when mission
+preserve that same terminal-operation `memory_receipt` handoff when mission
 progression executes a linked operation through the governed runtime. Direct
 `POST /missions/{mission_id}/advance`, top-level `POST /missions/run_once`, and
 the chat UI missions client now retain the receipt-backed mission, operation,
@@ -360,18 +360,19 @@ trace, run, and artifact references instead of dropping the execution-to-memory
 handoff at the mission boundary.
 
 As of `2026-04-25`, the mission continuity/world-state projection now carries
-those completed mission operation receipts as bounded memory evidence. Stage 3
+those terminal mission operation receipts as bounded memory evidence. Stage 3
 mission readiness evidence exposes sampled missions with memory receipts,
 receipt-backed operation and trace ids, and memory-backed reconstruction context;
 mission briefing/recent-completion payloads expose the latest receipt without
 changing readiness status semantics or creating new execution behavior.
 
-As of `2026-04-26`, mission detail projections carry the same completed-operation
+As of `2026-04-26`, mission detail projections carry the same terminal-operation
 memory receipts without requiring a world-state or briefing lookup. The
 `GET /missions/{mission_id}` route returns bounded receipt-backed memory
 evidence, latest receipt handles, and receipt-summary counts derived from
-continuity-ledger entries for completed mission-linked operation runs; the memory
-loop stage exposes those receipts only when real mission and operation ids exist.
+continuity-ledger entries for succeeded or failed mission-linked operation runs;
+the memory loop stage exposes those receipts only when real mission and
+operation ids exist.
 
 As of `2026-04-26`, the chat UI missions client preserves that mission-detail
 memory receipt contract. `MissionsClient.get` now retains flat ledger receipt ids,
@@ -2950,6 +2951,17 @@ Latest targeted validation for the `2026-04-25` Stage 3 completed mission operat
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed mission detail memory receipt projection slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_detail_surfaces_failed_operation_memory_receipt -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\memory\mission_receipts.py src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\memory\mission_receipts.py src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 failed mission operation memory receipt slice:

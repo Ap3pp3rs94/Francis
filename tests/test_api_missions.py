@@ -646,6 +646,80 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert any(item.get("details", {}).get("task_status") == "completed" for item in transition_events)
 
 
+def test_mission_detail_surfaces_failed_operation_memory_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Expose failed linked operation memory",
+            "summary": "Mission detail should retain failed terminal operation receipts.",
+            "next_step": "Review failed operation receipts before retrying.",
+            "requester_id": "test.missions.failed_memory_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "mission detail failed operation memory receipt",
+            "mission_id": mission_id,
+            "input": {"action": "run", "input": "missing plugin id"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.failed_memory_receipt"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is False
+    assert executed_body["status"] == "failed"
+    assert executed_body["memory_receipt"]["operation_status"] == "failed"
+    assert executed_body["memory_receipt"]["references"] == {
+        "mission_id": mission_id,
+        "operation_id": operation_id,
+    }
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["mission"]["status"] == "failed"
+    assert fetched_body["mission"]["last_task_id"] == operation_id
+    assert fetched_body["mission"]["last_task_status"] == "failed"
+    assert fetched_body["memory_receipt_count"] >= 1
+    assert fetched_body["memory_receipts"][0]["operation_id"] == operation_id
+    assert fetched_body["memory_receipts"][0]["operation_status"] == "failed"
+
+    receipt_summary = fetched_body["receipt_summary"]
+    assert receipt_summary["current_operation_id"] == operation_id
+    assert receipt_summary["current_operation_status"] == "failed"
+    assert receipt_summary["memory_receipt_count"] >= 1
+    assert receipt_summary["latest_memory_receipt"]["mission_id"] == mission_id
+    assert receipt_summary["latest_memory_receipt"]["operation_id"] == operation_id
+    assert receipt_summary["latest_memory_receipt"]["operation_status"] == "failed"
+
+    loop_state = fetched_body["loop_state"]
+    assert loop_state["active_stage"] == "deadletter"
+    assert loop_state["handoff"]["action"] == "retry_or_deadletter"
+    assert loop_state["memory"]["status"] == "recorded"
+    assert "terminal-operation memory receipt" in loop_state["memory"]["detail"]
+    assert loop_state["memory"]["latest_memory_receipt"]["mission_id"] == mission_id
+    assert loop_state["memory"]["latest_memory_receipt"]["operation_id"] == operation_id
+    assert loop_state["memory"]["latest_memory_receipt"]["operation_status"] == "failed"
+
+
 def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

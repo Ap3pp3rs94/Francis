@@ -6,6 +6,8 @@ from typing import Any
 
 from francis.chat.continuity.ledger import tail as continuity_tail
 
+_TERMINAL_OPERATION_STATUSES = {"succeeded", "failed"}
+
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -66,7 +68,10 @@ def mission_operation_receipt_index(
             continue
         if _safe_str(meta.get("scope")).strip() != "mission.loop":
             continue
-        if _safe_str(meta.get("operation_status")).strip().lower() != "succeeded":
+        operation_status = _safe_str(meta.get("operation_status")).strip().lower()
+        if operation_status == "completed":
+            operation_status = "succeeded"
+        if operation_status not in _TERMINAL_OPERATION_STATUSES:
             continue
 
         mission_id = _safe_str(meta.get("mission_id")).strip()
@@ -87,7 +92,7 @@ def mission_operation_receipt_index(
             "trace_id": _safe_str(meta.get("trace_id")).strip(),
             "run_id": _safe_str(meta.get("run_id")).strip(),
             "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
-            "operation_status": "succeeded",
+            "operation_status": operation_status,
             "capability": _safe_str(meta.get("capability")).strip(),
             "domain": "operations",
             "scope": "mission.loop",

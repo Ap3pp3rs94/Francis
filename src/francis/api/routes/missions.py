@@ -795,7 +795,7 @@ def _mission_loop_state(
         if history_count:
             memory_parts.append(f"{history_count} mission history receipt(s)")
         if memory_receipt_count:
-            memory_parts.append(f"{memory_receipt_count} completed-operation memory receipt(s)")
+            memory_parts.append(f"{memory_receipt_count} terminal-operation memory receipt(s)")
         memory_stage = _loop_stage(
             "recorded",
             "Mission continuity is backed by " + ", ".join(memory_parts) + ".",
