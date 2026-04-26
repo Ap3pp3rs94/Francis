@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ArtifactsApiError, ArtifactsClient } from "./index";
+import { artifactOriginTraceId, ArtifactsApiError, ArtifactsClient } from "./index";
 import type { ArtifactInspectResponse } from "./index";
 
 type ArtifactInspectionPanelProps = {
@@ -104,6 +104,7 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
   const hasRecoveryGuidance =
     inspection &&
     (inspection.recovery_hint || inspection.next_step || inspection.retryable !== undefined);
+  const originTraceId = artifactOriginTraceId(inspection?.originating_receipt);
 
   if (!artifactDir) return null;
 
@@ -250,9 +251,9 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
                   {" / "}advance=<code>{inspection.originating_receipt.current_task_advance_action}</code>
                 </>
               ) : null}
-              {inspection.originating_receipt.trace_id ? (
+              {originTraceId ? (
                 <>
-                  {" / "}trace=<code>{inspection.originating_receipt.trace_id}</code>
+                  {" / "}trace=<code>{originTraceId}</code>
                 </>
               ) : null}
               {inspection.originating_receipt.current_task_run_id || inspection.originating_receipt.handoff_run_id ? (

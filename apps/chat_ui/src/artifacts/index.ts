@@ -127,6 +127,23 @@ function safeString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function firstString(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    const text = safeString(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+export function artifactOriginTraceId(receipt: ArtifactOriginatingReceipt | undefined): string {
+  return firstString(
+    receipt?.current_task_trace_id,
+    receipt?.handoff_trace_id,
+    receipt?.trace_id,
+    receipt?.references?.trace_id,
+  );
+}
+
 function safeBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }

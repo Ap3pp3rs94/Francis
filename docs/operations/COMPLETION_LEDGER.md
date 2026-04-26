@@ -1300,6 +1300,18 @@ The shared artifact inspection panel renders those backend-projected handles as
 origin context. This is read-only artifact receipt context; it does not approve
 actions, inspect file contents, retry work, or synthesize missing receipt state.
 
+As of `2026-04-26`, artifact-origin trace rendering follows the same
+receipt-backed current-task and handoff priority as the rest of the origin
+context. The chat UI artifacts module now exposes `artifactOriginTraceId`, and
+the shared artifact inspection panel renders `current_task_trace_id` or
+`handoff_trace_id` when an originating receipt is sparse at top-level
+`trace_id`, falling back to legacy receipt references only after those handles.
+A real-browser proof against a mock API confirmed the selected-operation
+artifact inspection path renders the current-task trace from backend-shaped
+origin receipt context without HTTP failures. This is read-only trace
+reachability; it does not inspect file contents, create traces, or infer missing
+receipt handles.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -4956,6 +4968,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin receipt 
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin trace rendering slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\artifacts\index.test.ts`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m pytest tests\test_api_artifacts.py -q`
+  Result: `5 passed`
+- `$npxDir = Get-ChildItem "$env:LOCALAPPDATA\npm-cache\_npx" -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1; $env:NODE_PATH = Join-Path $npxDir.FullName "node_modules"; npx --yes --package @playwright/test playwright test --config data\test_runs\playwright\artifact-origin.config.cjs`
+  Result: `1 passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin receipt handoff context slice:

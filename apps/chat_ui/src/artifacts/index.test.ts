@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ArtifactsApiError, ArtifactsClient } from "./index.ts";
+import { artifactOriginTraceId, ArtifactsApiError, ArtifactsClient } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -33,6 +33,21 @@ function installFetch(handler: FetchHandler): () => void {
     delete globals.fetch;
   };
 }
+
+test("artifactOriginTraceId prefers current-task and handoff trace handles before legacy refs", () => {
+  assert.equal(
+    artifactOriginTraceId({
+      trace_id: "trace_top",
+      handoff_trace_id: "trace_handoff",
+      current_task_trace_id: "trace_current",
+      references: { trace_id: "trace_reference" },
+    }),
+    "trace_current",
+  );
+  assert.equal(artifactOriginTraceId({ handoff_trace_id: "trace_handoff", trace_id: "trace_top" }), "trace_handoff");
+  assert.equal(artifactOriginTraceId({ references: { trace_id: "trace_reference" } }), "trace_reference");
+  assert.equal(artifactOriginTraceId(undefined), "");
+});
 
 test("ArtifactsClient.inspect requests bounded artifact metadata and preserves directory entries", async () => {
   const requests: Array<{ path: string; artifactDir: string | null; limit: string | null; method: string }> = [];
