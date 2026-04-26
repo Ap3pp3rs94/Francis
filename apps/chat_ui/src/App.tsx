@@ -37,7 +37,6 @@ import type {
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
   MissionReadinessSummary,
-  MissionMemoryReceipt,
   ObserverAnomalySummary,
   ObserverEventsSnapshot,
   ObserverScanReceiptSummary,
@@ -87,6 +86,27 @@ type ChatMissionSurface = {
   status?: string;
   activeStage?: string;
   nextStep?: string;
+};
+
+type MissionMemoryReceiptLike = {
+  id?: string;
+  source?: string;
+  ts?: unknown;
+  mission_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  approval_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  operation_status?: string;
+  references?: {
+    mission_id?: string;
+    operation_id?: string;
+    trace_id?: string;
+    approval_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
+  };
 };
 
 const DEFAULT_SETTINGS: UiSettings = {
@@ -280,13 +300,25 @@ function memoryTimelineEventReferenceLine(event: MemoryTimelineEvent): string {
   return parts.join(" / ");
 }
 
-function missionMemoryReceiptReferenceLine(receipt: MissionMemoryReceipt): string {
+function missionMemoryReceiptLabel(receipt: MissionMemoryReceiptLike | null | undefined): string {
+  return safeString(receipt?.id).trim() || safeString(receipt?.source).trim() || "receipt";
+}
+
+function missionMemoryReceiptReferenceLine(receipt: MissionMemoryReceiptLike | null | undefined): string {
+  const refs = receipt?.references;
   const parts: string[] = [];
-  if (receipt.mission_id) parts.push(`mission ${receipt.mission_id}`);
-  if (receipt.operation_id) parts.push(`task ${receipt.operation_id}`);
-  if (receipt.trace_id) parts.push(`trace ${receipt.trace_id}`);
-  if (receipt.run_id) parts.push(`run ${receipt.run_id}`);
-  if (receipt.artifact_dir) parts.push(`artifact ${receipt.artifact_dir}`);
+  const missionId = safeString(receipt?.mission_id).trim() || safeString(refs?.mission_id).trim();
+  const operationId = safeString(receipt?.operation_id).trim() || safeString(refs?.operation_id).trim();
+  const traceId = safeString(receipt?.trace_id).trim() || safeString(refs?.trace_id).trim();
+  const approvalId = safeString(receipt?.approval_id).trim() || safeString(refs?.approval_id).trim();
+  const runId = safeString(receipt?.run_id).trim() || safeString(refs?.run_id).trim();
+  const artifactDir = safeString(receipt?.artifact_dir).trim() || safeString(refs?.artifact_dir).trim();
+  if (missionId) parts.push(`mission ${missionId}`);
+  if (operationId) parts.push(`task ${operationId}`);
+  if (traceId) parts.push(`trace ${traceId}`);
+  if (approvalId) parts.push(`approval ${approvalId}`);
+  if (runId) parts.push(`run ${runId}`);
+  if (artifactDir) parts.push(`artifact ${artifactDir}`);
   return parts.join(" / ");
 }
 
@@ -4027,6 +4059,21 @@ function SystemPanel(props: {
     safeString(selectedMissionCurrentTask?.artifact_dir).trim();
   const missionReceiptLatestRunAt = mixedLocaleTime(missionReceiptSummary?.latest_run_ts);
   const missionReceiptLatestHistoryAt = mixedLocaleTime(missionReceiptSummary?.latest_history_ts);
+  const missionMemoryReceiptCount =
+    missionDetail?.memory_receipt_count ??
+    missionReceiptSummary?.memory_receipt_count ??
+    missionLoopState?.memory?.memory_receipt_count ??
+    missionDetail?.memory_receipts?.length ??
+    0;
+  const missionLatestMemoryReceipt =
+    missionDetail?.latest_memory_receipt ??
+    missionReceiptSummary?.latest_memory_receipt ??
+    missionLoopState?.memory?.latest_memory_receipt ??
+    missionDetail?.memory_receipts?.[0];
+  const missionLatestMemoryReceiptRefs = missionLatestMemoryReceipt
+    ? missionMemoryReceiptReferenceLine(missionLatestMemoryReceipt)
+    : "";
+  const missionLatestMemoryReceiptAt = mixedLocaleTime(missionLatestMemoryReceipt?.ts);
   const missionLoopStages = missionLoopState
     ? ([
         { key: "plan", label: "Plan", stage: missionLoopState.plan },
@@ -6461,7 +6508,7 @@ function SystemPanel(props: {
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 600 }}>Continuity Receipts</div>
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                        Compact receipt posture for this mission from linked operations, run ledger, and local mission history.
+                        Compact receipt posture for this mission from linked operations, run ledger, local mission history, and memory receipts.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -6477,6 +6524,7 @@ function SystemPanel(props: {
                     linked_ops=<code>{String(missionReceiptSummary.linked_operation_count ?? missionLinkedOperations.length)}</code>
                     {" / "}run_receipts=<code>{String(missionReceiptSummary.run_ledger_count ?? missionRunLedger.length)}</code>
                     {" / "}history_receipts=<code>{String(missionReceiptSummary.history_count ?? missionHistory.length)}</code>
+                    {" / "}memory_receipts=<code>{String(missionMemoryReceiptCount)}</code>
                   </div>
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                     {missionReceiptOperationId ? (
@@ -6544,13 +6592,30 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
+                  {missionLatestMemoryReceipt ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      latest_memory=<code>{missionMemoryReceiptLabel(missionLatestMemoryReceipt)}</code>
+                      {missionLatestMemoryReceipt.operation_status ? (
+                        <>
+                          {" / "}memory_status=<code>{missionLatestMemoryReceipt.operation_status}</code>
+                        </>
+                      ) : null}
+                      {missionLatestMemoryReceiptAt ? (
+                        <>
+                          {" / "}memory_at=<code>{missionLatestMemoryReceiptAt}</code>
+                        </>
+                      ) : null}
+                      {missionLatestMemoryReceiptRefs ? <>{" / "}{missionLatestMemoryReceiptRefs}</> : null}
+                    </div>
+                  ) : null}
                   {(missionReceiptApprovalId ||
                     missionReceiptOperationId ||
                     missionReceiptTraceId ||
                     missionReceiptRunId ||
                     missionReceiptArtifactDir ||
                     missionReceiptSummary.run_ledger_count ||
-                    missionReceiptSummary.history_count) ? (
+                    missionReceiptSummary.history_count ||
+                    missionMemoryReceiptCount) ? (
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                       {missionReceiptApprovalId ? (
                         <button
@@ -6707,7 +6772,11 @@ function SystemPanel(props: {
                         <div style={{ fontSize: 11, color: THEME.text, marginTop: 8 }}>
                           {item.stage?.detail || "No receipt is recorded for this stage yet."}
                         </div>
-                        {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.approval_status || item.stage?.next_step) ? (
+                        {(item.stage?.count !== undefined ||
+                          item.stage?.gate ||
+                          item.stage?.approval_status ||
+                          item.stage?.next_step ||
+                          item.stage?.memory_receipt_count) ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                             {item.stage?.count !== undefined ? (
                               <>
@@ -6729,6 +6798,14 @@ function SystemPanel(props: {
                               <>
                                 {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.approval_status) ? " / " : ""}
                                 next <code>{item.stage.next_step}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.memory_receipt_count ? (
+                              <>
+                                {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.approval_status || item.stage?.next_step)
+                                  ? " / "
+                                  : ""}
+                                memory_receipts <code>{String(item.stage.memory_receipt_count)}</code>
                               </>
                             ) : null}
                           </div>
@@ -6782,6 +6859,24 @@ function SystemPanel(props: {
                                   : ""}
                                 at <code>{toLocaleTime(item.stage.latest_ts)}</code>
                               </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {item.stage?.latest_memory_receipt ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                            latest_memory=<code>{missionMemoryReceiptLabel(item.stage.latest_memory_receipt)}</code>
+                            {item.stage.latest_memory_receipt.operation_status ? (
+                              <>
+                                {" / "}memory_status=<code>{item.stage.latest_memory_receipt.operation_status}</code>
+                              </>
+                            ) : null}
+                            {mixedLocaleTime(item.stage.latest_memory_receipt.ts) ? (
+                              <>
+                                {" / "}memory_at=<code>{mixedLocaleTime(item.stage.latest_memory_receipt.ts)}</code>
+                              </>
+                            ) : null}
+                            {missionMemoryReceiptReferenceLine(item.stage.latest_memory_receipt) ? (
+                              <>{" / "}{missionMemoryReceiptReferenceLine(item.stage.latest_memory_receipt)}</>
                             ) : null}
                           </div>
                         ) : null}
@@ -9589,13 +9684,29 @@ function OperationsPanel(props: {
   ].filter((item) => item.stage);
   const selectedMissionLatestRunAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_run_ts);
   const selectedMissionLatestHistoryAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_history_ts);
+  const selectedMissionMemoryReceiptCount =
+    selectedMissionBridgeDetail?.memory_receipt_count ??
+    selectedMissionReceiptSummary?.memory_receipt_count ??
+    selectedMissionLoopState?.memory?.memory_receipt_count ??
+    selectedMissionBridgeDetail?.memory_receipts?.length ??
+    0;
+  const selectedMissionLatestMemoryReceipt =
+    selectedMissionBridgeDetail?.latest_memory_receipt ??
+    selectedMissionReceiptSummary?.latest_memory_receipt ??
+    selectedMissionLoopState?.memory?.latest_memory_receipt ??
+    selectedMissionBridgeDetail?.memory_receipts?.[0];
+  const selectedMissionLatestMemoryReceiptRefs = selectedMissionLatestMemoryReceipt
+    ? missionMemoryReceiptReferenceLine(selectedMissionLatestMemoryReceipt)
+    : "";
+  const selectedMissionLatestMemoryReceiptAt = mixedLocaleTime(selectedMissionLatestMemoryReceipt?.ts);
   const selectedReceiptEvidenceAvailable = Boolean(
     selectedTraceId ||
       selectedRunId ||
       selectedArtifactDir ||
       selectedMissionLoopState ||
       selectedMissionReceiptSummary?.run_ledger_count ||
-      selectedMissionReceiptSummary?.history_count,
+      selectedMissionReceiptSummary?.history_count ||
+      selectedMissionMemoryReceiptCount,
   );
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
@@ -10625,6 +10736,9 @@ function OperationsPanel(props: {
                           {selectedMissionLoopStages.map((item) => {
                             const stage = item.stage;
                             const stageLatestAt = stage?.latest_ts ? toLocaleTime(stage.latest_ts) : "";
+                            const stageMemoryReceipt = stage?.latest_memory_receipt;
+                            const stageMemoryReceiptAt = mixedLocaleTime(stageMemoryReceipt?.ts);
+                            const stageMemoryReceiptRefs = missionMemoryReceiptReferenceLine(stageMemoryReceipt);
                             return (
                               <div
                                 key={`selected-operation-loop-${selectedOperation.id}-${item.key}`}
@@ -10642,7 +10756,11 @@ function OperationsPanel(props: {
                                 <div style={{ fontSize: 11, color: THEME.text, marginTop: 6 }}>
                                   {stage?.detail || "No receipt is recorded for this stage yet."}
                                 </div>
-                                {(stage?.count !== undefined || stage?.gate || stage?.approval_status || stage?.next_step) ? (
+                                {(stage?.count !== undefined ||
+                                  stage?.gate ||
+                                  stage?.approval_status ||
+                                  stage?.next_step ||
+                                  stage?.memory_receipt_count) ? (
                                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                                     {stage?.count !== undefined ? (
                                       <>
@@ -10664,6 +10782,14 @@ function OperationsPanel(props: {
                                       <>
                                         {(stage?.count !== undefined || stage?.gate || stage?.approval_status) ? " / " : ""}next{" "}
                                         <code>{stage.next_step}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.memory_receipt_count ? (
+                                      <>
+                                        {(stage?.count !== undefined || stage?.gate || stage?.approval_status || stage?.next_step)
+                                          ? " / "
+                                          : ""}
+                                        memory_receipts <code>{String(stage.memory_receipt_count)}</code>
                                       </>
                                     ) : null}
                                   </div>
@@ -10722,6 +10848,22 @@ function OperationsPanel(props: {
                                     ) : null}
                                   </div>
                                 ) : null}
+                                {stageMemoryReceipt ? (
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                                    latest_memory=<code>{missionMemoryReceiptLabel(stageMemoryReceipt)}</code>
+                                    {stageMemoryReceipt.operation_status ? (
+                                      <>
+                                        {" / "}memory_status=<code>{stageMemoryReceipt.operation_status}</code>
+                                      </>
+                                    ) : null}
+                                    {stageMemoryReceiptAt ? (
+                                      <>
+                                        {" / "}memory_at=<code>{stageMemoryReceiptAt}</code>
+                                      </>
+                                    ) : null}
+                                    {stageMemoryReceiptRefs ? <>{" / "}{stageMemoryReceiptRefs}</> : null}
+                                  </div>
+                                ) : null}
                                 {(stage?.approval_id || stage?.operation_id) ? (
                                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                                     {stage?.approval_id ? (
@@ -10753,6 +10895,7 @@ function OperationsPanel(props: {
                         linked_ops=<code>{String(selectedMissionReceiptSummary?.linked_operation_count ?? 0)}</code>
                         {" / "}run_receipts=<code>{String(selectedMissionReceiptSummary?.run_ledger_count ?? 0)}</code>
                         {" / "}history_receipts=<code>{String(selectedMissionReceiptSummary?.history_count ?? 0)}</code>
+                        {" / "}memory_receipts=<code>{String(selectedMissionMemoryReceiptCount)}</code>
                       </div>
                       {(selectedMissionReceiptSummary?.latest_run_event ||
                         selectedMissionLatestRunAt ||
@@ -10785,6 +10928,22 @@ function OperationsPanel(props: {
                               memory_at=<code>{selectedMissionLatestHistoryAt}</code>
                             </>
                           ) : null}
+                        </div>
+                      ) : null}
+                      {selectedMissionLatestMemoryReceipt ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          latest_memory=<code>{missionMemoryReceiptLabel(selectedMissionLatestMemoryReceipt)}</code>
+                          {selectedMissionLatestMemoryReceipt.operation_status ? (
+                            <>
+                              {" / "}memory_status=<code>{selectedMissionLatestMemoryReceipt.operation_status}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLatestMemoryReceiptAt ? (
+                            <>
+                              {" / "}memory_at=<code>{selectedMissionLatestMemoryReceiptAt}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLatestMemoryReceiptRefs ? <>{" / "}{selectedMissionLatestMemoryReceiptRefs}</> : null}
                         </div>
                       ) : null}
                       {(selectedMemoryEvidenceBusy ||

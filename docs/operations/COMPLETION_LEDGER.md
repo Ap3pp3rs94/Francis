@@ -255,6 +255,13 @@ mission, operation, trace, run, artifact, domain, scope, and count fields from
 mission detail, receipt summary, and the memory loop stage while still preserving
 direct action response receipt references.
 
+As of `2026-04-26`, the selected mission inspector and linked-operation mission
+bridge render that preserved mission-detail memory receipt contract. The
+Continuity Receipts panels and mission loop-stage cards now show backend-provided
+memory receipt counts, latest receipt handles, timestamps, statuses, and bounded
+mission/operation/trace/approval/run/artifact references when those fields are
+present, without inventing memory state when no receipt is returned.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
