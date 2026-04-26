@@ -97,6 +97,15 @@ artifact behavior remains unchanged. This applies to the direct supervised-exec
 API route only; mission-linked and operation-run paths remain governed by their
 existing approval/execution flow.
 
+As of `2026-04-26`, direct operation lifecycle mutation routes also respect the
+operator posture write boundary. `PATCH /operations/{operation_id}`,
+`POST /operations/{operation_id}/cancel`, and `DELETE /operations/{operation_id}`
+now deny in Observe mode before changing operation metadata, tags, notes, or
+cancellation state, while returning the current operation projection and blocked
+posture. Operation create, direct run, and worker-cycle routes already had
+posture guards. This is a posture guard integration only; it does not add an
+API-scope permission gate to operation lifecycle routes.
+
 As of `2026-04-26`, domain registry write routes are also wired to the API
 permission gate. `POST /domains/create`, `PATCH /domains/update`, and
 `POST /domains/delete` now deny before mutating local domain registry state unless
@@ -3456,6 +3465,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop UI trace-ha
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git -c safe.directory=D:/Francis diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` operation lifecycle posture guard slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` mission execution permission-gate slice:

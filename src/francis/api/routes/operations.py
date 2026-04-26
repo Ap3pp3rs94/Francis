@@ -941,6 +941,18 @@ def patch_operation(operation_id: str, payload: OperationPatchIn) -> dict[str, o
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
 
+        blocked_reason = posture_write_guard("updating operation metadata")
+        if blocked_reason:
+            task = _load_task(op_id)
+            operation = _task_to_operation(task) if isinstance(task, dict) else {"id": op_id, "status": "blocked"}
+            return {
+                "ok": False,
+                "operation": operation,
+                "status": operation.get("status", "blocked"),
+                "message": blocked_reason,
+                "error": blocked_reason,
+            }
+
         status_patch = _normalize_internal_status(payload.status) if payload.status else ""
         if status_patch == "cancelled":
             ok, err = delegation_store.cancel_delegation(op_id, reason=payload.note or "cancelled_by_patch")
@@ -992,6 +1004,18 @@ def cancel_operation(operation_id: str, payload: OperationCancelIn) -> dict[str,
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
 
+        blocked_reason = posture_write_guard("cancelling an operation")
+        if blocked_reason:
+            task = _load_task(op_id)
+            operation = _task_to_operation(task) if isinstance(task, dict) else {"id": op_id, "status": "blocked"}
+            return {
+                "ok": False,
+                "status": operation.get("status", "blocked"),
+                "operation": operation,
+                "message": blocked_reason,
+                "error": blocked_reason,
+            }
+
         ok, err = delegation_store.cancel_delegation(op_id, reason=payload.reason)
         task = _load_task(op_id)
         operation = _task_to_operation(task) if isinstance(task, dict) else {"id": op_id, "status": "unknown"}
@@ -1032,6 +1056,18 @@ def delete_operation(operation_id: str, payload: OperationDeleteIn) -> dict[str,
         op_id = _safe_str(operation_id).strip()
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
+
+        blocked_reason = posture_write_guard("deleting an operation")
+        if blocked_reason:
+            task = _load_task(op_id)
+            operation = _task_to_operation(task) if isinstance(task, dict) else {"id": op_id, "status": "blocked"}
+            return {
+                "ok": False,
+                "status": operation.get("status", "blocked"),
+                "operation": operation,
+                "message": blocked_reason,
+                "error": blocked_reason,
+            }
 
         ok, err = delegation_store.cancel_delegation(op_id, reason=payload.reason)
         task = _load_task(op_id)

@@ -275,6 +275,69 @@ def test_operations_run_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) 
     assert fetched_body["operation"]["status"] == "queued"
 
 
+def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+
+    operation_ids: list[str] = []
+    for label in ("patch", "cancel", "delete"):
+        created = client.post(
+            "/operations/create",
+            json={"action": "plan.create", "reason": f"observe_{label}", "input": {"goal": label}},
+        )
+        assert created.status_code == 200
+        operation_ids.append(str(created.json()["operation_id"]))
+
+    patch_operation_id, cancel_operation_id, delete_operation_id = operation_ids
+
+    set_control_mode("observe", reason="test_observe_lifecycle_block", actor="tests")
+
+    patched = client.patch(
+        f"/operations/{patch_operation_id}",
+        json={
+            "tags": ["observe-mutated"],
+            "meta": {"operator_note": "should not persist"},
+            "note": "observe patch should not persist",
+        },
+    )
+    assert patched.status_code == 200
+    patched_body = patched.json()
+    assert patched_body["ok"] is False
+    assert patched_body["status"] == "queued"
+    assert "Observe mode keeps Francis read-only." in patched_body["message"]
+
+    cancelled = client.post(f"/operations/{cancel_operation_id}/cancel", json={"reason": "observe_cancel"})
+    assert cancelled.status_code == 200
+    cancelled_body = cancelled.json()
+    assert cancelled_body["ok"] is False
+    assert cancelled_body["status"] == "queued"
+    assert "Observe mode keeps Francis read-only." in cancelled_body["message"]
+
+    deleted = client.request("DELETE", f"/operations/{delete_operation_id}", json={"reason": "observe_delete"})
+    assert deleted.status_code == 200
+    deleted_body = deleted.json()
+    assert deleted_body["ok"] is False
+    assert deleted_body["status"] == "queued"
+    assert "Observe mode keeps Francis read-only." in deleted_body["message"]
+
+    patch_record = json.loads((data_root / "tasks" / patch_operation_id / "record.json").read_text(encoding="utf-8"))
+    assert patch_record.get("tags") is None
+    assert "observe patch should not persist" not in json.dumps(patch_record, sort_keys=True)
+    assert "should not persist" not in json.dumps(patch_record, sort_keys=True)
+
+    for operation_id in (patch_operation_id, cancel_operation_id, delete_operation_id):
+        fetched = client.get(f"/operations/{operation_id}")
+        assert fetched.status_code == 200
+        assert fetched.json()["operation"]["status"] == "queued"
+
+
 def test_operations_run_once_worker_route_completes_cleanly(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
