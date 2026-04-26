@@ -465,6 +465,16 @@ def _all_events() -> list[dict[str, Any]]:
     return list(merged.values())
 
 
+def _matches_text_handle(item: dict[str, Any], expected: str, keys: tuple[str, ...]) -> bool:
+    meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+    for key in keys:
+        if _safe_str(item.get(key)).strip().lower() == expected:
+            return True
+        if _safe_str(meta.get(key)).strip().lower() == expected:
+            return True
+    return False
+
+
 def _filter_events(
     items: list[dict[str, Any]],
     *,
@@ -517,20 +527,35 @@ def _filter_events(
             continue
         if correlation_filter and _safe_str(item.get("correlation_id")).strip().lower() != correlation_filter:
             continue
-        if trace_filter and not (
-            _safe_str(item.get("trace_id")).strip().lower() == trace_filter
-            or _safe_str(item.get("correlation_id")).strip().lower() == trace_filter
+        if trace_filter and not _matches_text_handle(
+            item,
+            trace_filter,
+            ("trace_id", "correlation_id", "handoff_trace_id", "current_task_trace_id"),
         ):
             continue
         if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
             continue
-        if operation_filter and _safe_str(item.get("operation_id")).strip().lower() != operation_filter:
+        if operation_filter and not _matches_text_handle(
+            item,
+            operation_filter,
+            ("operation_id", "task_id", "handoff_operation_id", "current_task_operation_id"),
+        ):
             continue
-        if approval_filter and _safe_str(item.get("approval_id")).strip().lower() != approval_filter:
+        if approval_filter and not _matches_text_handle(
+            item,
+            approval_filter,
+            ("approval_id", "handoff_approval_id", "current_task_approval_id"),
+        ):
             continue
-        if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
+        if run_filter and not _matches_text_handle(
+            item, run_filter, ("run_id", "handoff_run_id", "current_task_run_id")
+        ):
             continue
-        if artifact_filter and _safe_str(item.get("artifact_dir")).strip().lower() != artifact_filter:
+        if artifact_filter and not _matches_text_handle(
+            item,
+            artifact_filter,
+            ("artifact_dir", "artifact_path", "handoff_artifact_dir", "current_task_artifact_dir"),
+        ):
             continue
         if (
             operation_status_filter

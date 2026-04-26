@@ -345,6 +345,65 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     assert [event["id"] for event in status_listed.json()["items"]] == [item["id"]]
 
 
+def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Mission continuity receipt with loop-only handles.",
+        {
+            "domain": "operations",
+            "scope": "mission.loop",
+            "mission_id": "msn-loop-handle-memory",
+            "handoff_operation_id": "tsk-loop-handle-memory",
+            "handoff_trace_id": "trace-loop-handle-memory",
+            "handoff_approval_id": "apr-loop-handle-memory",
+            "handoff_run_id": "run-loop-handle-memory",
+            "handoff_artifact_dir": "D:/francis/data/artifacts/loop-handle-memory",
+            "current_task_operation_id": "tsk-loop-handle-memory",
+            "current_task_trace_id": "trace-loop-handle-memory",
+            "current_task_approval_id": "apr-loop-handle-memory",
+            "current_task_run_id": "run-loop-handle-memory",
+            "current_task_artifact_dir": "D:/francis/data/artifacts/loop-handle-memory",
+            "operation_status": "failed",
+        },
+    )
+
+    client = TestClient(create_app())
+
+    operation_listed = client.get("/memory/timeline/list?operation_id=tsk-loop-handle-memory")
+    assert operation_listed.status_code == 200
+    body = operation_listed.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["loop"]["handoff_operation_id"] == "tsk-loop-handle-memory"
+    assert item["loop"]["current_task_approval_id"] == "apr-loop-handle-memory"
+
+    trace_listed = client.get("/memory/timeline/list?trace_id=trace-loop-handle-memory")
+    assert trace_listed.status_code == 200
+    assert [event["id"] for event in trace_listed.json()["items"]] == [item["id"]]
+
+    approval_listed = client.get("/memory/timeline/list?approval_id=apr-loop-handle-memory")
+    assert approval_listed.status_code == 200
+    assert [event["id"] for event in approval_listed.json()["items"]] == [item["id"]]
+
+    run_listed = client.get("/memory/timeline/list?run_id=run-loop-handle-memory")
+    assert run_listed.status_code == 200
+    assert [event["id"] for event in run_listed.json()["items"]] == [item["id"]]
+
+    artifact_listed = client.get(
+        "/memory/timeline/list", params={"artifact_dir": "D:/francis/data/artifacts/loop-handle-memory"}
+    )
+    assert artifact_listed.status_code == 200
+    assert [event["id"] for event in artifact_listed.json()["items"]] == [item["id"]]
+
+
 def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

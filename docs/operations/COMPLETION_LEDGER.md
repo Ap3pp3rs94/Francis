@@ -701,6 +701,14 @@ instead of reducing gate evidence to adjacent receipt ids. This is still a
 read-model/client contract change only; it does not create approvals, alter
 policy decisions, or advance mission execution.
 
+As of `2026-04-26`, memory timeline filters can also resolve exact loop-only
+mission receipt handles. `/memory/timeline/list` now treats handoff and
+current-task operation, trace, approval, run, and artifact handles in event
+metadata as queryable read references when the normalized top-level reference is
+not present. This keeps receipt-backed evidence lookup aligned with the visible
+`loop` projection without broad search, inferred linkage, execution, or
+approval authority.
+
 As of `2026-04-26`, memory timeline loop projections also preserve
 `current_task_trace_id` from mission-loop continuity metadata. This keeps
 current-task trace handles aligned with the existing handoff trace, run, and
@@ -3669,6 +3677,21 @@ Latest targeted validation for the `2026-04-26` memory timeline approval-filter 
 - `cd apps\chat_ui; npm run test`
   Result: `64 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` memory timeline loop-handle filter slice:
+
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_loop_handle_fallbacks -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `8 passed`
+- `ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_mission_loop_contract.py -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` terminal mission receipt current-task trace slice:
