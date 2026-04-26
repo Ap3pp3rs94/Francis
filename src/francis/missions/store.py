@@ -917,15 +917,15 @@ class MissionRecord:
             created_at=str(data.get("created_at") or ""),
             updated_at=str(data.get("updated_at") or ""),
             status=_coerce_status(data.get("status")),
-            objective=str(data.get("objective") or ""),
+            objective=_redact_free_text(data.get("objective")),
             requester_id=str(data.get("requester_id") or "api"),
-            summary=str(data.get("summary") or ""),
-            next_step=str(data.get("next_step") or ""),
+            summary=_redact_free_text(data.get("summary")),
+            next_step=_redact_free_text(data.get("next_step")),
             owner_id=str(data.get("owner_id") or data.get("requester_id") or "api"),
             priority=int(data.get("priority") or 5),
             risk_tier=str(data.get("risk_tier") or "medium"),
             dependency_ids=_normalize_task_ids(list(data.get("dependency_ids") or [])),
-            escalation_path=str(data.get("escalation_path") or ""),
+            escalation_path=_redact_free_text(data.get("escalation_path")),
             linked_task_ids=_normalize_task_ids(list(data.get("linked_task_ids") or [])),
             deadletter_reason=_redact_optional_text(data.get("deadletter_reason")),
             meta=_redact_meta(data.get("meta")),
@@ -935,7 +935,7 @@ class MissionRecord:
 def create_mission(
     request: MissionCreateRequest, repo_root: Path | None = None
 ) -> tuple[MissionRecord | None, str | None]:
-    objective = str(request.objective or "").strip()
+    objective = _redact_free_text(request.objective)
     if not objective:
         return None, "objective_required"
     if not _is_jsonable(request.meta):
@@ -949,13 +949,13 @@ def create_mission(
         status=_coerce_status(request.status),
         objective=objective,
         requester_id=str(request.requester_id or "api").strip() or "api",
-        summary=str(request.summary or "").strip(),
-        next_step=str(request.next_step or "").strip(),
+        summary=_redact_free_text(request.summary),
+        next_step=_redact_free_text(request.next_step),
         owner_id=str(request.owner_id or request.requester_id or "api").strip() or "api",
         priority=max(1, min(int(request.priority), 9)),
         risk_tier=str(request.risk_tier or "medium").strip() or "medium",
         dependency_ids=_normalize_task_ids(request.dependency_ids),
-        escalation_path=str(request.escalation_path or "").strip(),
+        escalation_path=_redact_free_text(request.escalation_path),
         linked_task_ids=_normalize_task_ids(request.linked_task_ids),
         meta=_redact_meta(request.meta),
     )
@@ -1222,13 +1222,13 @@ def update_mission(
         changes["status"] = {"from": previous_status.value, "to": new_status.value}
 
     if summary is not None:
-        cleaned_summary = str(summary or "").strip()
+        cleaned_summary = _redact_free_text(summary)
         if cleaned_summary != record.summary:
             record.summary = cleaned_summary
             changes["summary"] = record.summary
 
     if next_step is not None:
-        cleaned_next_step = str(next_step or "").strip()
+        cleaned_next_step = _redact_free_text(next_step)
         if cleaned_next_step != record.next_step:
             record.next_step = cleaned_next_step
             changes["next_step"] = record.next_step
@@ -1246,7 +1246,7 @@ def update_mission(
             changes["dependency_ids"] = list(record.dependency_ids)
 
     if escalation_path is not None:
-        cleaned_escalation_path = str(escalation_path or "").strip()
+        cleaned_escalation_path = _redact_free_text(escalation_path)
         if cleaned_escalation_path != record.escalation_path:
             record.escalation_path = cleaned_escalation_path
             changes["escalation_path"] = record.escalation_path

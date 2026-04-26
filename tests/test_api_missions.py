@@ -258,6 +258,90 @@ def test_mission_deadletter_reason_and_notes_redact_secret_text(monkeypatch, tmp
     assert deadletter_item["history_tail"][-1]["details"]["note"] == "review note token=[REDACTED:secret]"
 
 
+def test_mission_create_and_update_redact_continuity_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    create_secrets = {
+        "objective": "missioncreateobjectivesecret123",
+        "summary": "missioncreatesummarysecret123",
+        "next_step": "missioncreatenextstepsecret123",
+        "escalation_path": "missioncreateescalationsecret123",
+    }
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": f"Carry direct mission password={create_secrets['objective']}",
+            "summary": f"Create summary token={create_secrets['summary']}",
+            "next_step": f"Create next step secret={create_secrets['next_step']}",
+            "escalation_path": f"Create escalation api_key={create_secrets['escalation_path']}",
+            "requester_id": "test.missions.redaction",
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    mission_id = str(created_body["mission_id"])
+    assert created_body["mission"]["objective"] == "Carry direct mission password=[REDACTED:secret]"
+    assert created_body["mission"]["summary"] == "Create summary token=[REDACTED:secret]"
+    assert created_body["mission"]["next_step"] == "Create next step secret=[REDACTED:secret]"
+    assert created_body["mission"]["escalation_path"] == "Create escalation api_key=[REDACTED:secret]"
+    assert created_body["loop_state"]["interface"]["next_step"] == "Create next step secret=[REDACTED:secret]"
+    assert created_body["history"][0]["details"]["objective"] == "Carry direct mission password=[REDACTED:secret]"
+    assert created_body["history"][0]["details"]["next_step"] == "Create next step secret=[REDACTED:secret]"
+
+    mission_dir = data_root / "missions" / mission_id
+    record_text = (mission_dir / "record.json").read_text(encoding="utf-8")
+    history_text = (mission_dir / "history.jsonl").read_text(encoding="utf-8")
+    for raw_secret in create_secrets.values():
+        assert raw_secret not in record_text
+        assert raw_secret not in history_text
+
+    update_secrets = {
+        "summary": "missionupdatesummarysecret123",
+        "next_step": "missionupdatenextstepsecret123",
+        "escalation_path": "missionupdateescalationsecret123",
+        "note": "missionupdatenotesecret123",
+    }
+    patched = client.patch(
+        f"/missions/{mission_id}",
+        json={
+            "summary": f"Updated summary password={update_secrets['summary']}",
+            "next_step": f"Updated next token={update_secrets['next_step']}",
+            "escalation_path": f"Updated escalation secret={update_secrets['escalation_path']}",
+            "actor": "test.missions.redaction",
+            "note": f"Updated note api_key={update_secrets['note']}",
+        },
+    )
+    assert patched.status_code == 200
+    patched_body = patched.json()
+    assert patched_body["ok"] is True
+    assert patched_body["mission"]["summary"] == "Updated summary password=[REDACTED:secret]"
+    assert patched_body["mission"]["next_step"] == "Updated next token=[REDACTED:secret]"
+    assert patched_body["mission"]["escalation_path"] == "Updated escalation secret=[REDACTED:secret]"
+    assert patched_body["loop_state"]["interface"]["next_step"] == "Updated next token=[REDACTED:secret]"
+    continuity_event = [item for item in patched_body["history"] if item.get("event") == "continuity_updated"][-1]
+    assert continuity_event["details"]["summary"] == "Updated summary password=[REDACTED:secret]"
+    assert continuity_event["details"]["next_step"] == "Updated next token=[REDACTED:secret]"
+    assert continuity_event["details"]["escalation_path"] == "Updated escalation secret=[REDACTED:secret]"
+    assert continuity_event["details"]["note"] == "Updated note api_key=[REDACTED:secret]"
+
+    record_text = (mission_dir / "record.json").read_text(encoding="utf-8")
+    history_text = (mission_dir / "history.jsonl").read_text(encoding="utf-8")
+    persisted_text = record_text + history_text
+    for raw_secret in (*create_secrets.values(), *update_secrets.values()):
+        assert raw_secret not in persisted_text
+    assert "password=[REDACTED:secret]" in persisted_text
+    assert "token=[REDACTED:secret]" in persisted_text
+    assert "api_key=[REDACTED:secret]" in persisted_text
+
+
 def test_missions_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

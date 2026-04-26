@@ -203,6 +203,14 @@ envelope with gate, reason, next step, and count-only evidence, and the chat UI
 chat client preserves that envelope in mission-ingress metadata instead of
 collapsing policy truth to a plain error string.
 
+As of `2026-04-26`, direct mission continuity text is redacted at the mission
+store boundary. Mission `objective`, `summary`, `next_step`, and
+`escalation_path` fields are normalized through the governed free-text secret
+filter on create, update, and record read, so direct mission API responses,
+record files, and history entries do not replay inline password, token, key, or
+secret values. This does not change mission authority, queue eligibility, or
+execution behavior.
+
 As of `2026-04-26`, terminal mission-operation memory receipts are reachable
 from operation detail surfaces after the immediate run response is gone. The
 shared receipt reader can query continuity-ledger receipts by operation id with
@@ -4445,6 +4453,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt g
   Result: `passed`
 - `cd apps\chat_ui; npx tsc --noEmit`
   Result: `failed on existing broad strict TypeScript errors across unrelated UI modules; not used as the targeted gate`
+
+Latest targeted validation for the `2026-04-26` Stage 3 direct mission continuity redaction slice:
+
+- `python -m ruff format src\francis\missions\store.py tests\test_api_missions.py`
+  Result: `2 files left unchanged`
+- `python -m ruff check src\francis\missions\store.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py::test_mission_create_and_update_redact_continuity_text -q`
+  Result: `1 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `64 passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 terminal mission receipt operator-review gate slice:
 
