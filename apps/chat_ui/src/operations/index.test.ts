@@ -157,9 +157,18 @@ test("OperationsClient.create posts the governed operation request envelope and 
     return jsonResponse({
       ok: true,
       operation_id: "tsk_compose_alpha",
+      mission_id: "mission_alpha",
+      mission_linked: true,
       approval_id: "apr_compose_alpha",
       status: "queued",
       message: "created",
+      operation: {
+        id: "tsk_compose_alpha",
+        ts: 1777160000,
+        status: "queued",
+        actor: "chat_ui.operations",
+        meta: { mission_id: "mission_alpha" },
+      },
     });
   });
 
@@ -195,9 +204,55 @@ test("OperationsClient.create posts the governed operation request envelope and 
     ]);
     assert.equal(response.ok, true);
     assert.equal(response.operation_id, "tsk_compose_alpha");
+    assert.equal(response.operation?.id, "tsk_compose_alpha");
+    assert.equal(response.operation?.meta?.mission_id, "mission_alpha");
+    assert.equal(response.mission_id, "mission_alpha");
+    assert.equal(response.mission_linked, true);
+    assert.equal(response.mission_link_error, undefined);
     assert.equal(response.approval_id, "apr_compose_alpha");
     assert.equal(response.status, "queued");
     assert.equal(response.message, "created");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("OperationsClient.create preserves created operation context when mission linking fails", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      ok: false,
+      operation_id: "tsk_unlinked_alpha",
+      mission_id: "mission_missing",
+      mission_linked: false,
+      mission_link_error: "not_found",
+      status: "queued",
+      message: "created_with_mission_link_error",
+      operation: {
+        id: "tsk_unlinked_alpha",
+        ts: 1777160000,
+        status: "queued",
+        meta: { mission_id: "mission_missing" },
+      },
+    }),
+  );
+
+  try {
+    const client = new OperationsClient("http://127.0.0.1:8000");
+    const response = await client.create({
+      action: "plan.create",
+      reason: "operator_requested",
+      actor: "chat_ui.operations",
+      mission_id: "mission_missing",
+      input: { goal: "Preserve unlinked task context" },
+    });
+
+    assert.equal(response.ok, false);
+    assert.equal(response.operation_id, "tsk_unlinked_alpha");
+    assert.equal(response.operation?.id, "tsk_unlinked_alpha");
+    assert.equal(response.mission_id, "mission_missing");
+    assert.equal(response.mission_linked, false);
+    assert.equal(response.mission_link_error, "not_found");
+    assert.equal(response.message, "created_with_mission_link_error");
   } finally {
     restoreFetch();
   }

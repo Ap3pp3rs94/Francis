@@ -236,6 +236,14 @@ status, active loop stage, next backend handoff, and an `Open mission flow`
 action that jumps to the existing mission inspector. The UI does not create this
 surface for ordinary chat replies or mission-less responses.
 
+As of `2026-04-25`, the chat UI operations client preserves backend operation
+creation mission-link truth. Mission-linked create requests are explicitly typed,
+and create responses retain the returned operation projection, `mission_id`,
+`mission_linked`, `mission_link_error`, approval id, status, and message. This
+keeps first-operation handoff evidence available to operator surfaces, including
+the partial-failure case where an operation was created but mission linking
+failed.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2353,6 +2361,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation create mission-link UI contract slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py -q`
+  Result: `43 passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 chat mission ingress interface slice:
 

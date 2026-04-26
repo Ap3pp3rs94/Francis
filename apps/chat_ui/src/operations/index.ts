@@ -159,6 +159,12 @@ export type OperationCreateRequest = {
   actor?: string;
 
   /**
+   * Optional mission continuity anchor. When present, the backend links the
+   * created operation into that mission or returns an explicit link error.
+   */
+  mission_id?: string;
+
+  /**
    * Optional idempotency key to prevent duplicates on retries.
    */
   idempotency_key?: string;
@@ -172,11 +178,28 @@ export type OperationCreateRequest = {
    * Forward-compatible metadata bag.
    */
   meta?: Record<string, unknown>;
+
+  /**
+   * Optional capability override when the semantic action needs explicit mapping.
+   */
+  capability?: string;
+
+  /**
+   * Optional audit/display objective for the queued operation.
+   */
+  objective?: string;
+
+  /**
+   * Optional priority and expiry controls accepted by the backend operation route.
+   */
+  priority?: number;
+  ttl_sec?: number;
 };
 
 export type OperationCreateResponse = {
   ok: boolean;
   operation_id?: string;
+  operation?: OperationRecord;
 
   /**
    * If the server routes this through approvals/governance, it may return
@@ -186,6 +209,10 @@ export type OperationCreateResponse = {
 
   status?: OperationStatus;
   message?: string;
+  error?: string;
+  mission_id?: string;
+  mission_linked?: boolean;
+  mission_link_error?: string;
 };
 
 export type OperationUpdateRequest = {
@@ -907,12 +934,21 @@ export class OperationsClient {
 
     if (!isRecord(json)) return { ok: true };
 
+    const operation = parseOperationRecord(json.operation);
+    const error = safeString(json.error) || undefined;
+    const missionLinkError = safeString(json.mission_link_error) || undefined;
+
     return {
       ok: Boolean(json.ok ?? true),
       operation_id: safeString(json.operation_id) || safeString(json.id) || undefined,
+      operation: operation ?? undefined,
       approval_id: safeString(json.approval_id) || undefined,
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
-      message: safeString(json.message) || undefined,
+      message: safeString(json.message) || error || missionLinkError || undefined,
+      error,
+      mission_id: safeString(json.mission_id) || undefined,
+      mission_linked: typeof json.mission_linked === "boolean" ? json.mission_linked : undefined,
+      mission_link_error: missionLinkError,
     };
   }
 
