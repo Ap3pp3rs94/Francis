@@ -781,7 +781,10 @@ def _mission_loop_state(
     approved_gate_can_execute = (
         queue_approval_status == "approved" and queue_recommended_action == "run_linked_operation"
     )
-    governance_hold_active = bool(latest_gate or latest_approval_id) and not approved_gate_can_execute
+    terminal_operation_closed = latest_operation_status in {"completed", "succeeded", "failed", "canceled", "cancelled"}
+    governance_hold_active = (
+        bool(latest_gate or latest_approval_id) and not approved_gate_can_execute and not terminal_operation_closed
+    )
 
     if linked_operations:
         plan_stage = _loop_stage(
@@ -928,6 +931,18 @@ def _mission_loop_state(
     receipt_items = [dict(item) for item in memory_receipts or [] if isinstance(item, dict)]
     memory_receipt_count = len(receipt_items)
     latest_memory_receipt = receipt_items[0] if receipt_items else {}
+    latest_memory_approval_id = _first_text(
+        latest_memory_receipt.get("approval_id"),
+        latest_memory_receipt.get("current_task_approval_id"),
+        latest_memory_receipt.get("handoff_approval_id"),
+        latest_approval_id,
+    )
+    latest_memory_approval_status = _first_text(
+        latest_memory_receipt.get("approval_status"),
+        latest_memory_receipt.get("current_task_approval_status"),
+        latest_memory_receipt.get("handoff_approval_status"),
+        queue_approval_status,
+    )
     latest_history_event = ""
     latest_history_ts = ""
     if history:
@@ -944,6 +959,8 @@ def _mission_loop_state(
             "recorded",
             "Mission continuity is backed by " + ", ".join(memory_parts) + ".",
             count=history_count + memory_receipt_count,
+            approval_id=latest_memory_approval_id,
+            approval_status=latest_memory_approval_status,
             operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
             trace_id=_first_text(latest_memory_receipt.get("trace_id"), latest_trace_id),
             run_id=_first_text(latest_memory_receipt.get("run_id"), latest_run_id),
@@ -969,6 +986,8 @@ def _mission_loop_state(
             "interface",
             "review_result",
             "Review the completed mission result, trace, and memory receipt before declaring follow-up work.",
+            approval_id=latest_memory_approval_id,
+            approval_status=latest_memory_approval_status,
             operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
             trace_id=_first_text(latest_memory_receipt.get("trace_id"), latest_trace_id),
             run_id=_first_text(latest_memory_receipt.get("run_id"), latest_run_id),

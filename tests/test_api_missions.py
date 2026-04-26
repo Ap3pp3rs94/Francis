@@ -864,10 +864,19 @@ def test_mission_linked_supervised_exec_surfaces_artifact_handle(monkeypatch, tm
     assert linked_operation["run_id"] == run_id
     assert fetched_body["receipt_summary"]["current_artifact_dir"] == artifact_dir
     assert fetched_body["receipt_summary"]["current_run_id"] == run_id
+    assert fetched_body["latest_memory_receipt"]["approval_id"] == approval_id
+    assert fetched_body["latest_memory_receipt"]["approval_status"] == "approved"
     assert fetched_body["current_task"]["artifact_dir"] == artifact_dir
     assert fetched_body["current_task"]["run_id"] == run_id
     assert fetched_body["loop_state"]["trace"]["artifact_dir"] == artifact_dir
     assert fetched_body["loop_state"]["trace"]["run_id"] == run_id
+    assert fetched_body["loop_state"]["memory"]["approval_id"] == approval_id
+    assert fetched_body["loop_state"]["memory"]["approval_status"] == "approved"
+    assert fetched_body["loop_state"]["active_stage"] == "interface"
+    assert fetched_body["loop_state"]["handoff"]["stage"] == "interface"
+    assert fetched_body["loop_state"]["handoff"]["action"] == "review_result"
+    assert fetched_body["loop_state"]["handoff"]["approval_id"] == approval_id
+    assert fetched_body["loop_state"]["handoff"]["approval_status"] == "approved"
     assert fetched_body["loop_state"]["interface"]["artifact_dir"] == artifact_dir
     assert fetched_body["loop_state"]["interface"]["run_id"] == run_id
 

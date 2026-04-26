@@ -582,6 +582,15 @@ projection and the mission receipt reader preserve it. This keeps the memory
 handoff aligned with the same operation trace already exposed by the mission loop
 without creating traces, changing execution, or expanding memory writes.
 
+As of `2026-04-26`, mission detail loop state also uses terminal operation
+memory receipts to carry approved execution posture through the memory and
+interface handoff stages. When an approved supervised execution completes, the
+mission loop memory stage now exposes the receipt-backed `approval_id` and
+`approval_status`, and the completed mission remains on the `interface /
+review_result` handoff instead of being pulled back to a stale approval gate
+from old operation metadata. This is a read-model truth fix only; it does not
+approve actions, execute work, create receipts, or change policy decisions.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -3561,6 +3570,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` terminal mission receipt approval-handoff slice:
+
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests/test_api_missions.py::test_mission_linked_supervised_exec_surfaces_artifact_handle -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `63 passed`
 - `git diff --check`
   Result: `passed`
 
