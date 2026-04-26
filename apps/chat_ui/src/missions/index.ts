@@ -354,6 +354,9 @@ export type MissionQueueItem = MissionRecord & {
   recovery?: MissionRecoveryProjection;
   dependency_state?: MissionDependencyState;
   current_task?: MissionCurrentTask;
+  loop_state?: MissionLoopState;
+  handoff?: MissionLoopHandoff;
+  receipt_summary?: MissionReceiptSummary;
   last_task_id?: string;
   last_task_status?: string;
   last_task_result_status?: string;
@@ -385,6 +388,8 @@ export type MissionQueueItem = MissionRecord & {
   last_recovery_source_status?: string;
   last_recovery_at?: string;
   history_count?: number;
+  linked_operation_count?: number;
+  run_ledger_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryEntry[];
@@ -483,6 +488,16 @@ export type MissionRunOnceResponse = {
   status?: string;
   error?: string;
   request?: MissionRunOnceRequest;
+  governance?: MissionGovernanceDecision;
+};
+
+export type MissionQueueResponse = {
+  ok: boolean;
+  items: MissionQueueItem[];
+  failed: MissionQueueItem[];
+  deadletter: MissionQueueItem[];
+  total?: number;
+  error?: string;
   governance?: MissionGovernanceDecision;
 };
 
@@ -785,6 +800,9 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     recovery: parseMissionRecoveryProjection(raw.recovery),
     dependency_state: parseMissionDependencyState(raw.dependency_state),
     current_task: parseMissionCurrentTask(raw.current_task),
+    loop_state: parseMissionLoopState(raw.loop_state),
+    handoff: parseMissionLoopHandoff(raw.handoff),
+    receipt_summary: parseMissionReceiptSummary(raw.receipt_summary),
     last_task_id: safeString(raw.last_task_id, "") || undefined,
     last_task_status: safeString(raw.last_task_status, "") || undefined,
     last_task_result_status: safeString(raw.last_task_result_status, "") || undefined,
@@ -816,6 +834,8 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_recovery_source_status: safeString(raw.last_recovery_source_status, "") || undefined,
     last_recovery_at: safeString(raw.last_recovery_at, "") || undefined,
     history_count: safeNumber(raw.history_count, 0) || undefined,
+    linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
+    run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
     latest_history_event: safeString(raw.latest_history_event, "") || undefined,
     latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,
     history_tail: Array.isArray(raw.history_tail)
@@ -1452,6 +1472,38 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
   };
 }
 
+function parseMissionQueueResponse(json: unknown): MissionQueueResponse {
+  if (!isRecord(json)) {
+    return {
+      ok: false,
+      items: [],
+      failed: [],
+      deadletter: [],
+      error: typeof json === "string" ? json : "invalid_mission_queue_payload",
+    };
+  }
+
+  const items = Array.isArray(json.items)
+    ? json.items.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+  const deadletter = Array.isArray(json.deadletter)
+    ? json.deadletter.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+  const failed = Array.isArray(json.failed)
+    ? json.failed.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+
+  return {
+    ok: safeBoolean(json.ok, false),
+    items,
+    failed,
+    deadletter,
+    total: safeNumber(json.total, items.length) || undefined,
+    error: safeString(json.error, "") || undefined,
+    governance: parseMissionGovernance(json.governance),
+  };
+}
+
 function missionQueueNeedsReview(item: MissionQueueItem): boolean {
   return item.advance?.eligible !== true;
 }
@@ -1631,6 +1683,17 @@ export class MissionsClient {
     return url.toString();
   }
 
+  private queueUrl(limit?: number, includeTerminal?: boolean): string {
+    const url = new URL(`${this.baseUrl}/missions/queue`);
+    if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+      url.searchParams.set("limit", String(Math.max(1, Math.floor(limit))));
+    }
+    if (includeTerminal === true) {
+      url.searchParams.set("include_terminal", "true");
+    }
+    return url.toString();
+  }
+
   private createUrl(): string {
     return `${this.baseUrl}/missions/create`;
   }
@@ -1656,6 +1719,20 @@ export class MissionsClient {
       timeoutMs: opts?.timeoutMs,
     });
     return parseMissionListResponse(json);
+  }
+
+  async queue(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    limit?: number;
+    includeTerminal?: boolean;
+  }): Promise<MissionQueueResponse> {
+    const json = await fetchJson(this.queueUrl(opts?.limit, opts?.includeTerminal), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+    return parseMissionQueueResponse(json);
   }
 
   async create(

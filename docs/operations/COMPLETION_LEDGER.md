@@ -266,6 +266,13 @@ history/linked-operation/run-ledger counts. This is a read projection only; it
 does not advance missions, run operations, widen approvals, or replace the full
 mission detail/log inspection route.
 
+As of `2026-04-26`, the chat UI missions client can consume that direct queue
+read projection. `MissionsClient.queue` now reads `GET /missions/queue` with
+bounded limit and terminal-inclusion params, and `MissionQueueItem` preserves
+queue-level `loop_state`, `handoff`, `receipt_summary`, current-task receipt
+fields, and bounded linked-operation/run-ledger counts. This is a typed client
+contract only; it does not add new rendering claims or execution authority.
+
 As of `2026-04-26`, the explanation registry can preserve and query the same
 mission loop handles used by the Stage 3 trace and memory surfaces. Explanation
 records now lift `mission_id` and `operation_id` from either top-level fields or
@@ -3378,6 +3385,16 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission queue loop
+client contract slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `15 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission queue loop
 projection slice:

@@ -281,6 +281,101 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
   }
 });
 
+test("MissionsClient.queue preserves receipt-backed loop projection on queue items", async () => {
+  const requests: Array<{ path: string; limit: string | null; includeTerminal: string | null }> = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      limit: parsed.searchParams.get("limit"),
+      includeTerminal: parsed.searchParams.get("include_terminal"),
+    });
+
+    return jsonResponse({
+      ok: true,
+      items: [
+        {
+          id: "mission_queue_loop",
+          status: "blocked",
+          objective: "Carry queue loop truth into the interface client",
+          recommended_action: "raise_trust_or_reduce_risk",
+          action_target_id: "tsk_queue_loop",
+          advance: { eligible: false, action: "raise_trust_or_reduce_risk", target_id: "tsk_queue_loop" },
+          current_task: {
+            mission_id: "mission_queue_loop",
+            source: "mission_meta",
+            operation_id: "tsk_queue_loop",
+            gate: "trust_gate",
+            latest_receipt_status: "blocked",
+          },
+          loop_state: {
+            active_stage: "gate",
+            handoff: {
+              stage: "gate",
+              action: "raise_trust_or_reduce_risk",
+              operation_id: "tsk_queue_loop",
+              gate: "trust_gate",
+              detail: "Review trust gate before execution can continue.",
+            },
+            interface: {
+              status: "available",
+              operation_id: "tsk_queue_loop",
+              gate: "trust_gate",
+              latest_receipt_status: "blocked",
+            },
+          },
+          handoff: {
+            stage: "gate",
+            action: "raise_trust_or_reduce_risk",
+            operation_id: "tsk_queue_loop",
+            gate: "trust_gate",
+          },
+          receipt_summary: {
+            linked_operation_count: 1,
+            run_ledger_count: 2,
+            history_count: 3,
+            current_operation_id: "tsk_queue_loop",
+            current_operation_status: "blocked",
+            current_gate: "trust_gate",
+            latest_run_event: "governance_hold",
+            latest_run_status: "blocked",
+          },
+          history_count: 3,
+          linked_operation_count: 1,
+          run_ledger_count: 2,
+        },
+      ],
+      failed: [],
+      deadletter: [],
+      total: 1,
+    });
+  });
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.queue({ limit: 6, includeTerminal: true, timeoutMs: 50 });
+
+    assert.deepEqual(requests, [{ path: "/missions/queue", limit: "6", includeTerminal: "true" }]);
+    assert.equal(response.ok, true);
+    assert.equal(response.total, 1);
+    assert.equal(response.items[0]?.recommended_action, "raise_trust_or_reduce_risk");
+    assert.equal(response.items[0]?.loop_state?.active_stage, "gate");
+    assert.equal(response.items[0]?.loop_state?.handoff?.action, "raise_trust_or_reduce_risk");
+    assert.equal(response.items[0]?.loop_state?.interface?.status, "available");
+    assert.equal(response.items[0]?.handoff?.operation_id, "tsk_queue_loop");
+    assert.equal(response.items[0]?.handoff?.gate, "trust_gate");
+    assert.equal(response.items[0]?.receipt_summary?.current_operation_id, "tsk_queue_loop");
+    assert.equal(response.items[0]?.receipt_summary?.current_gate, "trust_gate");
+    assert.equal(response.items[0]?.current_task?.operation_id, "tsk_queue_loop");
+    assert.equal(response.items[0]?.current_task?.latest_receipt_status, "blocked");
+    assert.equal(response.items[0]?.history_count, 3);
+    assert.equal(response.items[0]?.linked_operation_count, 1);
+    assert.equal(response.items[0]?.run_ledger_count, 2);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("MissionsClient.create posts a mission declaration and preserves the returned mission envelope", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {
