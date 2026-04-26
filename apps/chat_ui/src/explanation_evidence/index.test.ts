@@ -9,12 +9,17 @@ import {
 
 test("buildExplanationEvidenceQueries builds bounded receipt filters", () => {
   const queries = buildExplanationEvidenceQueries({
+    approvalId: " apr_alpha ",
     traceId: " trace_alpha ",
     runId: "run_alpha",
     artifactDir: "D:/francis/data/artifacts/alpha",
   });
 
   assert.deepEqual(queries, [
+    {
+      label: "approval=apr_alpha",
+      filters: { approval_id: "apr_alpha", limit: 8 },
+    },
     {
       label: "trace=trace_alpha",
       filters: { trace_id: "trace_alpha", limit: 8 },
@@ -30,7 +35,7 @@ test("buildExplanationEvidenceQueries builds bounded receipt filters", () => {
   ]);
   assert.equal(
     explanationEvidenceQueryKey(queries),
-    "trace=trace_alpha|run=run_alpha|artifact=D:/francis/data/artifacts/alpha",
+    "approval=apr_alpha|trace=trace_alpha|run=run_alpha|artifact=D:/francis/data/artifacts/alpha",
   );
 });
 
@@ -48,10 +53,13 @@ test("buildExplanationEvidenceQueries ignores empty receipt handles", () => {
 test("buildExplanationEvidenceQueries follows completed handoff receipt handles", () => {
   const queries = buildExplanationEvidenceQueries({
     receipt: {
+      approval_id: "apr_legacy",
+      current_task_approval_id: "apr_completed",
       current_task_trace_id: "trace_completed",
       current_task_run_id: "run_completed",
       current_task_artifact_dir: "D:/francis/data/artifacts/completed",
       references: {
+        approval_id: "apr_reference",
         trace_id: "trace_legacy",
         run_id: "run_legacy",
         artifact_dir: "D:/francis/data/artifacts/legacy",
@@ -60,6 +68,10 @@ test("buildExplanationEvidenceQueries follows completed handoff receipt handles"
   });
 
   assert.deepEqual(queries, [
+    {
+      label: "approval=apr_legacy",
+      filters: { approval_id: "apr_legacy", limit: 8 },
+    },
     {
       label: "trace=trace_completed",
       filters: { trace_id: "trace_completed", limit: 8 },

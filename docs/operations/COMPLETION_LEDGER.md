@@ -893,12 +893,12 @@ lineage without adding new mutation controls or UI-synthesized state.
 
 As of `2026-04-26`, memory and explanation evidence queries can also follow
 those completed-loop receipt handoff handles. Browser-side memory evidence now
-uses receipt `current_task_*` / `handoff_*` mission, operation, trace, run, and
-artifact handles as bounded fallbacks, and explanation evidence uses the same
-trace/run/artifact fallback from the selected mission receipt before giving up.
-This keeps completed `memory -> interface` handoff review connected to existing
-trace, artifact, and memory evidence paths without creating new evidence or
-execution authority.
+uses receipt `current_task_*` / `handoff_*` mission, operation, approval, trace,
+run, and artifact handles as bounded fallbacks, and explanation evidence uses
+the same approval/trace/run/artifact fallback from the selected mission receipt
+before giving up. This keeps completed `memory -> interface` handoff review
+connected to existing approval, trace, artifact, and memory evidence paths
+without creating new evidence or execution authority.
 
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
@@ -3750,6 +3750,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 operation explanation ev
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --cached --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation evidence approval-handle query slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_evidence\index.test.ts`
+  Result: `4 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link contract slice:

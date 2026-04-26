@@ -13,13 +13,17 @@ export type ExplanationEvidenceReceiptReference = {
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
+  approval_id?: string;
+  handoff_approval_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
+  current_task_approval_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   references?: {
+    approval_id?: string;
     trace_id?: string;
     run_id?: string;
     artifact_dir?: string;
@@ -27,6 +31,7 @@ export type ExplanationEvidenceReceiptReference = {
 };
 
 export type ExplanationEvidenceQueryInput = {
+  approvalId?: string;
   traceId?: string;
   runId?: string;
   artifactDir?: string;
@@ -39,9 +44,17 @@ function cleanId(value: string | undefined): string {
 
 function receiptReferenceId(
   receipt: ExplanationEvidenceReceiptReference | undefined,
-  key: "trace_id" | "run_id" | "artifact_dir",
+  key: "approval_id" | "trace_id" | "run_id" | "artifact_dir",
 ): string {
   if (!receipt) return "";
+  if (key === "approval_id") {
+    return (
+      cleanId(receipt.approval_id) ||
+      cleanId(receipt.current_task_approval_id) ||
+      cleanId(receipt.handoff_approval_id) ||
+      cleanId(receipt.references?.approval_id)
+    );
+  }
   if (key === "trace_id") {
     return (
       cleanId(receipt.trace_id) ||
@@ -76,10 +89,12 @@ export function buildExplanationEvidenceQueries(input: ExplanationEvidenceQueryI
     queries.push({ label, filters: { ...filters, limit: 8 } });
   };
 
+  const approvalId = cleanId(input.approvalId) || receiptReferenceId(input.receipt, "approval_id");
   const traceId = cleanId(input.traceId) || receiptReferenceId(input.receipt, "trace_id");
   const runId = cleanId(input.runId) || receiptReferenceId(input.receipt, "run_id");
   const artifactDir = cleanId(input.artifactDir) || receiptReferenceId(input.receipt, "artifact_dir");
 
+  if (approvalId) push(`approval=${approvalId}`, { approval_id: approvalId });
   if (traceId) push(`trace=${traceId}`, { trace_id: traceId });
   if (runId) push(`run=${runId}`, { run_id: runId });
   if (artifactDir) push(`artifact=${artifactDir}`, { artifact_dir: artifactDir });
