@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
@@ -56,6 +58,21 @@ class ApiPermissionGate:
             scopes, valid = _scope_list(raw_scopes)
             if actor_id and valid:
                 self._actor_scopes[actor_id] = tuple(scopes)
+
+    @classmethod
+    def from_env(cls, env_var: str = "FRANCIS_API_ACTOR_SCOPES") -> "ApiPermissionGate":
+        raw = _safe_text(os.getenv(env_var)).strip()
+        if not raw:
+            return cls()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("invalid API actor-scope policy JSON")
+            return cls()
+        if not isinstance(parsed, dict):
+            logger.warning("API actor-scope policy must be a JSON object")
+            return cls()
+        return cls(parsed)
 
     def check(
         self,

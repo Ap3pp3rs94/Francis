@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from francis.governance.api_permission_gate import ApiPermissionGate
 
 
@@ -66,3 +68,21 @@ def test_api_permission_gate_allows_resolved_actor_scope() -> None:
     assert decision.evidence["actor_present"] is True
     assert decision.evidence["method"] == "POST"
     assert "sk-supersecret" not in repr(decision.evidence)
+
+
+def test_api_permission_gate_loads_actor_scopes_from_env(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"operator": ["codex.supervised_exec"]}),
+    )
+
+    decision = ApiPermissionGate.from_env().check(
+        actor_id="operator",
+        required_scopes=["codex.supervised_exec"],
+        route="/operations/supervised-exec/run",
+        method="post",
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == "ok"
+    assert decision.evidence["actor_scope_count"] == 1

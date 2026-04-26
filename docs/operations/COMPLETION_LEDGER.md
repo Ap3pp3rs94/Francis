@@ -88,6 +88,15 @@ returns the same count-only decision evidence for direct scope checks. This is a
 reusable gate contract; privileged routes still need explicit integration before
 claiming API-wide permission enforcement.
 
+As of `2026-04-26`, the direct supervised-exec API side-effect route is wired to
+that permission gate. `POST /operations/supervised-exec/run` now denies before
+creating an approval request unless the request actor is present in the
+server-side `FRANCIS_API_ACTOR_SCOPES` policy with the `codex.supervised_exec`
+scope. When allowed by that policy, the existing exact-action approval and
+artifact behavior remains unchanged. This applies to the direct supervised-exec
+API route only; mission-linked and operation-run paths remain governed by their
+existing approval/execution flow.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2562,6 +2571,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` direct supervised-exec permission-gate slice:
+
+- `python -m ruff check src\francis\governance\api_permission_gate.py src\francis\api\routes\supervised_exec.py tests\unit\test_api_permission_gate.py tests\test_api_supervised_exec.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\governance\api_permission_gate.py src\francis\api\routes\supervised_exec.py tests\unit\test_api_permission_gate.py tests\test_api_supervised_exec.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_api_permission_gate.py tests\test_api_supervised_exec.py -q`
+  Result: `9 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_supervised_exec.py tests\test_api_operations.py::test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts tests\test_api_operations.py::test_operations_supervised_exec_refreshes_stale_approval tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `13 passed`
 
 Latest targeted validation for the `2026-04-26` API permission gate decision contract slice:
 
