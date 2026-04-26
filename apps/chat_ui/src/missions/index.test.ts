@@ -1474,6 +1474,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_id: "apr_loop",
           approval_status: "pending",
           operation_id: "tsk_loop",
+          trace_id: "trace_loop",
           run_id: "run_loop",
           artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         },
@@ -1496,6 +1497,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_id: "apr_loop",
           approval_status: "pending",
           operation_id: "tsk_loop",
+          trace_id: "trace_loop",
           run_id: "run_loop",
           artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         },
@@ -1503,6 +1505,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           status: "queued",
           detail: "The latest linked operation is currently queued.",
           operation_id: "tsk_loop",
+          trace_id: "trace_loop",
           approval_id: "apr_loop",
           approval_status: "pending",
           run_id: "run_loop",
@@ -1587,6 +1590,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.handoff?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.handoff?.approval_status, "pending");
     assert.equal(response.loop_state?.handoff?.operation_id, "tsk_loop");
+    assert.equal(response.loop_state?.handoff?.trace_id, "trace_loop");
     assert.equal(response.loop_state?.handoff?.run_id, "run_loop");
     assert.equal(response.loop_state?.handoff?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.plan?.plan_status, "in_progress");
@@ -1597,8 +1601,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.gate?.status, "needs_approval");
     assert.equal(response.loop_state?.gate?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.gate?.approval_status, "pending");
+    assert.equal(response.loop_state?.gate?.trace_id, "trace_loop");
     assert.equal(response.loop_state?.gate?.next_step, "review_pending_approval");
     assert.equal(response.loop_state?.execute?.approval_status, "pending");
+    assert.equal(response.loop_state?.execute?.trace_id, "trace_loop");
     assert.equal(response.loop_state?.execute?.run_id, "run_loop");
     assert.equal(response.loop_state?.execute?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.execute?.next_step, "review_pending_approval");

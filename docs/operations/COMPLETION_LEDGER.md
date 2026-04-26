@@ -711,6 +711,13 @@ move from gate review toward trace evidence without relying only on
 `current_task`. This does not mint traces, approve work, execute operations, or
 write memory.
 
+As of `2026-04-26`, the chat UI mission client contract also proves those loop
+stage trace handles survive browser-side parsing. The ORB mission inspector
+fixture now requires `trace_id` on the active handoff, gate stage, and execute
+stage, alongside the existing approval, operation, run, and artifact handles.
+This is a client contract proof only; it does not change UI authority, approval
+decisions, execution, backend projection behavior, or memory writes.
+
 As of `2026-04-26`, chat mission ingress continuity entries preserve bounded ORB
 loop metadata for newly declared missions. The assistant ledger entry written by
 `POST /chat/send` or websocket mission ingress now carries the real mission id,
@@ -3438,6 +3445,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop gate trace-
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `.\scripts\check.ps1`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop UI trace-handoff contract slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/missions/index.test.ts`
+  Result: `14 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git -c safe.directory=D:/Francis diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` mission execution permission-gate slice:
