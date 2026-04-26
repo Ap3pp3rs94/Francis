@@ -591,6 +591,14 @@ review_result` handoff instead of being pulled back to a stale approval gate
 from old operation metadata. This is a read-model truth fix only; it does not
 approve actions, execute work, create receipts, or change policy decisions.
 
+As of `2026-04-26`, the chat UI settings and continuity clients preserve those
+receipt-backed approval handoff handles when parsing world-state and continuity
+briefing mission memory receipts. Mission memory receipt projections now retain
+top-level `approval_id`, handoff/current-task approval id and status fields, and
+bounded receipt references including `references.approval_id`. This is a parser
+contract only; it does not render new authority, create receipts, approve work,
+or infer missing approval posture.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -3569,6 +3577,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` settings mission receipt approval-handle parser slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

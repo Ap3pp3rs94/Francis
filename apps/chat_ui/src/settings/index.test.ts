@@ -433,9 +433,21 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 trace_id: "trace_alpha",
                 run_id: "run_alpha",
                 operation_status: "succeeded",
+                approval_id: "apr_alpha",
                 approval_status: "approved",
+                handoff_approval_id: "apr_alpha",
+                handoff_approval_status: "approved",
+                current_task_approval_id: "apr_alpha",
+                current_task_approval_status: "approved",
                 domain: "operations",
                 scope: "mission.loop",
+                references: {
+                  mission_id: "mission_alpha",
+                  operation_id: "tsk_alpha",
+                  trace_id: "trace_alpha",
+                  approval_id: "apr_alpha",
+                  run_id: "run_alpha",
+                },
               },
               memory_receipts: [
                 {
@@ -447,9 +459,21 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   trace_id: "trace_alpha",
                   run_id: "run_alpha",
                   operation_status: "succeeded",
+                  approval_id: "apr_alpha",
                   approval_status: "approved",
+                  handoff_approval_id: "apr_alpha",
+                  handoff_approval_status: "approved",
+                  current_task_approval_id: "apr_alpha",
+                  current_task_approval_status: "approved",
                   domain: "operations",
                   scope: "mission.loop",
+                  references: {
+                    mission_id: "mission_alpha",
+                    operation_id: "tsk_alpha",
+                    trace_id: "trace_alpha",
+                    approval_id: "apr_alpha",
+                    run_id: "run_alpha",
+                  },
                 },
               ],
               replacement_for_mission_id: "mission_failed_source",
@@ -798,8 +822,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipt_count, 1);
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.id, "ledger_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.approval_id, "apr_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.approval_status, "approved");
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.handoff_approval_id,
+      "apr_alpha",
+    );
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_approval_id,
+      "apr_alpha",
+    );
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.trace_id, "trace_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.references?.approval_id, "apr_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
@@ -1709,20 +1743,32 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               trace_id: "trace_done",
               run_id: "run_done",
               operation_status: "succeeded",
+              approval_id: "apr_done",
               approval_status: "approved",
               capability: "plugin.run",
               domain: "operations",
               scope: "mission.loop",
+              references: {
+                mission_id: "mission_done",
+                operation_id: "tsk_done",
+                trace_id: "trace_done",
+                approval_id: "apr_done",
+                run_id: "run_done",
+              },
               active_stage: "interface",
               handoff_stage: "interface",
               handoff_action: "review_result",
               handoff_operation_id: "tsk_done",
+              handoff_approval_id: "apr_done",
+              handoff_approval_status: "approved",
               handoff_trace_id: "trace_done",
               handoff_run_id: "run_done",
               handoff_artifact_dir: "D:/francis/data/artifacts/done",
               handoff_next_step: "review_completed_mission",
               current_task_source: "terminal_operation_receipt",
               current_task_operation_id: "tsk_done",
+              current_task_approval_id: "apr_done",
+              current_task_approval_status: "approved",
               current_task_trace_id: "trace_done",
               current_task_run_id: "run_done",
               current_task_artifact_dir: "D:/francis/data/artifacts/done",
@@ -1739,20 +1785,32 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 trace_id: "trace_done",
                 run_id: "run_done",
                 operation_status: "succeeded",
+                approval_id: "apr_done",
                 approval_status: "approved",
                 capability: "plugin.run",
                 domain: "operations",
                 scope: "mission.loop",
+                references: {
+                  mission_id: "mission_done",
+                  operation_id: "tsk_done",
+                  trace_id: "trace_done",
+                  approval_id: "apr_done",
+                  run_id: "run_done",
+                },
                 active_stage: "interface",
                 handoff_stage: "interface",
                 handoff_action: "review_result",
                 handoff_operation_id: "tsk_done",
+                handoff_approval_id: "apr_done",
+                handoff_approval_status: "approved",
                 handoff_trace_id: "trace_done",
                 handoff_run_id: "run_done",
                 handoff_artifact_dir: "D:/francis/data/artifacts/done",
                 handoff_next_step: "review_completed_mission",
                 current_task_source: "terminal_operation_receipt",
                 current_task_operation_id: "tsk_done",
+                current_task_approval_id: "apr_done",
+                current_task_approval_status: "approved",
                 current_task_trace_id: "trace_done",
                 current_task_run_id: "run_done",
                 current_task_artifact_dir: "D:/francis/data/artifacts/done",
@@ -1772,20 +1830,32 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             trace_id: "trace_done",
             run_id: "run_done",
             operation_status: "succeeded",
+            approval_id: "apr_done",
             approval_status: "approved",
             capability: "plugin.run",
             domain: "operations",
             scope: "mission.loop",
+            references: {
+              mission_id: "mission_done",
+              operation_id: "tsk_done",
+              trace_id: "trace_done",
+              approval_id: "apr_done",
+              run_id: "run_done",
+            },
             active_stage: "interface",
             handoff_stage: "interface",
             handoff_action: "review_result",
             handoff_operation_id: "tsk_done",
+            handoff_approval_id: "apr_done",
+            handoff_approval_status: "approved",
             handoff_trace_id: "trace_done",
             handoff_run_id: "run_done",
             handoff_artifact_dir: "D:/francis/data/artifacts/done",
             handoff_next_step: "review_completed_mission",
             current_task_source: "terminal_operation_receipt",
             current_task_operation_id: "tsk_done",
+            current_task_approval_id: "apr_done",
+            current_task_approval_status: "approved",
             current_task_trace_id: "trace_done",
             current_task_run_id: "run_done",
             current_task_artifact_dir: "D:/francis/data/artifacts/done",
@@ -1925,9 +1995,18 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipt_count, 1);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.operation_id, "tsk_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.approval_id, "apr_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.approval_status, "approved");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.active_stage, "interface");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_action, "review_result");
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_approval_id,
+      "apr_done",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_approval_id,
+      "apr_done",
+    );
     assert.equal(
       briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_next_step,
       "review_completed_mission",
@@ -1942,6 +2021,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     );
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.memory_receipt_count, 1);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.trace_id, "trace_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.references?.approval_id, "apr_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.handoff_action, "review_result");
     assert.equal(
@@ -1949,7 +2029,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       "review_completed_mission",
     );
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.id, "ledger_done");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.approval_id, "apr_done");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_approval_id, "apr_done");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.current_task_approval_id, "apr_done");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_action, "review_result");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
