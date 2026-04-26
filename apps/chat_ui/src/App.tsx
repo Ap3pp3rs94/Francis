@@ -4352,6 +4352,9 @@ function SystemPanel(props: {
     safeString(selectedMission?.replacement_reason).trim() ||
     safeString(selectedMissionMeta.replacement_reason).trim();
   const selectedMissionCurrentTask = missionDetail?.current_task;
+  const selectedMissionCurrentTaskOperationName = safeString(selectedMissionCurrentTask?.operation_name).trim();
+  const selectedMissionCurrentTaskOperationPlane = safeString(selectedMissionCurrentTask?.operation_plane).trim();
+  const selectedMissionCurrentTaskAdvanceAction = safeString(selectedMissionCurrentTask?.advance_action).trim();
   const selectedMissionTaskStatus = safeString(selectedMissionCurrentTask?.task_status).trim();
   const selectedMissionLastTaskStatus =
     safeString(selectedMissionCurrentTask?.operation_status).trim() ||
@@ -6752,6 +6755,21 @@ function SystemPanel(props: {
                 {selectedMissionCurrentTaskId ? (
                   <>
                     {" / "}current_task=<code>{selectedMissionCurrentTaskId}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTaskOperationName ? (
+                  <>
+                    {" / "}operation=<code>{selectedMissionCurrentTaskOperationName}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTaskOperationPlane ? (
+                  <>
+                    {" / "}plane=<code>{selectedMissionCurrentTaskOperationPlane}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTaskAdvanceAction ? (
+                  <>
+                    {" / "}advance=<code>{selectedMissionCurrentTaskAdvanceAction}</code>
                   </>
                 ) : null}
                 {selectedMissionLastTaskStatus ? (
@@ -10137,6 +10155,9 @@ function OperationsPanel(props: {
   const selectedMissionReceiptSummary = selectedMissionBridgeDetail?.receipt_summary;
   const selectedMissionCurrentTask = selectedMissionBridgeDetail?.current_task;
   const selectedMissionCurrentTaskId = safeString(selectedMissionCurrentTask?.operation_id).trim();
+  const selectedMissionCurrentTaskOperationName = safeString(selectedMissionCurrentTask?.operation_name).trim();
+  const selectedMissionCurrentTaskOperationPlane = safeString(selectedMissionCurrentTask?.operation_plane).trim();
+  const selectedMissionCurrentTaskAdvanceAction = safeString(selectedMissionCurrentTask?.advance_action).trim();
   const selectedMissionCurrentTaskStatus = safeString(selectedMissionCurrentTask?.operation_status).trim();
   const selectedMissionCurrentTaskResultStatus = safeString(selectedMissionCurrentTask?.result_status).trim();
   const selectedMissionCurrentTaskGate = safeString(selectedMissionCurrentTask?.gate).trim();
@@ -11211,6 +11232,9 @@ function OperationsPanel(props: {
                         {selectedMissionLoopState?.summary || "Mission detail is loaded, but no loop summary has been projected yet."}
                       </div>
                       {(selectedMissionCurrentTaskId ||
+                        selectedMissionCurrentTaskOperationName ||
+                        selectedMissionCurrentTaskOperationPlane ||
+                        selectedMissionCurrentTaskAdvanceAction ||
                         selectedMissionCurrentTaskStatus ||
                         selectedMissionCurrentTaskApprovalStatus ||
                         selectedMissionCurrentTaskResultStatus ||
@@ -11224,20 +11248,56 @@ function OperationsPanel(props: {
                               current_task=<code>{selectedMissionCurrentTaskId}</code>
                             </>
                           ) : null}
+                          {selectedMissionCurrentTaskOperationName ? (
+                            <>
+                              {selectedMissionCurrentTaskId ? " / " : ""}operation=<code>{selectedMissionCurrentTaskOperationName}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskOperationPlane ? (
+                            <>
+                              {(selectedMissionCurrentTaskId || selectedMissionCurrentTaskOperationName) ? " / " : ""}
+                              plane=<code>{selectedMissionCurrentTaskOperationPlane}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskAdvanceAction ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane)
+                                ? " / "
+                                : ""}
+                              advance=<code>{selectedMissionCurrentTaskAdvanceAction}</code>
+                            </>
+                          ) : null}
                           {selectedMissionCurrentTaskStatus ? (
                             <>
-                              {selectedMissionCurrentTaskId ? " / " : ""}task_status=<code>{selectedMissionCurrentTaskStatus}</code>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction)
+                                ? " / "
+                                : ""}
+                              task_status=<code>{selectedMissionCurrentTaskStatus}</code>
                             </>
                           ) : null}
                           {selectedMissionCurrentTaskApprovalStatus ? (
                             <>
-                              {(selectedMissionCurrentTaskId || selectedMissionCurrentTaskStatus) ? " / " : ""}
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
+                              selectedMissionCurrentTaskStatus)
+                                ? " / "
+                                : ""}
                               approval_status=<code>{selectedMissionCurrentTaskApprovalStatus}</code>
                             </>
                           ) : null}
                           {selectedMissionCurrentTaskResultStatus ? (
                             <>
                               {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
                               selectedMissionCurrentTaskStatus ||
                               selectedMissionCurrentTaskApprovalStatus)
                                 ? " / "
@@ -11248,6 +11308,9 @@ function OperationsPanel(props: {
                           {selectedMissionCurrentTaskGate ? (
                             <>
                               {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
                               selectedMissionCurrentTaskStatus ||
                               selectedMissionCurrentTaskApprovalStatus ||
                               selectedMissionCurrentTaskResultStatus)
@@ -11259,6 +11322,9 @@ function OperationsPanel(props: {
                           {selectedMissionCurrentTaskNextStep ? (
                             <>
                               {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
                               selectedMissionCurrentTaskStatus ||
                               selectedMissionCurrentTaskApprovalStatus ||
                               selectedMissionCurrentTaskResultStatus ||
@@ -11271,6 +11337,9 @@ function OperationsPanel(props: {
                           {selectedMissionCurrentTaskReceiptEvent ? (
                             <>
                               {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
                               selectedMissionCurrentTaskStatus ||
                               selectedMissionCurrentTaskApprovalStatus ||
                               selectedMissionCurrentTaskResultStatus ||
@@ -11284,6 +11353,9 @@ function OperationsPanel(props: {
                           {selectedMissionCurrentTaskReceiptStatus ? (
                             <>
                               {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskOperationName ||
+                              selectedMissionCurrentTaskOperationPlane ||
+                              selectedMissionCurrentTaskAdvanceAction ||
                               selectedMissionCurrentTaskStatus ||
                               selectedMissionCurrentTaskApprovalStatus ||
                               selectedMissionCurrentTaskResultStatus ||

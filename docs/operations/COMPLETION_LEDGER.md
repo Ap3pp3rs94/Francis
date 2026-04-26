@@ -885,6 +885,14 @@ operation ORB plane, and advance action, so later interface surfaces can render
 the real plan/execute stage identity from the typed mission contract instead of
 falling back to ids alone.
 
+As of `2026-04-26`, the selected mission inspector and linked-operation mission
+bridge render that backend-provided current-task operation identity. When the
+mission detail contract includes operation name, ORB plane, or advance action,
+the existing read-only mission flow rows show those fields next to the
+current-task id and receipt posture. This is interface exposure only; it does
+not add mission controls, infer missing operation identity, or change execution
+authority.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -3869,6 +3877,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission current-task ide
 - `git diff --check`
   Result: `passed`
 - `.\scripts\check.ps1`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission current-task identity interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop projection slice:
