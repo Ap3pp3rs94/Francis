@@ -116,6 +116,7 @@ def _attach_mission_memory_receipts(
         enriched_item["memory_receipts"] = receipts
         enriched_item["memory_receipt_count"] = len(receipts)
         enriched_item["latest_memory_receipt"] = dict(receipts[0]) if receipts else {}
+        enriched_item["current_task"] = _mission_current_task_projection(enriched_item)
         enriched.append(enriched_item)
     return enriched
 
@@ -129,6 +130,11 @@ def _mission_memory_projection(item: dict[str, Any]) -> dict[str, Any]:
         else {},
         "memory_receipts": receipts,
     }
+
+
+def _memory_receipt_reference(receipt: dict[str, Any], key: str) -> str:
+    references = receipt.get("references") if isinstance(receipt.get("references"), dict) else {}
+    return _first_text(receipt.get(key), references.get(key))
 
 
 def _observer_anomaly_projection(raw: Any) -> dict[str, Any]:
@@ -1003,6 +1009,9 @@ def _mission_default_handoff_action(item: dict[str, Any]) -> str:
 def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
     existing = item.get("current_task") if isinstance(item.get("current_task"), dict) else {}
     latest_activity = item.get("latest_activity") if isinstance(item.get("latest_activity"), dict) else {}
+    latest_memory_receipt = (
+        item.get("latest_memory_receipt") if isinstance(item.get("latest_memory_receipt"), dict) else {}
+    )
     action_target_id = _safe_str(item.get("action_target_id")).strip()
     has_meta_task = any(
         _safe_str(item.get(field)).strip()
@@ -1021,11 +1030,13 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         action_target_id if action_target_id.startswith("tsk_") else "",
         item.get("last_advance_operation_id"),
         latest_activity.get("operation_id"),
+        _memory_receipt_reference(latest_memory_receipt, "operation_id"),
     )
     source = _first_text(
         existing.get("source"),
         "mission_meta" if has_meta_task else "",
         "latest_activity" if latest_activity else "",
+        "latest_memory_receipt" if latest_memory_receipt else "",
         "mission",
     )
     payload: dict[str, Any] = {
@@ -1040,6 +1051,7 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             latest_activity.get("operation_status"),
             latest_activity.get("status"),
             item.get("last_advance_operation_status"),
+            latest_memory_receipt.get("operation_status"),
         ),
         "result_status": _first_text(existing.get("result_status"), item.get("last_task_result_status")),
         "gate": _first_text(existing.get("gate"), item.get("last_task_gate"), latest_activity.get("gate")),
@@ -1047,25 +1059,56 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             existing.get("next_step"),
             item.get("last_task_next_step"),
             latest_activity.get("next_step"),
+            latest_memory_receipt.get("recovery_next_step"),
             item.get("next_step"),
         ),
         "reason": _first_text(
             existing.get("reason"),
             item.get("last_task_reason"),
             latest_activity.get("reason"),
+            latest_memory_receipt.get("operation_error"),
+            latest_memory_receipt.get("result_message"),
             item.get("operator_hint"),
         ),
-        "approval_id": _first_text(existing.get("approval_id"), item.get("last_task_approval_id")),
-        "approval_status": _first_text(item.get("last_task_approval_status"), existing.get("approval_status")),
-        "trace_id": _first_text(existing.get("trace_id"), latest_activity.get("trace_id")),
-        "run_id": _first_text(existing.get("run_id"), latest_activity.get("run_id")),
-        "artifact_dir": _first_text(existing.get("artifact_dir"), latest_activity.get("artifact_dir")),
+        "approval_id": _first_text(
+            existing.get("approval_id"),
+            item.get("last_task_approval_id"),
+            _memory_receipt_reference(latest_memory_receipt, "approval_id"),
+        ),
+        "approval_status": _first_text(
+            item.get("last_task_approval_status"),
+            existing.get("approval_status"),
+            latest_memory_receipt.get("approval_status"),
+        ),
+        "trace_id": _first_text(
+            existing.get("trace_id"),
+            latest_activity.get("trace_id"),
+            _memory_receipt_reference(latest_memory_receipt, "trace_id"),
+        ),
+        "run_id": _first_text(
+            existing.get("run_id"),
+            latest_activity.get("run_id"),
+            _memory_receipt_reference(latest_memory_receipt, "run_id"),
+        ),
+        "artifact_dir": _first_text(
+            existing.get("artifact_dir"),
+            latest_activity.get("artifact_dir"),
+            _memory_receipt_reference(latest_memory_receipt, "artifact_dir"),
+        ),
         "handoff_action": _first_text(
             existing.get("handoff_action"), item.get("recommended_action"), _mission_default_handoff_action(item)
         ),
-        "latest_receipt_event": _first_text(existing.get("latest_receipt_event"), latest_activity.get("name")),
-        "latest_receipt_status": _first_text(existing.get("latest_receipt_status"), latest_activity.get("status")),
-        "latest_receipt_ts": _first_text(existing.get("latest_receipt_ts"), latest_activity.get("ts")),
+        "latest_receipt_event": _first_text(
+            existing.get("latest_receipt_event"), latest_activity.get("name"), latest_memory_receipt.get("source")
+        ),
+        "latest_receipt_status": _first_text(
+            existing.get("latest_receipt_status"),
+            latest_activity.get("status"),
+            latest_memory_receipt.get("operation_status"),
+        ),
+        "latest_receipt_ts": _first_text(
+            existing.get("latest_receipt_ts"), latest_activity.get("ts"), latest_memory_receipt.get("ts")
+        ),
         "last_advance_operation_id": _first_text(
             existing.get("last_advance_operation_id"), item.get("last_advance_operation_id")
         ),

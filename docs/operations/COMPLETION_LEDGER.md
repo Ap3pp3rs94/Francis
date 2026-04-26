@@ -230,6 +230,14 @@ operation-detail memory summaries, mission receipt helpers, and memory timeline
 loop projections preserve those fields so failure review can start from the
 receipt itself instead of inferring the failure reason from mission detail state.
 
+As of `2026-04-26`, the continuity briefing also uses those terminal
+mission-operation receipts as a fallback when projecting a mission's current
+task. Failed mission previews keep the receipt-backed operation id, trace
+references, failure reason, and `recovery_next_step` visible in `current_task`
+when mission metadata or run-ledger activity does not already provide those
+fields. This does not create retry authority; it keeps the existing recovery
+handoff tied to a receipt-backed operation detail review.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend

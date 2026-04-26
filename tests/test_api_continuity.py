@@ -865,6 +865,13 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["mission_id"] == mission_id
     assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["operation_id"] == operation_id
     assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["operation_status"] == "failed"
+    assert body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["operation_error"] == "plan_missing"
+    assert (
+        body["briefing"]["failed_preview"][0]["latest_memory_receipt"]["recovery_next_step"]
+        == "review_operation_detail"
+    )
+    assert body["briefing"]["failed_preview"][0]["current_task"]["next_step"] == "review_operation_detail"
+    assert body["briefing"]["failed_preview"][0]["current_task"]["reason"] == "plan_missing"
     failed_receipts = [
         item
         for item in body["briefing"]["memory_receipts"]
