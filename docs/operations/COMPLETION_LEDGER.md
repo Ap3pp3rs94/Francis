@@ -97,6 +97,14 @@ artifact behavior remains unchanged. This applies to the direct supervised-exec
 API route only; mission-linked and operation-run paths remain governed by their
 existing approval/execution flow.
 
+As of `2026-04-26`, domain registry write routes are also wired to the API
+permission gate. `POST /domains/create`, `PATCH /domains/update`, and
+`POST /domains/delete` now deny before mutating local domain registry state unless
+the request actor is present in the server-side `FRANCIS_API_ACTOR_SCOPES`
+policy with the `domains.write` scope. Domain read/list/summary routes remain
+read-only. This is another narrow route integration, not a claim of API-wide
+permission enforcement.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2571,6 +2579,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` domain registry permission-gate slice:
+
+- `python -m ruff check src\francis\api\routes\domains.py tests\test_api_domains.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\domains.py tests\test_api_domains.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_domains.py -q`
+  Result: `3 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `1 passed`
 
 Latest targeted validation for the `2026-04-26` direct supervised-exec permission-gate slice:
 

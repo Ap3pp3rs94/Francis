@@ -3,10 +3,51 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_DOMAIN_ACTOR = "test.domains"
+
+
+def _allow_domain_write(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_DOMAIN_ACTOR: ["domains.write"]}),
+    )
+
+
+def test_domains_write_routes_deny_without_actor_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/domains/create",
+        json={
+            "name": "Denied Domain",
+            "tags": ["blocked"],
+            "reason": "permission_test",
+            "actor": _DOMAIN_ACTOR,
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+    assert not (data_root / "domains" / "_registry.json").exists()
+
 
 def test_domains_lifecycle_and_summary(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_domain_write(monkeypatch)
 
     from fastapi.testclient import TestClient
 
@@ -22,6 +63,7 @@ def test_domains_lifecycle_and_summary(monkeypatch, tmp_path: Path) -> None:
             "tags": ["ops", "critical"],
             "reason": "integration_test",
             "meta": {"trust_level": 4, "memory_items": 12, "plugin_count": 3},
+            "actor": _DOMAIN_ACTOR,
         },
     )
     assert created.status_code == 200
@@ -57,6 +99,7 @@ def test_domains_lifecycle_and_summary(monkeypatch, tmp_path: Path) -> None:
             "domain_id": domain_id,
             "updates": {"status": "archived", "tags": ["ops"], "meta": {"trust_level": 8}},
             "reason": "test_archive",
+            "actor": _DOMAIN_ACTOR,
         },
     )
     assert updated.status_code == 200
@@ -69,7 +112,7 @@ def test_domains_lifecycle_and_summary(monkeypatch, tmp_path: Path) -> None:
     archived_body = archived.json()
     assert any(str(item.get("id")) == domain_id for item in archived_body["items"])
 
-    deleted = client.post("/domains/delete", json={"domain_id": domain_id, "reason": "cleanup"})
+    deleted = client.post("/domains/delete", json={"domain_id": domain_id, "reason": "cleanup", "actor": _DOMAIN_ACTOR})
     assert deleted.status_code == 200
     deleted_body = deleted.json()
     assert deleted_body["ok"] is True
@@ -83,6 +126,7 @@ def test_domains_lifecycle_and_summary(monkeypatch, tmp_path: Path) -> None:
 def test_domains_filters_and_registry_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_domain_write(monkeypatch)
 
     from fastapi.testclient import TestClient
 
@@ -90,14 +134,23 @@ def test_domains_filters_and_registry_persistence(monkeypatch, tmp_path: Path) -
 
     client = TestClient(create_app())
 
-    first = client.post("/domains/create", json={"name": "Core Systems", "tags": ["core", "ops"]})
-    second = client.post("/domains/create", json={"name": "Billing", "tags": ["finance", "ops"]})
+    first = client.post(
+        "/domains/create",
+        json={"name": "Core Systems", "tags": ["core", "ops"], "actor": _DOMAIN_ACTOR},
+    )
+    second = client.post(
+        "/domains/create",
+        json={"name": "Billing", "tags": ["finance", "ops"], "actor": _DOMAIN_ACTOR},
+    )
     assert first.status_code == 200
     assert second.status_code == 200
     first_id = str(first.json()["id"])
     second_id = str(second.json()["id"])
 
-    disabled = client.patch("/domains/update", json={"domain_id": second_id, "updates": {"status": "disabled"}})
+    disabled = client.patch(
+        "/domains/update",
+        json={"domain_id": second_id, "updates": {"status": "disabled"}, "actor": _DOMAIN_ACTOR},
+    )
     assert disabled.status_code == 200
     assert disabled.json()["ok"] is True
 

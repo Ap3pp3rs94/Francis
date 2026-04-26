@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -18,6 +19,7 @@ router = APIRouter()
 _DOMAIN_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _DEFAULT_STATUS = "active"
 _ALLOWED_STATUSES = {"active", "archived", "disabled", "error"}
+_DOMAIN_WRITE_SCOPE = "domains.write"
 
 
 def _safe_str(value: Any) -> str:
@@ -225,17 +227,43 @@ class DomainCreateIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
     reason: str = "requested"
     meta: dict[str, Any] = Field(default_factory=dict)
+    actor: str | None = None
 
 
 class DomainUpdateIn(BaseModel):
     domain_id: str
     updates: dict[str, Any] = Field(default_factory=dict)
     reason: str = "requested"
+    actor: str | None = None
 
 
 class DomainDeleteIn(BaseModel):
     domain_id: str
     reason: str = "requested"
+    actor: str | None = None
+
+
+def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_DOMAIN_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_or_use_read_only_domain_routes",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 @router.get("/status")
@@ -308,6 +336,10 @@ def get_domain(domain_id: str) -> dict[str, object]:
 @router.post("/create")
 def create_domain(payload: DomainCreateIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route="/domains/create", method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         name = _safe_str(payload.name).strip()
         if not name:
             return {"ok": False, "error": "name_required"}
@@ -361,6 +393,10 @@ def create_domain(payload: DomainCreateIn) -> dict[str, object]:
 @router.patch("/update")
 def update_domain(payload: DomainUpdateIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route="/domains/update", method="PATCH")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         domain_id = _validate_domain_id(payload.domain_id)
         registry = _load_registry()
         current = _read_domain(registry, domain_id)
@@ -404,6 +440,10 @@ def update_domain(payload: DomainUpdateIn) -> dict[str, object]:
 @router.post("/delete")
 def delete_domain(payload: DomainDeleteIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route="/domains/delete", method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         domain_id = _validate_domain_id(payload.domain_id)
         registry = _load_registry()
         removed = _delete_domain(registry, domain_id)
