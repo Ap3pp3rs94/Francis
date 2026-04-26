@@ -521,15 +521,64 @@ function operationMemoryReceiptReferenceLine(receipt: OperationMemoryReceipt | n
 }
 
 function operationMemoryReceiptCurrentTaskLine(receipt: OperationMemoryReceipt | null | undefined): string {
+  const refs = receipt?.references;
   const parts: string[] = [];
+  const source = safeString(receipt?.current_task_source).trim();
+  const activeStage = safeString(receipt?.active_stage).trim();
+  const handoffStage = safeString(receipt?.handoff_stage).trim();
+  const handoffAction = safeString(receipt?.handoff_action).trim();
+  const gate = safeString(receipt?.current_task_gate).trim() || safeString(receipt?.handoff_gate).trim();
+  const approvalId =
+    safeString(receipt?.current_task_approval_id).trim() || safeString(receipt?.handoff_approval_id).trim();
+  const approvalStatus =
+    safeString(receipt?.current_task_approval_status).trim() ||
+    safeString(receipt?.handoff_approval_status).trim() ||
+    safeString(receipt?.approval_status).trim();
+  const operationId =
+    safeString(receipt?.current_task_operation_id).trim() ||
+    safeString(receipt?.handoff_operation_id).trim() ||
+    safeString(refs?.operation_id).trim();
+  const nextStep =
+    safeString(receipt?.current_task_next_step).trim() || safeString(receipt?.handoff_next_step).trim();
+  const traceId =
+    safeString(receipt?.current_task_trace_id).trim() ||
+    safeString(receipt?.handoff_trace_id).trim() ||
+    safeString(refs?.trace_id).trim();
+  const runId =
+    safeString(receipt?.current_task_run_id).trim() ||
+    safeString(receipt?.handoff_run_id).trim() ||
+    safeString(refs?.run_id).trim();
+  const artifactDir =
+    safeString(receipt?.current_task_artifact_dir).trim() ||
+    safeString(receipt?.handoff_artifact_dir).trim() ||
+    safeString(refs?.artifact_dir).trim();
+  const receiptCount =
+    typeof receipt?.memory_receipt_count === "number" && Number.isFinite(receipt.memory_receipt_count)
+      ? receipt.memory_receipt_count
+      : undefined;
+
+  if (source) parts.push(`source ${source}`);
+  if (activeStage) parts.push(`active ${activeStage}`);
+  if (handoffStage) parts.push(`handoff ${handoffStage}`);
+  if (handoffAction) parts.push(`action ${handoffAction}`);
+  if (gate) parts.push(`gate ${gate}`);
+  if (approvalId) parts.push(`approval ${approvalId}`);
+  if (approvalStatus) parts.push(`approval_status ${approvalStatus}`);
+  if (operationId) parts.push(`task ${operationId}`);
   if (receipt?.current_task_operation_name) parts.push(`task_name ${receipt.current_task_operation_name}`);
   if (receipt?.current_task_operation_plane) parts.push(`task_plane ${receipt.current_task_operation_plane}`);
   if (receipt?.current_task_advance_action) parts.push(`advance ${receipt.current_task_advance_action}`);
+  if (nextStep) parts.push(`next ${nextStep}`);
+  if (traceId) parts.push(`trace ${traceId}`);
+  if (runId) parts.push(`run ${runId}`);
+  if (artifactDir) parts.push(`artifact ${artifactDir}`);
+  if (receiptCount !== undefined) parts.push(`receipt_count ${String(receiptCount)}`);
   return parts.join(" / ");
 }
 
 function operationMemoryReceiptFromMeta(value: unknown): OperationMemoryReceipt | undefined {
   if (!isRecord(value)) return undefined;
+  const rawMemoryReceiptCount = safeNumber(value.memory_receipt_count, Number.NaN);
   const referencesRaw = isRecord(value.references) ? value.references : {};
   const references = {
     mission_id: safeString(referencesRaw.mission_id).trim() || undefined,
@@ -550,9 +599,32 @@ function operationMemoryReceiptFromMeta(value: unknown): OperationMemoryReceipt 
     approval_status: safeString(value.approval_status).trim() || undefined,
     capability: safeString(value.capability).trim() || undefined,
     subsystem: safeString(value.subsystem).trim() || undefined,
+    active_stage: safeString(value.active_stage).trim() || undefined,
+    handoff_stage: safeString(value.handoff_stage).trim() || undefined,
+    handoff_action: safeString(value.handoff_action).trim() || undefined,
+    handoff_gate: safeString(value.handoff_gate).trim() || undefined,
+    handoff_approval_id: safeString(value.handoff_approval_id).trim() || undefined,
+    handoff_approval_status: safeString(value.handoff_approval_status).trim() || undefined,
+    handoff_operation_id: safeString(value.handoff_operation_id).trim() || undefined,
+    handoff_trace_id: safeString(value.handoff_trace_id).trim() || undefined,
+    handoff_run_id: safeString(value.handoff_run_id).trim() || undefined,
+    handoff_artifact_dir: safeString(value.handoff_artifact_dir).trim() || undefined,
+    handoff_next_step: safeString(value.handoff_next_step).trim() || undefined,
+    current_task_source: safeString(value.current_task_source).trim() || undefined,
+    current_task_approval_id: safeString(value.current_task_approval_id).trim() || undefined,
+    current_task_approval_status: safeString(value.current_task_approval_status).trim() || undefined,
+    current_task_operation_id: safeString(value.current_task_operation_id).trim() || undefined,
     current_task_operation_name: safeString(value.current_task_operation_name).trim() || undefined,
     current_task_operation_plane: safeString(value.current_task_operation_plane).trim() || undefined,
     current_task_advance_action: safeString(value.current_task_advance_action).trim() || undefined,
+    current_task_gate: safeString(value.current_task_gate).trim() || undefined,
+    current_task_trace_id: safeString(value.current_task_trace_id).trim() || undefined,
+    current_task_run_id: safeString(value.current_task_run_id).trim() || undefined,
+    current_task_artifact_dir: safeString(value.current_task_artifact_dir).trim() || undefined,
+    current_task_next_step: safeString(value.current_task_next_step).trim() || undefined,
+    memory_receipt_count: Number.isFinite(rawMemoryReceiptCount)
+      ? Math.max(0, Math.floor(rawMemoryReceiptCount))
+      : undefined,
   };
   if (Object.values(references).some(Boolean)) receipt.references = references;
   return Object.values(receipt).some((item) => item !== undefined) ? receipt : undefined;
@@ -10508,6 +10580,26 @@ function OperationsPanel(props: {
     (safeNumber(selectedMeta.memory_receipt_count, 0) ||
       detail?.memory_receipts?.length ||
       (selectedOperationMemoryReceipt ? 1 : 0));
+  const selectedOperationReceiptOperationId =
+    safeString(selectedOperationMemoryReceipt?.current_task_operation_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.handoff_operation_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.references?.operation_id).trim();
+  const selectedOperationReceiptApprovalId =
+    safeString(selectedOperationMemoryReceipt?.current_task_approval_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.handoff_approval_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.references?.approval_id).trim();
+  const selectedOperationReceiptTraceId =
+    safeString(selectedOperationMemoryReceipt?.current_task_trace_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.handoff_trace_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.references?.trace_id).trim();
+  const selectedOperationReceiptRunId =
+    safeString(selectedOperationMemoryReceipt?.current_task_run_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.handoff_run_id).trim() ||
+    safeString(selectedOperationMemoryReceipt?.references?.run_id).trim();
+  const selectedOperationReceiptArtifactDir =
+    safeString(selectedOperationMemoryReceipt?.current_task_artifact_dir).trim() ||
+    safeString(selectedOperationMemoryReceipt?.handoff_artifact_dir).trim() ||
+    safeString(selectedOperationMemoryReceipt?.references?.artifact_dir).trim();
   const selectedMissionBridgeTaskId =
     selectedMissionCurrentTaskId ||
     safeString(selectedMissionLoopHandoff?.operation_id).trim() ||
@@ -10518,19 +10610,19 @@ function OperationsPanel(props: {
     selectedMissionReceiptSummary?.latest_memory_receipt ??
     selectedMissionLoopState?.memory?.latest_memory_receipt ??
     selectedMissionBridgeDetail?.memory_receipts?.[0];
-  const selectedMemoryEvidenceOperationId =
-    safeString(selectedOperationMemoryReceipt?.references?.operation_id).trim() || selectedMissionBridgeTaskId;
+  const selectedMemoryEvidenceOperationId = selectedOperationReceiptOperationId || selectedMissionBridgeTaskId;
   const selectedMissionMemoryTraceId =
     safeString(selectedMissionCurrentTask?.trace_id).trim() ||
     safeString(selectedMissionLoopHandoff?.trace_id).trim() ||
     safeString(selectedMissionReceiptSummary?.current_trace_id).trim() ||
+    selectedOperationReceiptTraceId ||
     selectedTraceId;
   const selectedMemoryEvidenceQueries = useMemo(
     () =>
       buildMemoryEvidenceQueries({
         missionId: selectedMissionId,
         operationId: selectedMemoryEvidenceOperationId,
-        approvalId: selectedMissionBridgeApprovalId || selectedApprovalId,
+        approvalId: selectedMissionBridgeApprovalId || selectedOperationReceiptApprovalId || selectedApprovalId,
         fallbackOperationId: selectedOperation?.id,
         operationStatus: [
           selectedMissionCurrentTaskStatus,
@@ -10538,8 +10630,8 @@ function OperationsPanel(props: {
           selectedStatus,
         ],
         traceId: selectedMissionMemoryTraceId,
-        runId: selectedRunId,
-        artifactDir: selectedArtifactDir,
+        runId: selectedOperationReceiptRunId || selectedRunId,
+        artifactDir: selectedOperationReceiptArtifactDir || selectedArtifactDir,
         receipt: selectedMissionEvidenceReceipt,
       }),
     [
@@ -10551,6 +10643,9 @@ function OperationsPanel(props: {
       selectedMissionBridgeApprovalId,
       selectedMemoryEvidenceOperationId,
       selectedMissionMemoryTraceId,
+      selectedOperationReceiptApprovalId,
+      selectedOperationReceiptArtifactDir,
+      selectedOperationReceiptRunId,
       selectedOperation?.id,
       selectedApprovalId,
       selectedRunId,
@@ -10563,17 +10658,23 @@ function OperationsPanel(props: {
       buildExplanationEvidenceQueries({
         missionId: selectedMissionId,
         operationId: selectedMemoryEvidenceOperationId,
+        approvalId: selectedMissionBridgeApprovalId || selectedOperationReceiptApprovalId || selectedApprovalId,
         traceId: selectedMissionMemoryTraceId,
-        runId: selectedRunId,
-        artifactDir: selectedArtifactDir,
+        runId: selectedOperationReceiptRunId || selectedRunId,
+        artifactDir: selectedOperationReceiptArtifactDir || selectedArtifactDir,
         receipt: selectedMissionEvidenceReceipt,
       }),
     [
       selectedArtifactDir,
+      selectedApprovalId,
       selectedMemoryEvidenceOperationId,
       selectedMissionEvidenceReceipt,
+      selectedMissionBridgeApprovalId,
       selectedMissionId,
       selectedMissionMemoryTraceId,
+      selectedOperationReceiptApprovalId,
+      selectedOperationReceiptArtifactDir,
+      selectedOperationReceiptRunId,
       selectedRunId,
     ],
   );

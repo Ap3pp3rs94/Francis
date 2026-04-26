@@ -834,6 +834,16 @@ execution receipt truth available to the existing operation-detail and memory
 evidence client paths without creating evidence, inspecting artifacts, or
 widening execution authority.
 
+As of `2026-04-26`, the selected operation detail surface uses those operation
+memory receipt handoff and current-task handles when rendering operation memory
+receipt context and when building bounded memory/explanation evidence queries.
+The operation detail panel now keeps the same receipt-backed source, active
+stage, handoff stage/action, gate, approval, operation, trace, run, artifact,
+next-step, and receipt-count handles from direct detail responses or operation
+metadata fallback before falling back to older operation fields. This is
+read-only interface reachability; it does not create evidence records, inspect
+artifacts, decide approvals, execute work, or synthesize missing receipt state.
+
 As of `2026-04-26`, the shared terminal mission receipt reader also carries the
 same receipt-backed approval and gate posture from continuity-ledger metadata.
 `francis.memory.mission_receipts` now preserves `handoff_gate`,
@@ -5516,6 +5526,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations memory receip
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
   Result: `8 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 selected operation receipt handoff interface slice:
+
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
