@@ -118,6 +118,23 @@ def _payload_artifact_dir(payload: dict[str, Any]) -> str:
     )
 
 
+def _payload_approval_id(payload: dict[str, Any]) -> str:
+    receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+    sandbox = payload.get("sandbox") if isinstance(payload.get("sandbox"), dict) else {}
+    receipt_sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    audit_event = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return (
+        _safe_str(payload.get("approval_id")).strip()
+        or _safe_str(payload.get("approvalId")).strip()
+        or _safe_str(receipt.get("approval_id")).strip()
+        or _safe_str(sandbox.get("approval_id")).strip()
+        or _safe_str(receipt_sandbox.get("approval_id")).strip()
+        or _safe_str(audit_event.get("approval_id")).strip()
+        or _safe_str(sandbox_audit.get("approval_id")).strip()
+    )
+
+
 def _attach_execution_handles(payload: Any) -> None:
     if not isinstance(payload, dict):
         return
@@ -134,6 +151,7 @@ def _payload_audit_references(payload: Any) -> dict[str, str]:
         "trace_id": _payload_trace_id(payload),
         "run_id": _payload_run_id(payload),
         "artifact_dir": _payload_artifact_dir(payload),
+        "approval_id": _payload_approval_id(payload),
     }
     return {key: value for key, value in references.items() if value}
 

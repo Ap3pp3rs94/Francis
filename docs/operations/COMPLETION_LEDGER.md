@@ -527,10 +527,11 @@ mapping, or memory-write behavior is changed.
 
 As of `2026-04-26`, completed task audit events also carry the real execution
 receipt handles when they exist. The final `status_updated` task audit entry now
-records `trace_id`, `run_id`, and `artifact_dir` from the result payload, and
-operation log projections expose those handles as first-class log fields while
-preserving the same details inside `output`/`meta`. This makes the operation
-audit trail line up with the operation result trace without changing execution,
+records `approval_id`, `trace_id`, `run_id`, and `artifact_dir` from the result
+payload or nested receipt/audit payload, and operation log projections expose
+the trace/run/artifact handles as first-class log fields while preserving the
+same details inside `output`/`meta`. This makes the operation audit trail line
+up with the operation result and gate receipt without changing execution,
 approval, scheduling, or memory-write behavior.
 
 As of `2026-04-26`, the supervised-exec CLI human summary preserves the same
@@ -3670,6 +3671,19 @@ Latest targeted validation for the `2026-04-26` terminal mission receipt current
   Result: `25 passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py`
   Result: `63 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 executor audit approval-handle slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_executor_audit_references.py -q`
+  Result: `1 passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\agent\executor.py tests\unit\test_executor_audit_references.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\agent\executor.py tests\unit\test_executor_audit_references.py`
+  Result: `2 files already formatted`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py -q`
+  Result: `23 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` supervised-exec CLI summary handle slice:
 
