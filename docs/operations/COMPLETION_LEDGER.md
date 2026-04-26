@@ -4055,11 +4055,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal operation recei
 
 - `python -m pytest tests\test_mission_receipts.py tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
   Result: `5 passed`
-- `python -m ruff check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py`
+- `python -m pytest tests/test_api_mission_runtime_redaction.py::test_mission_advance_redacts_secret_handoff_text tests/test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
+  Result: `2 passed`
+- `python -m ruff check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py tests\test_api_mission_runtime_redaction.py`
   Result: `passed` (non-blocking Ruff cache write warnings from local `.ruff_cache` access)
-- `python -m ruff format --check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py`
+- `python -m ruff format --check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py tests\test_api_mission_runtime_redaction.py`
   Result: `passed`
 - `python -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py tests/test_api_operations.py tests/test_api_mission_loop_contract.py tests/test_mission_receipts.py -q`
+  Result: `passed`
+- `python -m pytest -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:

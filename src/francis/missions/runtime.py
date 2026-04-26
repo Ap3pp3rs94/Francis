@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from francis.governance.redaction import redact_secret_text
@@ -179,6 +180,25 @@ def _memory_receipt_recovery_handoff(receipt: Any) -> dict[str, object]:
     return handoff
 
 
+def _run_operation_for_advance(
+    operation_id: str,
+    *,
+    worker_id: str,
+    advance_action: str,
+) -> dict[str, object]:
+    run_operation = operations_runtime.run_operation
+    try:
+        parameters = inspect.signature(run_operation).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    accepts_advance_action = "advance_action" in parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
+    if accepts_advance_action:
+        return run_operation(operation_id, worker_id=worker_id, advance_action=advance_action)
+    return run_operation(operation_id, worker_id=worker_id)
+
+
 def advance_mission(
     mission_id: str,
     *,
@@ -251,7 +271,7 @@ def advance_mission(
         }
 
     if action == "run_linked_operation" and action_target_id:
-        run_result = operations_runtime.run_operation(
+        run_result = _run_operation_for_advance(
             action_target_id,
             worker_id=worker_id,
             advance_action=action,
