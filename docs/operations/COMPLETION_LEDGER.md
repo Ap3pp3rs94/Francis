@@ -615,6 +615,15 @@ references including `references.approval_id`. This is a parser contract only;
 it does not render new authority, create receipts, approve work, or infer
 missing approval posture.
 
+As of `2026-04-26`, the shared terminal mission receipt reader also carries the
+same receipt-backed approval and gate posture from continuity-ledger metadata.
+`francis.memory.mission_receipts` now preserves `handoff_gate`,
+`handoff_approval_id`, `handoff_approval_status`, `current_task_gate`,
+`current_task_approval_id`, and `current_task_approval_status` when projecting
+terminal mission-operation memory receipts. This is readback-only memory truth;
+it does not change execution, approval decisions, receipt writes, or UI
+authority.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -4346,6 +4355,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt r
   Result: `4 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `63 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt approval-gate readback slice:
+
+- `python -m pytest tests\test_mission_receipts.py -q`
+  Result: `2 passed`
+- `python -m pytest tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py -q`
+  Result: `8 passed`
+- `ruff check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `ruff format --check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 
