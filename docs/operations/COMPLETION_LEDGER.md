@@ -786,6 +786,13 @@ keep `active_stage`, `handoff_*`, `current_task_*`, and receipt count fields
 from backend memory receipts instead of dropping them before operator surfaces
 can render the completed `memory -> interface` handoff.
 
+As of `2026-04-26`, existing chat UI mission receipt surfaces render those
+receipt-backed completed-loop handoff fields when the backend provides them.
+Shift Briefing memory evidence, recently-completed mission cards, selected
+mission continuity receipts, and mission loop stage memory rows now show the
+backend `active_stage`, `handoff`, `next`, current-task handle, and receipt-count
+lineage without adding new mutation controls or UI-synthesized state.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -3011,6 +3018,13 @@ Latest targeted validation for the `2026-04-26` Stage 3 completed mission receip
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts src\settings\index.test.ts`
   Result: `26 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `60 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed mission receipt handoff rendering slice:
+
 - `cd apps\chat_ui; npm run test`
   Result: `60 passed`
 - `cd apps\chat_ui; npm run build`

@@ -117,6 +117,21 @@ type MissionMemoryReceiptLike = {
   operation_error?: string;
   result_message?: string;
   recovery_next_step?: string;
+  active_stage?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  handoff_next_step?: string;
+  current_task_source?: string;
+  current_task_operation_id?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
+  memory_receipt_count?: number;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -437,6 +452,40 @@ function missionMemoryReceiptReferenceLine(receipt: MissionMemoryReceiptLike | n
   if (approvalId) parts.push(`approval ${approvalId}`);
   if (runId) parts.push(`run ${runId}`);
   if (artifactDir) parts.push(`artifact ${artifactDir}`);
+  return parts.join(" / ");
+}
+
+function missionMemoryReceiptHandoffLine(receipt: MissionMemoryReceiptLike | null | undefined): string {
+  const refs = receipt?.references;
+  const parts: string[] = [];
+  const activeStage = safeString(receipt?.active_stage).trim();
+  const handoffStage = safeString(receipt?.handoff_stage).trim();
+  const handoffAction = safeString(receipt?.handoff_action).trim();
+  const nextStep =
+    safeString(receipt?.current_task_next_step).trim() || safeString(receipt?.handoff_next_step).trim();
+  const operationId =
+    safeString(receipt?.current_task_operation_id).trim() || safeString(receipt?.handoff_operation_id).trim();
+  const traceId = safeString(receipt?.current_task_trace_id).trim() || safeString(receipt?.handoff_trace_id).trim();
+  const runId = safeString(receipt?.current_task_run_id).trim() || safeString(receipt?.handoff_run_id).trim();
+  const artifactDir =
+    safeString(receipt?.current_task_artifact_dir).trim() || safeString(receipt?.handoff_artifact_dir).trim();
+  const receiptCount =
+    typeof receipt?.memory_receipt_count === "number" && Number.isFinite(receipt.memory_receipt_count)
+      ? receipt.memory_receipt_count
+      : undefined;
+  const baseOperationId = safeString(receipt?.operation_id).trim() || safeString(refs?.operation_id).trim();
+  const baseTraceId = safeString(receipt?.trace_id).trim() || safeString(refs?.trace_id).trim();
+  const baseRunId = safeString(receipt?.run_id).trim() || safeString(refs?.run_id).trim();
+  const baseArtifactDir = safeString(receipt?.artifact_dir).trim() || safeString(refs?.artifact_dir).trim();
+  if (activeStage) parts.push(`active_stage ${activeStage}`);
+  if (handoffStage && handoffStage !== activeStage) parts.push(`handoff_stage ${handoffStage}`);
+  if (handoffAction) parts.push(`handoff ${handoffAction}`);
+  if (nextStep) parts.push(`next ${nextStep}`);
+  if (operationId && operationId !== baseOperationId) parts.push(`handoff_task ${operationId}`);
+  if (traceId && traceId !== baseTraceId) parts.push(`handoff_trace ${traceId}`);
+  if (runId && runId !== baseRunId) parts.push(`handoff_run ${runId}`);
+  if (artifactDir && artifactDir !== baseArtifactDir) parts.push(`handoff_artifact ${artifactDir}`);
+  if (receiptCount !== undefined) parts.push(`receipt_count ${String(receiptCount)}`);
   return parts.join(" / ");
 }
 
@@ -4354,6 +4403,9 @@ function SystemPanel(props: {
   const missionLatestMemoryReceiptRefs = missionLatestMemoryReceipt
     ? missionMemoryReceiptReferenceLine(missionLatestMemoryReceipt)
     : "";
+  const missionLatestMemoryReceiptHandoff = missionLatestMemoryReceipt
+    ? missionMemoryReceiptHandoffLine(missionLatestMemoryReceipt)
+    : "";
   const missionLatestMemoryReceiptAt = mixedLocaleTime(missionLatestMemoryReceipt?.ts);
   const missionLoopStages = missionLoopState
     ? ([
@@ -5104,6 +5156,7 @@ function SystemPanel(props: {
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {shiftBriefingMemoryReceipts.slice(0, 3).map((receipt, receiptIndex) => {
                 const receiptReferenceLine = missionMemoryReceiptReferenceLine(receipt);
+                const receiptHandoffLine = missionMemoryReceiptHandoffLine(receipt);
                 const receiptAt = mixedLocaleTime(receipt.ts);
                 const receiptOperationId = safeString(receipt.operation_id).trim();
                 const receiptMissionId = safeString(receipt.mission_id).trim();
@@ -5121,6 +5174,9 @@ function SystemPanel(props: {
                     </div>
                     {receiptReferenceLine ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{receiptReferenceLine}</div>
+                    ) : null}
+                    {receiptHandoffLine ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{receiptHandoffLine}</div>
                     ) : null}
                     {receipt.capability || receipt.domain || receipt.scope || receiptAt ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
@@ -5729,6 +5785,8 @@ function SystemPanel(props: {
                       safeString(completedCurrentTask?.task_status).trim() ||
                       safeString(completedCurrentTask?.operation_status).trim();
                     const completedTaskResult = safeString(completedCurrentTask?.result_status).trim();
+                    const completedTaskHandoffAction = safeString(completedCurrentTask?.handoff_action).trim();
+                    const completedTaskNextStep = safeString(completedCurrentTask?.next_step).trim();
                     const completedLatestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                     const completedHistoryTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                     return (
@@ -5759,6 +5817,20 @@ function SystemPanel(props: {
                           {completedTaskResult ? (
                             <>
                               {(completedOperationId || completedTaskStatus) ? " / " : ""}result=<code>{completedTaskResult}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {completedTaskHandoffAction || completedTaskNextStep ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          {completedTaskHandoffAction ? (
+                            <>
+                              handoff=<code>{completedTaskHandoffAction}</code>
+                            </>
+                          ) : null}
+                          {completedTaskNextStep ? (
+                            <>
+                              {completedTaskHandoffAction ? " / " : ""}next=<code>{completedTaskNextStep}</code>
                             </>
                           ) : null}
                         </div>
@@ -6912,6 +6984,7 @@ function SystemPanel(props: {
                         </>
                       ) : null}
                       {missionLatestMemoryReceiptRefs ? <>{" / "}{missionLatestMemoryReceiptRefs}</> : null}
+                      {missionLatestMemoryReceiptHandoff ? <>{" / "}{missionLatestMemoryReceiptHandoff}</> : null}
                     </div>
                   ) : null}
                   {missionReceiptArtifactDir ? (
@@ -7098,16 +7171,18 @@ function SystemPanel(props: {
                   ) : null}
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
-                    {missionLoopStages.map((item) => (
-                      <div
-                        key={`mission-loop-${item.key}`}
-                        style={{
-                          border: `1px solid ${missionLoopState?.active_stage === item.key ? "#3a5c67" : THEME.panelBorder}`,
-                          borderRadius: 10,
-                          padding: 10,
-                          background: missionLoopState?.active_stage === item.key ? "#10181b" : "#121212",
-                        }}
-                      >
+                    {missionLoopStages.map((item) => {
+                      const stageMemoryReceiptHandoff = missionMemoryReceiptHandoffLine(item.stage?.latest_memory_receipt);
+                      return (
+                        <div
+                          key={`mission-loop-${item.key}`}
+                          style={{
+                            border: `1px solid ${missionLoopState?.active_stage === item.key ? "#3a5c67" : THEME.panelBorder}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            background: missionLoopState?.active_stage === item.key ? "#10181b" : "#121212",
+                          }}
+                        >
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                           <div style={{ fontSize: 11, color: THEME.muted }}>{item.label}</div>
                           <span style={badgeStyle(item.stage?.status || "unknown")}>{item.stage?.status || "unknown"}</span>
@@ -7251,6 +7326,7 @@ function SystemPanel(props: {
                             {missionMemoryReceiptReferenceLine(item.stage.latest_memory_receipt) ? (
                               <>{" / "}{missionMemoryReceiptReferenceLine(item.stage.latest_memory_receipt)}</>
                             ) : null}
+                            {stageMemoryReceiptHandoff ? <>{" / "}{stageMemoryReceiptHandoff}</> : null}
                           </div>
                         ) : null}
                         {missionLoopStagePlanReceiptLine(item.stage)}
@@ -7293,7 +7369,8 @@ function SystemPanel(props: {
                           </div>
                         ) : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -10151,6 +10228,9 @@ function OperationsPanel(props: {
   const selectedMissionLatestMemoryReceiptRefs = selectedMissionLatestMemoryReceipt
     ? missionMemoryReceiptReferenceLine(selectedMissionLatestMemoryReceipt)
     : "";
+  const selectedMissionLatestMemoryReceiptHandoff = selectedMissionLatestMemoryReceipt
+    ? missionMemoryReceiptHandoffLine(selectedMissionLatestMemoryReceipt)
+    : "";
   const selectedMissionLatestMemoryReceiptAt = mixedLocaleTime(selectedMissionLatestMemoryReceipt?.ts);
   const selectedReceiptEvidenceAvailable = Boolean(
     selectedTraceId ||
@@ -11334,6 +11414,7 @@ function OperationsPanel(props: {
                             const stageMemoryReceipt = stage?.latest_memory_receipt;
                             const stageMemoryReceiptAt = mixedLocaleTime(stageMemoryReceipt?.ts);
                             const stageMemoryReceiptRefs = missionMemoryReceiptReferenceLine(stageMemoryReceipt);
+                            const stageMemoryReceiptHandoff = missionMemoryReceiptHandoffLine(stageMemoryReceipt);
                             return (
                               <div
                                 key={`selected-operation-loop-${selectedOperation.id}-${item.key}`}
@@ -11484,6 +11565,7 @@ function OperationsPanel(props: {
                                       </>
                                     ) : null}
                                     {stageMemoryReceiptRefs ? <>{" / "}{stageMemoryReceiptRefs}</> : null}
+                                    {stageMemoryReceiptHandoff ? <>{" / "}{stageMemoryReceiptHandoff}</> : null}
                                   </div>
                                 ) : null}
                                 {missionLoopStagePlanReceiptLine(stage)}
@@ -11583,6 +11665,7 @@ function OperationsPanel(props: {
                             </>
                           ) : null}
                           {selectedMissionLatestMemoryReceiptRefs ? <>{" / "}{selectedMissionLatestMemoryReceiptRefs}</> : null}
+                          {selectedMissionLatestMemoryReceiptHandoff ? <>{" / "}{selectedMissionLatestMemoryReceiptHandoff}</> : null}
                         </div>
                       ) : null}
                       {(selectedMemoryEvidenceBusy ||
