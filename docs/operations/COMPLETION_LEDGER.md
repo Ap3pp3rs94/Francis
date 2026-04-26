@@ -170,12 +170,22 @@ settings/config mutation aliases deny before changing control mode, service
 action receipts, feature flags, or runtime settings unless the request actor is
 present in the server-side `FRANCIS_API_ACTOR_SCOPES` policy with the
 `system.write` scope. Read-only system status, health, world-state, ORB,
-operator-mode, flags, and config surfaces remain read-only. Observer scan is
-unchanged in this slice. The chat UI settings client now sends its bounded
-`chat_ui.system` actor for system mutations and treats permission-denial
-responses as mutation errors instead of presenting them as successful changes.
+operator-mode, flags, and config surfaces remain read-only. The chat UI settings
+client now sends its bounded `chat_ui.system` actor for system mutations and
+treats permission-denial responses as mutation errors instead of presenting them
+as successful changes.
 This is another narrow route integration, not a claim of API-wide permission
 enforcement.
+
+As of `2026-04-26`, explicit observer scans are also wired to that same system
+write permission gate. `POST /system/observer/scan` now denies before creating an
+observer audit receipt unless the request actor has `system.write` in
+`FRANCIS_API_ACTOR_SCOPES`. Read-only observer status, observer audit history,
+world-state, continuity, and ORB observer projections remain read-only. The chat
+UI settings client sends the bounded system mutation actor fallback for scan
+requests and treats backend permission denials as mutation errors. This is
+receipt-write governance only; it does not change passive observer snapshots,
+probe scoring, mission execution, or readiness semantics.
 
 As of `2026-04-26`, plugin catalog and lifecycle mutation routes are also wired
 to the API permission gate. `POST /plugins/build`, `POST /plugins/enable`,
@@ -3360,6 +3370,28 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` observer scan permission-gate
+slice:
+
+- `python -m pytest tests\test_api_system_permission_gate.py -q`
+  Result: `2 passed`
+- `python -m pytest tests\test_api_system_settings.py::test_system_observer_scan_is_receipted_and_read_paths_remain_passive tests\test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion tests\test_api_system_settings.py::test_system_mutation_context_redacts_secret_text -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `python -m ruff check src\francis\api\routes\system.py tests\conftest.py tests\test_api_system_permission_gate.py tests\test_api_system_settings.py tests\test_api_continuity.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\system.py tests\conftest.py tests\test_api_system_permission_gate.py tests\test_api_system_settings.py tests\test_api_continuity.py`
+  Result: `5 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `17 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 top-level mission
 current-task identity slice:

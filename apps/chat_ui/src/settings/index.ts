@@ -3582,10 +3582,11 @@ export class SettingsClient {
     const { json } = await this.fetchFirstOk(this.endpoints.observerScan(), {
       ...this.init(opts),
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify({ ...req, actor: systemMutationActor(req.actor) }),
     });
 
     if (!isRecord(json)) return { ok: false };
+    assertSystemPermissionAllowed(json, "Observer scan mutation denied.");
     const response: ObserverScanResponse = {
       ok: safeBoolean(json.ok, false),
       subsystem: safeString(json.subsystem, ""),

@@ -32,7 +32,13 @@ CREDENTIAL_WRITE_TEST_ACTORS = (
 )
 SYSTEM_WRITE_TEST_SCOPE = "system.write"
 SYSTEM_WRITE_TEST_ACTORS = (
+    "chat_ui.command_palette",
+    "chat_ui.shift_briefing",
+    "chat_ui.system",
     "test.system.write",
+    "test.system.observer",
+    "test.system.redaction",
+    "test.continuity.briefing",
     "chat_ui",
     "chat_ui_alias_test",
     "tests",

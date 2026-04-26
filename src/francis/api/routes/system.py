@@ -514,9 +514,13 @@ def observer_events(
 
 
 @router.post("/observer/scan")
-def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10) -> dict[str, object]:
+def observer_scan(request: Request, payload: ObserverScanIn | None = None, recent_limit: int = 10) -> dict[str, object]:
     try:
         body = payload or ObserverScanIn()
+        permission = _write_permission(body.actor, route=request.url.path, method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         with start_span("observer.scan"):
             snapshot = observer_incident_snapshot()
             summary = observer_summary(snapshot)

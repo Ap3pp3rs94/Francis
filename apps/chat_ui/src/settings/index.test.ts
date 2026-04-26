@@ -1404,6 +1404,10 @@ test("SettingsClient treats system permission denials as mutation errors", async
       () => client.mutateConfig({ op: "set", path: "ui.preferences.theme", value: "dark" }, { timeoutMs: 50 }),
       (err: unknown) => err instanceof SettingsApiError && err.message === "api_permission_denied",
     );
+    await assert.rejects(
+      () => client.recordObserverScan({ reason: "permission check" }, { timeoutMs: 50 }),
+      (err: unknown) => err instanceof SettingsApiError && err.message === "api_permission_denied",
+    );
   } finally {
     restoreFetch();
   }

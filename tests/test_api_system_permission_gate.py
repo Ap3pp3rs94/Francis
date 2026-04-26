@@ -70,6 +70,19 @@ def test_system_runtime_mutations_deny_without_actor_scope(monkeypatch, tmp_path
     assert denied_service_body["error"] == "api_permission_denied"
     assert denied_service_body["governance"]["gate"] == "permission_gate"
     assert denied_service_body["governance"]["reason"] == "missing_actor"
+
+    denied_observer_scan = client.post(
+        "/system/observer/scan",
+        json={"reason": "missing actor"},
+    )
+    assert denied_observer_scan.status_code == 200
+    denied_observer_scan_body = denied_observer_scan.json()
+    assert denied_observer_scan_body["ok"] is False
+    assert denied_observer_scan_body["applied"] is False
+    assert denied_observer_scan_body["status"] == "denied"
+    assert denied_observer_scan_body["error"] == "api_permission_denied"
+    assert denied_observer_scan_body["governance"]["gate"] == "permission_gate"
+    assert denied_observer_scan_body["governance"]["reason"] == "missing_actor"
     assert not (data_root / "logs" / "audit" / "audit.jsonl").exists()
 
 
@@ -130,3 +143,14 @@ def test_system_runtime_mutations_allow_scoped_actor(monkeypatch, tmp_path: Path
     service_body = service.json()
     assert service_body["ok"] is True
     assert service_body["status"] == "accepted"
+
+    observer_scan = client.post(
+        "/system/observer/scan",
+        json={"reason": "scoped observer scan", "actor": _SYSTEM_ACTOR},
+    )
+    assert observer_scan.status_code == 200
+    observer_scan_body = observer_scan.json()
+    assert observer_scan_body["ok"] is True
+    assert observer_scan_body["subsystem"] == "observer"
+    assert observer_scan_body["receipt"]["event"] == "observer.scan"
+    assert observer_scan_body["receipt"]["actor"] == _SYSTEM_ACTOR
