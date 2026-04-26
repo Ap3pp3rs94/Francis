@@ -155,6 +155,15 @@ class DelegationRouter:
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 
 
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
 def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
@@ -218,6 +227,32 @@ def _new_task_id() -> str:
     return f"tsk_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}"
 
 
+def _task_mission_id(inputs: dict[str, Any]) -> str:
+    mission_id = _safe_str(inputs.get("mission_id")).strip()
+    if mission_id:
+        return mission_id
+    meta = inputs.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("mission_id")).strip()
+    return ""
+
+
+def _created_audit_details(record: DelegationRecord) -> dict[str, Any]:
+    input_keys = [key for key in record.inputs if isinstance(key, str) and key.strip()]
+    details: dict[str, Any] = {
+        "status": record.status.value,
+        "capability": record.capability,
+        "requester_id": record.requester_id,
+        "priority": record.priority,
+        "ttl_sec": record.ttl_sec,
+        "input_key_count": len(input_keys),
+    }
+    mission_id = _task_mission_id(record.inputs)
+    if mission_id:
+        details["mission_id"] = mission_id
+    return details
+
+
 def create_delegation(
     request: DelegationRequest, repo_root: Path | None = None, *, policy: DelegationPolicy | None = None
 ) -> tuple[DelegationRecord | None, str | None]:
@@ -243,7 +278,7 @@ def create_delegation(
     try:
         path = _record_path(task_id, repo_root)
         _atomic_write_text(path, json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False))
-        _append_audit(task_id, "created", {"status": record.status.value, "capability": record.capability}, repo_root)
+        _append_audit(task_id, "created", _created_audit_details(record), repo_root)
         return record, None
     except Exception as exc:
         logger.error("Create failed: %s", exc)

@@ -149,6 +149,13 @@ responses replace secret-like free text before returning to callers. Action
 inputs remain available in local task storage for execution, but API projections
 return redacted views.
 
+As of `2026-04-26`, delegation creation audit receipts preserve bounded request
+context without recording input values. Created task audit entries now include
+requester id, priority, ttl, mission id when already present, and input key
+count, while continuing to redact audit details through the operation redaction
+boundary. This improves traceability for the plan/delegation entry point without
+changing task routing, execution, approval, or memory behavior.
+
 As of `2026-04-25`, lower-level telemetry audit, operation log, and error log
 writers apply the same governed redaction boundary. Telemetry fields and trace
 context are coerced into JSON-safe values and secret-like passwords, tokens,
@@ -2546,6 +2553,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` delegation creation audit context slice:
+
+- `python -m ruff check src\francis\agent\delegation.py tests\unit\test_delegation_audit.py tests\unit\test_workers_runner.py tests\unit\test_daemon_runner.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\agent\delegation.py tests\unit\test_delegation_audit.py tests\unit\test_workers_runner.py tests\unit\test_daemon_runner.py tests\test_api_operations.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_delegation_audit.py -q`
+  Result: `1 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_delegation_audit.py tests\unit\test_workers_runner.py tests\unit\test_daemon_runner.py tests\test_api_operations.py::test_operations_create_list_get_cancel tests\test_api_operations.py::test_operations_operator_surfaces_redact_secret_text -q`
+  Result: `7 passed`
 
 Latest targeted validation for the `2026-04-26` plan-create receipt summary slice:
 
