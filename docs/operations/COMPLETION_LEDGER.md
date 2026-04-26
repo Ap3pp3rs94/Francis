@@ -235,6 +235,14 @@ envelope with gate, reason, next step, and count-only evidence, and the chat UI
 chat client preserves that envelope in mission-ingress metadata instead of
 collapsing policy truth to a plain error string.
 
+As of `2026-04-26`, those chat mission ingress permission denials also preserve
+bounded gate handoff metadata in the continuity ledger. The assistant ledger
+entry keeps the ingress plane, gate stage, handoff gate/action/next step,
+governance reason, and count-only evidence, and `/memory/timeline/list` projects
+that denial as a read-only loop event without creating mission or task records.
+This is trace/readback only; it does not grant mission authority, bypass policy,
+or synthesize mission state for denied ingress.
+
 As of `2026-04-26`, direct mission continuity text is redacted at the mission
 store boundary. Mission `objective`, `summary`, `next_step`, and
 `escalation_path` fields are normalized through the governed free-text secret
@@ -3947,6 +3955,21 @@ Latest targeted validation for the `2026-04-26` chat mission ingress handoff-han
 - `cd apps\chat_ui; npm run test`
   Result: `62 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` chat mission ingress permission-gate continuity slice:
+
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m mypy src\francis\api\routes\chat.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py::test_memory_timeline_projects_chat_mission_ingress_permission_gate -q`
+  Result: `6 passed`
+- `python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py -q`
+  Result: `15 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` plugin lifecycle permission-gate slice:

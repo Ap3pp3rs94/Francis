@@ -230,6 +230,28 @@ def test_chat_mission_command_denies_unscoped_actor_before_mutation(monkeypatch,
     assert body["governance"]["evidence"]["actor_present"] is True
     assert body["governance"]["evidence"]["required_scope_count"] == 1
 
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(
+        item
+        for item in reversed(ledger_entries)
+        if item["role"] == "assistant" and item["meta"]["mode"] == "mission_ingress"
+    )
+    assistant_meta = assistant_entry["meta"]
+    assert assistant_meta["status"] == "denied"
+    assert assistant_meta["error"] == "api_permission_denied"
+    assert assistant_meta["ingress_plane"] == "P1_INTERFACE"
+    assert assistant_meta["active_stage"] == "gate"
+    assert assistant_meta["handoff_stage"] == "gate"
+    assert assistant_meta["handoff_action"] == "configure_actor_scope"
+    assert assistant_meta["handoff_gate"] == "permission_gate"
+    assert assistant_meta["handoff_next_step"] == "configure_actor_scope_before_declaring_chat_missions"
+    assert assistant_meta["governance_gate"] == "permission_gate"
+    assert assistant_meta["governance_reason"] == "missing_scopes"
+    assert assistant_meta["governance_next_step"] == "configure_actor_scope_before_declaring_chat_missions"
+    assert assistant_meta["governance_evidence"]["actor_present"] is True
+    assert assistant_meta["governance_evidence"]["required_scope_count"] == 1
+
     mission_root = data_root / "missions"
     task_root = data_root / "tasks"
     assert not mission_root.exists() or not any(mission_root.iterdir())

@@ -175,6 +175,43 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
     }
 
 
+def _compact_mission_gate_meta(
+    *,
+    status: str,
+    error: str = "",
+    governance: dict[str, object] | None = None,
+    handoff_action: str = "",
+) -> dict[str, object]:
+    governance_obj = governance if isinstance(governance, dict) else {}
+    gate = str(governance_obj.get("gate") or "").strip()
+    reason = str(governance_obj.get("reason") or "").strip()
+    next_step = str(governance_obj.get("next_step") or "").strip()
+
+    meta: dict[str, object] = {
+        "mode": "mission_ingress",
+        "status": status,
+        "ingress_plane": "P1_INTERFACE",
+        "active_stage": "gate",
+        "handoff_stage": "gate",
+    }
+    if error:
+        meta["error"] = error
+    if handoff_action:
+        meta["handoff_action"] = handoff_action
+    if gate:
+        meta["handoff_gate"] = gate
+        meta["governance_gate"] = gate
+    if reason:
+        meta["governance_reason"] = reason
+    if next_step:
+        meta["handoff_next_step"] = next_step
+        meta["governance_next_step"] = next_step
+    evidence = governance_obj.get("evidence")
+    if isinstance(evidence, dict):
+        meta["governance_evidence"] = evidence
+    return meta
+
+
 def _compact_mission_advance_result(outcome: dict[str, object]) -> dict[str, object]:
     compact: dict[str, object] = {}
     for key in ("ok", "applied"):
@@ -236,12 +273,12 @@ def _mission_ingress_reply(
         append(
             "assistant",
             str(denied["reply"]),
-            {
-                "mode": "mission_ingress",
-                "status": "denied",
-                "governance_gate": "permission_gate",
-                "governance_reason": permission.reason,
-            },
+            _compact_mission_gate_meta(
+                status="denied",
+                error="api_permission_denied",
+                governance=_safe_dict(denied.get("governance")),
+                handoff_action="configure_actor_scope",
+            ),
         )
         return denied
 

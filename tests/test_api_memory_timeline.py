@@ -571,6 +571,60 @@ def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch
     assert "memoryloopsecret123" not in item_text
 
 
+def test_memory_timeline_projects_chat_mission_ingress_permission_gate(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    sent = client.post(
+        "/chat/send",
+        json={"message": "/mission Preserve denied ingress gate token=deniedmemorysecret123", "use_llm": False},
+    )
+    assert sent.status_code == 200
+    sent_body = sent.json()
+    assert sent_body["mode"] == "mission_ingress"
+    assert sent_body["status"] == "denied"
+    assert sent_body["governance"]["gate"] == "permission_gate"
+
+    listed = client.get(
+        "/memory/timeline/list",
+        params={"actor": "assistant", "search": "api_permission_denied"},
+    )
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["kind"] == "ledger_append"
+    assert item["provenance"]["source"] == "continuity.ledger"
+    assert item["actor"] == "assistant"
+    assert item["loop"] == {
+        "ingress_plane": "P1_INTERFACE",
+        "active_stage": "gate",
+        "handoff_stage": "gate",
+        "handoff_action": "configure_actor_scope",
+        "handoff_gate": "permission_gate",
+        "handoff_next_step": "configure_actor_scope_before_declaring_chat_missions",
+    }
+    assert item["meta"]["governance_gate"] == "permission_gate"
+    assert item["meta"]["governance_reason"] == "missing_scopes"
+    assert item["meta"]["governance_next_step"] == "configure_actor_scope_before_declaring_chat_missions"
+    assert item["meta"]["governance_evidence"]["actor_present"] is True
+    assert item["meta"]["governance_evidence"]["required_scope_count"] == 1
+    item_text = json.dumps(item, sort_keys=True)
+    assert "deniedmemorysecret123" not in item_text
+
+    mission_root = data_root / "missions"
+    task_root = data_root / "tasks"
+    assert not mission_root.exists() or not any(mission_root.iterdir())
+    assert not task_root.exists() or not any(task_root.iterdir())
+
+
 def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
