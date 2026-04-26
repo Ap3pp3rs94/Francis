@@ -302,6 +302,13 @@ or operation state, and the derived `current_task` projection keeps the same
 handles for chat UI settings/world-state clients. This is a read-model/interface
 handoff only; it does not create traces, mutate missions, or write memory.
 
+As of `2026-04-26`, the chat UI operations client preserves bounded
+`plan.create` receipt summaries as typed operation data. When backend operation
+output includes the real plan status, current step id/title, step count, and
+checkpoint count, the client exposes those fields as `plan_summary` while
+leaving the raw output intact. This is a parser/interface contract only; it does
+not add UI claims, create plans, execute work, or write memory.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2698,6 +2705,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation plan summary interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state activity trace-handle slice:
 

@@ -40,6 +40,15 @@ export type OperationStatus =
 
 export type OperationSeverity = "debug" | "info" | "warning" | "error" | "critical" | string;
 
+export type OperationPlanSummary = {
+  kind?: string;
+  status?: string;
+  current_step_id?: string;
+  current_step_title?: string;
+  step_count?: number;
+  checkpoint_count?: number;
+};
+
 /**
  * A single operational record/event.
  *
@@ -71,6 +80,7 @@ export type OperationRecord = {
   // Payloads (untrusted)
   input?: unknown;
   output?: unknown;
+  plan_summary?: OperationPlanSummary;
   error?: unknown;
 
   // Tags/metadata (safe surface; still untrusted)
@@ -348,6 +358,47 @@ function safeStringArray(v: unknown): string[] | undefined {
   return out.length ? out : undefined;
 }
 
+function parseOperationPlanSummary(output: unknown): OperationPlanSummary | undefined {
+  if (!isRecord(output)) return undefined;
+
+  const kind = safeString(output.kind) || undefined;
+  const hasPlanFields =
+    "plan_status" in output ||
+    "plan_current_step_id" in output ||
+    "plan_current_step_title" in output ||
+    "plan_step_count" in output ||
+    "plan_checkpoint_count" in output;
+
+  if (kind !== "plan.create.result" && !hasPlanFields) return undefined;
+
+  const rawStepCount = safeNumber(output.plan_step_count, Number.NaN);
+  const rawCheckpointCount = safeNumber(output.plan_checkpoint_count, Number.NaN);
+
+  const summary: OperationPlanSummary = {
+    kind,
+    status: safeString(output.plan_status) || undefined,
+    current_step_id: safeString(output.plan_current_step_id) || undefined,
+    current_step_title: safeString(output.plan_current_step_title) || undefined,
+    step_count: Number.isFinite(rawStepCount) ? Math.max(0, Math.floor(rawStepCount)) : undefined,
+    checkpoint_count: Number.isFinite(rawCheckpointCount)
+      ? Math.max(0, Math.floor(rawCheckpointCount))
+      : undefined,
+  };
+
+  if (
+    !summary.kind &&
+    !summary.status &&
+    !summary.current_step_id &&
+    !summary.current_step_title &&
+    summary.step_count === undefined &&
+    summary.checkpoint_count === undefined
+  ) {
+    return undefined;
+  }
+
+  return summary;
+}
+
 function normalizeBaseUrl(url: string): string {
   return (url || "").trim().replace(/\/+$/, "");
 }
@@ -588,6 +639,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     "response" in raw ? raw.response :
     "result" in raw ? raw.result :
     undefined;
+  const plan_summary = parseOperationPlanSummary(output);
 
   const error =
     "error" in raw ? raw.error :
@@ -621,6 +673,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
       meta,
       input,
       output,
+      plan_summary,
       error,
     };
   }
@@ -645,6 +698,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     meta,
     input,
     output,
+    plan_summary,
     error,
   };
 }

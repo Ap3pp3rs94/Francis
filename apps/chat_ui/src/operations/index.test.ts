@@ -117,8 +117,17 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         ts: 1_710_000_100,
         status: "running",
         name: "plan.create",
+        trace_id: "trace_task_alpha",
         run_id: "run_task_alpha",
         artifact_dir: "D:/francis/data/artifacts/task_alpha",
+        output: {
+          kind: "plan.create.result",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: 4,
+          plan_checkpoint_count: 3,
+        },
         meta: {
           objective: "Advance morning continuity",
           orb_plane: "P7_EXECUTION",
@@ -164,8 +173,15 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.message, "operation_started");
     assert.equal(response.operation?.id, "task_alpha");
     assert.equal(response.operation?.status, "running");
+    assert.equal(response.operation?.trace_id, "trace_task_alpha");
     assert.equal(response.operation?.run_id, "run_task_alpha");
     assert.equal(response.operation?.artifact_dir, "D:/francis/data/artifacts/task_alpha");
+    assert.equal(response.operation?.plan_summary?.kind, "plan.create.result");
+    assert.equal(response.operation?.plan_summary?.status, "in_progress");
+    assert.equal(response.operation?.plan_summary?.current_step_id, "understand");
+    assert.equal(response.operation?.plan_summary?.current_step_title, "Understand goal + constraints");
+    assert.equal(response.operation?.plan_summary?.step_count, 4);
+    assert.equal(response.operation?.plan_summary?.checkpoint_count, 3);
     assert.equal(response.operation?.meta?.orb_plane, "P7_EXECUTION");
     assert.equal(response.memory_receipt?.source, "continuity.ledger");
     assert.equal(response.memory_receipt?.kind, "ledger_append");
