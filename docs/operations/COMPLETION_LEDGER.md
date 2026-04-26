@@ -893,6 +893,15 @@ current-task id and receipt posture. This is interface exposure only; it does
 not add mission controls, infer missing operation identity, or change execution
 authority.
 
+As of `2026-04-26`, continuity and world-state mission current-task read models
+also preserve that backend-backed operation identity. Mission queue, recent
+mission, and shift-briefing current-task projections can now carry operation name,
+operation ORB plane, and last advance action from mission metadata or operation
+activity, so return-to-work surfaces do not lose the plan/execute identity after
+leaving the mission detail route. This is read-model propagation only; it does not
+add new controls, execute missions, infer missing operation records, or change
+mission authority.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -3886,6 +3895,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission current-task ide
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission current-task identity continuity read-model slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop projection slice:

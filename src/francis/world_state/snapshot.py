@@ -700,6 +700,8 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(meta.get("last_advance_outcome") or "").strip(),
                 "last_advance_operation_id": str(meta.get("last_advance_operation_id") or "").strip(),
+                "last_advance_operation_name": str(meta.get("last_advance_operation_name") or "").strip(),
+                "last_advance_operation_plane": str(meta.get("last_advance_operation_plane") or "").strip(),
                 "last_advance_operation_status": str(meta.get("last_advance_operation_status") or "").strip(),
                 "last_advance_message": str(meta.get("last_advance_message") or "").strip(),
                 "last_advance_actor": str(meta.get("last_advance_actor") or "").strip(),
@@ -900,6 +902,7 @@ def _operation_latest_activity(
             "source": "run_ledger",
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
+            "operation_plane": str(operation_meta.get("orb_plane") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
             "approval_id": _first_text(
                 log.get("approval_id"),
@@ -931,6 +934,7 @@ def _operation_latest_activity(
             "source": "operation_state",
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
+            "operation_plane": str(operation_meta.get("orb_plane") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
             "approval_id": _first_text(operation.get("approval_id"), operation_meta.get("approval_id")),
             "trace_id": _safe_str(operation.get("trace_id")).strip(),
@@ -1054,6 +1058,16 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
     }
     values = {
         "operation_id": operation_id,
+        "operation_name": _first_text(
+            existing.get("operation_name"),
+            item.get("last_advance_operation_name"),
+            latest_activity.get("operation_name"),
+        ),
+        "operation_plane": _first_text(
+            existing.get("operation_plane"),
+            item.get("last_advance_operation_plane"),
+            latest_activity.get("operation_plane"),
+        ),
         "task_status": _first_text(existing.get("task_status"), item.get("last_task_status")),
         "operation_status": _first_text(
             existing.get("operation_status"),
@@ -1125,6 +1139,7 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             item.get("recommended_action"),
             _mission_default_handoff_action(item),
         ),
+        "advance_action": _first_text(existing.get("advance_action"), item.get("last_advance_action")),
         "latest_receipt_event": _first_text(
             existing.get("latest_receipt_event"), latest_activity.get("name"), latest_memory_receipt.get("source")
         ),

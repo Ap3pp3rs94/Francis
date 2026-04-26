@@ -420,6 +420,7 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["focus"][0]["id"] == blocked_id
     assert body["briefing"]["focus"][0]["recommended_action"] == "raise_trust_or_reduce_risk"
     assert body["briefing"]["focus"][0]["current_task"]["operation_id"] == blocked_operation_id
+    assert body["briefing"]["focus"][0]["current_task"]["operation_name"] == "plugin.run"
     assert body["briefing"]["focus"][0]["current_task"]["gate"] == "trust_gate"
     assert body["briefing"]["focus"][0]["current_task"]["latest_receipt_event"] == "governance_hold"
     assert body["briefing"]["focus"][0]["current_task"]["latest_receipt_status"] == "blocked"
@@ -486,6 +487,9 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
     assert recent_completed[0]["current_task"]["operation_id"] == completed_operation_id
+    assert recent_completed[0]["current_task"]["operation_name"] == "plan.create"
+    assert recent_completed[0]["current_task"]["operation_plane"] == "P9_OBSERVABILITY"
+    assert recent_completed[0]["current_task"]["advance_action"] == "run_linked_operation"
     assert recent_completed[0]["current_task"]["handoff_action"] == "review_result"
     assert recent_completed[0]["current_task"]["next_step"] == "review_completed_mission"
     assert recent_completed[0]["history_count"] >= 1
