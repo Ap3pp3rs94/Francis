@@ -177,7 +177,7 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
             </div>
           ) : null}
           {inspection.originating_receipt ? (
-            <div style={{ fontSize: 11, color: mutedColor, marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: mutedColor, marginTop: 4, overflowWrap: "anywhere" }}>
               origin=<code>{inspection.originating_receipt.source || "receipt"}</code>
               {inspection.originating_receipt.mission_id ? (
                 <>
@@ -189,9 +189,89 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
                   {" / "}operation=<code>{inspection.originating_receipt.operation_id}</code>
                 </>
               ) : null}
+              {inspection.originating_receipt.approval_id ||
+              inspection.originating_receipt.current_task_approval_id ||
+              inspection.originating_receipt.handoff_approval_id ? (
+                <>
+                  {" / "}approval=
+                  <code>
+                    {inspection.originating_receipt.current_task_approval_id ||
+                      inspection.originating_receipt.handoff_approval_id ||
+                      inspection.originating_receipt.approval_id}
+                  </code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_approval_status ||
+              inspection.originating_receipt.handoff_approval_status ? (
+                <>
+                  {" / "}approval_status=
+                  <code>
+                    {inspection.originating_receipt.current_task_approval_status ||
+                      inspection.originating_receipt.handoff_approval_status}
+                  </code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_gate || inspection.originating_receipt.handoff_gate ? (
+                <>
+                  {" / "}gate=
+                  <code>{inspection.originating_receipt.current_task_gate || inspection.originating_receipt.handoff_gate}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.active_stage || inspection.originating_receipt.handoff_stage ? (
+                <>
+                  {" / "}stage=
+                  <code>
+                    {inspection.originating_receipt.active_stage || inspection.originating_receipt.handoff_stage}
+                  </code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.handoff_action ? (
+                <>
+                  {" / "}handoff=<code>{inspection.originating_receipt.handoff_action}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_operation_id ||
+              inspection.originating_receipt.handoff_operation_id ? (
+                <>
+                  {" / "}task=
+                  <code>
+                    {inspection.originating_receipt.current_task_operation_id ||
+                      inspection.originating_receipt.handoff_operation_id}
+                  </code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_operation_name ? (
+                <>
+                  {" / "}task_name=<code>{inspection.originating_receipt.current_task_operation_name}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_advance_action ? (
+                <>
+                  {" / "}advance=<code>{inspection.originating_receipt.current_task_advance_action}</code>
+                </>
+              ) : null}
               {inspection.originating_receipt.trace_id ? (
                 <>
                   {" / "}trace=<code>{inspection.originating_receipt.trace_id}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_run_id || inspection.originating_receipt.handoff_run_id ? (
+                <>
+                  {" / "}run=
+                  <code>
+                    {inspection.originating_receipt.current_task_run_id ||
+                      inspection.originating_receipt.handoff_run_id}
+                  </code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.current_task_artifact_dir ||
+              inspection.originating_receipt.handoff_artifact_dir ? (
+                <>
+                  {" / "}artifact=
+                  <code>
+                    {inspection.originating_receipt.current_task_artifact_dir ||
+                      inspection.originating_receipt.handoff_artifact_dir}
+                  </code>
                 </>
               ) : null}
               {inspection.originating_receipt.operation_status ? (
@@ -199,9 +279,14 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
                   {" / "}status=<code>{inspection.originating_receipt.operation_status}</code>
                 </>
               ) : null}
-              {inspection.originating_receipt.recovery_next_step ? (
+              {inspection.originating_receipt.current_task_next_step ||
+              inspection.originating_receipt.recovery_next_step ? (
                 <>
-                  {" / "}recovery=<code>{inspection.originating_receipt.recovery_next_step}</code>
+                  {" / "}recovery=
+                  <code>
+                    {inspection.originating_receipt.current_task_next_step ||
+                      inspection.originating_receipt.recovery_next_step}
+                  </code>
                 </>
               ) : null}
             </div>

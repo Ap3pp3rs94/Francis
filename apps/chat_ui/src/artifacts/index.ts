@@ -32,13 +32,28 @@ export type ArtifactOriginatingReceipt = {
   operation_error?: string;
   result_message?: string;
   recovery_next_step?: string;
+  active_stage?: string;
+  handoff_stage?: string;
   handoff_action?: string;
   handoff_gate?: string;
+  handoff_approval_id?: string;
+  handoff_approval_status?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
   current_task_source?: string;
+  current_task_gate?: string;
+  current_task_approval_id?: string;
+  current_task_approval_status?: string;
   current_task_operation_id?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
+  current_task_advance_action?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
+  current_task_next_step?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -274,13 +289,28 @@ function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | und
     "operation_error",
     "result_message",
     "recovery_next_step",
+    "active_stage",
+    "handoff_stage",
     "handoff_action",
     "handoff_gate",
+    "handoff_approval_id",
+    "handoff_approval_status",
+    "handoff_operation_id",
+    "handoff_trace_id",
+    "handoff_run_id",
+    "handoff_artifact_dir",
     "current_task_source",
+    "current_task_gate",
+    "current_task_approval_id",
+    "current_task_approval_status",
     "current_task_operation_id",
+    "current_task_operation_name",
+    "current_task_operation_plane",
+    "current_task_advance_action",
     "current_task_trace_id",
     "current_task_run_id",
     "current_task_artifact_dir",
+    "current_task_next_step",
   ] as const) {
     const value = safeString(raw[key]).trim();
     if (value) receipt[key] = value;

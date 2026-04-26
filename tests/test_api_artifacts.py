@@ -83,9 +83,28 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
             "operation_error": "plugin_id_required",
             "result_message": "Plugin id is required. password=artifactsecret123",
             "recovery_next_step": "review_operation_detail token=artifactrecovery123",
+            "active_stage": "deadletter",
+            "handoff_stage": "deadletter",
             "handoff_action": "retry_or_deadletter",
             "handoff_gate": "operator_review",
+            "handoff_approval_id": "apr_artifact_origin",
+            "handoff_approval_status": "approved",
+            "handoff_operation_id": "tsk_artifact_origin",
+            "handoff_trace_id": "trace_artifact_origin",
+            "handoff_run_id": "run_artifact_origin",
+            "handoff_artifact_dir": str(artifact_dir),
             "current_task_source": "terminal_operation_receipt",
+            "current_task_gate": "operator_review",
+            "current_task_approval_id": "apr_artifact_origin",
+            "current_task_approval_status": "approved",
+            "current_task_operation_id": "tsk_artifact_origin",
+            "current_task_operation_name": "plugin.run",
+            "current_task_operation_plane": "P7_EXECUTION",
+            "current_task_advance_action": "run_operation",
+            "current_task_trace_id": "trace_artifact_origin",
+            "current_task_run_id": "run_artifact_origin",
+            "current_task_artifact_dir": str(artifact_dir),
+            "current_task_next_step": "review_operation_detail",
         },
     )
 
@@ -108,6 +127,28 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
     assert receipt["operation_error"] == "plugin_id_required"
     assert receipt["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert receipt["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert receipt["active_stage"] == "deadletter"
+    assert receipt["handoff_stage"] == "deadletter"
+    assert receipt["handoff_action"] == "retry_or_deadletter"
+    assert receipt["handoff_gate"] == "operator_review"
+    assert receipt["handoff_approval_id"] == "apr_artifact_origin"
+    assert receipt["handoff_approval_status"] == "approved"
+    assert receipt["handoff_operation_id"] == "tsk_artifact_origin"
+    assert receipt["handoff_trace_id"] == "trace_artifact_origin"
+    assert receipt["handoff_run_id"] == "run_artifact_origin"
+    assert receipt["handoff_artifact_dir"] == str(artifact_dir)
+    assert receipt["current_task_source"] == "terminal_operation_receipt"
+    assert receipt["current_task_gate"] == "operator_review"
+    assert receipt["current_task_approval_id"] == "apr_artifact_origin"
+    assert receipt["current_task_approval_status"] == "approved"
+    assert receipt["current_task_operation_id"] == "tsk_artifact_origin"
+    assert receipt["current_task_operation_name"] == "plugin.run"
+    assert receipt["current_task_operation_plane"] == "P7_EXECUTION"
+    assert receipt["current_task_advance_action"] == "run_operation"
+    assert receipt["current_task_trace_id"] == "trace_artifact_origin"
+    assert receipt["current_task_run_id"] == "run_artifact_origin"
+    assert receipt["current_task_artifact_dir"] == str(artifact_dir)
+    assert receipt["current_task_next_step"] == "review_operation_detail"
     assert receipt["references"]["artifact_dir"] == str(artifact_dir)
     assert "artifactsecret123" not in str(body)
     assert "artifactrecovery123" not in str(body)
