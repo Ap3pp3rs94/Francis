@@ -450,13 +450,7 @@ def _cap_chat_summarize(inputs: dict[str, Any], objective: str) -> dict[str, Any
     }
 
 
-def _cap_plan_create(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
-    goal = _safe_str(inputs.get("goal", objective))
-    constraints = inputs.get("constraints")
-    plan = create_plan(goal, constraints if isinstance(constraints, dict) else None)
-    machine = PlanStateMachine(plan)
-    machine.start()
-    plan_payload = plan.to_dict()
+def _plan_receipt_summary(plan_payload: dict[str, Any]) -> dict[str, Any]:
     steps = plan_payload.get("steps") if isinstance(plan_payload.get("steps"), list) else []
     checkpoints = plan_payload.get("checkpoints") if isinstance(plan_payload.get("checkpoints"), list) else []
     current_step = next(
@@ -464,13 +458,25 @@ def _cap_plan_create(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
         {},
     )
     return {
-        "kind": "plan.create.result",
-        "plan": plan_payload,
         "plan_status": _safe_str(plan_payload.get("status")).strip() or None,
         "plan_current_step_id": _safe_str(current_step.get("step_id")).strip() or None,
         "plan_current_step_title": _safe_str(current_step.get("title")).strip() or None,
         "plan_step_count": len(steps),
         "plan_checkpoint_count": len(checkpoints),
+    }
+
+
+def _cap_plan_create(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
+    goal = _safe_str(inputs.get("goal", objective))
+    constraints = inputs.get("constraints")
+    plan = create_plan(goal, constraints if isinstance(constraints, dict) else None)
+    machine = PlanStateMachine(plan)
+    machine.start()
+    plan_payload = plan.to_dict()
+    return {
+        "kind": "plan.create.result",
+        "plan": plan_payload,
+        **_plan_receipt_summary(plan_payload),
     }
 
 
@@ -481,10 +487,12 @@ def _cap_plan_revise(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
         return {"kind": "plan.revise.result", "ok": False, "error": "plan_missing"}
     plan = plan_from_dict(raw_plan)
     revised = revise_plan(plan, reason)
+    plan_payload = revised.to_dict()
     return {
         "kind": "plan.revise.result",
         "ok": True,
-        "plan": revised.to_dict(),
+        "plan": plan_payload,
+        **_plan_receipt_summary(plan_payload),
         "objective": objective,
     }
 

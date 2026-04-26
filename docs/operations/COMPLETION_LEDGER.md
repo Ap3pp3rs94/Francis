@@ -482,6 +482,14 @@ step count, and checkpoint count from the generated `PlanStateMachine` state,
 so the cognition step can be inspected from operation output without parsing the
 entire plan object.
 
+As of `2026-04-26`, successful `plan.revise` operation results use that same
+bounded plan receipt summary contract. Revision results preserve the full
+revised plan, but also return `plan_status`, current in-progress step id/title
+when present, step count, and checkpoint count as first-class output fields.
+This keeps the cognition recovery path inspectable from operation read models
+and the chat UI operation parser without changing planner state transitions,
+execution authority, approvals, or mission mutation behavior.
+
 As of `2026-04-26`, untraced capability execution results also receive bounded
 task execution trace/run handles. `plan.create` now returns `trace_id` and
 `run_id` from the persisted task result, so `/operations/list` can filter the
@@ -3414,6 +3422,25 @@ Latest targeted validation for the `2026-04-26` plan-create receipt summary slic
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_run_executes_plan_create -q`
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 plan revision receipt summary slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_plan_revision.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\agent\executor.py tests\test_api_plan_revision.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\agent\executor.py tests\test_api_plan_revision.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `64 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` credential actor receipt identity slice:

@@ -121,6 +121,30 @@ test("parseOperationRecord preserves trace handles from operation metadata", () 
   assert.equal(parsed?.artifact_dir, "D:/francis/data/artifacts/meta-alpha");
 });
 
+test("parseOperationRecord preserves plan revision summaries", () => {
+  const parsed = parseOperationRecord({
+    id: "task_plan_revision",
+    ts: 1_710_000_130,
+    status: "succeeded",
+    name: "plan.revise",
+    output: {
+      kind: "plan.revise.result",
+      plan_status: "revised",
+      plan_current_step_id: "understand",
+      plan_current_step_title: "Understand goal + constraints",
+      plan_step_count: 7,
+      plan_checkpoint_count: 3,
+    },
+  });
+
+  assert.equal(parsed?.plan_summary?.kind, "plan.revise.result");
+  assert.equal(parsed?.plan_summary?.status, "revised");
+  assert.equal(parsed?.plan_summary?.current_step_id, "understand");
+  assert.equal(parsed?.plan_summary?.current_step_title, "Understand goal + constraints");
+  assert.equal(parsed?.plan_summary?.step_count, 7);
+  assert.equal(parsed?.plan_summary?.checkpoint_count, 3);
+});
+
 test("OperationsClient.run posts the bounded worker request to the operation run route", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {
