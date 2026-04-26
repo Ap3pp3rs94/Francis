@@ -1418,12 +1418,17 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
     assert recent_completed[0]["last_advance_outcome"] == "succeeded"
     assert recent_completed[0]["latest_activity"]["source"] == "run_ledger"
     assert recent_completed[0]["latest_activity"]["status"] == "succeeded"
+    assert recent_completed[0]["current_task"]["handoff_action"] == "review_result"
+    assert recent_completed[0]["current_task"]["next_step"] == "review_completed_mission"
 
     completed_recent = next(item for item in body["overview"]["recent_missions"] if item["id"] == completed_id)
     assert completed_recent["last_advance_action"] == "run_linked_operation"
     assert completed_recent["last_advance_outcome"] == "succeeded"
     assert completed_recent["latest_activity"]["source"] == "run_ledger"
     assert completed_recent["latest_activity"]["status"] == "succeeded"
+    assert completed_recent["latest_memory_receipt"]["handoff_action"] == "review_result"
+    assert completed_recent["current_task"]["handoff_action"] == "review_result"
+    assert completed_recent["current_task"]["next_step"] == "review_completed_mission"
 
 
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:

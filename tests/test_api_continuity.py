@@ -486,7 +486,8 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
     assert recent_completed[0]["current_task"]["operation_id"] == completed_operation_id
-    assert recent_completed[0]["current_task"]["handoff_action"] == "review_completion"
+    assert recent_completed[0]["current_task"]["handoff_action"] == "review_result"
+    assert recent_completed[0]["current_task"]["next_step"] == "review_completed_mission"
     assert recent_completed[0]["history_count"] >= 1
     assert recent_completed[0]["latest_history_event"]
     assert len(recent_completed[0]["history_tail"]) >= 1
@@ -772,6 +773,9 @@ def test_continuity_briefing_reports_ready_stage3_mission_posture(monkeypatch, t
     completed_projection = next(item for item in recently_completed if item["id"] == completed_id)
     assert completed_projection["memory_receipt_count"] >= 1
     assert completed_projection["latest_memory_receipt"]["mission_id"] == completed_id
+    assert completed_projection["latest_memory_receipt"]["handoff_action"] == "review_result"
+    assert completed_projection["current_task"]["handoff_action"] == "review_result"
+    assert completed_projection["current_task"]["next_step"] == "review_completed_mission"
 
 
 def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_path: Path) -> None:

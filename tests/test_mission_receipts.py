@@ -28,6 +28,20 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "recovery_next_step": "",
             "approval_status": "approved",
             "capability": "plugin.run",
+            "active_stage": "interface",
+            "handoff_stage": "interface",
+            "handoff_action": "review_result",
+            "handoff_operation_id": "tsk_receipt_refs",
+            "handoff_trace_id": "trace_receipt_refs",
+            "handoff_run_id": "run_receipt_refs",
+            "handoff_artifact_dir": "D:/francis/data/artifacts/receipt-refs",
+            "handoff_next_step": "review_completed_mission",
+            "current_task_source": "terminal_operation_receipt",
+            "current_task_operation_id": "tsk_receipt_refs",
+            "current_task_run_id": "run_receipt_refs",
+            "current_task_artifact_dir": "D:/francis/data/artifacts/receipt-refs",
+            "current_task_next_step": "review_completed_mission",
+            "memory_receipt_count": 1,
         },
     )
 
@@ -38,6 +52,18 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["operation_id"] == "tsk_receipt_refs"
     assert receipts[0]["approval_id"] == "apr_receipt_refs"
     assert receipts[0]["approval_status"] == "approved"
+    assert receipts[0]["active_stage"] == "interface"
+    assert receipts[0]["handoff_stage"] == "interface"
+    assert receipts[0]["handoff_action"] == "review_result"
+    assert receipts[0]["handoff_operation_id"] == "tsk_receipt_refs"
+    assert receipts[0]["handoff_trace_id"] == "trace_receipt_refs"
+    assert receipts[0]["handoff_run_id"] == "run_receipt_refs"
+    assert receipts[0]["handoff_next_step"] == "review_completed_mission"
+    assert receipts[0]["current_task_source"] == "terminal_operation_receipt"
+    assert receipts[0]["current_task_operation_id"] == "tsk_receipt_refs"
+    assert receipts[0]["current_task_run_id"] == "run_receipt_refs"
+    assert receipts[0]["current_task_next_step"] == "review_completed_mission"
+    assert receipts[0]["memory_receipt_count"] == 1
     assert receipts[0]["references"] == {
         "mission_id": "msn_receipt_refs",
         "operation_id": "tsk_receipt_refs",

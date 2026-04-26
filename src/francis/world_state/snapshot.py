@@ -1029,6 +1029,8 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         item.get("last_task_id"),
         action_target_id if action_target_id.startswith("tsk_") else "",
         item.get("last_advance_operation_id"),
+        latest_memory_receipt.get("current_task_operation_id"),
+        latest_memory_receipt.get("handoff_operation_id"),
         latest_activity.get("operation_id"),
         _memory_receipt_reference(latest_memory_receipt, "operation_id"),
     )
@@ -1059,6 +1061,8 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             existing.get("next_step"),
             item.get("last_task_next_step"),
             latest_activity.get("next_step"),
+            latest_memory_receipt.get("current_task_next_step"),
+            latest_memory_receipt.get("handoff_next_step"),
             latest_memory_receipt.get("recovery_next_step"),
             item.get("next_step"),
         ),
@@ -1082,21 +1086,30 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         ),
         "trace_id": _first_text(
             existing.get("trace_id"),
+            latest_memory_receipt.get("current_task_trace_id"),
+            latest_memory_receipt.get("handoff_trace_id"),
             latest_activity.get("trace_id"),
             _memory_receipt_reference(latest_memory_receipt, "trace_id"),
         ),
         "run_id": _first_text(
             existing.get("run_id"),
+            latest_memory_receipt.get("current_task_run_id"),
+            latest_memory_receipt.get("handoff_run_id"),
             latest_activity.get("run_id"),
             _memory_receipt_reference(latest_memory_receipt, "run_id"),
         ),
         "artifact_dir": _first_text(
             existing.get("artifact_dir"),
+            latest_memory_receipt.get("current_task_artifact_dir"),
+            latest_memory_receipt.get("handoff_artifact_dir"),
             latest_activity.get("artifact_dir"),
             _memory_receipt_reference(latest_memory_receipt, "artifact_dir"),
         ),
         "handoff_action": _first_text(
-            existing.get("handoff_action"), item.get("recommended_action"), _mission_default_handoff_action(item)
+            latest_memory_receipt.get("handoff_action"),
+            existing.get("handoff_action"),
+            item.get("recommended_action"),
+            _mission_default_handoff_action(item),
         ),
         "latest_receipt_event": _first_text(
             existing.get("latest_receipt_event"), latest_activity.get("name"), latest_memory_receipt.get("source")

@@ -121,11 +121,28 @@ def _operation_receipts_from_continuity(
             "scope": "mission.loop",
             "references": references,
         }
-        for key in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+        for key in (
+            "active_stage",
+            "handoff_stage",
+            "handoff_action",
+            "handoff_operation_id",
+            "handoff_trace_id",
+            "handoff_run_id",
+            "handoff_artifact_dir",
+            "handoff_next_step",
+            "current_task_source",
+            "current_task_operation_id",
+            "current_task_run_id",
+            "current_task_artifact_dir",
+            "current_task_next_step",
+            "plan_status",
+            "plan_current_step_id",
+            "plan_current_step_title",
+        ):
             value = _safe_str(meta.get(key)).strip()
             if value:
                 receipt[key] = value
-        for key in ("plan_step_count", "plan_checkpoint_count"):
+        for key in ("memory_receipt_count", "plan_step_count", "plan_checkpoint_count"):
             value = _safe_nonnegative_int(meta.get(key))
             if value is not None:
                 receipt[key] = value
