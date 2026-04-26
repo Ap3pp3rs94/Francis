@@ -39,6 +39,7 @@ function jsonRequestBody(init?: RequestInit): unknown {
 test("OperationsClient.list requests receipt handle filters and preserves returned handles", async () => {
   const requests: Array<{
     path: string;
+    approvalId: string | null;
     traceId: string | null;
     runId: string | null;
     artifactDir: string | null;
@@ -48,6 +49,7 @@ test("OperationsClient.list requests receipt handle filters and preserves return
     const parsed = new URL(url);
     requests.push({
       path: parsed.pathname,
+      approvalId: parsed.searchParams.get("approval_id"),
       traceId: parsed.searchParams.get("trace_id"),
       runId: parsed.searchParams.get("run_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
@@ -61,6 +63,7 @@ test("OperationsClient.list requests receipt handle filters and preserves return
           ts: 1_710_000_100,
           status: "succeeded",
           name: "plugin.run",
+          meta: { approval_id: "apr_task_alpha" },
           trace_id: "trace_task_alpha",
           run_id: "run_task_alpha",
           artifact_dir: "D:/francis/data/artifacts/task_trace_alpha",
@@ -73,6 +76,7 @@ test("OperationsClient.list requests receipt handle filters and preserves return
     const client = new OperationsClient("http://127.0.0.1:8000");
     const response = await client.list(
       {
+        approval_id: "apr_task_alpha",
         trace_id: "trace_task_alpha",
         run_id: "run_task_alpha",
         artifact_dir: "D:/francis/data/artifacts/task_trace_alpha",
@@ -83,6 +87,7 @@ test("OperationsClient.list requests receipt handle filters and preserves return
     assert.deepEqual(requests, [
       {
         path: "/operations/list",
+        approvalId: "apr_task_alpha",
         traceId: "trace_task_alpha",
         runId: "run_task_alpha",
         artifactDir: "D:/francis/data/artifacts/task_trace_alpha",
@@ -90,6 +95,7 @@ test("OperationsClient.list requests receipt handle filters and preserves return
       },
     ]);
     assert.equal(response.items[0]?.id, "task_trace_alpha");
+    assert.equal(response.items[0]?.meta?.approval_id, "apr_task_alpha");
     assert.equal(response.items[0]?.trace_id, "trace_task_alpha");
     assert.equal(response.items[0]?.run_id, "run_task_alpha");
     assert.equal(response.items[0]?.artifact_dir, "D:/francis/data/artifacts/task_trace_alpha");

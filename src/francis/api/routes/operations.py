@@ -593,6 +593,7 @@ def _query_operations(
     start_ts: int | None,
     end_ts: int | None,
     capability: str | None,
+    approval_id: str | None = None,
     trace_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
@@ -602,6 +603,7 @@ def _query_operations(
     actor_filter = _safe_str(actor).strip().lower()
     search_filter = _safe_str(search).strip().lower()
     capability_filter = _safe_str(capability).strip().lower()
+    approval_filter = _safe_str(approval_id).strip().lower()
     trace_filter = _safe_str(trace_id).strip().lower()
     run_filter = _safe_str(run_id).strip().lower()
     artifact_filter = _safe_str(artifact_dir).strip().lower()
@@ -622,6 +624,16 @@ def _query_operations(
         if actor_filter and _safe_str(op.get("actor")).lower() != actor_filter:
             continue
         if capability_filter and _safe_str(op.get("name")).lower() != capability_filter:
+            continue
+        op_meta = op.get("meta") if isinstance(op.get("meta"), dict) else {}
+        if (
+            approval_filter
+            and (
+                _safe_str(op.get("approval_id")).strip().lower()
+                or _safe_str(op_meta.get("approval_id")).strip().lower()
+            )
+            != approval_filter
+        ):
             continue
         if trace_filter and _safe_str(op.get("trace_id")).lower() != trace_filter:
             continue
@@ -673,6 +685,7 @@ def status() -> dict[str, object]:
             start_ts=None,
             end_ts=None,
             capability=None,
+            approval_id=None,
             trace_id=None,
             run_id=None,
             artifact_dir=None,
@@ -704,6 +717,7 @@ def list_operations(
     start_ts: int | None = None,
     end_ts: int | None = None,
     capability: str | None = None,
+    approval_id: str | None = None,
     trace_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
@@ -721,6 +735,7 @@ def list_operations(
             start_ts=start_ts,
             end_ts=end_ts,
             capability=capability,
+            approval_id=approval_id,
             trace_id=trace_id,
             run_id=run_id,
             artifact_dir=artifact_dir,
@@ -829,6 +844,7 @@ def export_operations(
     start_ts: int | None = None,
     end_ts: int | None = None,
     capability: str | None = None,
+    approval_id: str | None = None,
     trace_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
@@ -843,6 +859,7 @@ def export_operations(
         start_ts=start_ts,
         end_ts=end_ts,
         capability=capability,
+        approval_id=approval_id,
         trace_id=trace_id,
         run_id=run_id,
         artifact_dir=artifact_dir,
@@ -864,6 +881,7 @@ def export_operations(
                 "kind",
                 "name",
                 "actor",
+                "approval_id",
                 "trace_id",
                 "run_id",
                 "artifact_dir",
@@ -881,6 +899,9 @@ def export_operations(
                     "kind": item.get("kind"),
                     "name": item.get("name"),
                     "actor": item.get("actor"),
+                    "approval_id": (item.get("meta") or {}).get("approval_id")
+                    if isinstance(item.get("meta"), dict)
+                    else None,
                     "trace_id": item.get("trace_id"),
                     "run_id": item.get("run_id"),
                     "artifact_dir": item.get("artifact_dir"),

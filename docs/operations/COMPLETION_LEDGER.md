@@ -484,11 +484,12 @@ It does not invent explanation status when no receipt handles or records exist.
 
 As of `2026-04-26`, operations list and export routes can also filter by real
 execution receipt handles. `/operations/list` and `/operations/export` accept
-`trace_id`, `run_id`, and `artifact_dir` filters, JSON export keeps the same
-operation projection, CSV export includes those receipt handle columns, and the
-chat UI operations client can request the same filters without inventing
-receipt state. This makes execution -> trace/artifact inspection reachable from
-operations read models without changing worker execution or approvals.
+`approval_id`, `trace_id`, `run_id`, and `artifact_dir` filters, JSON export
+keeps the same operation projection, CSV export includes those receipt handle
+columns, and the chat UI operations client can request the same filters without
+inventing receipt state. This makes execution -> approval/trace/artifact
+inspection reachable from operations read models without changing worker
+execution or approvals.
 
 As of `2026-04-26`, operation records also preserve trace/run/artifact handles
 when those handles are only stored in task metadata or input metadata. The API
@@ -3712,6 +3713,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations receipt filte
   Result: `passed`
 - `git diff --check -- src\francis\api\routes\operations.py tests\test_api_operations.py apps\chat_ui\src\operations\index.ts apps\chat_ui\src\operations\index.test.ts docs\operations\COMPLETION_LEDGER.md`
   Result: `passed` (line-ending warning only for existing UI file normalization)
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations approval receipt filter slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_list_get_and_export_preserve_metadata_only_trace_handles -q`
+  Result: `1 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `2 files already formatted`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation receipt filter slice:
 

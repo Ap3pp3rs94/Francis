@@ -133,6 +133,7 @@ export type OperationListParams = {
   kind?: string;
   actor?: string;
   domain?: string;
+  approval_id?: string;
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;

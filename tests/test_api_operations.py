@@ -505,6 +505,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     task_id = "tsk_metadata_handles"
     trace_id = "trace_metadata_handles"
     run_id = "run_metadata_handles"
+    approval_id = "apr_metadata_handles"
     artifact_dir = str(data_root / "artifacts" / "metadata" / "run_metadata_handles")
     task_dir = data_root / "tasks" / task_id
     task_dir.mkdir(parents=True)
@@ -520,6 +521,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
                 "inputs": {
                     "meta": {
                         "run_id": run_id,
+                        "approval_id": approval_id,
                         "artifact_dir": artifact_dir,
                     }
                 },
@@ -550,6 +552,7 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     assert listed_operation["trace_id"] == trace_id
     assert listed_operation["run_id"] == run_id
     assert listed_operation["artifact_dir"] == artifact_dir
+    assert listed_operation["meta"]["approval_id"] == approval_id
     assert listed_operation["meta"]["trace_id"] == trace_id
     assert listed_operation["meta"]["run_id"] == run_id
     assert listed_operation["meta"]["artifact_dir"] == artifact_dir
@@ -566,6 +569,10 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     assert listed_by_artifact.status_code == 200
     assert [item["id"] for item in listed_by_artifact.json()["items"]] == [task_id]
 
+    listed_by_approval = client.get("/operations/list", params={"approval_id": approval_id})
+    assert listed_by_approval.status_code == 200
+    assert [item["id"] for item in listed_by_approval.json()["items"]] == [task_id]
+
     fetched = client.get(f"/operations/{task_id}")
     assert fetched.status_code == 200
     fetched_operation = fetched.json()["operation"]
@@ -578,10 +585,16 @@ def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(mon
     assert [item["id"] for item in exported_json.json()["items"]] == [task_id]
     assert exported_json.json()["items"][0]["trace_id"] == trace_id
 
+    exported_approval_json = client.get("/operations/export", params={"format": "json", "approval_id": approval_id})
+    assert exported_approval_json.status_code == 200
+    assert [item["id"] for item in exported_approval_json.json()["items"]] == [task_id]
+    assert exported_approval_json.json()["items"][0]["meta"]["approval_id"] == approval_id
+
     exported_csv = client.get("/operations/export", params={"format": "csv", "artifact_dir": artifact_dir})
     assert exported_csv.status_code == 200
     rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
     assert [row["id"] for row in rows] == [task_id]
+    assert rows[0]["approval_id"] == approval_id
     assert rows[0]["trace_id"] == trace_id
     assert rows[0]["run_id"] == run_id
     assert rows[0]["artifact_dir"] == artifact_dir
