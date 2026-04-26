@@ -595,6 +595,8 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert executed_body["memory_receipt"]["source"] == "continuity.ledger"
     assert executed_body["memory_receipt"]["references"]["mission_id"] == mission_id
     assert executed_body["memory_receipt"]["references"]["operation_id"] == operation_id
+    assert executed_body["memory_receipt"]["handoff_gate"] == "operator_review"
+    assert executed_body["memory_receipt"]["current_task_gate"] == "operator_review"
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -623,6 +625,8 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert receipt_summary["latest_memory_receipt"]["source"] == "continuity.ledger"
     assert receipt_summary["latest_memory_receipt"]["mission_id"] == mission_id
     assert receipt_summary["latest_memory_receipt"]["operation_id"] == operation_id
+    assert receipt_summary["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert receipt_summary["latest_memory_receipt"]["current_task_gate"] == "operator_review"
     assert receipt_summary["current_operation_id"] == operation_id
     assert receipt_summary["current_operation_status"] == "succeeded"
     assert receipt_summary["latest_run_event"] == run_ledger[0]["name"]
@@ -632,11 +636,15 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert fetched_body["latest_memory_receipt"]["source"] == "continuity.ledger"
     assert fetched_body["latest_memory_receipt"]["mission_id"] == mission_id
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert fetched_body["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert fetched_body["latest_memory_receipt"]["current_task_gate"] == "operator_review"
     assert fetched_body["memory_receipts"][0]["operation_id"] == operation_id
+    assert fetched_body["current_task"]["gate"] == "operator_review"
     loop_state = fetched_body["loop_state"]
     assert loop_state["active_stage"] == "interface"
     assert loop_state["handoff"]["stage"] == "interface"
     assert loop_state["handoff"]["action"] == "review_result"
+    assert loop_state["handoff"]["gate"] == "operator_review"
     assert loop_state["handoff"]["operation_id"] == operation_id
     assert loop_state["handoff"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["handoff"]["latest_ts"] == fetched_body["history"][-1]["ts"]
@@ -646,6 +654,7 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert loop_state["interface"]["latest_event"] == receipt_summary["latest_run_event"]
     assert loop_state["interface"]["latest_receipt_status"] == receipt_summary["latest_run_status"]
     assert loop_state["memory"]["memory_receipt_count"] >= 1
+    assert loop_state["memory"]["gate"] == "operator_review"
     assert loop_state["memory"]["latest_memory_receipt"]["mission_id"] == mission_id
     assert loop_state["memory"]["latest_memory_receipt"]["operation_id"] == operation_id
     history_events = [str(item.get("event")) for item in fetched_body["history"]]

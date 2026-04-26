@@ -1420,6 +1420,9 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
     assert recent_completed[0]["last_advance_outcome"] == "succeeded"
     assert recent_completed[0]["latest_activity"]["source"] == "run_ledger"
     assert recent_completed[0]["latest_activity"]["status"] == "succeeded"
+    assert recent_completed[0]["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert recent_completed[0]["latest_memory_receipt"]["current_task_gate"] == "operator_review"
+    assert recent_completed[0]["current_task"]["gate"] == "operator_review"
     assert recent_completed[0]["current_task"]["handoff_action"] == "review_result"
     assert recent_completed[0]["current_task"]["next_step"] == "review_completed_mission"
 
@@ -1429,6 +1432,9 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
     assert completed_recent["latest_activity"]["source"] == "run_ledger"
     assert completed_recent["latest_activity"]["status"] == "succeeded"
     assert completed_recent["latest_memory_receipt"]["handoff_action"] == "review_result"
+    assert completed_recent["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert completed_recent["latest_memory_receipt"]["current_task_gate"] == "operator_review"
+    assert completed_recent["current_task"]["gate"] == "operator_review"
     assert completed_recent["current_task"]["handoff_action"] == "review_result"
     assert completed_recent["current_task"]["next_step"] == "review_completed_mission"
 

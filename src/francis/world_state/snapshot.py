@@ -1063,7 +1063,13 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             latest_memory_receipt.get("operation_status"),
         ),
         "result_status": _first_text(existing.get("result_status"), item.get("last_task_result_status")),
-        "gate": _first_text(existing.get("gate"), item.get("last_task_gate"), latest_activity.get("gate")),
+        "gate": _first_text(
+            existing.get("gate"),
+            item.get("last_task_gate"),
+            latest_activity.get("gate"),
+            latest_memory_receipt.get("current_task_gate"),
+            latest_memory_receipt.get("handoff_gate"),
+        ),
         "next_step": _first_text(
             existing.get("next_step"),
             item.get("last_task_next_step"),

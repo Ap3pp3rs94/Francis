@@ -943,6 +943,10 @@ def _mission_loop_state(
         latest_memory_receipt.get("handoff_approval_status"),
         queue_approval_status,
     )
+    latest_memory_gate = _first_text(
+        latest_memory_receipt.get("current_task_gate"),
+        latest_memory_receipt.get("handoff_gate"),
+    )
     latest_history_event = ""
     latest_history_ts = ""
     if history:
@@ -959,6 +963,7 @@ def _mission_loop_state(
             "recorded",
             "Mission continuity is backed by " + ", ".join(memory_parts) + ".",
             count=history_count + memory_receipt_count,
+            gate=latest_memory_gate,
             approval_id=latest_memory_approval_id,
             approval_status=latest_memory_approval_status,
             operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
@@ -986,6 +991,7 @@ def _mission_loop_state(
             "interface",
             "review_result",
             "Review the completed mission result, trace, and memory receipt before declaring follow-up work.",
+            gate=latest_memory_gate,
             approval_id=latest_memory_approval_id,
             approval_status=latest_memory_approval_status,
             operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),

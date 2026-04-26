@@ -659,6 +659,8 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert receipt["scope"] == "mission.loop"
     assert receipt["operation_status"] == "succeeded"
     assert receipt["subsystem"] == "operations.runtime"
+    assert receipt["handoff_gate"] == "operator_review"
+    assert receipt["current_task_gate"] == "operator_review"
     expected_references = {
         "mission_id": mission_id,
         "operation_id": operation_id,
@@ -682,6 +684,8 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     fetched_body = fetched.json()
     assert fetched_body["memory_receipt_count"] == 1
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert fetched_body["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert fetched_body["latest_memory_receipt"]["current_task_gate"] == "operator_review"
     assert fetched_body["latest_memory_receipt"]["current_task_trace_id"] == trace_id
     assert fetched_body["latest_memory_receipt"]["references"] == expected_references
     assert fetched_body["operation"]["meta"]["memory_receipt_count"] == 1
@@ -692,6 +696,8 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     many_item = fetched_many.json()["items"][0]
     assert many_item["memory_receipt_count"] == 1
     assert many_item["latest_memory_receipt"]["operation_id"] == operation_id
+    assert many_item["latest_memory_receipt"]["handoff_gate"] == "operator_review"
+    assert many_item["latest_memory_receipt"]["current_task_gate"] == "operator_review"
 
 
 def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:

@@ -624,6 +624,16 @@ terminal mission-operation memory receipts. This is readback-only memory truth;
 it does not change execution, approval decisions, receipt writes, or UI
 authority.
 
+As of `2026-04-26`, successful terminal mission-operation memory receipts now
+write and project the completed-loop operator-review gate explicitly.
+`operations.runtime` records `handoff_gate=operator_review` and
+`current_task_gate=operator_review` for succeeded mission-linked operation
+receipts, immediate operation-run receipt projections preserve those fields, and
+mission detail plus world-state current-task read models can carry that gate from
+receipt truth into the `memory -> interface` handoff. This names an existing
+operator review checkpoint only; it does not approve work, rerun execution, or
+add a new mutation path.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -4427,6 +4437,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt g
   Result: `passed`
 - `cd apps\chat_ui; npx tsc --noEmit`
   Result: `failed on existing broad strict TypeScript errors across unrelated UI modules; not used as the targeted gate`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal mission receipt operator-review gate slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py::test_mission_linked_operation_run_updates_history_and_status tests/test_api_system_settings.py::test_system_world_state_projects_mission_briefing_and_advance_receipts -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\operations\runtime.py src\francis\api\routes\missions.py src\francis\world_state\snapshot.py tests\test_api_missions.py tests\test_api_system_settings.py`
+  Result: `5 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\operations\runtime.py src\francis\api\routes\missions.py src\francis\world_state\snapshot.py tests\test_api_missions.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `63 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt -q`
+  Result: `1 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_operations.py -q`
+  Result: `23 passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 
