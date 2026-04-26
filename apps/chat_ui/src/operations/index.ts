@@ -120,6 +120,9 @@ export type OperationListParams = {
   kind?: string;
   actor?: string;
   domain?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
 
   // Time window (unix seconds)
   start_ts?: number;

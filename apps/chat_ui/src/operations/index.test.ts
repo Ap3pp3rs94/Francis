@@ -36,6 +36,68 @@ function jsonRequestBody(init?: RequestInit): unknown {
   return JSON.parse(body) as unknown;
 }
 
+test("OperationsClient.list requests receipt handle filters and preserves returned handles", async () => {
+  const requests: Array<{
+    path: string;
+    traceId: string | null;
+    runId: string | null;
+    artifactDir: string | null;
+    method: string;
+  }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      traceId: parsed.searchParams.get("trace_id"),
+      runId: parsed.searchParams.get("run_id"),
+      artifactDir: parsed.searchParams.get("artifact_dir"),
+      method: (init?.method ?? "GET").toUpperCase(),
+    });
+
+    return jsonResponse({
+      items: [
+        {
+          id: "task_trace_alpha",
+          ts: 1_710_000_100,
+          status: "succeeded",
+          name: "plugin.run",
+          trace_id: "trace_task_alpha",
+          run_id: "run_task_alpha",
+          artifact_dir: "D:/francis/data/artifacts/task_trace_alpha",
+        },
+      ],
+    });
+  });
+
+  try {
+    const client = new OperationsClient("http://127.0.0.1:8000");
+    const response = await client.list(
+      {
+        trace_id: "trace_task_alpha",
+        run_id: "run_task_alpha",
+        artifact_dir: "D:/francis/data/artifacts/task_trace_alpha",
+      },
+      { timeoutMs: 50 },
+    );
+
+    assert.deepEqual(requests, [
+      {
+        path: "/operations/list",
+        traceId: "trace_task_alpha",
+        runId: "run_task_alpha",
+        artifactDir: "D:/francis/data/artifacts/task_trace_alpha",
+        method: "GET",
+      },
+    ]);
+    assert.equal(response.items[0]?.id, "task_trace_alpha");
+    assert.equal(response.items[0]?.trace_id, "trace_task_alpha");
+    assert.equal(response.items[0]?.run_id, "run_task_alpha");
+    assert.equal(response.items[0]?.artifact_dir, "D:/francis/data/artifacts/task_trace_alpha");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("OperationsClient.run posts the bounded worker request to the operation run route", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {

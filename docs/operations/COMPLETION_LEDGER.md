@@ -199,6 +199,14 @@ chat UI explanation explorer client preserves the same trace linkage across
 list, get, and export calls. This gives trace-bearing mission and operation
 receipts another read path without adding execution or synthetic trace state.
 
+As of `2026-04-26`, operations list and export routes can also filter by real
+execution receipt handles. `/operations/list` and `/operations/export` accept
+`trace_id`, `run_id`, and `artifact_dir` filters, JSON export keeps the same
+operation projection, CSV export includes those receipt handle columns, and the
+chat UI operations client can request the same filters without inventing
+receipt state. This makes execution -> trace/artifact inspection reachable from
+operations read models without changing worker execution or approvals.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2473,6 +2481,21 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations receipt filter slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_list_and_export_filter_artifact_receipts -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py -q`
+  Result: `20 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `41 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check -- src\francis\api\routes\operations.py tests\test_api_operations.py apps\chat_ui\src\operations\index.ts apps\chat_ui\src\operations\index.test.ts docs\operations\COMPLETION_LEDGER.md`
+  Result: `passed` (line-ending warning only for existing UI file normalization)
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link contract slice:
 

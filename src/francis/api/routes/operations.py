@@ -539,12 +539,18 @@ def _query_operations(
     start_ts: int | None,
     end_ts: int | None,
     capability: str | None,
+    trace_id: str | None = None,
+    run_id: str | None = None,
+    artifact_dir: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     status_filter = _safe_str(status).strip().lower()
     kind_filter = _safe_str(kind).strip().lower()
     actor_filter = _safe_str(actor).strip().lower()
     search_filter = _safe_str(search).strip().lower()
     capability_filter = _safe_str(capability).strip().lower()
+    trace_filter = _safe_str(trace_id).strip().lower()
+    run_filter = _safe_str(run_id).strip().lower()
+    artifact_filter = _safe_str(artifact_dir).strip().lower()
 
     items: list[dict[str, Any]] = []
     task_ids = delegation_store.list_tasks(limit=max(offset + limit + 200, 50_000))
@@ -563,6 +569,12 @@ def _query_operations(
             continue
         if capability_filter and _safe_str(op.get("name")).lower() != capability_filter:
             continue
+        if trace_filter and _safe_str(op.get("trace_id")).lower() != trace_filter:
+            continue
+        if run_filter and _safe_str(op.get("run_id")).lower() != run_filter:
+            continue
+        if artifact_filter and _safe_str(op.get("artifact_dir")).lower() != artifact_filter:
+            continue
 
         ts = int(op.get("ts") or 0)
         if start_ts is not None and ts < start_ts:
@@ -575,6 +587,9 @@ def _query_operations(
                 [
                     _safe_str(op.get("id")),
                     _safe_str(op.get("name")),
+                    _safe_str(op.get("trace_id")),
+                    _safe_str(op.get("run_id")),
+                    _safe_str(op.get("artifact_dir")),
                     _safe_str((op.get("meta") or {}).get("objective")),
                     _safe_str(op.get("error")),
                     json.dumps(op.get("input"), ensure_ascii=False, default=str),
@@ -604,6 +619,9 @@ def status() -> dict[str, object]:
             start_ts=None,
             end_ts=None,
             capability=None,
+            trace_id=None,
+            run_id=None,
+            artifact_dir=None,
         )
         counts: dict[str, int] = {}
         for item in items:
@@ -632,6 +650,9 @@ def list_operations(
     start_ts: int | None = None,
     end_ts: int | None = None,
     capability: str | None = None,
+    trace_id: str | None = None,
+    run_id: str | None = None,
+    artifact_dir: str | None = None,
 ) -> dict[str, object]:
     try:
         safe_limit = max(1, min(int(limit), 5000))
@@ -646,6 +667,9 @@ def list_operations(
             start_ts=start_ts,
             end_ts=end_ts,
             capability=capability,
+            trace_id=trace_id,
+            run_id=run_id,
+            artifact_dir=artifact_dir,
         )
         return {"items": items, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
@@ -757,6 +781,9 @@ def export_operations(
     start_ts: int | None = None,
     end_ts: int | None = None,
     capability: str | None = None,
+    trace_id: str | None = None,
+    run_id: str | None = None,
+    artifact_dir: str | None = None,
 ) -> PlainTextResponse:
     items, _ = _query_operations(
         limit=10_000,
@@ -768,6 +795,9 @@ def export_operations(
         start_ts=start_ts,
         end_ts=end_ts,
         capability=capability,
+        trace_id=trace_id,
+        run_id=run_id,
+        artifact_dir=artifact_dir,
     )
 
     fmt = _safe_str(format).strip().lower() or "json"
@@ -779,7 +809,19 @@ def export_operations(
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
-            fieldnames=["id", "ts", "status", "kind", "name", "actor", "duration_ms", "error"],
+            fieldnames=[
+                "id",
+                "ts",
+                "status",
+                "kind",
+                "name",
+                "actor",
+                "trace_id",
+                "run_id",
+                "artifact_dir",
+                "duration_ms",
+                "error",
+            ],
         )
         writer.writeheader()
         for item in items:
@@ -791,6 +833,9 @@ def export_operations(
                     "kind": item.get("kind"),
                     "name": item.get("name"),
                     "actor": item.get("actor"),
+                    "trace_id": item.get("trace_id"),
+                    "run_id": item.get("run_id"),
+                    "artifact_dir": item.get("artifact_dir"),
                     "duration_ms": item.get("duration_ms"),
                     "error": item.get("error"),
                 }

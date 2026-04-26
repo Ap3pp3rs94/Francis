@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import subprocess
 from pathlib import Path
@@ -386,6 +388,79 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
     listed_operation = next(item for item in listed.json()["items"] if item["id"] == operation_id)
     assert listed_operation["trace_id"] == trace_id
     assert listed_operation["run_id"] == run_id
+
+    listed_by_trace = client.get("/operations/list", params={"trace_id": trace_id})
+    assert listed_by_trace.status_code == 200
+    assert [item["id"] for item in listed_by_trace.json()["items"]] == [operation_id]
+
+    listed_by_run = client.get("/operations/list", params={"run_id": run_id})
+    assert listed_by_run.status_code == 200
+    assert [item["id"] for item in listed_by_run.json()["items"]] == [operation_id]
+
+    exported_json = client.get("/operations/export", params={"format": "json", "run_id": run_id})
+    assert exported_json.status_code == 200
+    assert [item["id"] for item in exported_json.json()["items"]] == [operation_id]
+
+    exported_csv = client.get("/operations/export", params={"format": "csv", "trace_id": trace_id})
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert [row["id"] for row in rows] == [operation_id]
+    assert rows[0]["trace_id"] == trace_id
+    assert rows[0]["run_id"] == run_id
+    assert "artifact_dir" in rows[0]
+
+
+def test_operations_list_and_export_filter_artifact_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    task_id = "tsk_artifact_filter"
+    artifact_dir = str(data_root / "artifacts" / "supervised_exec" / "run_filter")
+    task_dir = data_root / "tasks" / task_id
+    task_dir.mkdir(parents=True)
+    (task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": task_id,
+                "status": "completed",
+                "capability": "codex.supervised_exec",
+                "requester_id": "test.operations.artifact_filter",
+                "created_at": "2024-03-09T16:00:00+00:00",
+                "updated_at": "2024-03-09T16:00:01+00:00",
+                "inputs": {},
+                "result": {
+                    "data": {
+                        "ok": True,
+                        "receipt": {
+                            "trace_id": "trace_artifact_filter",
+                            "run_id": "run_artifact_filter",
+                            "artifact_dir": artifact_dir,
+                        },
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    listed = client.get("/operations/list", params={"artifact_dir": artifact_dir})
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["items"]] == [task_id]
+
+    exported = client.get("/operations/export", params={"format": "csv", "artifact_dir": artifact_dir})
+    assert exported.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported.text)))
+    assert [row["id"] for row in rows] == [task_id]
+    assert rows[0]["trace_id"] == "trace_artifact_filter"
+    assert rows[0]["run_id"] == "run_artifact_filter"
+    assert rows[0]["artifact_dir"] == artifact_dir
 
 
 def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:
