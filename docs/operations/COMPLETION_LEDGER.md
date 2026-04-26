@@ -924,6 +924,14 @@ keep `active_stage`, `handoff_*`, `current_task_*`, and receipt count fields
 from backend memory receipts instead of dropping them before operator surfaces
 can render the completed `memory -> interface` handoff.
 
+As of `2026-04-26`, the chat UI mission and settings clients also preserve the
+receipt-backed gate names on those mission memory receipts. Mission detail,
+receipt summary, memory receipt arrays, Shift Briefing recently-completed items,
+and shared briefing memory receipt projections now keep `handoff_gate` and
+`current_task_gate` when the backend provides them, so the operator interface can
+show the real approval gate context already recorded by memory without
+inventing approval posture or changing execution authority.
+
 As of `2026-04-26`, existing chat UI mission receipt surfaces render those
 receipt-backed completed-loop handoff fields when the backend provides them.
 Shift Briefing memory evidence, recently-completed mission cards, selected
@@ -4406,6 +4414,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt a
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt gate parser slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `14 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `cd apps\chat_ui; npx tsc --noEmit`
+  Result: `failed on existing broad strict TypeScript errors across unrelated UI modules; not used as the targeted gate`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 

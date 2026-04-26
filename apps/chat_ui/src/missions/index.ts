@@ -225,6 +225,7 @@ export type MissionMemoryReceipt = {
   active_stage?: string;
   handoff_stage?: string;
   handoff_action?: string;
+  handoff_gate?: string;
   handoff_approval_id?: string;
   handoff_approval_status?: string;
   handoff_operation_id?: string;
@@ -233,6 +234,7 @@ export type MissionMemoryReceipt = {
   handoff_artifact_dir?: string;
   handoff_next_step?: string;
   current_task_source?: string;
+  current_task_gate?: string;
   current_task_approval_id?: string;
   current_task_approval_status?: string;
   current_task_operation_id?: string;
@@ -1078,6 +1080,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     active_stage: safeString(raw.active_stage, "") || undefined,
     handoff_stage: safeString(raw.handoff_stage, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
+    handoff_gate: safeString(raw.handoff_gate, "") || undefined,
     handoff_approval_id: safeString(raw.handoff_approval_id, "") || undefined,
     handoff_approval_status: safeString(raw.handoff_approval_status, "") || undefined,
     handoff_operation_id: safeString(raw.handoff_operation_id, "") || undefined,
@@ -1086,6 +1089,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     handoff_artifact_dir: safeString(raw.handoff_artifact_dir, "") || undefined,
     handoff_next_step: safeString(raw.handoff_next_step, "") || undefined,
     current_task_source: safeString(raw.current_task_source, "") || undefined,
+    current_task_gate: safeString(raw.current_task_gate, "") || undefined,
     current_task_approval_id: safeString(raw.current_task_approval_id, "") || undefined,
     current_task_approval_status: safeString(raw.current_task_approval_status, "") || undefined,
     current_task_operation_id: safeString(raw.current_task_operation_id, "") || undefined,
@@ -1115,10 +1119,12 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.domain &&
     !receipt.active_stage &&
     !receipt.handoff_action &&
+    !receipt.handoff_gate &&
     !receipt.handoff_approval_id &&
     !receipt.handoff_approval_status &&
     !receipt.handoff_operation_id &&
     !receipt.handoff_next_step &&
+    !receipt.current_task_gate &&
     !receipt.current_task_approval_id &&
     !receipt.current_task_approval_status &&
     !receipt.current_task_operation_id &&

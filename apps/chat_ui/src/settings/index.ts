@@ -348,12 +348,14 @@ export type MissionMemoryReceipt = {
   active_stage?: string;
   handoff_stage?: string;
   handoff_action?: string;
+  handoff_gate?: string;
   handoff_operation_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
   handoff_next_step?: string;
   current_task_source?: string;
+  current_task_gate?: string;
   current_task_operation_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
@@ -1398,12 +1400,14 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
     active_stage: safeString(raw["active_stage"], "").trim(),
     handoff_stage: safeString(raw["handoff_stage"], "").trim(),
     handoff_action: safeString(raw["handoff_action"], "").trim(),
+    handoff_gate: safeString(raw["handoff_gate"], "").trim(),
     handoff_operation_id: safeString(raw["handoff_operation_id"], "").trim(),
     handoff_trace_id: safeString(raw["handoff_trace_id"], "").trim(),
     handoff_run_id: safeString(raw["handoff_run_id"], "").trim(),
     handoff_artifact_dir: safeString(raw["handoff_artifact_dir"], "").trim(),
     handoff_next_step: safeString(raw["handoff_next_step"], "").trim(),
     current_task_source: safeString(raw["current_task_source"], "").trim(),
+    current_task_gate: safeString(raw["current_task_gate"], "").trim(),
     current_task_operation_id: safeString(raw["current_task_operation_id"], "").trim(),
     current_task_trace_id: safeString(raw["current_task_trace_id"], "").trim(),
     current_task_run_id: safeString(raw["current_task_run_id"], "").trim(),
@@ -1435,12 +1439,14 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.active_stage) delete receipt.active_stage;
   if (!receipt.handoff_stage) delete receipt.handoff_stage;
   if (!receipt.handoff_action) delete receipt.handoff_action;
+  if (!receipt.handoff_gate) delete receipt.handoff_gate;
   if (!receipt.handoff_operation_id) delete receipt.handoff_operation_id;
   if (!receipt.handoff_trace_id) delete receipt.handoff_trace_id;
   if (!receipt.handoff_run_id) delete receipt.handoff_run_id;
   if (!receipt.handoff_artifact_dir) delete receipt.handoff_artifact_dir;
   if (!receipt.handoff_next_step) delete receipt.handoff_next_step;
   if (!receipt.current_task_source) delete receipt.current_task_source;
+  if (!receipt.current_task_gate) delete receipt.current_task_gate;
   if (!receipt.current_task_operation_id) delete receipt.current_task_operation_id;
   if (!receipt.current_task_trace_id) delete receipt.current_task_trace_id;
   if (!receipt.current_task_run_id) delete receipt.current_task_run_id;

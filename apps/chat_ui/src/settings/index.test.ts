@@ -1758,6 +1758,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               active_stage: "interface",
               handoff_stage: "interface",
               handoff_action: "review_result",
+              handoff_gate: "operator_review",
               handoff_operation_id: "tsk_done",
               handoff_approval_id: "apr_done",
               handoff_approval_status: "approved",
@@ -1766,6 +1767,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               handoff_artifact_dir: "D:/francis/data/artifacts/done",
               handoff_next_step: "review_completed_mission",
               current_task_source: "terminal_operation_receipt",
+              current_task_gate: "operator_review",
               current_task_operation_id: "tsk_done",
               current_task_approval_id: "apr_done",
               current_task_approval_status: "approved",
@@ -1800,6 +1802,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 active_stage: "interface",
                 handoff_stage: "interface",
                 handoff_action: "review_result",
+                handoff_gate: "operator_review",
                 handoff_operation_id: "tsk_done",
                 handoff_approval_id: "apr_done",
                 handoff_approval_status: "approved",
@@ -1808,6 +1811,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 handoff_artifact_dir: "D:/francis/data/artifacts/done",
                 handoff_next_step: "review_completed_mission",
                 current_task_source: "terminal_operation_receipt",
+                current_task_gate: "operator_review",
                 current_task_operation_id: "tsk_done",
                 current_task_approval_id: "apr_done",
                 current_task_approval_status: "approved",
@@ -1845,6 +1849,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             active_stage: "interface",
             handoff_stage: "interface",
             handoff_action: "review_result",
+            handoff_gate: "operator_review",
             handoff_operation_id: "tsk_done",
             handoff_approval_id: "apr_done",
             handoff_approval_status: "approved",
@@ -1853,6 +1858,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             handoff_artifact_dir: "D:/francis/data/artifacts/done",
             handoff_next_step: "review_completed_mission",
             current_task_source: "terminal_operation_receipt",
+            current_task_gate: "operator_review",
             current_task_operation_id: "tsk_done",
             current_task_approval_id: "apr_done",
             current_task_approval_status: "approved",
@@ -2000,6 +2006,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.active_stage, "interface");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_action, "review_result");
     assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_gate,
+      "operator_review",
+    );
+    assert.equal(
       briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_approval_id,
       "apr_done",
     );
@@ -2016,6 +2026,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       "tsk_done",
     );
     assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_gate,
+      "operator_review",
+    );
+    assert.equal(
       briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_next_step,
       "review_completed_mission",
     );
@@ -2024,6 +2038,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.references?.approval_id, "apr_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.handoff_action, "review_result");
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.handoff_gate,
+      "operator_review",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.current_task_gate,
+      "operator_review",
+    );
     assert.equal(
       briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.current_task_next_step,
       "review_completed_mission",
@@ -2034,6 +2056,8 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_approval_id, "apr_done");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.current_task_approval_id, "apr_done");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_action, "review_result");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_gate, "operator_review");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.current_task_gate, "operator_review");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");
