@@ -427,6 +427,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 trace_id: "trace_alpha",
                 run_id: "run_alpha",
                 operation_status: "succeeded",
+                approval_status: "approved",
                 domain: "operations",
                 scope: "mission.loop",
               },
@@ -440,6 +441,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   trace_id: "trace_alpha",
                   run_id: "run_alpha",
                   operation_status: "succeeded",
+                  approval_status: "approved",
                   domain: "operations",
                   scope: "mission.loop",
                 },
@@ -643,6 +645,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 operation_id: "tsk_alpha",
                 trace_id: "trace_alpha",
                 operation_status: "succeeded",
+                approval_status: "approved",
                 domain: "operations",
                 scope: "mission.loop",
               },
@@ -783,7 +786,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipt_count, 1);
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.id, "ledger_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.approval_status, "approved");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.trace_id, "trace_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
@@ -868,6 +873,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_briefing?.readiness?.review_criteria_ids, undefined);
     assert.equal(worldState.overview?.mission_briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.operation_id, "tsk_alpha");
+    assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.approval_status, "approved");
     assert.deepEqual(
       missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
       [
@@ -1671,6 +1677,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               trace_id: "trace_done",
               run_id: "run_done",
               operation_status: "succeeded",
+              approval_status: "approved",
               capability: "plugin.run",
               domain: "operations",
               scope: "mission.loop",
@@ -1685,6 +1692,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 trace_id: "trace_done",
                 run_id: "run_done",
                 operation_status: "succeeded",
+                approval_status: "approved",
                 capability: "plugin.run",
                 domain: "operations",
                 scope: "mission.loop",
@@ -1702,6 +1710,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             trace_id: "trace_done",
             run_id: "run_done",
             operation_status: "succeeded",
+            approval_status: "approved",
             capability: "plugin.run",
             domain: "operations",
             scope: "mission.loop",
@@ -1838,8 +1847,11 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipt_count, 1);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.operation_id, "tsk_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.approval_status, "approved");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.trace_id, "trace_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.id, "ledger_done");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");

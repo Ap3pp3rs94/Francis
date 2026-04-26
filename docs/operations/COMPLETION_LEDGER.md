@@ -480,9 +480,10 @@ or displaying artifact file contents.
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
-latest receipt, mission, operation, trace, run, artifact, domain, and scope
-fields, and readiness evidence now prioritizes memory receipt ids without
-claiming synthesized memory when the backend does not return receipts.
+latest receipt, mission, operation, trace, approval status, run, artifact,
+domain, and scope fields, and readiness evidence now prioritizes memory receipt
+ids without claiming synthesized memory when the backend does not return
+receipts.
 
 As of `2026-04-25`, mission loop detail includes an explicit read-only
 `interface` stage after `plan -> gate -> execute -> trace -> memory`. The stage
@@ -2672,6 +2673,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory receipt approval-status client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `11 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` domain registry permission-gate slice:
 

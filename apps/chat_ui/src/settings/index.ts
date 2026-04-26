@@ -347,6 +347,7 @@ export type MissionMemoryReceipt = {
   run_id?: string;
   artifact_dir?: string;
   operation_status?: string;
+  approval_status?: string;
   capability?: string;
   domain?: string;
   scope?: string;
@@ -1344,6 +1345,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
     run_id: safeString(raw["run_id"], "").trim(),
     artifact_dir: safeString(raw["artifact_dir"], "").trim(),
     operation_status: safeString(raw["operation_status"], "").trim(),
+    approval_status: safeString(raw["approval_status"], "").trim(),
     capability: safeString(raw["capability"], "").trim(),
     domain: safeString(raw["domain"], "").trim(),
     scope: safeString(raw["scope"], "").trim(),
@@ -1358,6 +1360,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.run_id) delete receipt.run_id;
   if (!receipt.artifact_dir) delete receipt.artifact_dir;
   if (!receipt.operation_status) delete receipt.operation_status;
+  if (!receipt.approval_status) delete receipt.approval_status;
   if (!receipt.capability) delete receipt.capability;
   if (!receipt.domain) delete receipt.domain;
   if (!receipt.scope) delete receipt.scope;
