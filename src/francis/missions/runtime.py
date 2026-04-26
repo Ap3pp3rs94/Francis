@@ -336,23 +336,25 @@ def run_queue_once(
             worker_id=actor,
             record_operator_receipt=False,
         )
-        results.append(
-            {
-                "mission_id": mission_id,
-                "ok": bool(outcome.get("ok")),
-                "applied": bool(outcome.get("applied")),
-                "action": _safe_str(outcome.get("action")).strip() or action,
-                "status": _safe_str(outcome.get("status")).strip(),
-                "operation_id": _safe_str(outcome.get("operation_id")).strip() or None,
-                "message": _safe_str(outcome.get("message")).strip(),
-                "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
-                "gate": _safe_str(outcome.get("gate")).strip() or None,
-                "next_step": _safe_str(outcome.get("next_step")).strip() or None,
-                "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
-                "run_id": _safe_str(outcome.get("run_id")).strip() or None,
-                "artifact_dir": _safe_str(outcome.get("artifact_dir")).strip() or None,
-            }
-        )
+        result: dict[str, object] = {
+            "mission_id": mission_id,
+            "ok": bool(outcome.get("ok")),
+            "applied": bool(outcome.get("applied")),
+            "action": _safe_str(outcome.get("action")).strip() or action,
+            "status": _safe_str(outcome.get("status")).strip(),
+            "operation_id": _safe_str(outcome.get("operation_id")).strip() or None,
+            "message": _safe_str(outcome.get("message")).strip(),
+            "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
+            "gate": _safe_str(outcome.get("gate")).strip() or None,
+            "next_step": _safe_str(outcome.get("next_step")).strip() or None,
+            "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
+            "run_id": _safe_str(outcome.get("run_id")).strip() or None,
+            "artifact_dir": _safe_str(outcome.get("artifact_dir")).strip() or None,
+        }
+        operation = outcome.get("operation")
+        if isinstance(operation, dict):
+            result["operation"] = operation
+        results.append(result)
         if bool(outcome.get("applied")):
             advanced += 1
         elif outcome.get("ok") is False:

@@ -1382,6 +1382,7 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert ready_result["applied"] is True
     assert ready_result["action"] == "create_first_operation"
     assert ready_result["operation_id"]
+    assert ready_result["operation"]["id"] == ready_result["operation_id"]
     assert ready_result["mission"]["id"] == ready_id
     assert ready_result["loop_state"]["active_stage"] == "execute"
     assert ready_result["handoff"]["action"] == "run_linked_operation"
@@ -1532,6 +1533,7 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert mission_result["applied"] is True
     assert mission_result["action"] == "run_linked_operation"
     assert mission_result["operation_id"] == operation_id
+    assert mission_result["operation"]["id"] == operation_id
     assert mission_result["mission"]["id"] == mission_id
     assert mission_result["loop_state"]["active_stage"] == "memory"
     assert mission_result["handoff"]["action"] == "review_continuity"
@@ -1584,6 +1586,7 @@ def test_mission_store_run_once_uses_bounded_runtime_path(monkeypatch, tmp_path:
     assert mission_result["applied"] is True
     assert mission_result["action"] == "create_first_operation"
     assert mission_result["operation_id"]
+    assert mission_result["operation"]["id"] == mission_result["operation_id"]
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200

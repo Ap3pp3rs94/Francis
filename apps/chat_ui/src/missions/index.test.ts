@@ -764,6 +764,13 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           },
           status: "queued",
           operation_id: "tsk_ready",
+          operation: {
+            id: "tsk_ready",
+            ts: 1770000010,
+            status: "queued",
+            name: "plan.create",
+            meta: { mission_id: "mission_ready" },
+          },
           approval_id: "apr_ready",
           gate: "approvals_gate",
           next_step: "approve_exact_action",
@@ -893,6 +900,8 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.items[0]?.history_tail?.[1]?.event, "mission_ticked");
     assert.equal(response.results?.[0]?.mission_id, "mission_ready");
     assert.equal(response.results?.[0]?.operation_id, "tsk_ready");
+    assert.equal(response.results?.[0]?.operation?.id, "tsk_ready");
+    assert.equal(response.results?.[0]?.operation?.status, "queued");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.queue_item?.recommended_action, "review_pending_approval");
     assert.equal(response.results?.[0]?.queue_item?.last_task_approval_id, "apr_ready");

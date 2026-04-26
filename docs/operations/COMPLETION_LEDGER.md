@@ -244,6 +244,13 @@ keeps first-operation handoff evidence available to operator surfaces, including
 the partial-failure case where an operation was created but mission linking
 failed.
 
+As of `2026-04-25`, bounded mission queue runs preserve the concrete operation
+projection returned by the governed mission runtime. `run_queue_once` result
+items now keep the same operation object already returned by direct mission
+advance, and the chat UI mission client preserves that operation projection
+without requiring a follow-up operation lookup before an interface can reason
+from the queue-run receipt.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2361,6 +2368,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue operation projection slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_run_once_advances_safe_queue_actions tests\test_api_missions.py::test_mission_run_once_executes_linked_queued_operation tests\test_api_missions.py::test_mission_store_run_once_uses_bounded_runtime_path -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation create mission-link UI contract slice:
 
