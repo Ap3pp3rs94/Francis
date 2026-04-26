@@ -787,6 +787,11 @@ contract. This keeps trace/artifact reachability tied to backend receipts rather
 than requiring operators or interface code to reconstruct handles from raw task
 JSON.
 
+As of `2026-04-26`, the ORB mission loop inspector renders those loop-stage
+receipt handles directly. Handoff and stage metadata now surface `run` and
+bounded `artifact` handles next to task and trace handles when the backend
+returns them, without inventing handles when the loop state omits them.
+
 As of `2026-04-25`, the ORB chat UI also prefers current mission task truth for
 mission recovery links. Selected mission recovery posture, return-to-work
 mission actions, and recent mission progress cards use `last_task_id`, loop
@@ -3063,6 +3068,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop receipt-han
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 ORB mission loop receipt-handle rendering slice:
+
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
 - `cd apps\chat_ui; npm run build`

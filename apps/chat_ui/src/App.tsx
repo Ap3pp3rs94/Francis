@@ -6774,8 +6774,12 @@ function SystemPanel(props: {
                           ) : null}
                         </div>
                       ) : null}
-                      {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id || missionLoopHandoff.trace_id) ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      {(missionLoopHandoff.approval_id ||
+                        missionLoopHandoff.operation_id ||
+                        missionLoopHandoff.trace_id ||
+                        missionLoopHandoff.run_id ||
+                        missionLoopHandoff.artifact_dir) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
                           {missionLoopHandoff.approval_id ? (
                             <>
                               approval <code>{missionLoopHandoff.approval_id}</code>
@@ -6789,6 +6793,25 @@ function SystemPanel(props: {
                           {missionLoopHandoff.trace_id ? (
                             <>
                               {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id) ? " / " : ""}trace <code>{missionLoopHandoff.trace_id}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.run_id ? (
+                            <>
+                              {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id || missionLoopHandoff.trace_id)
+                                ? " / "
+                                : ""}
+                              run <code>{missionLoopHandoff.run_id}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.artifact_dir ? (
+                            <>
+                              {(missionLoopHandoff.approval_id ||
+                              missionLoopHandoff.operation_id ||
+                              missionLoopHandoff.trace_id ||
+                              missionLoopHandoff.run_id)
+                                ? " / "
+                                : ""}
+                              artifact <code title={missionLoopHandoff.artifact_dir}>{truncateText(missionLoopHandoff.artifact_dir, 96)}</code>
                             </>
                           ) : null}
                         </div>
@@ -6877,10 +6900,12 @@ function SystemPanel(props: {
                         {(item.stage?.approval_id ||
                           item.stage?.operation_id ||
                           item.stage?.trace_id ||
+                          item.stage?.run_id ||
+                          item.stage?.artifact_dir ||
                           item.stage?.latest_event ||
                           item.stage?.latest_receipt_status ||
                           item.stage?.latest_ts) ? (
-                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8, overflowWrap: "anywhere" }}>
                             {item.stage?.approval_id ? (
                               <>
                                 approval <code>{item.stage.approval_id}</code>
@@ -6896,9 +6921,33 @@ function SystemPanel(props: {
                                 {(item.stage?.approval_id || item.stage?.operation_id) ? " / " : ""}trace <code>{item.stage.trace_id}</code>
                               </>
                             ) : null}
+                            {item.stage?.run_id ? (
+                              <>
+                                {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id) ? " / " : ""}run{" "}
+                                <code>{item.stage.run_id}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.artifact_dir ? (
+                              <>
+                                {(item.stage?.approval_id ||
+                                item.stage?.operation_id ||
+                                item.stage?.trace_id ||
+                                item.stage?.run_id)
+                                  ? " / "
+                                  : ""}
+                                artifact <code title={item.stage.artifact_dir}>{truncateText(item.stage.artifact_dir, 96)}</code>
+                              </>
+                            ) : null}
                             {item.stage?.latest_event ? (
                               <>
-                                {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id) ? " / " : ""}latest <code>{item.stage.latest_event}</code>
+                                {(item.stage?.approval_id ||
+                                item.stage?.operation_id ||
+                                item.stage?.trace_id ||
+                                item.stage?.run_id ||
+                                item.stage?.artifact_dir)
+                                  ? " / "
+                                  : ""}
+                                latest <code>{item.stage.latest_event}</code>
                               </>
                             ) : null}
                             {item.stage?.latest_receipt_status ? (
@@ -6906,6 +6955,8 @@ function SystemPanel(props: {
                                 {(item.stage?.approval_id ||
                                 item.stage?.operation_id ||
                                 item.stage?.trace_id ||
+                                item.stage?.run_id ||
+                                item.stage?.artifact_dir ||
                                 item.stage?.latest_event)
                                   ? " / "
                                   : ""}
@@ -6917,6 +6968,8 @@ function SystemPanel(props: {
                                 {(item.stage?.approval_id ||
                                 item.stage?.operation_id ||
                                 item.stage?.trace_id ||
+                                item.stage?.run_id ||
+                                item.stage?.artifact_dir ||
                                 item.stage?.latest_event ||
                                 item.stage?.latest_receipt_status)
                                   ? " / "
@@ -10788,8 +10841,10 @@ function OperationsPanel(props: {
                         selectedMissionLoopHandoff?.next_step ||
                         selectedMissionLoopHandoff?.approval_id ||
                         selectedMissionLoopHandoff?.operation_id ||
-                        selectedMissionLoopHandoff?.trace_id) ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                        selectedMissionLoopHandoff?.trace_id ||
+                        selectedMissionLoopHandoff?.run_id ||
+                        selectedMissionLoopHandoff?.artifact_dir) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
                           {selectedMissionLoopHandoff?.detail ? <span>{selectedMissionLoopHandoff.detail}</span> : null}
                           {selectedMissionLoopHandoff?.gate ? (
                             <>
@@ -10833,6 +10888,36 @@ function OperationsPanel(props: {
                                 ? " / "
                                 : ""}
                               trace <code>{selectedMissionLoopHandoff.trace_id}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.run_id ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail ||
+                              selectedMissionLoopHandoff.gate ||
+                              selectedMissionLoopHandoff.next_step ||
+                              selectedMissionLoopHandoff.approval_id ||
+                              selectedMissionLoopHandoff.operation_id ||
+                              selectedMissionLoopHandoff.trace_id)
+                                ? " / "
+                                : ""}
+                              run <code>{selectedMissionLoopHandoff.run_id}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.artifact_dir ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail ||
+                              selectedMissionLoopHandoff.gate ||
+                              selectedMissionLoopHandoff.next_step ||
+                              selectedMissionLoopHandoff.approval_id ||
+                              selectedMissionLoopHandoff.operation_id ||
+                              selectedMissionLoopHandoff.trace_id ||
+                              selectedMissionLoopHandoff.run_id)
+                                ? " / "
+                                : ""}
+                              artifact{" "}
+                              <code title={selectedMissionLoopHandoff.artifact_dir}>
+                                {truncateText(selectedMissionLoopHandoff.artifact_dir, 96)}
+                              </code>
                             </>
                           ) : null}
                         </div>
@@ -10949,10 +11034,12 @@ function OperationsPanel(props: {
                                 {(stage?.approval_id ||
                                   stage?.operation_id ||
                                   stage?.trace_id ||
+                                  stage?.run_id ||
+                                  stage?.artifact_dir ||
                                   stage?.latest_event ||
                                   stage?.latest_receipt_status ||
                                   stageLatestAt) ? (
-                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
                                     {stage?.approval_id ? (
                                       <>
                                         approval <code>{stage.approval_id}</code>
@@ -10968,9 +11055,30 @@ function OperationsPanel(props: {
                                         {(stage?.approval_id || stage?.operation_id) ? " / " : ""}trace <code>{stage.trace_id}</code>
                                       </>
                                     ) : null}
+                                    {stage?.run_id ? (
+                                      <>
+                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id) ? " / " : ""}run{" "}
+                                        <code>{stage.run_id}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.artifact_dir ? (
+                                      <>
+                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id || stage?.run_id)
+                                          ? " / "
+                                          : ""}
+                                        artifact <code title={stage.artifact_dir}>{truncateText(stage.artifact_dir, 96)}</code>
+                                      </>
+                                    ) : null}
                                     {stage?.latest_event ? (
                                       <>
-                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id) ? " / " : ""}latest{" "}
+                                        {(stage?.approval_id ||
+                                        stage?.operation_id ||
+                                        stage?.trace_id ||
+                                        stage?.run_id ||
+                                        stage?.artifact_dir)
+                                          ? " / "
+                                          : ""}
+                                        latest{" "}
                                         <code>{stage.latest_event}</code>
                                       </>
                                     ) : null}
@@ -10979,6 +11087,8 @@ function OperationsPanel(props: {
                                         {(stage?.approval_id ||
                                         stage?.operation_id ||
                                         stage?.trace_id ||
+                                        stage?.run_id ||
+                                        stage?.artifact_dir ||
                                         stage?.latest_event)
                                           ? " / "
                                           : ""}
@@ -10990,6 +11100,8 @@ function OperationsPanel(props: {
                                         {(stage?.approval_id ||
                                         stage?.operation_id ||
                                         stage?.trace_id ||
+                                        stage?.run_id ||
+                                        stage?.artifact_dir ||
                                         stage?.latest_event ||
                                         stage?.latest_receipt_status)
                                           ? " / "
