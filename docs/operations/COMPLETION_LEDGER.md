@@ -443,6 +443,14 @@ preserves the same linkage across list, get, and export calls. This gives
 trace/run/artifact-bearing mission and operation receipts another read path
 without adding execution or synthetic trace state.
 
+As of `2026-04-26`, explanation and audit records also preserve `run_id` when
+that handle is supplied through record metadata instead of a top-level field.
+The backend normalizes metadata-only run handles into the same public summary,
+detail, filter, and export contract, and the chat UI explanation explorer
+client preserves the same fallback when parsing list/get responses. This is a
+read-model/client contract change only; it does not create explanations,
+execute work, or infer trace state.
+
 As of `2026-04-26`, the selected operation detail surface can use that
 explanation receipt contract from real operation and mission loop handles. The
 chat UI now builds bounded `/explanations/list` queries for the selected
@@ -3529,6 +3537,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation receipt filt
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata run-handle slice:
+
+- `python -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_explanation.py -q`
+  Result: `2 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_explanation.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `62 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation explanation evidence interface slice:

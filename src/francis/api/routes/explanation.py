@@ -107,6 +107,10 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
         or _safe_str(meta.get("trace_id") or meta.get("traceId")).strip()
     )
+    run_id = (
+        _safe_str(raw.get("run_id") or raw.get("runId")).strip()
+        or _safe_str(meta.get("run_id") or meta.get("runId")).strip()
+    )
     artifact_dir = (
         _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
         or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
@@ -128,7 +132,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "severity": _safe_str(raw.get("severity")).strip(),
         "title": _safe_str(raw.get("title")).strip(),
         "summary": _safe_str(raw.get("summary")).strip(),
-        "run_id": _safe_str(raw.get("run_id")).strip(),
+        "run_id": run_id,
         "trace_id": trace_id,
         "artifact_dir": artifact_dir,
         "domain": _safe_str(raw.get("domain")).strip(),
@@ -607,6 +611,12 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(payload_meta.get("trace_id") or payload_meta.get("traceId")).strip()
             or _safe_str(existing_meta.get("trace_id") or existing_meta.get("traceId")).strip()
         )
+        run_id = (
+            _safe_str(payload.get("run_id") or payload.get("runId")).strip()
+            or _safe_str(existing_obj.get("run_id") or existing_obj.get("runId")).strip()
+            or _safe_str(payload_meta.get("run_id") or payload_meta.get("runId")).strip()
+            or _safe_str(existing_meta.get("run_id") or existing_meta.get("runId")).strip()
+        )
         artifact_dir = (
             _safe_str(payload.get("artifact_dir") or payload.get("artifactDir")).strip()
             or _safe_str(existing_obj.get("artifact_dir") or existing_obj.get("artifactDir")).strip()
@@ -623,7 +633,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "severity": _safe_str(payload.get("severity")).strip() or _safe_str(existing_obj.get("severity")).strip(),
             "title": title or _safe_str(existing_obj.get("title")).strip(),
             "summary": _safe_str(payload.get("summary")).strip() or _safe_str(existing_obj.get("summary")).strip(),
-            "run_id": _safe_str(payload.get("run_id")).strip() or _safe_str(existing_obj.get("run_id")).strip(),
+            "run_id": run_id,
             "trace_id": trace_id,
             "artifact_dir": artifact_dir,
             "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),

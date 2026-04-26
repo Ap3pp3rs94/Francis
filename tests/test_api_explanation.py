@@ -75,10 +75,10 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "title": "Rollout guardrail",
             "summary": "Rollout was blocked after risk check.",
             "domain": "operations",
-            "run_id": "run-2",
             "trace_id": "trace-rollout",
             "artifact_dir": "runs/run-2/artifacts",
             "tags": ["ops", "risk"],
+            "meta": {"run_id": "run-2"},
             "content": {"step": "risk-check", "decision": "block"},
         },
     )
@@ -87,7 +87,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
 
     listed = client.get(
         "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout"
-        "&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&limit=10"
+        "&run_id=run-2&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&limit=10"
     )
     assert listed.status_code == 200
     listed_body = listed.json()
@@ -102,6 +102,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     fetched_body = fetched.json()
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["id"] == "exp-gamma"
+    assert fetched_body["item"]["run_id"] == "run-2"
     assert fetched_body["item"]["trace_id"] == "trace-rollout"
     assert fetched_body["item"]["artifact_dir"] == "runs/run-2/artifacts"
     assert fetched_body["content"]["decision"] == "block"

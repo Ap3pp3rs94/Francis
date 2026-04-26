@@ -56,10 +56,10 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           kind: "tool_trace",
           severity: "info",
           title: "Tool trace",
-          run_id: "run_alpha",
           trace_id: "trace_alpha",
           artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
+          meta: { run_id: "run_alpha" },
         },
       ],
     });

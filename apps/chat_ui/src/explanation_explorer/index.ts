@@ -369,7 +369,9 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const summary = safeString(raw.summary, "");
   if (summary) rec.summary = summary;
 
-  const runId = safeString(raw.run_id, "");
+  const meta = isRecord(raw.meta) ? raw.meta : {};
+
+  const runId = safeString(raw.run_id, safeString(raw.runId, safeString(meta.run_id, safeString(meta.runId, ""))));
   if (runId) rec.run_id = runId;
 
   const traceId = safeString(raw.trace_id, safeString(raw.traceId, ""));
