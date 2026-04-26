@@ -464,6 +464,9 @@ def test_mission_run_once_error_records_preserve_advance_context(monkeypatch, tm
             "gate": "approvals_gate",
             "next_step": "review_pending_approval",
             "trace_id": "trace_failed_context",
+            "operation_error": "operation_failed_context",
+            "result_message": "Operation failed with recoverable context.",
+            "recovery_next_step": "review_operation_detail",
             "message": "Approval review is required before execution can continue.",
             "error": "advance_failed_context",
         }
@@ -486,6 +489,9 @@ def test_mission_run_once_error_records_preserve_advance_context(monkeypatch, tm
     assert error["gate"] == "approvals_gate"
     assert error["next_step"] == "review_pending_approval"
     assert error["trace_id"] == "trace_failed_context"
+    assert error["operation_error"] == "operation_failed_context"
+    assert error["result_message"] == "Operation failed with recoverable context."
+    assert error["recovery_next_step"] == "review_operation_detail"
     assert error["message"] == "Approval review is required before execution can continue."
 
 
@@ -1828,6 +1834,61 @@ def test_mission_advance_runs_linked_queued_operation(monkeypatch, tmp_path: Pat
     advance_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert advance_events
     assert advance_events[-1]["details"]["operation_id"] == operation_id
+
+
+def test_mission_advance_surfaces_failed_operation_recovery_handoff(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Advance should expose failed operation recovery context",
+            "summary": "A failed linked operation should return receipt-backed recovery fields.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "advance failed linked run",
+            "mission_id": mission_id,
+            "input": {"action": "run", "input": "missing plugin id"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance", "worker_id": "test.missions.advance"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is False
+    assert advanced_body["applied"] is False
+    assert advanced_body["action"] == "run_linked_operation"
+    assert advanced_body["operation_id"] == operation_id
+    assert advanced_body["status"] == "failed"
+    assert advanced_body["operation_error"] == "plugin_id_required"
+    assert advanced_body["recovery_next_step"] == "review_operation_detail"
+    assert advanced_body["memory_receipt"]["operation_status"] == "failed"
+    assert advanced_body["memory_receipt"]["operation_error"] == "plugin_id_required"
+    assert advanced_body["memory_receipt"]["recovery_next_step"] == "review_operation_detail"
+    assert advanced_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert advanced_body["latest_memory_receipt"]["operation_error"] == "plugin_id_required"
+    assert advanced_body["loop_state"]["active_stage"] == "deadletter"
+    assert advanced_body["loop_state"]["handoff"]["action"] == "retry_or_deadletter"
 
 
 def test_mission_advance_respects_governance_blockers(monkeypatch, tmp_path: Path) -> None:

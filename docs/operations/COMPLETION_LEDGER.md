@@ -238,6 +238,14 @@ when mission metadata or run-ledger activity does not already provide those
 fields. This does not create retry authority; it keeps the existing recovery
 handoff tied to a receipt-backed operation detail review.
 
+As of `2026-04-26`, mission advance and queue-run handoff results preserve that
+receipt-backed recovery context when linked operation execution fails. The
+mission runtime projects `operation_error`, `result_message` when present, and
+`recovery_next_step` from the terminal operation memory receipt into the
+immediate mission result and queue error records. This keeps retry/deadletter
+decisions actionable from the mission handoff without creating retry authority
+or inferring recovery state outside the receipt.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend

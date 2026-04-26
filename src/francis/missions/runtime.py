@@ -38,6 +38,9 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
         "trace_id": outcome.get("trace_id"),
         "run_id": outcome.get("run_id"),
         "artifact_dir": outcome.get("artifact_dir"),
+        "operation_error": outcome.get("operation_error"),
+        "result_message": outcome.get("result_message"),
+        "recovery_next_step": outcome.get("recovery_next_step"),
         "message": outcome.get("message"),
     }
     for key, value in fields.items():
@@ -150,6 +153,16 @@ def _operation_receipt_identity(operation: Any) -> dict[str, str]:
     }
 
 
+def _memory_receipt_recovery_handoff(receipt: Any) -> dict[str, object]:
+    receipt_payload = _as_dict(receipt)
+    handoff: dict[str, object] = {}
+    for key in ("operation_error", "result_message", "recovery_next_step"):
+        value = _safe_str(receipt_payload.get(key)).strip()
+        if value:
+            handoff[key] = value
+    return handoff
+
+
 def advance_mission(
     mission_id: str,
     *,
@@ -258,6 +271,7 @@ def advance_mission(
         memory_receipt = run_result.get("memory_receipt")
         if isinstance(memory_receipt, dict):
             response["memory_receipt"] = memory_receipt
+            response.update(_memory_receipt_recovery_handoff(memory_receipt))
         return response
 
     if record_operator_receipt:
@@ -367,6 +381,9 @@ def run_queue_once(
             "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
             "run_id": _safe_str(outcome.get("run_id")).strip() or None,
             "artifact_dir": _safe_str(outcome.get("artifact_dir")).strip() or None,
+            "operation_error": _safe_str(outcome.get("operation_error")).strip() or None,
+            "result_message": _safe_str(outcome.get("result_message")).strip() or None,
+            "recovery_next_step": _safe_str(outcome.get("recovery_next_step")).strip() or None,
         }
         operation = outcome.get("operation")
         if isinstance(operation, dict):
