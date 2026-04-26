@@ -47,6 +47,7 @@ export type ExplanationRecord = {
   // Scoping / linkage
   run_id?: string;
   trace_id?: string;
+  artifact_dir?: string;
   domain?: string;
   conversation_id?: string;
   approval_id?: string;
@@ -91,6 +92,7 @@ export type ExplanationListQuery = {
   domain?: string;
   run_id?: string;
   trace_id?: string;
+  artifact_dir?: string;
   conversation_id?: string;
   approval_id?: string;
   plugin_id?: string;
@@ -373,6 +375,9 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const traceId = safeString(raw.trace_id, safeString(raw.traceId, ""));
   if (traceId) rec.trace_id = traceId;
 
+  const artifactDir = safeString(raw.artifact_dir, safeString(raw.artifactDir, ""));
+  if (artifactDir) rec.artifact_dir = artifactDir;
+
   const domain = safeString(raw.domain, "");
   if (domain) rec.domain = domain;
 
@@ -442,6 +447,7 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         domain: q?.domain,
         run_id: q?.run_id,
         trace_id: q?.trace_id,
+        artifact_dir: q?.artifact_dir,
         conversation_id: q?.conversation_id,
         approval_id: q?.approval_id,
         plugin_id: q?.plugin_id,
@@ -461,6 +467,7 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         domain: q.domain,
         run_id: q.run_id,
         trace_id: q.trace_id,
+        artifact_dir: q.artifact_dir,
         conversation_id: q.conversation_id,
         approval_id: q.approval_id,
         plugin_id: q.plugin_id,

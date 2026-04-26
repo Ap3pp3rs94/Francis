@@ -107,6 +107,10 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
         or _safe_str(meta.get("trace_id") or meta.get("traceId")).strip()
     )
+    artifact_dir = (
+        _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
+        or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
+    )
 
     content_raw = raw.get("content")
     content: dict[str, Any] | str | None
@@ -126,6 +130,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "summary": _safe_str(raw.get("summary")).strip(),
         "run_id": _safe_str(raw.get("run_id")).strip(),
         "trace_id": trace_id,
+        "artifact_dir": artifact_dir,
         "domain": _safe_str(raw.get("domain")).strip(),
         "conversation_id": _safe_str(raw.get("conversation_id") or raw.get("thread_id")).strip(),
         "approval_id": _safe_str(raw.get("approval_id")).strip(),
@@ -150,6 +155,7 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "summary": record.get("summary"),
         "run_id": record.get("run_id"),
         "trace_id": record.get("trace_id"),
+        "artifact_dir": record.get("artifact_dir"),
         "domain": record.get("domain"),
         "conversation_id": record.get("conversation_id"),
         "approval_id": record.get("approval_id"),
@@ -243,6 +249,7 @@ def _filter_records(
     domain: str = "",
     run_id: str = "",
     trace_id: str = "",
+    artifact_dir: str = "",
     conversation_id: str = "",
     approval_id: str = "",
     plugin_id: str = "",
@@ -256,6 +263,7 @@ def _filter_records(
     domain_filter = domain.strip().lower()
     run_filter = run_id.strip().lower()
     trace_filter = trace_id.strip().lower()
+    artifact_filter = artifact_dir.strip().lower()
     conversation_filter = conversation_id.strip().lower()
     approval_filter = approval_id.strip().lower()
     plugin_filter = plugin_id.strip().lower()
@@ -273,6 +281,8 @@ def _filter_records(
         if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
             continue
         if trace_filter and _safe_str(item.get("trace_id")).strip().lower() != trace_filter:
+            continue
+        if artifact_filter and _safe_str(item.get("artifact_dir")).strip().lower() != artifact_filter:
             continue
         if conversation_filter and _safe_str(item.get("conversation_id")).strip().lower() != conversation_filter:
             continue
@@ -319,6 +329,7 @@ def _csv(records: list[dict[str, Any]]) -> str:
             "summary",
             "run_id",
             "trace_id",
+            "artifact_dir",
             "domain",
             "conversation_id",
             "approval_id",
@@ -339,6 +350,7 @@ def _csv(records: list[dict[str, Any]]) -> str:
                 "summary": item.get("summary"),
                 "run_id": item.get("run_id"),
                 "trace_id": item.get("trace_id"),
+                "artifact_dir": item.get("artifact_dir"),
                 "domain": item.get("domain"),
                 "conversation_id": item.get("conversation_id"),
                 "approval_id": item.get("approval_id"),
@@ -363,6 +375,7 @@ def _query_records(
     domain: str | None = None,
     run_id: str | None = None,
     trace_id: str | None = None,
+    artifact_dir: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -379,6 +392,7 @@ def _query_records(
         domain=_safe_str(domain),
         run_id=_safe_str(run_id),
         trace_id=_safe_str(trace_id),
+        artifact_dir=_safe_str(artifact_dir),
         conversation_id=_safe_str(conversation_id),
         approval_id=_safe_str(approval_id),
         plugin_id=_safe_str(plugin_id),
@@ -439,6 +453,7 @@ def list_explanations(
     domain: str | None = None,
     run_id: str | None = None,
     trace_id: str | None = None,
+    artifact_dir: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -454,6 +469,7 @@ def list_explanations(
             domain=domain,
             run_id=run_id,
             trace_id=trace_id,
+            artifact_dir=artifact_dir,
             conversation_id=conversation_id,
             approval_id=approval_id,
             plugin_id=plugin_id,
@@ -505,6 +521,7 @@ def export_explanations(
     domain: str | None = None,
     run_id: str | None = None,
     trace_id: str | None = None,
+    artifact_dir: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -530,6 +547,7 @@ def export_explanations(
             domain=domain,
             run_id=run_id,
             trace_id=trace_id,
+            artifact_dir=artifact_dir,
             conversation_id=conversation_id,
             approval_id=approval_id,
             plugin_id=plugin_id,
@@ -589,6 +607,12 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(payload_meta.get("trace_id") or payload_meta.get("traceId")).strip()
             or _safe_str(existing_meta.get("trace_id") or existing_meta.get("traceId")).strip()
         )
+        artifact_dir = (
+            _safe_str(payload.get("artifact_dir") or payload.get("artifactDir")).strip()
+            or _safe_str(existing_obj.get("artifact_dir") or existing_obj.get("artifactDir")).strip()
+            or _safe_str(payload_meta.get("artifact_dir") or payload_meta.get("artifactDir")).strip()
+            or _safe_str(existing_meta.get("artifact_dir") or existing_meta.get("artifactDir")).strip()
+        )
         ts = int(payload.get("ts") or existing_obj.get("ts") or _now_s())
 
         merged = {
@@ -601,6 +625,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "summary": _safe_str(payload.get("summary")).strip() or _safe_str(existing_obj.get("summary")).strip(),
             "run_id": _safe_str(payload.get("run_id")).strip() or _safe_str(existing_obj.get("run_id")).strip(),
             "trace_id": trace_id,
+            "artifact_dir": artifact_dir,
             "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),
             "conversation_id": _safe_str(payload.get("conversation_id") or payload.get("thread_id")).strip()
             or _safe_str(existing_obj.get("conversation_id")).strip(),

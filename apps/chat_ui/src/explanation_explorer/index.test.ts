@@ -30,13 +30,20 @@ function installFetch(handler: FetchHandler): () => void {
   };
 }
 
-test("ExplanationClient.list requests trace filters and preserves trace ids", async () => {
-  const requests: Array<{ path: string; traceId: string | null; limit: string | null; method: string }> = [];
+test("ExplanationClient.list requests trace and artifact filters", async () => {
+  const requests: Array<{
+    path: string;
+    traceId: string | null;
+    artifactDir: string | null;
+    limit: string | null;
+    method: string;
+  }> = [];
   const restoreFetch = installFetch(async (url, init) => {
     const parsed = new URL(url);
     requests.push({
       path: parsed.pathname,
       traceId: parsed.searchParams.get("trace_id"),
+      artifactDir: parsed.searchParams.get("artifact_dir"),
       limit: parsed.searchParams.get("limit"),
       method: (init?.method ?? "GET").toUpperCase(),
     });
@@ -51,6 +58,7 @@ test("ExplanationClient.list requests trace filters and preserves trace ids", as
           title: "Tool trace",
           run_id: "run_alpha",
           trace_id: "trace_alpha",
+          artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
         },
       ],
@@ -59,12 +67,18 @@ test("ExplanationClient.list requests trace filters and preserves trace ids", as
 
   try {
     const client = new ExplanationClient("http://127.0.0.1:8000");
-    const response = await client.list({ trace_id: "trace_alpha", limit: 25, timeoutMs: 50 });
+    const response = await client.list({
+      trace_id: "trace_alpha",
+      artifact_dir: "runs/run_alpha/artifacts",
+      limit: 25,
+      timeoutMs: 50,
+    });
 
     assert.deepEqual(requests, [
       {
         path: "/explanations/list",
         traceId: "trace_alpha",
+        artifactDir: "runs/run_alpha/artifacts",
         limit: "25",
         method: "GET",
       },
@@ -73,19 +87,27 @@ test("ExplanationClient.list requests trace filters and preserves trace ids", as
     assert.equal(response.items[0]?.id, "exp-trace-alpha");
     assert.equal(response.items[0]?.trace_id, "trace_alpha");
     assert.equal(response.items[0]?.run_id, "run_alpha");
+    assert.equal(response.items[0]?.artifact_dir, "runs/run_alpha/artifacts");
   } finally {
     restoreFetch();
   }
 });
 
-test("ExplanationClient.get and export preserve trace linkage", async () => {
-  const requests: Array<{ path: string; id: string | null; traceId: string | null; method: string }> = [];
+test("ExplanationClient.get and export preserve receipt linkage", async () => {
+  const requests: Array<{
+    path: string;
+    id: string | null;
+    traceId: string | null;
+    artifactDir: string | null;
+    method: string;
+  }> = [];
   const restoreFetch = installFetch(async (url, init) => {
     const parsed = new URL(url);
     requests.push({
       path: parsed.pathname,
       id: parsed.searchParams.get("id"),
       traceId: parsed.searchParams.get("trace_id"),
+      artifactDir: parsed.searchParams.get("artifact_dir"),
       method: (init?.method ?? "GET").toUpperCase(),
     });
 
@@ -100,6 +122,7 @@ test("ExplanationClient.get and export preserve trace linkage", async () => {
         ts: 1_700_000_002,
         kind: "audit",
         trace_id: "trace_detail",
+        artifact_dir: "runs/run_detail/artifacts",
       },
       content: { outcome: "linked" },
     });
@@ -108,20 +131,27 @@ test("ExplanationClient.get and export preserve trace linkage", async () => {
   try {
     const client = new ExplanationClient("http://127.0.0.1:8000");
     const detail = await client.get("exp-trace-detail", { timeoutMs: 50 });
-    await client.export("json", { trace_id: "trace_detail", timeoutMs: 50 });
+    await client.export("json", {
+      trace_id: "trace_detail",
+      artifact_dir: "runs/run_detail/artifacts",
+      timeoutMs: 50,
+    });
 
     assert.equal(detail?.trace_id, "trace_detail");
+    assert.equal(detail?.artifact_dir, "runs/run_detail/artifacts");
     assert.deepEqual(requests, [
       {
         path: "/explanations/get",
         id: "exp-trace-detail",
         traceId: null,
+        artifactDir: null,
         method: "GET",
       },
       {
         path: "/explanations/export",
         id: null,
         traceId: "trace_detail",
+        artifactDir: "runs/run_detail/artifacts",
         method: "GET",
       },
     ]);

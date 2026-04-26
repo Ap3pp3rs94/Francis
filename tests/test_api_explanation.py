@@ -34,6 +34,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "domain": "operations",
             "run_id": "run-1",
             "trace_id": "trace-policy",
+            "artifact_dir": "runs/run-1/artifacts",
             "conversation_id": "conv-1",
             "approval_id": "appr-1",
             "plugin_id": "plugin-1",
@@ -76,6 +77,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "domain": "operations",
             "run_id": "run-2",
             "trace_id": "trace-rollout",
+            "artifact_dir": "runs/run-2/artifacts",
             "tags": ["ops", "risk"],
             "content": {"step": "risk-check", "decision": "block"},
         },
@@ -84,7 +86,8 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert third.json()["ok"] is True
 
     listed = client.get(
-        "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout&trace_id=trace-rollout&limit=10"
+        "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout"
+        "&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&limit=10"
     )
     assert listed.status_code == 200
     listed_body = listed.json()
@@ -100,6 +103,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["id"] == "exp-gamma"
     assert fetched_body["item"]["trace_id"] == "trace-rollout"
+    assert fetched_body["item"]["artifact_dir"] == "runs/run-2/artifacts"
     assert fetched_body["content"]["decision"] == "block"
 
     exported_json = client.get("/explanations/export?format=json&kind=decision&trace_id=trace-policy")
@@ -111,6 +115,13 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert "exp-gamma" not in exported_json_ids
     assert "exp-beta" not in exported_json_ids
 
+    exported_artifact_json = client.get("/explanations/export?format=json&artifact_dir=runs/run-2/artifacts")
+    assert exported_artifact_json.status_code == 200
+    exported_artifact_body = json.loads(exported_artifact_json.text)
+    exported_artifact_ids = {str(item.get("id")) for item in exported_artifact_body["items"]}
+    assert exported_artifact_ids == {"exp-gamma"}
+    assert exported_artifact_body["items"][0]["artifact_dir"] == "runs/run-2/artifacts"
+
     exported_csv = client.get("/explanations/export?format=csv&severity=error")
     assert exported_csv.status_code == 200
     assert exported_csv.headers["content-type"].startswith("text/csv")
@@ -119,6 +130,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert "exp-gamma" in row_ids
     assert "exp-alpha" not in row_ids
     assert rows[0]["trace_id"] == "trace-rollout"
+    assert rows[0]["artifact_dir"] == "runs/run-2/artifacts"
 
 
 def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path: Path) -> None:

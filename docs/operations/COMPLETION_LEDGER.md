@@ -234,11 +234,13 @@ timeline list requests, de-duplicates returned events by id, and sorts newest
 receipt-backed evidence first before rendering it.
 
 As of `2026-04-26`, explanation and audit records can preserve and filter by
-`trace_id`. `/explanations/list` and `/explanations/export` accept bounded
-trace filters, summaries/detail/export payloads retain the trace id, and the
-chat UI explanation explorer client preserves the same trace linkage across
-list, get, and export calls. This gives trace-bearing mission and operation
-receipts another read path without adding execution or synthetic trace state.
+receipt handles across `trace_id`, `run_id`, and `artifact_dir`.
+`/explanations/list` and `/explanations/export` accept bounded receipt filters,
+summaries/detail/export payloads retain the same handles, CSV exports include
+the artifact handle column, and the chat UI explanation explorer client
+preserves the same linkage across list, get, and export calls. This gives
+trace/run/artifact-bearing mission and operation receipts another read path
+without adding execution or synthetic trace state.
 
 As of `2026-04-26`, operations list and export routes can also filter by real
 execution receipt handles. `/operations/list` and `/operations/export` accept
@@ -2732,6 +2734,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations receipt filte
   Result: `passed`
 - `git diff --check -- src\francis\api\routes\operations.py tests\test_api_operations.py apps\chat_ui\src\operations\index.ts apps\chat_ui\src\operations\index.test.ts docs\operations\COMPLETION_LEDGER.md`
   Result: `passed` (line-ending warning only for existing UI file normalization)
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation receipt filter slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `41 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link contract slice:
 
