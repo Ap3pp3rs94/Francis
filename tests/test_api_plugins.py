@@ -265,7 +265,9 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert still_pending_body["governance"]["gate"] == "approvals_gate"
     assert still_pending_body["governance"]["approval_status"] == "pending"
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     approved_body = approved.json()
     assert approved_body["ok"] is True
@@ -290,7 +292,10 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert (refreshed_artifact_dir / "request.json").exists()
     assert (refreshed_artifact_dir / "mismatch.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -457,7 +462,9 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
     assert raw_key not in artifact_text
     assert "hmac-sha256:" not in artifact_text
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -489,7 +496,10 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
         assert different_key not in artifact_text
         assert "hmac-sha256:" not in artifact_text
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -581,7 +591,9 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     restart_approval_id = str(restart_pending_body["approval_id"])
     assert restart_pending_body["tool_id"] == restart_tool_id
 
-    approved_restart = client.post("/approvals/decision", json={"id": restart_approval_id, "action": "approve"})
+    approved_restart = client.post(
+        "/approvals/decision", json={"id": restart_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved_restart.status_code == 200
     assert approved_restart.json()["ok"] is True
 
@@ -605,7 +617,9 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     assert (refreshed_artifact_dir / "request.json").exists()
     assert (refreshed_artifact_dir / "mismatch.json").exists()
 
-    approved_deploy = client.post("/approvals/decision", json={"id": deploy_approval_id, "action": "approve"})
+    approved_deploy = client.post(
+        "/approvals/decision", json={"id": deploy_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved_deploy.status_code == 200
     assert approved_deploy.json()["ok"] is True
 

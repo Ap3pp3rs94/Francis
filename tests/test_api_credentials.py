@@ -242,7 +242,9 @@ def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_
     approval_id = str(requested_body["approval_id"])
     assert requested_body["status"] == "pending"
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -285,7 +287,9 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     credential_id = str(requested_body["id"])
     request_approval_id = str(requested_body["approval_id"])
 
-    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    approved_request = client.post(
+        "/approvals/decision", json={"id": request_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved_request.status_code == 200
     assert approved_request.json()["ok"] is True
 
@@ -309,7 +313,9 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     revoke_artifact = json.loads(revoke_artifact_path.read_text(encoding="utf-8"))
     assert revoke_artifact["request"]["reason"] == "cleanup token=[REDACTED:secret]"
 
-    approved_revoke = client.post("/approvals/decision", json={"id": revoke_approval_id, "action": "approve"})
+    approved_revoke = client.post(
+        "/approvals/decision", json={"id": revoke_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved_revoke.status_code == 200
     assert approved_revoke.json()["ok"] is True
 
@@ -412,7 +418,9 @@ def test_credentials_revocation_missing_approval_restores_previous_status(monkey
     credential_id = str(requested_body["id"])
     request_approval_id = str(requested_body["approval_id"])
 
-    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    approved_request = client.post(
+        "/approvals/decision", json={"id": request_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved_request.status_code == 200
     assert approved_request.json()["ok"] is True
 

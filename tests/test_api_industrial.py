@@ -296,7 +296,9 @@ def test_industrial_execute_refreshes_mismatched_approval(monkeypatch, tmp_path:
     assert approval_id
     assert intervention_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -327,7 +329,10 @@ def test_industrial_execute_refreshes_mismatched_approval(monkeypatch, tmp_path:
     artifact_dir = Path(str(mismatched_body["artifact_dir"]))
     assert (artifact_dir / "mismatch.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -399,7 +404,9 @@ def test_industrial_request_refreshes_mismatched_approval(monkeypatch, tmp_path:
     assert approval_id
     assert intervention_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -430,7 +437,10 @@ def test_industrial_request_refreshes_mismatched_approval(monkeypatch, tmp_path:
     artifact_dir = Path(str(mismatched_body["artifact_dir"]))
     assert (artifact_dir / "mismatch.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -605,7 +615,9 @@ def test_industrial_intervention_request_seals_sensitive_params_without_weakenin
     assert records[0]["params"]["api_key"] == "[REDACTED:secret]"
     assert "hmac-sha256" not in json.dumps(records[0]["params"], sort_keys=True)
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -724,7 +736,10 @@ def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Pa
     artifact_dir = Path(str(refreshed_body["artifact_dir"]))
     assert (artifact_dir / "error.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -827,7 +842,10 @@ def test_industrial_request_refreshes_missing_approval(monkeypatch, tmp_path: Pa
     artifact_dir = Path(str(refreshed_body["artifact_dir"]))
     assert (artifact_dir / "error.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -896,7 +914,9 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
     assert approval_id
     assert validation_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -933,7 +953,10 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
     assert mismatch_payload["request"]["params"]["api_key"] == "[REDACTED:secret]"
     assert mismatch_payload["approval_record"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1028,7 +1051,10 @@ def test_industrial_safety_validate_refreshes_missing_approval(monkeypatch, tmp_
     artifact_dir = Path(str(refreshed_body["artifact_dir"]))
     assert (artifact_dir / "request.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1094,7 +1120,9 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
     assert approval_id
     assert action_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1130,7 +1158,10 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
     assert mismatch_payload["request"]["params"]["api_key"] == "[REDACTED:secret]"
     assert mismatch_payload["approval_record"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1224,7 +1255,10 @@ def test_industrial_digital_twin_action_refreshes_missing_approval(monkeypatch, 
     artifact_dir = Path(str(refreshed_body["artifact_dir"]))
     assert (artifact_dir / "error.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_APPROVAL_ACTOR = "test.approvals.decision"
+
 
 def test_approval_decision_requires_local_client(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -19,7 +21,10 @@ def test_approval_decision_requires_local_client(monkeypatch, tmp_path: Path) ->
     approval_id = str(approval["id"])
 
     remote_client = TestClient(app, client=("198.51.100.5", 4321))
-    blocked = remote_client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    blocked = remote_client.post(
+        "/approvals/decision",
+        json={"id": approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
     assert blocked.status_code == 403
     assert blocked.json()["detail"] == "approval decisions require a local caller"
 
@@ -27,11 +32,25 @@ def test_approval_decision_requires_local_client(monkeypatch, tmp_path: Path) ->
     assert pending_path.exists()
 
     local_client = TestClient(app)
-    approved = local_client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    missing_actor = local_client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert missing_actor.status_code == 200
+    missing_actor_body = missing_actor.json()
+    assert missing_actor_body["ok"] is False
+    assert missing_actor_body["status"] == "denied"
+    assert missing_actor_body["error"] == "api_permission_denied"
+    assert missing_actor_body["governance"]["gate"] == "permission_gate"
+    assert missing_actor_body["governance"]["reason"] == "missing_actor"
+    assert pending_path.exists()
+
+    approved = local_client.post(
+        "/approvals/decision",
+        json={"id": approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
     assert approved.status_code == 200
     approved_body = approved.json()
     assert approved_body["ok"] is True
     assert approved_body["status"] == "approved"
+    assert approved_body["item"]["decision_actor"] == _APPROVAL_ACTOR
 
 
 def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_path: Path) -> None:
@@ -74,17 +93,20 @@ def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_pa
         json={
             "id": approval_id,
             "action": "approve",
+            "actor": _APPROVAL_ACTOR,
             "comment": f"reviewed token={raw_comment_secret}",
         },
     )
     assert approved.status_code == 200
     approved_body = approved.json()
     assert approved_body["ok"] is True
+    assert approved_body["item"]["decision_actor"] == _APPROVAL_ACTOR
     assert approved_body["item"]["comment"] == "reviewed token=[REDACTED:secret]"
 
     approved_path = data_root / "approvals" / "approved" / f"{approval_id}.json"
     approved_payload = json.loads(approved_path.read_text(encoding="utf-8"))
     assert approved_payload["reason"] == "operator note password=[REDACTED:secret]"
+    assert approved_payload["decision_actor"] == _APPROVAL_ACTOR
     assert approved_payload["comment"] == "reviewed token=[REDACTED:secret]"
     approved_text = approved_path.read_text(encoding="utf-8")
     assert raw_reason_secret not in approved_text
@@ -132,7 +154,10 @@ def test_approval_api_redacts_sealed_payload_digests(monkeypatch, tmp_path: Path
     assert "hmac-sha256:" not in listed_text
     assert listed_item["payload"]["user_command"] == "echo password=[REDACTED:secret]"
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision",
+        json={"id": approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
     assert approved.status_code == 200
     approved_body = approved.json()
     assert approved_body["ok"] is True
@@ -241,7 +266,10 @@ def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch,
     first_approval_id = str(pending_body["approval_id"])
     assert first_approval_id
 
-    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision",
+        json={"id": first_approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -335,7 +363,10 @@ def test_approval_list_surfaces_credential_request_and_revoke_context(monkeypatc
     assert request_item["payload_summary"]["label"] == "OpenAI Queue Visibility"
     assert request_item["payload_summary"]["credential_id"] == credential_id
 
-    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    approved_request = client.post(
+        "/approvals/decision",
+        json={"id": request_approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
     assert approved_request.status_code == 200
     assert approved_request.json()["ok"] is True
 

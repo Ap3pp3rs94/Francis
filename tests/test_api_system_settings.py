@@ -1132,7 +1132,9 @@ def test_system_world_state_deadletter_preview_preserves_pending_approval_linkag
     first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
     assert first_approval_id
 
-    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": first_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 

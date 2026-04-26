@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import decide as decide_request, list_requests, request as create_request
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value
 
 router = APIRouter()
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _LOCAL_HOST_ALIASES = {"localhost", "testclient"}
+_APPROVAL_DECISION_SCOPE = "approvals.decide"
 
 
 def _to_bool(value: str | None, *, default: bool) -> bool:
@@ -46,6 +48,29 @@ def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _decision_permission(actor: Any) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_APPROVAL_DECISION_SCOPE],
+        route="/approvals/decision",
+        method="POST",
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_deciding_approvals",
+            "evidence": decision.evidence,
+        },
+    }
+
+
 class ApprovalIn(BaseModel):
     action: str
     reason: str = "requested"
@@ -56,6 +81,7 @@ class ApprovalDecisionIn(BaseModel):
     id: str
     action: str
     comment: str | None = None
+    actor: str | None = None
 
 
 @router.post("/request")
@@ -81,7 +107,11 @@ def decide_approval(request: Request, payload: ApprovalDecisionIn) -> dict[str, 
         client_host = request.client.host if request.client is not None else ""
         if not _remote_decisions_allowed() and not _is_local_client(client_host):
             raise HTTPException(status_code=403, detail="approval decisions require a local caller")
-        result = decide_request(payload.id, payload.action, payload.comment)
+        permission = _decision_permission(payload.actor)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        result = decide_request(payload.id, payload.action, payload.comment, actor=payload.actor)
         if isinstance(result.get("item"), dict):
             result = dict(result)
             result["item"] = _approval_item(result["item"])

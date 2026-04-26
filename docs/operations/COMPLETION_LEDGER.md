@@ -105,6 +105,18 @@ policy with the `domains.write` scope. Domain read/list/summary routes remain
 read-only. This is another narrow route integration, not a claim of API-wide
 permission enforcement.
 
+As of `2026-04-26`, approval decisions are also wired to the API permission gate.
+`POST /approvals/decision` still requires a local caller unless remote approval
+decisions are explicitly enabled, and then denies before moving an approval out of
+the pending queue unless the decision actor is present in the server-side
+`FRANCIS_API_ACTOR_SCOPES` policy with the `approvals.decide` scope. Allowed
+decisions persist a redacted `decision_actor` in the approved/rejected/emergency
+approval record. The chat UI approvals client now sends its bounded
+`chat_ui.approvals` actor and treats backend denial responses as decision errors
+instead of presenting them as successful moves. This does not widen approval
+request/list behavior, exact-action matching, execution, or remote decision
+access.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2860,6 +2872,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `11 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` approval decision permission-gate slice:
+
+- `python -m ruff check src\francis\api\routes\approvals.py src\francis\governance\approvals.py tests\conftest.py tests\test_api_approvals.py tests\test_api_continuity.py tests\test_api_credentials.py tests\test_api_industrial.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_system_settings.py tests\test_api_web_learning.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\approvals.py src\francis\governance\approvals.py tests\conftest.py tests\test_api_approvals.py tests\test_api_continuity.py tests\test_api_credentials.py tests\test_api_industrial.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_system_settings.py tests\test_api_web_learning.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_industrial.py tests\test_api_web_learning.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `7 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `47 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 

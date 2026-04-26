@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ApprovalsClient } from "./index.ts";
+import { ApprovalsApiError, ApprovalsClient } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -99,6 +99,43 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
     assert.equal(result.items[0]?.payload_summary?.required_trust, 5);
     assert.deepEqual(result.items[0]?.payload_summary?.input_keys, ["target"]);
     assert.deepEqual(result.items[0]?.payload_summary?.params_keys, ["region"]);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("ApprovalsClient.decide sends an explicit approval actor", async () => {
+  let capturedBody: Record<string, unknown> | null = null;
+  const restoreFetch = installFetch(async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return jsonResponse({ ok: true, status: "approved", item: { id: "apr_1", ts: 1, action: "plugin.run", status: "approved" } });
+  });
+
+  try {
+    const client = new ApprovalsClient("http://127.0.0.1:8000");
+    const result = await client.decide({ id: "apr_1", action: "approve" });
+
+    assert.equal(result.ok, true);
+    assert.equal(capturedBody?.id, "apr_1");
+    assert.equal(capturedBody?.action, "approve");
+    assert.equal(capturedBody?.actor, "chat_ui.approvals");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("ApprovalsClient.decide treats backend denials as decision errors", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({ ok: false, status: "denied", error: "api_permission_denied" }),
+  );
+
+  try {
+    const client = new ApprovalsClient("http://127.0.0.1:8000");
+
+    await assert.rejects(
+      () => client.decide({ id: "apr_denied", action: "approve", actor: "chat_ui.approvals" }),
+      (err: unknown) => err instanceof ApprovalsApiError && err.message === "api_permission_denied",
+    );
   } finally {
     restoreFetch();
   }

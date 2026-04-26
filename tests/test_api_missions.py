@@ -825,7 +825,9 @@ def test_mission_linked_supervised_exec_surfaces_artifact_handle(monkeypatch, tm
     approval_id = str(pending.json()["operation"]["meta"]["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 

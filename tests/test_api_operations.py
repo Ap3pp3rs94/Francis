@@ -764,7 +764,9 @@ def test_operations_governance_holds_are_visible_and_rerunnable(monkeypatch, tmp
     assert "status_updated" in log_names
     assert "governance_hold" in log_names
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -850,7 +852,9 @@ def test_operations_approved_mission_run_receipt_preserves_approval_posture(monk
     approval_id = str(pending_body["operation"]["meta"]["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -945,7 +949,9 @@ def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_
     approval_id = str(pending_meta["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -988,7 +994,10 @@ def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_
     last_hold = governance_holds[-1]["output"]
     assert last_hold["approval_id"] == refreshed_approval_id
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1066,7 +1075,9 @@ def test_operations_git_push_requires_approval_and_pushes_branch(monkeypatch, tm
     log_names = [str(item.get("name")) for item in detail_pending_body["logs"]]
     assert "governance_hold" in log_names
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1138,7 +1149,9 @@ def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch,
     first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
     assert first_approval_id
 
-    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": first_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1177,7 +1190,10 @@ def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch,
     )
     assert mirror_branch_before.returncode != 0
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1270,7 +1286,9 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
     assert origin_secret not in request_artifact_text
     assert "hmac-sha256:" not in request_artifact_text
 
-    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": first_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1296,7 +1314,10 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
     )
     assert mirror_secret not in refreshed_approval_text
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 
@@ -1454,7 +1475,9 @@ def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     assert raw_secret not in request_artifact_text
     assert "hmac-sha256:" not in request_artifact_text
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1497,7 +1520,9 @@ def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     first_approval_id = str(mismatch_pending.json()["operation"]["meta"]["approval_id"])
     assert first_approval_id
 
-    first_approval = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    first_approval = client.post(
+        "/approvals/decision", json={"id": first_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert first_approval.status_code == 200
     assert first_approval.json()["ok"] is True
 
@@ -1564,7 +1589,9 @@ def test_operations_supervised_exec_refreshes_stale_approval(monkeypatch, tmp_pa
     approval_id = str(pending_meta["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1609,7 +1636,10 @@ def test_operations_supervised_exec_refreshes_stale_approval(monkeypatch, tmp_pa
     assert (refreshed_art / "mismatch.json").exists()
     assert not (refreshed_art / "result.json").exists()
 
-    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    approved_refreshed = client.post(
+        "/approvals/decision",
+        json={"id": refreshed_approval_id, "action": "approve", "actor": "test.approvals.decision"},
+    )
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True
 

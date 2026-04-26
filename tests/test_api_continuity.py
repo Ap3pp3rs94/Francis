@@ -1147,7 +1147,9 @@ def test_continuity_briefing_refreshes_approved_gate_into_rerun_handoff(monkeypa
     approval_id = str(pending_body["operation"]["meta"]["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 
@@ -1248,7 +1250,9 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
     assert first_approval_id
 
-    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": first_approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 

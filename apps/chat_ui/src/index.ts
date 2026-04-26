@@ -77,6 +77,8 @@ type DecideResult = {
   error?: string;
 };
 
+const DEFAULT_APPROVAL_DECISION_ACTOR = "chat_ui.approvals";
+
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -204,12 +206,13 @@ export class ApprovalsClient {
     return { items: Array.isArray(data?.items) ? data.items.map(parseApprovalItem).filter((item): item is ApprovalItem => item !== null) : [] };
   }
 
-  async decide(opts: { id: string; action: string; comment?: string }): Promise<DecideResult> {
+  async decide(opts: { id: string; action: string; comment?: string; actor?: string }): Promise<DecideResult> {
     const url = `${this.baseUrl}/approvals/decision`;
+    const actor = opts.actor?.trim() || DEFAULT_APPROVAL_DECISION_ACTOR;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: opts.id, action: opts.action, comment: opts.comment }),
+      body: JSON.stringify({ id: opts.id, action: opts.action, comment: opts.comment, actor }),
     });
 
     if (!res.ok) {
@@ -217,6 +220,9 @@ export class ApprovalsClient {
     }
 
     const data = (await res.json()) as Partial<DecideResult> | null;
+    if (!data?.ok) {
+      throw new ApprovalsApiError(data?.error || "Decision failed.", { status: res.status, url });
+    }
     return {
       ok: Boolean(data?.ok),
       status: data?.status,

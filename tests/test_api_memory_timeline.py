@@ -506,7 +506,9 @@ def test_memory_timeline_preserves_approved_operation_receipt_posture(monkeypatc
     approval_id = str(pending.json()["operation"]["meta"]["approval_id"])
     assert approval_id
 
-    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
     assert approved.status_code == 200
     assert approved.json()["ok"] is True
 

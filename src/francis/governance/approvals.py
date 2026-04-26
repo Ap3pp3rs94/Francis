@@ -97,7 +97,7 @@ def _decision_status(action: str) -> str:
     return ""
 
 
-def decide(approval_id: str, action: str, comment: str | None = None) -> dict[str, Any]:
+def decide(approval_id: str, action: str, comment: str | None = None, actor: str | None = None) -> dict[str, Any]:
     status = _decision_status(action)
     if not status:
         return {"ok": False, "status": "invalid", "error": "Unsupported decision action."}
@@ -115,6 +115,8 @@ def decide(approval_id: str, action: str, comment: str | None = None) -> dict[st
     req["decision"] = action
     if comment:
         req["comment"] = _redact_free_text(comment)
+    if actor:
+        req["decision_actor"] = _redact_free_text(actor)
     req["decided_ts"] = time.time()
 
     dest = {
