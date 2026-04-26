@@ -24,6 +24,8 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "run_id": "run_receipt_refs",
             "artifact_dir": "D:/francis/data/artifacts/receipt-refs",
             "operation_status": "succeeded",
+            "operation_error": "",
+            "recovery_next_step": "",
             "approval_status": "approved",
             "capability": "plugin.run",
         },
@@ -48,3 +50,38 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     operation_receipts = operation_memory_receipts("tsk_receipt_refs", mission_id="msn_receipt_refs")
     assert operation_receipts == receipts
     assert operation_memory_receipts("tsk_receipt_refs", mission_id="other_mission") == []
+
+
+def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.chat.continuity.ledger import append
+    from francis.memory.mission_receipts import operation_memory_receipts
+
+    append(
+        "system",
+        "Mission operation failed: mission=msn_failure_refs operation=tsk_failure_refs status=failed",
+        {
+            "domain": "operations",
+            "scope": "mission.loop",
+            "subsystem": "operations.runtime",
+            "mission_id": "msn_failure_refs",
+            "operation_id": "tsk_failure_refs",
+            "trace_id": "trace_failure_refs",
+            "run_id": "run_failure_refs",
+            "operation_status": "failed",
+            "operation_error": "plugin_id_required",
+            "result_message": "Plugin id is required.",
+            "recovery_next_step": "review_operation_detail",
+            "capability": "plugin.run",
+        },
+    )
+
+    receipts = operation_memory_receipts("tsk_failure_refs", mission_id="msn_failure_refs")
+
+    assert len(receipts) == 1
+    assert receipts[0]["operation_status"] == "failed"
+    assert receipts[0]["operation_error"] == "plugin_id_required"
+    assert receipts[0]["result_message"] == "Plugin id is required."
+    assert receipts[0]["recovery_next_step"] == "review_operation_detail"

@@ -637,6 +637,8 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["role"] == "system"
     assert receipt["scope"] == "mission.loop"
     assert receipt["operation_status"] == "failed"
+    assert receipt["operation_error"] == "plugin_id_required"
+    assert receipt["recovery_next_step"] == "review_operation_detail"
     assert receipt["subsystem"] == "operations.runtime"
     assert "Mission operation failed" in receipt["message"]
     assert receipt["references"]["mission_id"] == mission_id
@@ -658,6 +660,16 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     ]
     assert receipts
     assert receipts[0]["payload"]["meta"]["operation_status"] == "failed"
+    assert receipts[0]["payload"]["meta"]["operation_error"] == "plugin_id_required"
+    assert receipts[0]["payload"]["meta"]["recovery_next_step"] == "review_operation_detail"
+    assert receipts[0]["loop"]["operation_error"] == "plugin_id_required"
+    assert receipts[0]["loop"]["recovery_next_step"] == "review_operation_detail"
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["latest_memory_receipt"]["operation_error"] == "plugin_id_required"
+    assert fetched_body["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:

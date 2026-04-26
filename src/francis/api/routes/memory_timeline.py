@@ -250,6 +250,9 @@ def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
         "plan_status",
         "plan_current_step_id",
         "plan_current_step_title",
+        "operation_error",
+        "result_message",
+        "recovery_next_step",
     ):
         value = _safe_str(meta.get(key)).strip()
         if value:

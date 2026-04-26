@@ -438,7 +438,16 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
     }
     if references:
         projection["references"] = references
-    for key in ("scope", "operation_status", "approval_status", "capability", "subsystem"):
+    for key in (
+        "scope",
+        "operation_status",
+        "approval_status",
+        "capability",
+        "subsystem",
+        "operation_error",
+        "result_message",
+        "recovery_next_step",
+    ):
         value = _safe_str(meta.get(key)).strip()
         if value:
             projection[key] = value
@@ -507,6 +516,9 @@ def _append_terminal_mission_operation_receipt(
     operation_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
     approval_id = _safe_str(operation_meta.get("approval_id")).strip() or _operation_approval_id(task)
     approval_status = _approval_status(approval_id)
+    operation_error = redact_operation_optional_text(operation.get("error"))
+    result_message = redact_operation_optional_text(operation_meta.get("result_message"))
+    recovery_next_step = "review_operation_detail" if operation_status == "failed" else ""
     meta = {
         "domain": "operations",
         "scope": "mission.loop",
@@ -522,6 +534,9 @@ def _append_terminal_mission_operation_receipt(
         "run_id": run_id or None,
         "artifact_dir": artifact_dir or None,
         "operation_status": operation_status,
+        "operation_error": operation_error or None,
+        "result_message": result_message or None,
+        "recovery_next_step": recovery_next_step or None,
         "capability": capability or None,
         "subsystem": "operations.runtime",
     }

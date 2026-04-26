@@ -221,6 +221,15 @@ bounded memory-timeline query, and shows the operation memory receipt count plus
 reference line in the selected operation detail. This is a receipt-reachability
 slice only; it does not synthesize memory evidence or broaden query scope.
 
+As of `2026-04-26`, failed terminal mission-operation receipts also preserve
+bounded recovery context. When a mission-linked operation reaches failed
+terminal status, the operations runtime writes redacted `operation_error`,
+`result_message` when present, and `recovery_next_step=review_operation_detail`
+into the continuity-ledger receipt. Operation receipt projections,
+operation-detail memory summaries, mission receipt helpers, and memory timeline
+loop projections preserve those fields so failure review can start from the
+receipt itself instead of inferring the failure reason from mission detail state.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend
@@ -3669,6 +3678,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 operation memory receipt
 - `cd apps\chat_ui; npm run test`
   Result: `59 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed operation memory receipt recovery context slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_mission_receipts.py -q`
+  Result: `3 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py src\francis\api\routes\memory_timeline.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py src\francis\api\routes\memory_timeline.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory evidence interface slice:
