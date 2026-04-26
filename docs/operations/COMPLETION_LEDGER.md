@@ -330,6 +330,14 @@ instead of reducing gate evidence to adjacent receipt ids. This is still a
 read-model/client contract change only; it does not create approvals, alter
 policy decisions, or advance mission execution.
 
+As of `2026-04-26`, terminal mission-linked operation receipts can now feed that
+approval posture into memory evidence. When a completed or failed mission-linked
+operation already carries a real approval id, `operations.runtime` records the
+approval id and resolved local approval status in the continuity receipt metadata,
+including handoff/current-task loop fields that `/memory/timeline/list` projects
+as structured loop evidence. This does not change approval decisions, policy
+gates, operation execution, or mission advancement.
+
 As of `2026-04-26`, mission advance receipts preserve the identity of the real
 operation they just created or ran. The mission record, queue item, current-task
 projection, and `advance_receipt` history entry now carry the existing

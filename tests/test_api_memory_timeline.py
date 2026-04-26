@@ -459,6 +459,83 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert any(item.get("references", {}).get("operation_id") == operation_id for item in run_listed.json()["items"])
 
 
+def test_memory_timeline_preserves_approved_operation_receipt_posture(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Carry approved operation posture into memory timeline",
+            "summary": "Approved mission-linked execution should retain approval posture in terminal receipts.",
+            "requester_id": "test.memory.timeline.approval_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "approved memory receipt posture",
+            "mission_id": mission_id,
+            "input": {"user_command": "echo approved-memory-receipt", "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.memory.timeline.approval"})
+    assert pending.status_code == 200
+    approval_id = str(pending.json()["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.memory.timeline.approval"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    assert executed_body["memory_receipt"]["references"]["approval_id"] == approval_id
+    assert executed_body["memory_receipt"]["approval_status"] == "approved"
+
+    listed = client.get(
+        "/memory/timeline/list",
+        params={
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "run_id": approval_id,
+            "include_payload": "1",
+        },
+    )
+    assert listed.status_code == 200
+    receipts = [
+        item
+        for item in listed.json()["items"]
+        if item.get("kind") == "ledger_append"
+        and item.get("references", {}).get("operation_id") == operation_id
+        and item.get("operation_status") == "succeeded"
+    ]
+    assert receipts
+    receipt = receipts[0]
+    assert receipt["references"]["approval_id"] == approval_id
+    assert receipt["loop"]["handoff_approval_id"] == approval_id
+    assert receipt["loop"]["handoff_approval_status"] == "approved"
+    assert receipt["loop"]["current_task_approval_id"] == approval_id
+    assert receipt["loop"]["current_task_approval_status"] == "approved"
+    assert receipt["payload"]["meta"]["approval_status"] == "approved"
+
+
 def test_memory_timeline_redacts_secrets_from_persistence_and_api(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -11,6 +11,7 @@ from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
 from francis.agent.delegation import DelegationRequest
 from francis.chat.continuity.ledger import append as append_continuity_ledger
+from francis.governance import approvals
 from francis.governance.operation_redaction import (
     redact_operation_metadata,
     redact_operation_optional_text,
@@ -196,6 +197,21 @@ def _task_mission_id(task: dict[str, Any]) -> str:
     meta = inputs.get("meta")
     if isinstance(meta, dict):
         return _safe_str(meta.get("mission_id")).strip()
+    return ""
+
+
+def _approval_status(approval_id: str) -> str:
+    cleaned = _safe_str(approval_id).strip()
+    if not cleaned:
+        return ""
+    for status, folder in (
+        ("pending", approvals.pending_dir()),
+        ("approved", approvals.approved_dir()),
+        ("rejected", approvals.rejected_dir()),
+        ("emergency", approvals.emergency_dir()),
+    ):
+        if (folder / f"{cleaned}.json").exists():
+            return status
     return ""
 
 
@@ -408,7 +424,7 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
     }
     if references:
         projection["references"] = references
-    for key in ("scope", "operation_status", "capability", "subsystem"):
+    for key in ("scope", "operation_status", "approval_status", "capability", "subsystem"):
         value = _safe_str(meta.get(key)).strip()
         if value:
             projection[key] = value
@@ -428,12 +444,21 @@ def _append_terminal_mission_operation_receipt(
     run_id = _safe_str(operation.get("run_id")).strip()
     artifact_dir = _safe_str(operation.get("artifact_dir")).strip()
     capability = _safe_str(operation.get("name")).strip()
+    operation_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    approval_id = _safe_str(operation_meta.get("approval_id")).strip() or _result_approval_id(task)
+    approval_status = _approval_status(approval_id)
     meta = {
         "domain": "operations",
         "scope": "mission.loop",
         "mission_id": mission_id,
         "operation_id": operation_id,
         "trace_id": trace_id or None,
+        "approval_id": approval_id or None,
+        "approval_status": approval_status or None,
+        "handoff_approval_id": approval_id or None,
+        "handoff_approval_status": approval_status or None,
+        "current_task_approval_id": approval_id or None,
+        "current_task_approval_status": approval_status or None,
         "run_id": run_id or None,
         "artifact_dir": artifact_dir or None,
         "operation_status": operation_status,
