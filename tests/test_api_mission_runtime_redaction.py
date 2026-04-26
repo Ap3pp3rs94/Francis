@@ -84,3 +84,81 @@ def test_mission_run_once_redacts_secret_handoff_text(monkeypatch, tmp_path: Pat
     body_text = str(body)
     for raw_secret in raw_secrets.values():
         assert raw_secret not in body_text
+
+
+def test_mission_advance_redacts_secret_handoff_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.missions import runtime as mission_runtime
+
+    client = TestClient(create_app())
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Redact direct mission advance handoff text",
+            "summary": "Direct advance responses should not replay secrets.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "direct advance redaction",
+            "mission_id": mission_id,
+            "input": {"goal": "Create a linked operation for redaction proof"},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    raw_secrets = {
+        "message": "advancemessagesecret123",
+        "next_step": "advancenextstepsecret123",
+        "operation_message": "advanceoperationmessagesecret123",
+    }
+
+    def run_operation(operation_id: str, *, worker_id: str = "missions.runner") -> dict[str, Any]:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "message": f"advance message password={raw_secrets['message']}",
+            "operation": {
+                "id": operation_id,
+                "name": "plan.create",
+                "meta": {
+                    "orb_plane": "P7_EXECUTION",
+                    "governance": {
+                        "gate": "review_gate",
+                        "next_step": f"review next token={raw_secrets['next_step']}",
+                    },
+                    "result_message": f"operation message api_key={raw_secrets['operation_message']}",
+                },
+                "output": {},
+            },
+        }
+
+    monkeypatch.setattr(mission_runtime.operations_runtime, "run_operation", run_operation)
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance", "worker_id": "test.missions.advance"},
+    )
+    assert advanced.status_code == 200
+    body = advanced.json()
+    assert body["ok"] is False
+    assert body["operation_id"] == operation_id
+    assert body["message"] == "advance message password=[REDACTED:secret]"
+    assert body["next_step"] == "review next token=[REDACTED:secret]"
+    assert body["operation_message"] == "operation message api_key=[REDACTED:secret]"
+
+    advance_events = [item for item in body["history"] if item.get("event") == "advance_receipt"]
+    assert advance_events
+    assert advance_events[-1]["details"]["message"] == "advance message password=[REDACTED:secret]"

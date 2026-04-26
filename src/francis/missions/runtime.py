@@ -201,7 +201,7 @@ def advance_mission(
 
     action = _safe_str(queue_item.get("recommended_action")).strip() or "review_mission"
     action_target_id = _safe_str(queue_item.get("action_target_id")).strip()
-    operator_hint = _safe_str(queue_item.get("operator_hint")).strip()
+    operator_hint = _redact_free_text(queue_item.get("operator_hint"))
 
     if action == "create_first_operation":
         created = operations_runtime.create_operation(
@@ -221,7 +221,7 @@ def advance_mission(
         )
         operation_id = _safe_str(created.get("operation_id")).strip()
         operation_status = _safe_str(created.get("status")).strip()
-        message = _safe_str(created.get("message")).strip() or "operation_created"
+        message = _redact_free_text(created.get("message")) or "operation_created"
         operation_identity = _operation_receipt_identity(created.get("operation"))
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_create")
         updated_record, receipt_err = mission_store.record_advance_receipt(
@@ -257,7 +257,7 @@ def advance_mission(
         )
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_run")
         operation_status = _safe_str(run_result.get("status")).strip()
-        message = _safe_str(run_result.get("message")).strip() or "operation_run"
+        message = _redact_free_text(run_result.get("message")) or "operation_run"
         operation_identity = _operation_receipt_identity(run_result.get("operation"))
         updated_record, receipt_err = mission_store.record_advance_receipt(
             mission_id,

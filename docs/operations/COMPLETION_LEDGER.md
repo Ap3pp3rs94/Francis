@@ -219,6 +219,13 @@ queue-run responses, while preserving bounded identifiers such as operation,
 approval, trace, run, and artifact handles. This closes a response-truth gap; it
 does not add new execution authority or retry behavior.
 
+As of `2026-04-26`, direct mission advance responses share that runtime
+redaction boundary. `POST /missions/{mission_id}/advance` now redacts free-text
+handoff messages and operator guidance before returning them or writing advance
+receipts, while preserving operation, approval, trace, run, and artifact handles.
+This keeps direct advance and queue-run responses aligned without changing
+execution authority, queue eligibility, or approval behavior.
+
 As of `2026-04-26`, terminal mission-operation memory receipts are reachable
 from operation detail surfaces after the immediate run response is gone. The
 shared receipt reader can query continuity-ledger receipts by operation id with
@@ -4461,6 +4468,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt g
   Result: `passed`
 - `cd apps\chat_ui; npx tsc --noEmit`
   Result: `failed on existing broad strict TypeScript errors across unrelated UI modules; not used as the targeted gate`
+
+Latest targeted validation for the `2026-04-26` Stage 3 direct mission advance handoff redaction slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format src\francis\missions\runtime.py tests\test_api_mission_runtime_redaction.py`
+  Result: `2 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\missions\runtime.py tests\test_api_mission_runtime_redaction.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_mission_runtime_redaction.py -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\missions\runtime.py tests\test_api_mission_runtime_redaction.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py tests/test_api_mission_runtime_redaction.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission queue-run handoff redaction slice:
 
