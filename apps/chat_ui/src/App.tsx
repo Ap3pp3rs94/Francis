@@ -114,6 +114,9 @@ type MissionMemoryReceiptLike = {
   run_id?: string;
   artifact_dir?: string;
   operation_status?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -122,6 +125,20 @@ type MissionMemoryReceiptLike = {
     run_id?: string;
     artifact_dir?: string;
   };
+};
+
+type MissionOperationRecoveryFields = {
+  operationError?: string;
+  resultMessage?: string;
+  recoveryNextStep?: string;
+};
+
+type MissionOperationRecoverySource = {
+  operation_error?: unknown;
+  result_message?: unknown;
+  recovery_next_step?: unknown;
+  memory_receipt?: unknown;
+  latest_memory_receipt?: unknown;
 };
 
 const DEFAULT_SETTINGS: UiSettings = {
@@ -207,6 +224,57 @@ function safeNumber(v: unknown, fallback = 0): number {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+function missionOperationRecoveryFields(source: MissionOperationRecoverySource | null | undefined): MissionOperationRecoveryFields {
+  const rawMemoryReceipt = source?.memory_receipt;
+  const rawLatestMemoryReceipt = source?.latest_memory_receipt;
+  const memoryReceipt = isRecord(rawMemoryReceipt) ? rawMemoryReceipt : {};
+  const latestMemoryReceipt = isRecord(rawLatestMemoryReceipt) ? rawLatestMemoryReceipt : {};
+  return {
+    operationError:
+      safeString(source?.operation_error).trim() ||
+      safeString(memoryReceipt.operation_error).trim() ||
+      safeString(latestMemoryReceipt.operation_error).trim() ||
+      undefined,
+    resultMessage:
+      safeString(source?.result_message).trim() ||
+      safeString(memoryReceipt.result_message).trim() ||
+      safeString(latestMemoryReceipt.result_message).trim() ||
+      undefined,
+    recoveryNextStep:
+      safeString(source?.recovery_next_step).trim() ||
+      safeString(memoryReceipt.recovery_next_step).trim() ||
+      safeString(latestMemoryReceipt.recovery_next_step).trim() ||
+      undefined,
+  };
+}
+
+function missionOperationRecoveryLine(fields: MissionOperationRecoveryFields | null | undefined): React.ReactNode {
+  const items = [
+    { label: "operation_error", value: safeString(fields?.operationError).trim() },
+    { label: "result_message", value: safeString(fields?.resultMessage).trim() },
+    { label: "recovery_next_step", value: safeString(fields?.recoveryNextStep).trim() },
+  ].filter((item) => item.value);
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        color: fields?.operationError ? "#ffcf9d" : THEME.muted,
+        marginTop: 4,
+        overflowWrap: "anywhere",
+      }}
+    >
+      {items.map((item, index) => (
+        <React.Fragment key={item.label}>
+          {index > 0 ? " / " : ""}
+          {item.label}=<code>{item.value}</code>
+        </React.Fragment>
+      ))}
+    </div>
+  );
 }
 
 function chatMissionSurface(message: ChatMessage): ChatMissionSurface | null {
@@ -3553,6 +3621,9 @@ function SystemPanel(props: {
     missionId?: string;
     operationId?: string;
     approvalId?: string;
+    operationError?: string;
+    resultMessage?: string;
+    recoveryNextStep?: string;
   } | null>(null);
   const [missionQueueRunBusy, setMissionQueueRunBusy] = useState(false);
   const [missionQueueRunSummary, setMissionQueueRunSummary] = useState<{
@@ -3589,6 +3660,9 @@ function SystemPanel(props: {
       linkedOperationCount?: number;
       runLedgerCount?: number;
       message?: string;
+      operationError?: string;
+      resultMessage?: string;
+      recoveryNextStep?: string;
     }>;
     errors: Array<{
       missionId?: string;
@@ -3603,6 +3677,9 @@ function SystemPanel(props: {
       artifactDir?: string;
       error?: string;
       message?: string;
+      operationError?: string;
+      resultMessage?: string;
+      recoveryNextStep?: string;
     }>;
   } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -4421,6 +4498,17 @@ function SystemPanel(props: {
           response.operation ?? missionCurrentOperation(nextDetail?.linked_operations ?? [], nextMissionCurrentTaskId);
         const approvalId = safeString(responseCurrentTask?.approval_id).trim() || operationApprovalId(resolvedOperation);
         const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
+        const operationId =
+          safeString(responseCurrentTask?.operation_id).trim() ||
+          safeString(response.operation_id).trim() ||
+          safeString(resolvedOperation?.id).trim();
+        const recoveryFields = missionOperationRecoveryFields(response);
+        setMissionActionResult({
+          missionId: cleaned,
+          operationId: operationId || undefined,
+          approvalId: approvalId || undefined,
+          ...recoveryFields,
+        });
         if (!response.ok) {
           const governanceText = missionGovernanceNotice(response.governance);
           setMissionActionNotice({
@@ -4440,15 +4528,6 @@ function SystemPanel(props: {
         const message = safeString(response.message).trim();
         const handoffDetail = safeString(actionHandoff?.detail).trim();
         const approvalMessage = approvalId ? ` Review approval ${approvalId}.` : "";
-        setMissionActionResult({
-          missionId: cleaned,
-          operationId:
-            safeString(responseCurrentTask?.operation_id).trim() ||
-            safeString(response.operation_id).trim() ||
-            safeString(resolvedOperation?.id).trim() ||
-            undefined,
-          approvalId: approvalId || undefined,
-        });
         setMissionActionNotice({
           tone: "info",
           text: `${summary}${message ? ` ${message}` : ""}${handoffDetail ? ` ${handoffDetail}` : ""}${approvalMessage}`,
@@ -4536,28 +4615,32 @@ function SystemPanel(props: {
         errorCount: response.errors?.length ?? 0,
         counts: response.counts ?? {},
         request: response.request,
-        results: (response.results ?? []).slice(0, 4).map((item) => ({
-          missionId: item.mission_id,
-          operationId: item.operation_id,
-          approvalId: item.approval_id,
-          action: item.action,
-          activeStage: item.loop_state?.active_stage,
-          status: item.status,
-          gate: item.gate,
-          nextStep: item.next_step,
-          traceId: item.trace_id,
-          runId: item.run_id,
-          artifactDir: item.artifact_dir,
-          queueItem: item.queue_item,
-          currentTask: item.current_task,
-          receiptSummary: item.receipt_summary,
-          handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
-          handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
-          historyCount: item.history_count,
-          linkedOperationCount: item.linked_operation_count,
-          runLedgerCount: item.run_ledger_count,
-          message: item.message,
-        })),
+        results: (response.results ?? []).slice(0, 4).map((item) => {
+          const recoveryFields = missionOperationRecoveryFields(item);
+          return {
+            missionId: item.mission_id,
+            operationId: item.operation_id,
+            approvalId: item.approval_id,
+            action: item.action,
+            activeStage: item.loop_state?.active_stage,
+            status: item.status,
+            gate: item.gate,
+            nextStep: item.next_step,
+            traceId: item.trace_id,
+            runId: item.run_id,
+            artifactDir: item.artifact_dir,
+            queueItem: item.queue_item,
+            currentTask: item.current_task,
+            receiptSummary: item.receipt_summary,
+            handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
+            handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
+            historyCount: item.history_count,
+            linkedOperationCount: item.linked_operation_count,
+            runLedgerCount: item.run_ledger_count,
+            message: item.message,
+            ...recoveryFields,
+          };
+        }),
         errors: (response.errors ?? []).slice(0, 4).map((item) => {
           const governance = isRecord(item.governance) ? item.governance : {};
           const governanceDecision: MissionGovernanceDecision = {
@@ -4565,6 +4648,7 @@ function SystemPanel(props: {
             reason: safeString(governance.reason).trim(),
             next_step: safeString(governance.next_step).trim(),
           };
+          const recoveryFields = missionOperationRecoveryFields(item);
           return {
             missionId: safeString(item.mission_id).trim(),
             operationId: safeString(item.operation_id).trim() || safeString(item.task_id).trim(),
@@ -4581,6 +4665,7 @@ function SystemPanel(props: {
               safeString(item.message).trim() ||
               missionGovernanceNotice(governanceDecision) ||
               missionGovernanceNotice(response.governance),
+            ...recoveryFields,
           };
         }),
       });
@@ -7257,6 +7342,11 @@ function SystemPanel(props: {
                       Review approval
                     </button>
                   ) : null}
+                  {missionActionResult.operationError ||
+                  missionActionResult.resultMessage ||
+                  missionActionResult.recoveryNextStep ? (
+                    <div style={{ flexBasis: "100%" }}>{missionOperationRecoveryLine(missionActionResult)}</div>
+                  ) : null}
                 </div>
               ) : null}
               {missionAdvanceBlockedReason ? (
@@ -7816,6 +7906,7 @@ function SystemPanel(props: {
                           </div>
                         </div>
                         {item.message ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.message}</div> : null}
+                        {missionOperationRecoveryLine(item)}
                         {queueItem ? (
                           <div style={{ fontSize: 11, color: queueAdvanceEligible ? THEME.muted : "#ffcf9d", marginTop: 6 }}>
                             advance=<code>{queueAdvanceEligible ? "eligible" : "review_required"}</code>
@@ -8167,6 +8258,7 @@ function SystemPanel(props: {
                             </div>
                           </div>
                           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{errorDetail}</div>
+                          {missionOperationRecoveryLine(item)}
                           {item.operationId ||
                           item.approvalId ||
                           item.gate ||

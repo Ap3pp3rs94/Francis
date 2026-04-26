@@ -254,6 +254,13 @@ records, and terminal mission memory receipts keep `operation_error`,
 is a client contract slice only; it does not add new execution controls or claim
 new visible rendering outside the existing mission result surfaces.
 
+As of `2026-04-26`, the ORB mission action and queue-run result surfaces render
+that preserved recovery context in the existing mission result cards. Mission
+advance failures and queue-run result/error rows now show receipt-backed
+`operation_error`, `result_message`, and `recovery_next_step` when present,
+without adding retry authority, new mutation controls, or inferred recovery
+state.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend
@@ -2926,6 +2933,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission recovery handoff rendering slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `60 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory plan receipt slice:
 
