@@ -20,13 +20,18 @@ def _queue_run_error(errors: list[dict[str, object]]) -> str:
     if not errors:
         return ""
     first = errors[0]
-    return _safe_str(first.get("error") or first.get("message")).strip() or "mission_queue_run_failed"
+    return _redact_free_text(first.get("error") or first.get("message")) or "mission_queue_run_failed"
+
+
+def _redact_result_text(value: Any) -> str | None:
+    text = _redact_free_text(value)
+    return text or None
 
 
 def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, object]) -> dict[str, object]:
     record: dict[str, object] = {
         "mission_id": mission_id,
-        "error": _safe_str(outcome.get("error")).strip() or "advance_failed",
+        "error": _redact_free_text(outcome.get("error")) or "advance_failed",
     }
     fields = {
         "action": action,
@@ -44,7 +49,7 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
         "message": outcome.get("message"),
     }
     for key, value in fields.items():
-        text = _safe_str(value).strip()
+        text = _redact_free_text(value) if key in _FREE_TEXT_HANDOFF_FIELDS else _safe_str(value).strip()
         if text:
             record[key] = text
     return record
@@ -52,6 +57,17 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
 
 def _redact_free_text(value: Any) -> str:
     return redact_secret_text(_safe_str(value).strip())
+
+
+_FREE_TEXT_HANDOFF_FIELDS = frozenset(
+    {
+        "message",
+        "next_step",
+        "operation_error",
+        "result_message",
+        "recovery_next_step",
+    }
+)
 
 
 def _queue_run_request(actor: Any, note: Any, limit: int) -> dict[str, object]:
@@ -75,7 +91,7 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         _safe_str(operation_meta.get("approval_id")).strip() or _safe_str(operation_output.get("approval_id")).strip()
     )
     gate = _safe_str(governance.get("gate")).strip()
-    next_step = _safe_str(governance.get("next_step")).strip()
+    next_step = _redact_free_text(governance.get("next_step"))
     trace_id = (
         _safe_str(operation_record.get("trace_id")).strip()
         or _safe_str(operation_meta.get("trace_id")).strip()
@@ -123,8 +139,8 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         or _safe_str(output_audit.get("artifact_dir")).strip()
         or _safe_str(output_sandbox_audit.get("artifact_dir")).strip()
     )
-    message = (
-        _safe_str(operation_meta.get("result_message")).strip() or _safe_str(operation_output.get("message")).strip()
+    message = _redact_free_text(operation_meta.get("result_message")) or _redact_free_text(
+        operation_output.get("message")
     )
     handoff: dict[str, object] = {}
     if approval_id:
@@ -157,7 +173,7 @@ def _memory_receipt_recovery_handoff(receipt: Any) -> dict[str, object]:
     receipt_payload = _as_dict(receipt)
     handoff: dict[str, object] = {}
     for key in ("operation_error", "result_message", "recovery_next_step"):
-        value = _safe_str(receipt_payload.get(key)).strip()
+        value = _redact_free_text(receipt_payload.get(key))
         if value:
             handoff[key] = value
     return handoff
@@ -354,7 +370,7 @@ def run_queue_once(
                     "action": action,
                     "status": _safe_str(item.get("status")).strip(),
                     "operation_id": _safe_str(item.get("action_target_id")).strip() or None,
-                    "message": _safe_str(item.get("operator_hint")).strip()
+                    "message": _redact_free_text(item.get("operator_hint"))
                     or "Mission requires operator intervention.",
                 }
             )
@@ -374,16 +390,16 @@ def run_queue_once(
             "action": _safe_str(outcome.get("action")).strip() or action,
             "status": _safe_str(outcome.get("status")).strip(),
             "operation_id": _safe_str(outcome.get("operation_id")).strip() or None,
-            "message": _safe_str(outcome.get("message")).strip(),
+            "message": _redact_free_text(outcome.get("message")),
             "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
             "gate": _safe_str(outcome.get("gate")).strip() or None,
-            "next_step": _safe_str(outcome.get("next_step")).strip() or None,
+            "next_step": _redact_result_text(outcome.get("next_step")),
             "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
             "run_id": _safe_str(outcome.get("run_id")).strip() or None,
             "artifact_dir": _safe_str(outcome.get("artifact_dir")).strip() or None,
-            "operation_error": _safe_str(outcome.get("operation_error")).strip() or None,
-            "result_message": _safe_str(outcome.get("result_message")).strip() or None,
-            "recovery_next_step": _safe_str(outcome.get("recovery_next_step")).strip() or None,
+            "operation_error": _redact_result_text(outcome.get("operation_error")),
+            "result_message": _redact_result_text(outcome.get("result_message")),
+            "recovery_next_step": _redact_result_text(outcome.get("recovery_next_step")),
         }
         operation = outcome.get("operation")
         if isinstance(operation, dict):
