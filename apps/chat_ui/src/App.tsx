@@ -8520,6 +8520,7 @@ function SystemPanel(props: {
                 const queueReceiptOperationId = safeString(queueReceiptSummary?.current_operation_id).trim();
                 const queueReceiptOperationStatus = safeString(queueReceiptSummary?.current_operation_status).trim();
                 const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
+                const queueReceiptApprovalId = safeString(queueReceiptSummary?.current_approval_id).trim();
                 const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
                 const queueReceiptRunId = safeString(queueReceiptSummary?.current_run_id).trim();
                 const queueReceiptArtifactDir = safeString(queueReceiptSummary?.current_artifact_dir).trim();
@@ -8659,15 +8660,30 @@ function SystemPanel(props: {
                             <code>{queueReceiptGate}</code>
                           </>
                         ) : null}
-                        {queueReceiptTraceId ? (
+                        {queueReceiptApprovalId ? (
                           <>
                             {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptGate) ? " / " : ""}
+                            receipt_approval=<code>{queueReceiptApprovalId}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptTraceId ? (
+                          <>
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptGate ||
+                            queueReceiptApprovalId)
+                              ? " / "
+                              : ""}
                             trace=<code>{queueReceiptTraceId}</code>
                           </>
                         ) : null}
                         {queueReceiptRunId ? (
                           <>
-                            {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptGate || queueReceiptTraceId)
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptGate ||
+                            queueReceiptApprovalId ||
+                            queueReceiptTraceId)
                               ? " / "
                               : ""}
                             run=<code>{queueReceiptRunId}</code>
@@ -8678,6 +8694,7 @@ function SystemPanel(props: {
                             {(queueReceiptOperationId ||
                             queueReceiptOperationStatus ||
                             queueReceiptGate ||
+                            queueReceiptApprovalId ||
                             queueReceiptTraceId ||
                             queueReceiptRunId)
                               ? " / "
@@ -8690,6 +8707,7 @@ function SystemPanel(props: {
                             {(queueReceiptOperationId ||
                             queueReceiptOperationStatus ||
                             queueReceiptGate ||
+                            queueReceiptApprovalId ||
                             queueReceiptTraceId ||
                             queueReceiptRunId ||
                             queueReceiptArtifactDir)
@@ -8708,6 +8726,20 @@ function SystemPanel(props: {
                             {" / "}memory_receipts=<code>{String(queueReceiptMemoryCount)}</code>
                           </>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {queueReceiptArtifactDir ? (
+                      <div style={{ marginTop: 8 }}>
+                        <ArtifactInspectionPanel
+                          baseUrl={resolvedBaseUrl}
+                          artifactDir={queueReceiptArtifactDir}
+                          title="Queue Receipt Artifact"
+                          buttonLabel="Inspect receipt artifact"
+                          buttonStyle={buttonStyle}
+                          badgeStyle={badgeStyle}
+                          borderColor={THEME.panelBorder}
+                          mutedColor={THEME.muted}
+                        />
                       </div>
                     ) : null}
                     {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
@@ -8773,6 +8805,19 @@ function SystemPanel(props: {
                           Review approval
                         </button>
                       ) : null}
+                      {queueReceiptApprovalId && queueReceiptApprovalId !== queueApprovalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(queueReceiptApprovalId, {
+                              missionId: item.id,
+                              operationId: queueReceiptOperationId || queueOperationTargetId || undefined,
+                            })
+                          }
+                        >
+                          Review receipt approval
+                        </button>
+                      ) : null}
                       <button
                         style={buttonStyle}
                         onClick={() => void advanceMission(item.id)}
@@ -8799,6 +8844,13 @@ function SystemPanel(props: {
                           }
                         >
                           {queueTargetIsMission ? "Open dependency mission" : "Open linked task"}
+                        </button>
+                      ) : null}
+                      {queueReceiptOperationId &&
+                      queueReceiptOperationId !== queueTargetId &&
+                      queueReceiptOperationId !== queueOperationTargetId ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(queueReceiptOperationId)}>
+                          Open receipt task
                         </button>
                       ) : null}
                     </div>

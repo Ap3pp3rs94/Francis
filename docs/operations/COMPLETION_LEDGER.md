@@ -284,6 +284,14 @@ handles, and receipt counts before opening full mission detail. This is a
 read-only overview projection; it does not advance missions, create receipts,
 broaden approvals, or replace the full mission detail/log inspection route.
 
+As of `2026-04-26`, those persistent ORB mission queue cards also expose direct
+receipt reachability from the overview path. When the overview projection carries
+a receipt operation, approval, or artifact handle, the card can open the receipt
+task, review the receipt approval, and inspect the receipt artifact from the
+existing artifact-inspection surface. This is a UI reachability improvement over
+already-projected handles only; it does not create artifacts, synthesize memory,
+or add execution authority.
+
 As of `2026-04-26`, the explanation registry can preserve and query the same
 mission loop handles used by the Stage 3 trace and memory surfaces. Explanation
 records now lift `mission_id` and `operation_id` from either top-level fields or
@@ -3396,6 +3404,16 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission queue receipt
+reachability slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state mission
 overview loop projection slice:
