@@ -346,6 +346,7 @@ test("MissionsClient.create posts a mission declaration and preserves the return
           summary: "Created from the UI composer.",
           next_step: "Run the linked task once it exists.",
           requester_id: "chat_ui.operations",
+          actor: "chat_ui.operations",
           owner_id: "owner.beta",
           dependency_ids: ["dep_beta"],
           escalation_path: "Deadletter if the first operation cannot be linked.",

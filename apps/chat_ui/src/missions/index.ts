@@ -270,6 +270,7 @@ export type MissionCreateRequest = {
   summary?: string;
   next_step?: string;
   requester_id?: string;
+  actor?: string;
   owner_id?: string;
   priority?: number;
   risk_tier?: string;
@@ -1576,9 +1577,10 @@ export class MissionsClient {
     req: MissionCreateRequest,
     opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<MissionCreateResponse> {
+    const actor = safeString(req.actor, "").trim() || safeString(req.requester_id, "").trim() || "chat_ui.operations";
     const json = await fetchJson(this.createUrl(), {
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify({ ...req, actor }),
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs,
       headers: {

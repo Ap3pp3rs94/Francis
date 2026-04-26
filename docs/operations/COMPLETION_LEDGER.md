@@ -175,10 +175,9 @@ permission gate. `POST /missions/run_once` and
 `POST /missions/{mission_id}/advance` deny before reconciling or advancing
 mission execution unless the request actor is present in the server-side
 `FRANCIS_API_ACTOR_SCOPES` policy with the `missions.write` scope. Mission read
-surfaces and the direct mission declaration route are unchanged in this slice
-and remain governed by their existing operator-posture, history, and receipt
-contracts. This is a narrow execution-gate integration for Stage 3 mission flow,
-not a claim of API-wide mission permission enforcement.
+surfaces remain unchanged in this slice. This is a narrow execution-gate
+integration for Stage 3 mission flow, not a claim of API-wide mission permission
+enforcement.
 
 As of `2026-04-26`, actor-bearing mission lifecycle mutation routes are also
 wired to that mission write permission gate. `POST /missions/tick`,
@@ -186,9 +185,14 @@ wired to that mission write permission gate. `POST /missions/tick`,
 `POST /missions/{mission_id}/deadletter`, and
 `POST /missions/{mission_id}/replace` deny before reconciling, updating,
 deadlettering, or declaring replacement mission state unless the request actor
-has `missions.write` in `FRANCIS_API_ACTOR_SCOPES`. Direct
-`POST /missions/create` remains outside this slice because its request contract
-does not yet carry an explicit actor field.
+has `missions.write` in `FRANCIS_API_ACTOR_SCOPES`.
+
+As of `2026-04-26`, direct mission declaration is also wired to that mission
+write permission gate. `POST /missions/create` accepts an explicit `actor`,
+falls back to `requester_id` for legacy direct callers, and denies before
+creating mission records, history, or queue state unless the resolved identity
+has `missions.write` in `FRANCIS_API_ACTOR_SCOPES`. The chat UI mission client
+now sends an explicit create actor instead of relying only on requester id.
 
 As of `2026-04-26`, chat mission ingress is also wired to that mission write
 permission gate. `/chat/send` and `/chat/ws` mission commands use the bounded
@@ -3553,6 +3557,31 @@ Latest targeted validation for the `2026-04-25` Stage 3 memory evidence UI contr
 
 - `cd apps\chat_ui; npm run test`
   Result: `30 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 direct mission create permission-gate slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions_permission_gate.py -q`
+  Result: `5 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_approvals.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `7 passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\api\routes\missions.py tests\conftest.py tests\test_api_missions_permission_gate.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\api\routes\missions.py tests\conftest.py tests\test_api_missions_permission_gate.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `13 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `58 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

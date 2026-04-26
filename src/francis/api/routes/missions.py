@@ -1140,6 +1140,7 @@ class MissionCreateIn(BaseModel):
     summary: str = ""
     next_step: str = ""
     requester_id: str = "api"
+    actor: str | None = None
     owner_id: str = ""
     priority: int = 5
     risk_tier: str = "medium"
@@ -1201,10 +1202,14 @@ class MissionReplaceIn(BaseModel):
 
 
 @router.post("/create")
-def create_mission(payload: MissionCreateIn) -> dict[str, object]:
+def create_mission(request: Request, payload: MissionCreateIn) -> dict[str, object]:
     blocked_reason = _mission_write_posture_guard("declaring a mission")
     if blocked_reason:
         return {"ok": False, "error": blocked_reason, "status": "blocked"}
+    actor = _first_text(payload.actor, payload.requester_id)
+    permission = _mission_write_permission(actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
     try:
         record, err = mission_store.create_mission(
             MissionCreateRequest(
