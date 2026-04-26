@@ -398,6 +398,13 @@ continuity-ledger entries for succeeded or failed mission-linked operation runs;
 the memory loop stage exposes those receipts only when real mission and
 operation ids exist.
 
+As of `2026-04-26`, mission memory receipt projections also preserve a
+structured `references` object alongside their flat mission, operation, trace,
+approval, run, and artifact handle fields. This aligns mission detail,
+continuity, and world-state memory receipts with the existing operation-run and
+memory-timeline receipt contracts, so consumers can read one bounded reference
+shape without parsing raw ledger metadata.
+
 As of `2026-04-26`, the chat UI missions client preserves that mission-detail
 memory receipt contract. `MissionsClient.get` now retains flat ledger receipt ids,
 mission, operation, trace, run, artifact, domain, scope, and count fields from
@@ -3144,6 +3151,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission tick timestamp-i
   Result: `26 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `93 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt references slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_mission_receipts.py -q`
+  Result: `1 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_linked_operation_run_updates_history_and_status tests\test_api_missions.py::test_mission_detail_surfaces_failed_operation_memory_receipt tests\test_api_continuity.py::test_continuity_briefing_reports_ready_stage3_mission_posture tests\test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery -q`
+  Result: `4 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `63 passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 

@@ -83,21 +83,34 @@ def mission_operation_receipt_index(
         content = _safe_str(item.get("content")).strip()
         ts_raw = item.get("ts")
         digest = hashlib.sha1(f"{ts_raw}:{role}:{content}".encode("utf-8", errors="ignore")).hexdigest()[:12]
+        references = {
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "trace_id": _safe_str(meta.get("trace_id")).strip(),
+            "approval_id": _safe_str(meta.get("approval_id")).strip(),
+            "run_id": _safe_str(meta.get("run_id")).strip(),
+            "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
+        }
+        references = {key: value for key, value in references.items() if value}
         receipt = {
             "id": f"ledger_{digest}",
             "source": "continuity.ledger",
             "ts": _parse_ts(ts_raw),
             "mission_id": mission_id,
             "operation_id": operation_id,
-            "trace_id": _safe_str(meta.get("trace_id")).strip(),
-            "run_id": _safe_str(meta.get("run_id")).strip(),
-            "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
+            "trace_id": references.get("trace_id", ""),
+            "approval_id": references.get("approval_id", ""),
+            "run_id": references.get("run_id", ""),
+            "artifact_dir": references.get("artifact_dir", ""),
             "operation_status": operation_status,
             "capability": _safe_str(meta.get("capability")).strip(),
             "domain": "operations",
             "scope": "mission.loop",
+            "references": references,
         }
-        receipts.setdefault(mission_id, []).append({key: value for key, value in receipt.items() if value != ""})
+        receipts.setdefault(mission_id, []).append(
+            {key: value for key, value in receipt.items() if value != "" and value != {}}
+        )
 
     safe_per_mission_limit = max(1, min(int(per_mission_limit), 100))
     for mission_id, items in list(receipts.items()):
