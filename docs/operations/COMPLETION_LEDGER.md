@@ -421,11 +421,18 @@ continuity, and world-state memory receipts with the existing operation-run and
 memory-timeline receipt contracts, so consumers can read one bounded reference
 shape without parsing raw ledger metadata.
 
+As of `2026-04-26`, mission memory receipt projections also preserve terminal
+operation approval posture. When a mission-loop continuity receipt includes a
+real `approval_status`, `mission_operation_receipts()` carries that status into
+mission detail, continuity, and world-state receipt projections alongside the
+existing approval id, without changing the receipt reference shape or approval
+decision behavior.
+
 As of `2026-04-26`, the chat UI missions client preserves that mission-detail
 memory receipt contract. `MissionsClient.get` now retains flat ledger receipt ids,
-mission, operation, trace, run, artifact, domain, scope, and count fields from
-mission detail, receipt summary, and the memory loop stage while still preserving
-direct action response receipt references.
+mission, operation, trace, approval posture, run, artifact, domain, scope, and
+count fields from mission detail, receipt summary, and the memory loop stage
+while still preserving direct action response receipt references.
 
 As of `2026-04-26`, the selected mission inspector and linked-operation mission
 bridge render that preserved mission-detail memory receipt contract. The
@@ -3167,6 +3174,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission tick timestamp-i
   Result: `26 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `93 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt approval-status projection slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_mission_receipts.py -q`
+  Result: `1 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `11 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt references slice:
 

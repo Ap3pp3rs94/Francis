@@ -209,6 +209,7 @@ export type MissionMemoryReceipt = {
   message?: string;
   scope?: string;
   operation_status?: string;
+  approval_status?: string;
   capability?: string;
   subsystem?: string;
   domain?: string;
@@ -1010,6 +1011,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     message: safeString(raw.message, "") || undefined,
     scope: safeString(raw.scope, "") || undefined,
     operation_status: safeString(raw.operation_status, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
     capability: safeString(raw.capability, "") || undefined,
     subsystem: safeString(raw.subsystem, "") || undefined,
     domain: safeString(raw.domain, "") || undefined,
@@ -1028,6 +1030,7 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.message &&
     !receipt.scope &&
     !receipt.operation_status &&
+    !receipt.approval_status &&
     !receipt.domain &&
     !receipt.references
   ) {

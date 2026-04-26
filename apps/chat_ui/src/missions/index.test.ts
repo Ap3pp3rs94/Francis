@@ -1182,6 +1182,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           run_id: "run_loop",
           artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           operation_status: "succeeded",
+          approval_status: "approved",
           domain: "operations",
           scope: "mission.loop",
         },
@@ -1209,6 +1210,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         run_id: "run_loop",
         artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         operation_status: "succeeded",
+        approval_status: "approved",
         capability: "plugin.run",
         domain: "operations",
         scope: "mission.loop",
@@ -1224,6 +1226,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           run_id: "run_loop",
           artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           operation_status: "succeeded",
+          approval_status: "approved",
           capability: "plugin.run",
           domain: "operations",
           scope: "mission.loop",
@@ -1299,6 +1302,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
             run_id: "run_loop",
             artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
             operation_status: "succeeded",
+            approval_status: "approved",
             domain: "operations",
             scope: "mission.loop",
           },
@@ -1359,6 +1363,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.memory?.memory_receipt_count, 1);
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.operation_id, "tsk_loop");
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.approval_status, "approved");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.references?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.interface?.status, "available");
     assert.equal(response.loop_state?.interface?.operation_id, "tsk_loop");
@@ -1406,6 +1411,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.memory_receipt_count, 1);
     assert.equal(response.receipt_summary?.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.mission_id, "mission_loop");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.approval_status, "approved");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.references?.mission_id, "mission_loop");
     assert.equal(response.receipt_summary?.current_operation_id, "tsk_loop");
     assert.equal(response.receipt_summary?.current_operation_status, "queued");
@@ -1419,9 +1425,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.memory_receipt_count, 1);
     assert.equal(response.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.latest_memory_receipt?.operation_id, "tsk_loop");
+    assert.equal(response.latest_memory_receipt?.approval_status, "approved");
     assert.equal(response.latest_memory_receipt?.references?.operation_id, "tsk_loop");
     assert.equal(response.memory_receipts?.[0]?.id, "ledger_loop");
     assert.equal(response.memory_receipts?.[0]?.run_id, "run_loop");
+    assert.equal(response.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(response.memory_receipts?.[0]?.references?.run_id, "run_loop");
   } finally {
     restoreFetch();

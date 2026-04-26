@@ -24,6 +24,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "run_id": "run_receipt_refs",
             "artifact_dir": "D:/francis/data/artifacts/receipt-refs",
             "operation_status": "succeeded",
+            "approval_status": "approved",
             "capability": "plugin.run",
         },
     )
@@ -34,6 +35,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["mission_id"] == "msn_receipt_refs"
     assert receipts[0]["operation_id"] == "tsk_receipt_refs"
     assert receipts[0]["approval_id"] == "apr_receipt_refs"
+    assert receipts[0]["approval_status"] == "approved"
     assert receipts[0]["references"] == {
         "mission_id": "msn_receipt_refs",
         "operation_id": "tsk_receipt_refs",

@@ -103,6 +103,7 @@ def mission_operation_receipt_index(
             "run_id": references.get("run_id", ""),
             "artifact_dir": references.get("artifact_dir", ""),
             "operation_status": operation_status,
+            "approval_status": _safe_str(meta.get("approval_status")).strip().lower(),
             "capability": _safe_str(meta.get("capability")).strip(),
             "domain": "operations",
             "scope": "mission.loop",
