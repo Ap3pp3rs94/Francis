@@ -18,6 +18,12 @@ import {
   memoryEvidenceQueryKey,
   mergeMemoryEvidenceResponses,
 } from "./memory_evidence";
+import {
+  buildExplanationEvidenceQueries,
+  explanationEvidenceQueryKey,
+  mergeExplanationEvidenceResponses,
+} from "./explanation_evidence";
+import { ExplanationApiError, ExplanationClient, type ExplanationRecord } from "./explanation_explorer";
 import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
@@ -298,6 +304,21 @@ function memoryTimelineEventReferenceLine(event: MemoryTimelineEvent): string {
   if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
   if (refs?.run_id) parts.push(`run ${refs.run_id}`);
   if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
+  return parts.join(" / ");
+}
+
+function explanationRecordSummary(record: ExplanationRecord): string {
+  return safeString(record.title).trim() || safeString(record.summary).trim() || safeString(record.kind).trim() || record.id;
+}
+
+function explanationRecordReferenceLine(record: ExplanationRecord): string {
+  const parts: string[] = [];
+  if (record.trace_id) parts.push(`trace ${record.trace_id}`);
+  if (record.run_id) parts.push(`run ${record.run_id}`);
+  if (record.artifact_dir) parts.push(`artifact ${record.artifact_dir}`);
+  if (record.approval_id) parts.push(`approval ${record.approval_id}`);
+  if (record.plugin_id) parts.push(`plugin ${record.plugin_id}`);
+  if (record.domain) parts.push(`domain ${record.domain}`);
   return parts.join(" / ");
 }
 
@@ -9512,6 +9533,7 @@ function OperationsPanel(props: {
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const memoryTimelineClient = useMemo(() => new MemoryTimelineClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const explanationClient = useMemo(() => new ExplanationClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
   const [selectedOperationId, setSelectedOperationId] = useState("");
   const [detail, setDetail] = useState<OperationDetail | null>(null);
@@ -9529,6 +9551,10 @@ function OperationsPanel(props: {
   const [selectedMemoryEvidenceBusy, setSelectedMemoryEvidenceBusy] = useState(false);
   const [selectedMemoryEvidenceError, setSelectedMemoryEvidenceError] = useState<string | null>(null);
   const [selectedMemoryEvidenceLoadedAt, setSelectedMemoryEvidenceLoadedAt] = useState<number | null>(null);
+  const [selectedExplanationEvidence, setSelectedExplanationEvidence] = useState<ExplanationRecord[]>([]);
+  const [selectedExplanationEvidenceBusy, setSelectedExplanationEvidenceBusy] = useState(false);
+  const [selectedExplanationEvidenceError, setSelectedExplanationEvidenceError] = useState<string | null>(null);
+  const [selectedExplanationEvidenceLoadedAt, setSelectedExplanationEvidenceLoadedAt] = useState<number | null>(null);
   const [composerObjective, setComposerObjective] = useState("Create a governed plan for the current operator objective");
   const [composerReason, setComposerReason] = useState("operator_requested");
   const [composerAction, setComposerAction] = useState("plan.create");
@@ -9721,6 +9747,16 @@ function OperationsPanel(props: {
     ],
   );
   const selectedMemoryEvidenceQueryKey = memoryEvidenceQueryKey(selectedMemoryEvidenceQueries);
+  const selectedExplanationEvidenceQueries = useMemo(
+    () =>
+      buildExplanationEvidenceQueries({
+        traceId: selectedMissionMemoryTraceId,
+        runId: selectedRunId,
+        artifactDir: selectedArtifactDir,
+      }),
+    [selectedArtifactDir, selectedMissionMemoryTraceId, selectedRunId],
+  );
+  const selectedExplanationEvidenceQueryKey = explanationEvidenceQueryKey(selectedExplanationEvidenceQueries);
   const selectedMissionLoopStages = [
     { key: "plan", label: "Plan", stage: selectedMissionLoopState?.plan },
     { key: "gate", label: "Gate", stage: selectedMissionLoopState?.gate },
@@ -9827,6 +9863,12 @@ function OperationsPanel(props: {
     setSelectedMemoryEvidenceLoadedAt(null);
   }, [selectedMemoryEvidenceQueryKey]);
 
+  useEffect(() => {
+    setSelectedExplanationEvidence([]);
+    setSelectedExplanationEvidenceError(null);
+    setSelectedExplanationEvidenceLoadedAt(null);
+  }, [selectedExplanationEvidenceQueryKey]);
+
   const loadSelectedMemoryEvidence = useCallback(async () => {
     if (!selectedMemoryEvidenceQueries.length) {
       setSelectedMemoryEvidence([]);
@@ -9859,6 +9901,39 @@ function OperationsPanel(props: {
       setSelectedMemoryEvidenceBusy(false);
     }
   }, [memoryTimelineClient, selectedMemoryEvidenceQueries]);
+
+  const loadSelectedExplanationEvidence = useCallback(async () => {
+    if (!selectedExplanationEvidenceQueries.length) {
+      setSelectedExplanationEvidence([]);
+      setSelectedExplanationEvidenceLoadedAt(null);
+      setSelectedExplanationEvidenceError("No trace, run, or artifact handle is available for explanation evidence.");
+      return;
+    }
+
+    setSelectedExplanationEvidenceBusy(true);
+    setSelectedExplanationEvidenceError(null);
+    try {
+      const responses = await Promise.all(
+        selectedExplanationEvidenceQueries.map((query) =>
+          explanationClient.list({ ...query.filters, timeoutMs: 10_000 }),
+        ),
+      );
+      setSelectedExplanationEvidence(mergeExplanationEvidenceResponses(responses, 10));
+      setSelectedExplanationEvidenceLoadedAt(nowUnixSeconds());
+    } catch (err) {
+      const msg =
+        err instanceof ExplanationApiError
+          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+          : err instanceof Error
+            ? err.message
+            : "Explanation evidence request failed.";
+      setSelectedExplanationEvidence([]);
+      setSelectedExplanationEvidenceLoadedAt(null);
+      setSelectedExplanationEvidenceError(msg);
+    } finally {
+      setSelectedExplanationEvidenceBusy(false);
+    }
+  }, [explanationClient, selectedExplanationEvidenceQueries]);
 
   const refreshSelectedOperationView = useCallback(async () => {
     await refresh();
@@ -10754,7 +10829,10 @@ function OperationsPanel(props: {
                           ) : null}
                         </div>
                       ) : null}
-                      {(selectedMissionBridgeApprovalId || selectedMissionBridgeTaskId || selectedMemoryEvidenceQueries.length > 0) ? (
+                      {(selectedMissionBridgeApprovalId ||
+                        selectedMissionBridgeTaskId ||
+                        selectedMemoryEvidenceQueries.length > 0 ||
+                        selectedExplanationEvidenceQueries.length > 0) ? (
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                           {selectedMissionBridgeApprovalId ? (
                             <button
@@ -10781,6 +10859,15 @@ function OperationsPanel(props: {
                               onClick={() => void loadSelectedMemoryEvidence()}
                             >
                               {selectedMemoryEvidenceBusy ? "Loading memory." : "Load memory evidence"}
+                            </button>
+                          ) : null}
+                          {selectedExplanationEvidenceQueries.length > 0 ? (
+                            <button
+                              style={buttonStyle}
+                              disabled={selectedExplanationEvidenceBusy}
+                              onClick={() => void loadSelectedExplanationEvidence()}
+                            >
+                              {selectedExplanationEvidenceBusy ? "Loading audit." : "Load audit explanations"}
                             </button>
                           ) : null}
                           <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
@@ -11049,6 +11136,63 @@ function OperationsPanel(props: {
                                     </div>
                                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                                       event <code>{event.id}</code> / at <code>{toLocaleTime(event.ts)}</code>
+                                    </div>
+                                    {referenceLine ? (
+                                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{referenceLine}</div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(selectedExplanationEvidenceBusy ||
+                        selectedExplanationEvidenceError ||
+                        selectedExplanationEvidenceLoadedAt !== null ||
+                        selectedExplanationEvidence.length > 0) ? (
+                        <div
+                          style={{
+                            border: `1px solid ${THEME.panelBorder}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            marginTop: 8,
+                            background: "#101214",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>Audit Explanations</div>
+                            {selectedExplanationEvidenceLoadedAt !== null ? (
+                              <div style={{ fontSize: 11, color: THEME.muted }}>
+                                loaded <code>{toLocaleTime(selectedExplanationEvidenceLoadedAt)}</code>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {selectedExplanationEvidenceQueries.map((query) => query.label).join(" / ")}
+                          </div>
+                          {selectedExplanationEvidenceBusy ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>Loading explanation records.</div>
+                          ) : selectedExplanationEvidenceError ? (
+                            <div style={{ fontSize: 11, color: "#ffaaaa", marginTop: 8 }}>
+                              Explanation records unavailable: {selectedExplanationEvidenceError}
+                            </div>
+                          ) : selectedExplanationEvidenceLoadedAt !== null && selectedExplanationEvidence.length === 0 ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                              No explanation records returned for the selected receipt handles.
+                            </div>
+                          ) : selectedExplanationEvidence.length > 0 ? (
+                            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                              {selectedExplanationEvidence.map((record) => {
+                                const referenceLine = explanationRecordReferenceLine(record);
+                                return (
+                                  <div key={record.id} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                                      <div style={{ fontSize: 12, color: THEME.text }}>{explanationRecordSummary(record)}</div>
+                                      <span style={badgeStyle(record.kind || "audit")}>{record.kind || "audit"}</span>
+                                    </div>
+                                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                                      record <code>{record.id}</code> / at <code>{toLocaleTime(record.ts)}</code>
                                     </div>
                                     {referenceLine ? (
                                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{referenceLine}</div>

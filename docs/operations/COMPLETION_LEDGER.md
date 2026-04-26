@@ -242,6 +242,13 @@ preserves the same linkage across list, get, and export calls. This gives
 trace/run/artifact-bearing mission and operation receipts another read path
 without adding execution or synthetic trace state.
 
+As of `2026-04-26`, the selected operation detail surface can use that
+explanation receipt contract from real operation and mission loop handles. The
+chat UI now builds bounded `/explanations/list` queries for the selected
+trace/run/artifact handles, de-duplicates returned audit/explanation records,
+and renders only backend-returned records when the operator manually loads them.
+It does not invent explanation status when no receipt handles or records exist.
+
 As of `2026-04-26`, operations list and export routes can also filter by real
 execution receipt handles. `/operations/list` and `/operations/export` accept
 `trace_id`, `run_id`, and `artifact_dir` filters, JSON export keeps the same
@@ -2750,6 +2757,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation receipt filt
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation explanation evidence interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_evidence\index.test.ts`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `44 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --cached --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link contract slice:
