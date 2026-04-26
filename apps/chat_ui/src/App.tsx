@@ -9554,8 +9554,17 @@ function OperationsPanel(props: {
         operationId: selectedMissionBridgeTaskId,
         fallbackOperationId: selectedOperation?.id,
         traceId: selectedMissionMemoryTraceId,
+        runId: selectedRunId,
+        artifactDir: selectedArtifactDir,
       }),
-    [selectedMissionBridgeTaskId, selectedMissionId, selectedMissionMemoryTraceId, selectedOperation?.id],
+    [
+      selectedArtifactDir,
+      selectedMissionBridgeTaskId,
+      selectedMissionId,
+      selectedMissionMemoryTraceId,
+      selectedOperation?.id,
+      selectedRunId,
+    ],
   );
   const selectedMemoryEvidenceQueryKey = memoryEvidenceQueryKey(selectedMemoryEvidenceQueries);
   const selectedMissionLoopStages = [

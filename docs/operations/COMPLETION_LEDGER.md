@@ -179,6 +179,13 @@ events, and render only receipt-backed memory timeline entries. The UI does not
 invent memory status when the timeline route returns no entries or is
 unavailable.
 
+As of `2026-04-25`, the selected operation memory-evidence lookup also carries
+real execution receipt handles into the same bounded timeline path. When the
+operation detail exposes a `run_id` or `artifact_dir`, the chat UI includes
+those exact filters alongside mission, operation, and trace filters instead of
+leaving run/artifact-backed continuity receipts unreachable from the operation
+surface.
+
 As of `2026-04-25`, those operations memory-evidence query rules are covered by
 a direct UI contract helper. The chat UI builds only mission, linked-task or
 fallback-task, and trace filters from real ids, keeps payloads out of the bounded
@@ -2397,6 +2404,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation run/artifact memory evidence slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation client memory receipt contract slice:
 
