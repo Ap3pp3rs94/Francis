@@ -96,6 +96,10 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert ingress_receipt["loop"]["active_stage"] == "execute"
     assert ingress_receipt["loop"]["handoff_action"] == "run_linked_operation"
     assert ingress_receipt["loop"]["linked_operation_count"] == 1
+    assert ingress_receipt["loop"]["current_task_operation_id"] == operation_id
+    assert ingress_receipt["loop"]["current_task_operation_name"] == "plan.create"
+    assert ingress_receipt["loop"]["current_task_operation_plane"] == "P7_EXECUTION"
+    assert ingress_receipt["loop"]["current_task_advance_action"] == "create_first_operation"
     assert ingress_receipt["loop"]["memory_receipt_count"] == 0
 
     terminal_items = [

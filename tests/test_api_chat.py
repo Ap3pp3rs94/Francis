@@ -57,6 +57,9 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert body["loop_state"]["interface"]["operation_id"] == operation_id
     assert body["current_task"]["source"] == "mission_meta"
     assert body["current_task"]["operation_id"] == operation_id
+    assert body["current_task"]["operation_name"] == "plan.create"
+    assert body["current_task"]["operation_plane"] == "P7_EXECUTION"
+    assert body["current_task"]["advance_action"] == "create_first_operation"
     assert body["current_task"]["handoff_action"] == "run_linked_operation"
 
     fetched = client.get(f"/missions/{mission_id}")
@@ -92,6 +95,9 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert assistant_meta["handoff_next_step"] == body["loop_state"]["handoff"]["next_step"]
     assert assistant_meta["current_task_source"] == "mission_meta"
     assert assistant_meta["current_task_operation_id"] == operation_id
+    assert assistant_meta["current_task_operation_name"] == "plan.create"
+    assert assistant_meta["current_task_operation_plane"] == "P7_EXECUTION"
+    assert assistant_meta["current_task_advance_action"] == "create_first_operation"
     assert assistant_meta["current_task_next_step"] == body["current_task"]["next_step"]
     assert assistant_meta["linked_operation_count"] == 1
     assert assistant_meta["run_ledger_count"] == 1
@@ -133,10 +139,13 @@ def test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles() -> 
             "approval_id": "apr_trace_handles",
             "approval_status": "approved",
             "operation_id": "tsk_trace_handles",
+            "operation_name": "plan.create",
+            "operation_plane": "P9_OBSERVABILITY",
             "gate": "operator_review",
             "trace_id": "trace_handles",
             "run_id": "run_handles",
             "artifact_dir": "D:/francis/data/artifacts/trace-handles",
+            "advance_action": "run_linked_operation",
             "next_step": "review_completed_mission",
         },
         receipt_summary={
@@ -153,9 +162,13 @@ def test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles() -> 
     assert meta["handoff_artifact_dir"] == "D:/francis/data/artifacts/trace-handles"
     assert meta["current_task_approval_id"] == "apr_trace_handles"
     assert meta["current_task_approval_status"] == "approved"
+    assert meta["current_task_operation_id"] == "tsk_trace_handles"
+    assert meta["current_task_operation_name"] == "plan.create"
+    assert meta["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert meta["current_task_trace_id"] == "trace_handles"
     assert meta["current_task_run_id"] == "run_handles"
     assert meta["current_task_artifact_dir"] == "D:/francis/data/artifacts/trace-handles"
+    assert meta["current_task_advance_action"] == "run_linked_operation"
     assert meta["memory_receipt_count"] == 1
 
 

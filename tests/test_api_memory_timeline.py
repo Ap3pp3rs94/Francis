@@ -305,10 +305,13 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
                 "handoff_artifact_dir": "D:/francis/data/artifacts/structured-loop",
                 "current_task_source": "terminal_operation_receipt",
                 "current_task_operation_id": "tsk-structured-loop",
+                "current_task_operation_name": "plan.create",
+                "current_task_operation_plane": "P9_OBSERVABILITY",
                 "current_task_trace_id": "trace-structured-loop",
                 "current_task_approval_id": "apr-structured-loop",
                 "current_task_run_id": "run-structured-loop",
                 "current_task_artifact_dir": "D:/francis/data/artifacts/structured-loop",
+                "current_task_advance_action": "run_linked_operation",
                 "memory_receipt_count": 1,
                 "run_ledger_count": "2",
             },
@@ -329,6 +332,9 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
     assert created_body["item"]["loop"]["active_stage"] == "interface"
     assert created_body["item"]["loop"]["handoff_operation_id"] == "tsk-structured-loop"
     assert created_body["item"]["loop"]["current_task_approval_id"] == "apr-structured-loop"
+    assert created_body["item"]["loop"]["current_task_operation_name"] == "plan.create"
+    assert created_body["item"]["loop"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert created_body["item"]["loop"]["current_task_advance_action"] == "run_linked_operation"
     assert created_body["item"]["loop"]["memory_receipt_count"] == 1
     assert created_body["item"]["loop"]["run_ledger_count"] == 2
 
@@ -352,6 +358,7 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
     assert persisted_body["ok"] is True
     assert persisted_body["item"]["references"]["mission_id"] == "msn-structured-loop"
     assert persisted_body["item"]["loop"]["current_task_operation_id"] == "tsk-structured-loop"
+    assert persisted_body["item"]["loop"]["current_task_operation_name"] == "plan.create"
 
 
 def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tmp_path: Path) -> None:
@@ -532,6 +539,9 @@ def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch
         "handoff_next_step": sent_body["loop_state"]["handoff"]["next_step"],
         "current_task_source": "mission_meta",
         "current_task_operation_id": operation_id,
+        "current_task_operation_name": "plan.create",
+        "current_task_operation_plane": "P7_EXECUTION",
+        "current_task_advance_action": "create_first_operation",
         "current_task_next_step": sent_body["current_task"]["next_step"],
         "linked_operation_count": 1,
         "run_ledger_count": 1,

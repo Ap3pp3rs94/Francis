@@ -902,6 +902,14 @@ leaving the mission detail route. This is read-model propagation only; it does n
 add new controls, execute missions, infer missing operation records, or change
 mission authority.
 
+As of `2026-04-26`, chat mission ingress continuity metadata and memory timeline
+loop projections also preserve current-task operation identity. Compact assistant
+ledger metadata, `/memory/timeline/list` loop projection, and the chat UI memory
+timeline client now carry operation name, operation ORB plane, and advance action
+with the existing current-task operation id. This is contract propagation only; it
+does not create memory writes outside the existing chat ingress path, infer
+missing operation records, or add execution authority.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -3958,6 +3966,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress con
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py -q`
   Result: `3 passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 chat ingress current-task identity memory-loop slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py -q`
+  Result: `16 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\chat.py src\francis\api\routes\memory_timeline.py tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\chat.py src\francis\api\routes\memory_timeline.py tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:
