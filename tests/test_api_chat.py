@@ -98,6 +98,67 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert assistant_meta["memory_receipt_count"] == 0
 
 
+def test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles() -> None:
+    from francis.api.routes.chat import _compact_mission_ingress_meta
+    from francis.missions.store import MissionRecord, MissionStatus
+
+    record = MissionRecord(
+        mission_id="msn_trace_handles",
+        created_at="2026-04-26T00:00:00+00:00",
+        updated_at="2026-04-26T00:00:01+00:00",
+        status=MissionStatus.COMPLETED,
+        objective="Preserve trace handles",
+        requester_id="chat.send",
+    )
+
+    meta = _compact_mission_ingress_meta(
+        record=record,
+        loop_state={
+            "active_stage": "interface",
+            "handoff": {
+                "stage": "interface",
+                "action": "review_result",
+                "gate": "operator_review",
+                "approval_id": "apr_trace_handles",
+                "approval_status": "approved",
+                "operation_id": "tsk_trace_handles",
+                "trace_id": "trace_handles",
+                "run_id": "run_handles",
+                "artifact_dir": "D:/francis/data/artifacts/trace-handles",
+                "next_step": "review_completed_mission",
+            },
+        },
+        current_task={
+            "source": "terminal_operation_receipt",
+            "approval_id": "apr_trace_handles",
+            "approval_status": "approved",
+            "operation_id": "tsk_trace_handles",
+            "gate": "operator_review",
+            "trace_id": "trace_handles",
+            "run_id": "run_handles",
+            "artifact_dir": "D:/francis/data/artifacts/trace-handles",
+            "next_step": "review_completed_mission",
+        },
+        receipt_summary={
+            "linked_operation_count": 1,
+            "run_ledger_count": 2,
+            "memory_receipt_count": 1,
+        },
+    )
+
+    assert meta["active_stage"] == "interface"
+    assert meta["handoff_approval_status"] == "approved"
+    assert meta["handoff_trace_id"] == "trace_handles"
+    assert meta["handoff_run_id"] == "run_handles"
+    assert meta["handoff_artifact_dir"] == "D:/francis/data/artifacts/trace-handles"
+    assert meta["current_task_approval_id"] == "apr_trace_handles"
+    assert meta["current_task_approval_status"] == "approved"
+    assert meta["current_task_trace_id"] == "trace_handles"
+    assert meta["current_task_run_id"] == "run_handles"
+    assert meta["current_task_artifact_dir"] == "D:/francis/data/artifacts/trace-handles"
+    assert meta["memory_receipt_count"] == 1
+
+
 def test_chat_mission_command_respects_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -23,8 +23,20 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
     current_task: {
       source: "mission_meta",
       operation_id: "tsk_chat",
+      trace_id: "trace_chat",
+      run_id: "run_chat",
+      artifact_dir: "D:/francis/data/artifacts/chat",
       handoff_action: "run_linked_operation",
       next_step: "Run linked operation.",
+    },
+    memory_receipt_count: 1,
+    latest_memory_receipt: {
+      id: "ledger_chat",
+      mission_id: "msn_chat",
+      operation_id: "tsk_chat",
+      trace_id: "trace_chat",
+      run_id: "run_chat",
+      artifact_dir: "D:/francis/data/artifacts/chat",
     },
     governance: {
       gate: "permission_gate",
@@ -54,7 +66,18 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
   const currentTask = meta.current_task as Record<string, unknown>;
   assert.equal(currentTask.source, "mission_meta");
   assert.equal(currentTask.operation_id, "tsk_chat");
+  assert.equal(currentTask.trace_id, "trace_chat");
+  assert.equal(currentTask.run_id, "run_chat");
+  assert.equal(currentTask.artifact_dir, "D:/francis/data/artifacts/chat");
   assert.equal(currentTask.handoff_action, "run_linked_operation");
+
+  assert.equal(meta.memory_receipt_count, 1);
+  const latestMemoryReceipt = meta.latest_memory_receipt as Record<string, unknown>;
+  assert.equal(latestMemoryReceipt.id, "ledger_chat");
+  assert.equal(latestMemoryReceipt.operation_id, "tsk_chat");
+  assert.equal(latestMemoryReceipt.trace_id, "trace_chat");
+  assert.equal(latestMemoryReceipt.run_id, "run_chat");
+  assert.equal(latestMemoryReceipt.artifact_dir, "D:/francis/data/artifacts/chat");
 
   const governance = meta.governance as Record<string, unknown>;
   assert.equal(governance.gate, "permission_gate");

@@ -87,6 +87,8 @@ const CHAT_SEND_META_KEYS = [
   "loop_state",
   "current_task",
   "receipt_summary",
+  "memory_receipt_count",
+  "latest_memory_receipt",
   "governance",
 ] as const;
 

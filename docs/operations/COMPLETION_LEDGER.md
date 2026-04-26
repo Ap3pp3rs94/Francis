@@ -552,6 +552,15 @@ source/next step, and receipt counts from the mission detail projection. The
 conversation ledger still redacts the operator objective before persistence and
 does not add execution, approval, or memory-timeline writes.
 
+As of `2026-04-26`, chat mission ingress metadata also preserves the trace and
+receipt handles needed to reconnect the interface to completed or gated mission
+work. Compact assistant ledger metadata keeps handoff/current-task approval
+status, trace id, run id, and artifact directory when the mission detail
+projection already has them, websocket mission-ingress events preserve top-level
+mission memory receipt summaries, and the chat UI protocol parser keeps those
+receipt summaries on `/chat/send` messages. This is pass-through only; it does
+not execute operations, mint receipts, inspect artifacts, or infer completion.
+
 As of `2026-04-26`, explicit chat mission ingress also creates the first bounded
 mission-linked `plan.create` operation. `POST /chat/send` and websocket mission
 ingress still require an explicit `/mission` or `mission:` declaration and still
@@ -3212,6 +3221,23 @@ Latest targeted validation for the `2026-04-26` chat mission ingress first-opera
   Result: `16 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `55 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` chat mission ingress handoff-handle slice:
+
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py -q`
+  Result: `5 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\chat\index.test.ts`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `62 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
