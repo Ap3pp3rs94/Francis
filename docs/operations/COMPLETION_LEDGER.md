@@ -276,6 +276,14 @@ and limit, keeps metadata-only file/directory projections, preserves missing or
 failed artifact state, and drops any drifted content/payload fields so artifact
 receipts remain inspectable without moving file contents into browser state.
 
+As of `2026-04-26`, the selected operation detail panel can inspect artifact
+handles through that client contract. When a selected operation exposes a real
+`artifact_dir`, the chat UI offers a manual metadata inspection action and
+renders only backend-returned availability, kind, path, size, timestamp, count,
+and directory-entry metadata. Missing or unreadable artifact handles remain
+visible as backend failure state instead of being converted into a UI success
+claim, and file contents are not requested or displayed.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -2444,6 +2452,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation artifact inspection interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `38 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 artifact inspect UI client contract slice:
 
