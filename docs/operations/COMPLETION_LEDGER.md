@@ -3849,6 +3849,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission advance operatio
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-26` Stage 3 mission current-task identity and failed receipt review-gate slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_advance_creates_first_operation_with_receipt -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_mission_receipts.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\missions.py src\francis\operations\runtime.py tests\test_api_missions.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\missions.py src\francis\operations\runtime.py tests\test_api_missions.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop projection slice:
 
 - `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
