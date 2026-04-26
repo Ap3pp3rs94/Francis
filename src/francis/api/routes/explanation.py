@@ -115,6 +115,10 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
         or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
     )
+    approval_id = (
+        _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip()
+        or _safe_str(meta.get("approval_id") or meta.get("approvalId")).strip()
+    )
 
     content_raw = raw.get("content")
     content: dict[str, Any] | str | None
@@ -137,7 +141,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "artifact_dir": artifact_dir,
         "domain": _safe_str(raw.get("domain")).strip(),
         "conversation_id": _safe_str(raw.get("conversation_id") or raw.get("thread_id")).strip(),
-        "approval_id": _safe_str(raw.get("approval_id")).strip(),
+        "approval_id": approval_id,
         "plugin_id": _safe_str(raw.get("plugin_id")).strip(),
         "tags": tags,
         "content": content,
@@ -623,6 +627,12 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(payload_meta.get("artifact_dir") or payload_meta.get("artifactDir")).strip()
             or _safe_str(existing_meta.get("artifact_dir") or existing_meta.get("artifactDir")).strip()
         )
+        approval_id = (
+            _safe_str(payload.get("approval_id") or payload.get("approvalId")).strip()
+            or _safe_str(existing_obj.get("approval_id") or existing_obj.get("approvalId")).strip()
+            or _safe_str(payload_meta.get("approval_id") or payload_meta.get("approvalId")).strip()
+            or _safe_str(existing_meta.get("approval_id") or existing_meta.get("approvalId")).strip()
+        )
         ts = int(payload.get("ts") or existing_obj.get("ts") or _now_s())
 
         merged = {
@@ -639,8 +649,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),
             "conversation_id": _safe_str(payload.get("conversation_id") or payload.get("thread_id")).strip()
             or _safe_str(existing_obj.get("conversation_id")).strip(),
-            "approval_id": _safe_str(payload.get("approval_id")).strip()
-            or _safe_str(existing_obj.get("approval_id")).strip(),
+            "approval_id": approval_id,
             "plugin_id": _safe_str(payload.get("plugin_id")).strip()
             or _safe_str(existing_obj.get("plugin_id")).strip(),
             "tags": _parse_list(payload.get("tags") if "tags" in payload else existing_obj.get("tags")),

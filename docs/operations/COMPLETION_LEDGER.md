@@ -467,6 +467,14 @@ client preserves the same fallback when parsing list/get responses. This is a
 read-model/client contract change only; it does not create explanations,
 execute work, or infer trace state.
 
+As of `2026-04-26`, explanation and audit records also preserve `approval_id`
+when that handle is supplied through record metadata instead of a top-level
+field. The backend normalizes metadata-only approval handles into the same
+summary, detail, list-filter, and export contract used by top-level approval
+handles. This keeps approval-backed mission and operation receipts reachable
+through explanation evidence without changing approval decisions, execution, or
+explanation creation behavior.
+
 As of `2026-04-26`, the selected operation detail surface can use that
 explanation receipt contract from real operation and mission loop handles. The
 chat UI now builds bounded `/explanations/list` queries for the selected
@@ -3738,6 +3746,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata run
   Result: `62 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata approval-handle slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `2 files already formatted`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `65 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation explanation evidence interface slice:
 

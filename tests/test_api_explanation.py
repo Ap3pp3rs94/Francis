@@ -78,7 +78,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "trace_id": "trace-rollout",
             "artifact_dir": "runs/run-2/artifacts",
             "tags": ["ops", "risk"],
-            "meta": {"run_id": "run-2"},
+            "meta": {"run_id": "run-2", "approval_id": "appr-2"},
             "content": {"step": "risk-check", "decision": "block"},
         },
     )
@@ -87,7 +87,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
 
     listed = client.get(
         "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout"
-        "&run_id=run-2&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&limit=10"
+        "&run_id=run-2&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&approval_id=appr-2&limit=10"
     )
     assert listed.status_code == 200
     listed_body = listed.json()
@@ -105,6 +105,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert fetched_body["item"]["run_id"] == "run-2"
     assert fetched_body["item"]["trace_id"] == "trace-rollout"
     assert fetched_body["item"]["artifact_dir"] == "runs/run-2/artifacts"
+    assert fetched_body["item"]["approval_id"] == "appr-2"
     assert fetched_body["content"]["decision"] == "block"
 
     exported_json = client.get("/explanations/export?format=json&kind=decision&trace_id=trace-policy")
@@ -122,6 +123,12 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     exported_artifact_ids = {str(item.get("id")) for item in exported_artifact_body["items"]}
     assert exported_artifact_ids == {"exp-gamma"}
     assert exported_artifact_body["items"][0]["artifact_dir"] == "runs/run-2/artifacts"
+
+    exported_approval_json = client.get("/explanations/export?format=json&approval_id=appr-2")
+    assert exported_approval_json.status_code == 200
+    exported_approval_body = json.loads(exported_approval_json.text)
+    assert {str(item.get("id")) for item in exported_approval_body["items"]} == {"exp-gamma"}
+    assert exported_approval_body["items"][0]["approval_id"] == "appr-2"
 
     exported_csv = client.get("/explanations/export?format=csv&severity=error")
     assert exported_csv.status_code == 200
