@@ -811,6 +811,15 @@ completed mission work. This is a read-model/client contract change only; it
 does not inspect artifacts, execute operations, mint memory receipts, or infer
 completion.
 
+As of `2026-04-26`, direct memory timeline writes can also preserve structured
+`references` and `loop` objects instead of requiring callers to flatten every
+mission-loop handle into metadata first. `/memory/timeline/record` and
+`/memory/timeline/create` now normalize structured mission, operation, trace,
+approval, run, artifact, handoff, and current-task fields into the same redacted
+public event contract used by continuity-ledger receipts, including persistence
+reload. This is a memory write/read contract fix only; it does not create
+mission state, execute operations, or infer missing linkage.
+
 As of `2026-04-26`, terminal mission-linked operation receipts can now feed that
 approval posture into memory evidence. When a completed or failed mission-linked
 operation carries a real approval id in the operation result or retained task
@@ -3775,6 +3784,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 memory timeline current-
   Result: `62 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 structured memory timeline receipt write slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed` with non-blocking `.ruff_cache` write warnings
 
 Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:
 

@@ -159,6 +159,10 @@ def _normalize_artifact(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    raw_meta = _meta(raw.get("meta"))
+    raw_references = _meta(raw.get("references"))
+    raw_loop = _meta(raw.get("loop"))
+    merged_meta = {**raw_meta, **raw_loop}
     payload_value = raw.get("payload") if "payload" in raw else raw.get("data")
     if isinstance(payload_value, (dict, list, str, int, float, bool)) or payload_value is None:
         payload = redact_governed_value(payload_value, key="payload")
@@ -179,23 +183,33 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "ts": _normalize_ts(raw.get("ts") or raw.get("created_ts") or raw.get("time") or _now_s()),
         "kind": _redact_text(raw.get("kind") or raw.get("type")) or "memory_write",
         "severity": _redact_text(raw.get("severity") or raw.get("level")),
-        "operation_status": _redact_text(raw.get("operation_status") or _meta(raw.get("meta")).get("operation_status")),
+        "operation_status": _redact_text(raw.get("operation_status") or merged_meta.get("operation_status")),
         "domain": _redact_text(raw.get("domain")),
         "actor": _redact_text(raw.get("actor") or raw.get("role")),
         "scope": _redact_text(raw.get("scope") or raw.get("scope_id")),
         "correlation_id": _redact_text(raw.get("correlation_id") or raw.get("trace_id") or raw.get("correlationId")),
-        "trace_id": _redact_text(raw.get("trace_id") or _meta(raw.get("meta")).get("trace_id")),
-        "mission_id": _redact_text(raw.get("mission_id") or _meta(raw.get("meta")).get("mission_id")),
-        "operation_id": _redact_text(
-            raw.get("operation_id") or raw.get("task_id") or _meta(raw.get("meta")).get("operation_id")
+        "trace_id": _redact_text(raw.get("trace_id") or raw_references.get("trace_id") or merged_meta.get("trace_id")),
+        "mission_id": _redact_text(
+            raw.get("mission_id") or raw_references.get("mission_id") or merged_meta.get("mission_id")
         ),
-        "approval_id": _redact_text(raw.get("approval_id") or _meta(raw.get("meta")).get("approval_id")),
-        "run_id": _redact_text(raw.get("run_id") or _meta(raw.get("meta")).get("run_id")),
+        "operation_id": _redact_text(
+            raw.get("operation_id")
+            or raw.get("task_id")
+            or raw_references.get("operation_id")
+            or raw_references.get("task_id")
+            or merged_meta.get("operation_id")
+        ),
+        "approval_id": _redact_text(
+            raw.get("approval_id") or raw_references.get("approval_id") or merged_meta.get("approval_id")
+        ),
+        "run_id": _redact_text(raw.get("run_id") or raw_references.get("run_id") or merged_meta.get("run_id")),
         "artifact_dir": _redact_text(
             raw.get("artifact_dir")
             or raw.get("artifact_path")
-            or _meta(raw.get("meta")).get("artifact_dir")
-            or _meta(raw.get("meta")).get("artifact_path")
+            or raw_references.get("artifact_dir")
+            or raw_references.get("artifact_path")
+            or merged_meta.get("artifact_dir")
+            or merged_meta.get("artifact_path")
         ),
         "parent_id": _redact_text(raw.get("parent_id") or raw.get("parentId")),
         "title": _redact_text(raw.get("title")),
@@ -203,7 +217,7 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "tags": _redact_tags(raw.get("tags")),
         "payload": payload,
         "artifacts": artifacts,
-        "meta": redact_governed_metadata(raw.get("meta")),
+        "meta": redact_governed_metadata(merged_meta),
     }
 
 
@@ -933,6 +947,10 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
             else payload.get("files")
             if isinstance(payload.get("files"), list)
             else existing.get("artifacts"),
+            "references": payload.get("references")
+            if isinstance(payload.get("references"), dict)
+            else existing.get("references"),
+            "loop": payload.get("loop") if isinstance(payload.get("loop"), dict) else existing.get("loop"),
             "meta": {**_meta(existing.get("meta")), **_meta(payload.get("meta"))},
         }
         item = _normalize_event(event_id, merged)

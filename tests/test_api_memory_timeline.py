@@ -262,6 +262,98 @@ def test_memory_timeline_create_alias_and_persistence(monkeypatch, tmp_path: Pat
     assert persisted.json()["ok"] is True
 
 
+def test_memory_timeline_record_preserves_structured_references_and_loop(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/memory/timeline/record",
+        json={
+            "id": "evt-structured-loop",
+            "ts": 1_700_000_004,
+            "kind": "ledger_append",
+            "severity": "info",
+            "domain": "operations",
+            "actor": "francis",
+            "scope": "mission.loop",
+            "title": "Structured loop receipt",
+            "message": "Stored structured mission loop receipt.",
+            "references": {
+                "mission_id": "msn-structured-loop",
+                "operation_id": "tsk-structured-loop",
+                "trace_id": "trace-structured-loop",
+                "approval_id": "apr-structured-loop",
+                "run_id": "run-structured-loop",
+                "artifact_dir": "D:/francis/data/artifacts/structured-loop",
+            },
+            "loop": {
+                "ingress_plane": "P1_INTERFACE",
+                "active_stage": "interface",
+                "handoff_stage": "interface",
+                "handoff_action": "review_result",
+                "handoff_gate": "operator_review",
+                "handoff_operation_id": "tsk-structured-loop",
+                "handoff_trace_id": "trace-structured-loop",
+                "handoff_approval_id": "apr-structured-loop",
+                "handoff_run_id": "run-structured-loop",
+                "handoff_artifact_dir": "D:/francis/data/artifacts/structured-loop",
+                "current_task_source": "terminal_operation_receipt",
+                "current_task_operation_id": "tsk-structured-loop",
+                "current_task_trace_id": "trace-structured-loop",
+                "current_task_approval_id": "apr-structured-loop",
+                "current_task_run_id": "run-structured-loop",
+                "current_task_artifact_dir": "D:/francis/data/artifacts/structured-loop",
+                "memory_receipt_count": 1,
+                "run_ledger_count": "2",
+            },
+            "meta": {"source": "unit_test"},
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    assert created_body["item"]["references"] == {
+        "mission_id": "msn-structured-loop",
+        "operation_id": "tsk-structured-loop",
+        "trace_id": "trace-structured-loop",
+        "approval_id": "apr-structured-loop",
+        "run_id": "run-structured-loop",
+        "artifact_dir": "D:/francis/data/artifacts/structured-loop",
+    }
+    assert created_body["item"]["loop"]["active_stage"] == "interface"
+    assert created_body["item"]["loop"]["handoff_operation_id"] == "tsk-structured-loop"
+    assert created_body["item"]["loop"]["current_task_approval_id"] == "apr-structured-loop"
+    assert created_body["item"]["loop"]["memory_receipt_count"] == 1
+    assert created_body["item"]["loop"]["run_ledger_count"] == 2
+
+    filtered = client.get(
+        "/memory/timeline/list",
+        params={
+            "operation_id": "tsk-structured-loop",
+            "trace_id": "trace-structured-loop",
+            "approval_id": "apr-structured-loop",
+            "run_id": "run-structured-loop",
+            "artifact_dir": "D:/francis/data/artifacts/structured-loop",
+        },
+    )
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.json()["items"]] == ["evt-structured-loop"]
+
+    client2 = TestClient(create_app())
+    persisted = client2.get("/memory/timeline/get?id=evt-structured-loop")
+    assert persisted.status_code == 200
+    persisted_body = persisted.json()
+    assert persisted_body["ok"] is True
+    assert persisted_body["item"]["references"]["mission_id"] == "msn-structured-loop"
+    assert persisted_body["item"]["loop"]["current_task_operation_id"] == "tsk-structured-loop"
+
+
 def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
