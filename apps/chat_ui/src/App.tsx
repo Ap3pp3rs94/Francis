@@ -6997,6 +6997,22 @@ function SystemPanel(props: {
                             ) : null}
                           </div>
                         ) : null}
+                        {item.stage?.artifact_dir ? (
+                          <div style={{ marginTop: 8 }}>
+                            <ArtifactInspectionPanel
+                              baseUrl={resolvedBaseUrl}
+                              artifactDir={item.stage.artifact_dir}
+                              title={`${item.label} Artifact`}
+                              buttonLabel="Inspect stage artifact"
+                              buttonStyle={buttonStyle}
+                              badgeStyle={badgeStyle}
+                              borderColor={THEME.panelBorder}
+                              mutedColor={THEME.muted}
+                              limit={25}
+                              maxEntries={5}
+                            />
+                          </div>
+                        ) : null}
                         {(item.stage?.approval_id || item.stage?.operation_id) ? (
                           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                             {item.stage?.approval_id ? (
@@ -11126,6 +11142,22 @@ function OperationsPanel(props: {
                                       </>
                                     ) : null}
                                     {stageMemoryReceiptRefs ? <>{" / "}{stageMemoryReceiptRefs}</> : null}
+                                  </div>
+                                ) : null}
+                                {stage?.artifact_dir ? (
+                                  <div style={{ marginTop: 8 }}>
+                                    <ArtifactInspectionPanel
+                                      baseUrl={resolvedBaseUrl}
+                                      artifactDir={stage.artifact_dir}
+                                      title={`${item.label} Artifact`}
+                                      buttonLabel="Inspect stage artifact"
+                                      buttonStyle={buttonStyle}
+                                      badgeStyle={badgeStyle}
+                                      borderColor={THEME.panelBorder}
+                                      mutedColor={THEME.muted}
+                                      limit={25}
+                                      maxEntries={5}
+                                    />
                                   </div>
                                 ) : null}
                                 {(stage?.approval_id || stage?.operation_id) ? (

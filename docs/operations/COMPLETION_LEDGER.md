@@ -792,6 +792,12 @@ receipt handles directly. Handoff and stage metadata now surface `run` and
 bounded `artifact` handles next to task and trace handles when the backend
 returns them, without inventing handles when the loop state omits them.
 
+As of `2026-04-26`, mission loop stage artifact handles are inspectable from
+the ORB mission loop inspector through the existing bounded artifact inspection
+panel. Stage cards only render the inspector when the backend loop stage returns
+an `artifact_dir`, and inspection remains read-only metadata retrieval through
+the existing artifact route.
+
 As of `2026-04-25`, the ORB chat UI also prefers current mission task truth for
 mission recovery links. Selected mission recovery posture, return-to-work
 mission actions, and recent mission progress cards use `last_task_id`, loop
@@ -3076,6 +3082,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop receipt-han
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 ORB mission loop receipt-handle rendering slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop artifact inspection slice:
 
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
