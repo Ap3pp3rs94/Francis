@@ -266,6 +266,9 @@ export type WorldStateMissionSummary = {
   updated_at?: string;
   terminal?: boolean;
   current_task?: WorldStateMissionCurrentTask;
+  loop_state?: WorldStateMissionLoopState;
+  handoff?: WorldStateMissionLoopHandoff;
+  receipt_summary?: WorldStateMissionReceiptSummary;
   latest_activity?: Record<string, unknown>;
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
@@ -406,6 +409,73 @@ export type MissionMemoryReceipt = {
   };
 };
 
+export type WorldStateMissionLoopStage = {
+  status?: string;
+  detail?: string;
+  count?: number;
+  gate?: string;
+  next_step?: string;
+  approval_id?: string;
+  approval_status?: string;
+  operation_id?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  latest_event?: string;
+  latest_receipt_status?: string;
+  latest_ts?: string;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+};
+
+export type WorldStateMissionLoopHandoff = {
+  stage?: string;
+  action?: string;
+  detail?: string;
+  gate?: string;
+  next_step?: string;
+  approval_id?: string;
+  approval_status?: string;
+  operation_id?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  latest_event?: string;
+  latest_ts?: string;
+};
+
+export type WorldStateMissionLoopState = {
+  summary?: string;
+  active_stage?: string;
+  handoff?: WorldStateMissionLoopHandoff;
+  plan?: WorldStateMissionLoopStage;
+  gate?: WorldStateMissionLoopStage;
+  execute?: WorldStateMissionLoopStage;
+  trace?: WorldStateMissionLoopStage;
+  memory?: WorldStateMissionLoopStage;
+  interface?: WorldStateMissionLoopStage;
+};
+
+export type WorldStateMissionReceiptSummary = {
+  linked_operation_count?: number;
+  run_ledger_count?: number;
+  history_count?: number;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  current_operation_id?: string;
+  current_operation_status?: string;
+  current_gate?: string;
+  current_approval_id?: string;
+  current_trace_id?: string;
+  current_run_id?: string;
+  current_artifact_dir?: string;
+  latest_run_event?: string;
+  latest_run_status?: string;
+  latest_run_ts?: string;
+  latest_history_event?: string;
+  latest_history_ts?: string;
+};
+
 export type WorldStateMissionQueueItem = {
   id: string;
   status?: string;
@@ -438,6 +508,9 @@ export type WorldStateMissionQueueItem = {
   advance?: WorldStateMissionAdvanceProjection;
   recovery?: WorldStateMissionRecoveryProjection;
   current_task?: WorldStateMissionCurrentTask;
+  loop_state?: WorldStateMissionLoopState;
+  handoff?: WorldStateMissionLoopHandoff;
+  receipt_summary?: WorldStateMissionReceiptSummary;
   deadletter_reason?: string;
   history_count?: number;
   latest_history_event?: string;
@@ -1151,6 +1224,10 @@ function parseWorldStateApprovalPayloadSummary(raw: Record<string, unknown>): Wo
 
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function safeOptionalNumber(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
 function safeStringArray(v: unknown): string[] {
@@ -2111,6 +2188,9 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     updated_at: safeString(raw.updated_at, ""),
     terminal: safeBoolean(raw.terminal, false),
     current_task: parseWorldStateMissionCurrentTask(raw.current_task),
+    loop_state: parseWorldStateMissionLoopState(raw.loop_state),
+    handoff: parseWorldStateMissionLoopHandoff(raw.handoff),
+    receipt_summary: parseWorldStateMissionReceiptSummary(raw.receipt_summary),
     latest_activity: isRecord(raw.latest_activity) ? (raw.latest_activity as Record<string, unknown>) : undefined,
     ...parseMissionMemoryFields(raw),
   };
@@ -2165,6 +2245,157 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     return undefined;
   }
   return task;
+}
+
+function parseWorldStateMissionLoopStage(raw: unknown): WorldStateMissionLoopStage | undefined {
+  if (!isRecord(raw)) return undefined;
+  const stage: WorldStateMissionLoopStage = {
+    status: safeString(raw.status, "") || undefined,
+    detail: safeString(raw.detail, "") || undefined,
+    count: safeOptionalNumber(raw.count),
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
+    latest_event: safeString(raw.latest_event, "") || undefined,
+    latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
+    latest_ts: safeString(raw.latest_ts, "") || undefined,
+    memory_receipt_count: safeOptionalNumber(raw.memory_receipt_count),
+    latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt) ?? undefined,
+  };
+  if (
+    !stage.status &&
+    !stage.detail &&
+    stage.count === undefined &&
+    !stage.gate &&
+    !stage.next_step &&
+    !stage.approval_id &&
+    !stage.approval_status &&
+    !stage.operation_id &&
+    !stage.trace_id &&
+    !stage.run_id &&
+    !stage.artifact_dir &&
+    !stage.latest_event &&
+    !stage.latest_receipt_status &&
+    !stage.latest_ts &&
+    stage.memory_receipt_count === undefined &&
+    !stage.latest_memory_receipt
+  ) {
+    return undefined;
+  }
+  return stage;
+}
+
+function parseWorldStateMissionLoopHandoff(raw: unknown): WorldStateMissionLoopHandoff | undefined {
+  if (!isRecord(raw)) return undefined;
+  const handoff: WorldStateMissionLoopHandoff = {
+    stage: safeString(raw.stage, "") || undefined,
+    action: safeString(raw.action, "") || undefined,
+    detail: safeString(raw.detail, "") || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
+    latest_event: safeString(raw.latest_event, "") || undefined,
+    latest_ts: safeString(raw.latest_ts, "") || undefined,
+  };
+  if (
+    !handoff.stage &&
+    !handoff.action &&
+    !handoff.detail &&
+    !handoff.gate &&
+    !handoff.next_step &&
+    !handoff.approval_id &&
+    !handoff.approval_status &&
+    !handoff.operation_id &&
+    !handoff.trace_id &&
+    !handoff.run_id &&
+    !handoff.artifact_dir &&
+    !handoff.latest_event &&
+    !handoff.latest_ts
+  ) {
+    return undefined;
+  }
+  return handoff;
+}
+
+function parseWorldStateMissionLoopState(raw: unknown): WorldStateMissionLoopState | undefined {
+  if (!isRecord(raw)) return undefined;
+  const state: WorldStateMissionLoopState = {
+    summary: safeString(raw.summary, "") || undefined,
+    active_stage: safeString(raw.active_stage, "") || undefined,
+    handoff: parseWorldStateMissionLoopHandoff(raw.handoff),
+    plan: parseWorldStateMissionLoopStage(raw.plan),
+    gate: parseWorldStateMissionLoopStage(raw.gate),
+    execute: parseWorldStateMissionLoopStage(raw.execute),
+    trace: parseWorldStateMissionLoopStage(raw.trace),
+    memory: parseWorldStateMissionLoopStage(raw.memory),
+    interface: parseWorldStateMissionLoopStage(raw.interface),
+  };
+  if (
+    !state.summary &&
+    !state.active_stage &&
+    !state.handoff &&
+    !state.plan &&
+    !state.gate &&
+    !state.execute &&
+    !state.trace &&
+    !state.memory &&
+    !state.interface
+  ) {
+    return undefined;
+  }
+  return state;
+}
+
+function parseWorldStateMissionReceiptSummary(raw: unknown): WorldStateMissionReceiptSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+  const summary: WorldStateMissionReceiptSummary = {
+    linked_operation_count: safeOptionalNumber(raw.linked_operation_count),
+    run_ledger_count: safeOptionalNumber(raw.run_ledger_count),
+    history_count: safeOptionalNumber(raw.history_count),
+    memory_receipt_count: safeOptionalNumber(raw.memory_receipt_count),
+    latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt) ?? undefined,
+    current_operation_id: safeString(raw.current_operation_id, "") || undefined,
+    current_operation_status: safeString(raw.current_operation_status, "") || undefined,
+    current_gate: safeString(raw.current_gate, "") || undefined,
+    current_approval_id: safeString(raw.current_approval_id, "") || undefined,
+    current_trace_id: safeString(raw.current_trace_id, "") || undefined,
+    current_run_id: safeString(raw.current_run_id, "") || undefined,
+    current_artifact_dir: safeString(raw.current_artifact_dir, "") || undefined,
+    latest_run_event: safeString(raw.latest_run_event, "") || undefined,
+    latest_run_status: safeString(raw.latest_run_status, "") || undefined,
+    latest_run_ts: safeString(raw.latest_run_ts, "") || undefined,
+    latest_history_event: safeString(raw.latest_history_event, "") || undefined,
+    latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,
+  };
+  if (
+    summary.linked_operation_count === undefined &&
+    summary.run_ledger_count === undefined &&
+    summary.history_count === undefined &&
+    summary.memory_receipt_count === undefined &&
+    !summary.latest_memory_receipt &&
+    !summary.current_operation_id &&
+    !summary.current_operation_status &&
+    !summary.current_gate &&
+    !summary.current_approval_id &&
+    !summary.current_trace_id &&
+    !summary.current_run_id &&
+    !summary.current_artifact_dir &&
+    !summary.latest_run_event &&
+    !summary.latest_history_event
+  ) {
+    return undefined;
+  }
+  return summary;
 }
 
 function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
@@ -2320,6 +2551,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
         recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
         current_task: parseWorldStateMissionCurrentTask(item.current_task),
+        loop_state: parseWorldStateMissionLoopState(item.loop_state),
+        handoff: parseWorldStateMissionLoopHandoff(item.handoff),
+        receipt_summary: parseWorldStateMissionReceiptSummary(item.receipt_summary),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, ""),
@@ -2370,6 +2604,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
         recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
         current_task: parseWorldStateMissionCurrentTask(item.current_task),
+        loop_state: parseWorldStateMissionLoopState(item.loop_state),
+        handoff: parseWorldStateMissionLoopHandoff(item.handoff),
+        receipt_summary: parseWorldStateMissionReceiptSummary(item.receipt_summary),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, ""),
@@ -2420,6 +2657,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
         recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
         current_task: parseWorldStateMissionCurrentTask(item.current_task),
+        loop_state: parseWorldStateMissionLoopState(item.loop_state),
+        handoff: parseWorldStateMissionLoopHandoff(item.handoff),
+        receipt_summary: parseWorldStateMissionReceiptSummary(item.receipt_summary),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, ""),

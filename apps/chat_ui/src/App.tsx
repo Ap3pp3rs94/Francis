@@ -8511,6 +8511,21 @@ function SystemPanel(props: {
                 const queueCurrentTaskResult = safeString(queueCurrentTask?.result_status).trim();
                 const queueCurrentTaskGate = safeString(queueCurrentTask?.gate).trim();
                 const queueCurrentTaskSource = safeString(queueCurrentTask?.source).trim();
+                const queueLoopState = item.loop_state;
+                const queueLoopHandoff = item.handoff ?? queueLoopState?.handoff;
+                const queueLoopActiveStage = safeString(queueLoopState?.active_stage).trim();
+                const queueLoopHandoffAction = safeString(queueLoopHandoff?.action).trim();
+                const queueLoopHandoffNextStep = safeString(queueLoopHandoff?.next_step).trim();
+                const queueReceiptSummary = item.receipt_summary;
+                const queueReceiptOperationId = safeString(queueReceiptSummary?.current_operation_id).trim();
+                const queueReceiptOperationStatus = safeString(queueReceiptSummary?.current_operation_status).trim();
+                const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
+                const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
+                const queueReceiptRunId = safeString(queueReceiptSummary?.current_run_id).trim();
+                const queueReceiptArtifactDir = safeString(queueReceiptSummary?.current_artifact_dir).trim();
+                const queueReceiptRunCount = queueReceiptSummary?.run_ledger_count;
+                const queueReceiptHistoryCount = queueReceiptSummary?.history_count;
+                const queueReceiptMemoryCount = queueReceiptSummary?.memory_receipt_count;
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
@@ -8593,6 +8608,104 @@ function SystemPanel(props: {
                         {queueCurrentTaskSource ? (
                           <>
                             {" / "}source=<code>{queueCurrentTaskSource}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {queueLoopActiveStage || queueLoopHandoffAction || queueLoopHandoffNextStep ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {queueLoopActiveStage ? (
+                          <>
+                            loop=<code>{queueLoopActiveStage}</code>
+                          </>
+                        ) : null}
+                        {queueLoopHandoffAction ? (
+                          <>
+                            {queueLoopActiveStage ? " / " : ""}handoff=<code>{queueLoopHandoffAction}</code>
+                          </>
+                        ) : null}
+                        {queueLoopHandoffNextStep ? (
+                          <>
+                            {(queueLoopActiveStage || queueLoopHandoffAction) ? " / " : ""}next=
+                            <code>{queueLoopHandoffNextStep}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {queueReceiptOperationId ||
+                    queueReceiptOperationStatus ||
+                    queueReceiptGate ||
+                    queueReceiptTraceId ||
+                    queueReceiptRunId ||
+                    queueReceiptArtifactDir ||
+                    typeof queueReceiptRunCount === "number" ||
+                    typeof queueReceiptHistoryCount === "number" ||
+                    typeof queueReceiptMemoryCount === "number" ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {queueReceiptOperationId ? (
+                          <>
+                            receipt_task=<code>{queueReceiptOperationId}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptOperationStatus ? (
+                          <>
+                            {queueReceiptOperationId ? " / " : ""}receipt_status=
+                            <code>{queueReceiptOperationStatus}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptGate ? (
+                          <>
+                            {(queueReceiptOperationId || queueReceiptOperationStatus) ? " / " : ""}receipt_gate=
+                            <code>{queueReceiptGate}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptTraceId ? (
+                          <>
+                            {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptGate) ? " / " : ""}
+                            trace=<code>{queueReceiptTraceId}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptRunId ? (
+                          <>
+                            {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptGate || queueReceiptTraceId)
+                              ? " / "
+                              : ""}
+                            run=<code>{queueReceiptRunId}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptArtifactDir ? (
+                          <>
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptGate ||
+                            queueReceiptTraceId ||
+                            queueReceiptRunId)
+                              ? " / "
+                              : ""}
+                            artifact=<code>{queueReceiptArtifactDir}</code>
+                          </>
+                        ) : null}
+                        {typeof queueReceiptRunCount === "number" ? (
+                          <>
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptGate ||
+                            queueReceiptTraceId ||
+                            queueReceiptRunId ||
+                            queueReceiptArtifactDir)
+                              ? " / "
+                              : ""}
+                            run_receipts=<code>{String(queueReceiptRunCount)}</code>
+                          </>
+                        ) : null}
+                        {typeof queueReceiptHistoryCount === "number" ? (
+                          <>
+                            {" / "}history_receipts=<code>{String(queueReceiptHistoryCount)}</code>
+                          </>
+                        ) : null}
+                        {typeof queueReceiptMemoryCount === "number" ? (
+                          <>
+                            {" / "}memory_receipts=<code>{String(queueReceiptMemoryCount)}</code>
                           </>
                         ) : null}
                       </div>

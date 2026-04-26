@@ -557,6 +557,53 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 approval_id: "apr_queue_exact",
                 approval_status: "pending",
               },
+              handoff: {
+                stage: "gate",
+                action: "raise_trust_or_reduce_risk",
+                gate: "trust_gate",
+                approval_id: "apr_queue_exact",
+                approval_status: "pending",
+                operation_id: "tsk_blocked",
+                next_step: "raise_trust_or_reduce_risk",
+              },
+              receipt_summary: {
+                linked_operation_count: 1,
+                run_ledger_count: 1,
+                history_count: 2,
+                memory_receipt_count: 0,
+                current_operation_id: "tsk_blocked",
+                current_operation_status: "blocked",
+                current_gate: "trust_gate",
+                current_approval_id: "apr_queue_exact",
+                latest_run_event: "governance_hold",
+                latest_run_status: "blocked",
+                latest_history_event: "mission_ticked",
+                latest_history_ts: "2026-04-14T07:45:00Z",
+              },
+              loop_state: {
+                active_stage: "gate",
+                handoff: {
+                  stage: "gate",
+                  action: "raise_trust_or_reduce_risk",
+                  gate: "trust_gate",
+                  approval_id: "apr_queue_exact",
+                  approval_status: "pending",
+                  operation_id: "tsk_blocked",
+                },
+                gate: {
+                  status: "blocked",
+                  gate: "trust_gate",
+                  approval_id: "apr_queue_exact",
+                  approval_status: "pending",
+                  operation_id: "tsk_blocked",
+                },
+                interface: {
+                  status: "available",
+                  count: 3,
+                  operation_id: "tsk_blocked",
+                  latest_event: "governance_hold",
+                },
+              },
               replacement_for_mission_id: "mission_failed_source",
               replacement_for_status: "failed",
               replacement_source_action: "retry_or_deadletter",
@@ -903,6 +950,14 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.active_stage, "gate");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.handoff?.action, "raise_trust_or_reduce_risk");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.gate?.approval_id, "apr_queue_exact");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.interface?.status, "available");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.handoff?.operation_id, "tsk_blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.current_operation_id, "tsk_blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.latest_run_event, "governance_hold");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.receipt_summary?.history_count, 2);
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_action, "retry_or_deadletter");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_target_id, "tsk_failed_source");

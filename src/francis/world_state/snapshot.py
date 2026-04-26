@@ -99,6 +99,22 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
+def _safe_nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        return 0
+
+
+def _stage_timestamp(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=UTC).isoformat().replace("+00:00", "Z")
+        except Exception:
+            return ""
+    return _safe_str(value).strip()
+
+
 def _mission_memory_receipt_index(*, limit: int = 1000) -> dict[str, list[dict[str, Any]]]:
     return mission_operation_receipt_index(limit=limit, per_mission_limit=5)
 
@@ -924,6 +940,7 @@ def _operation_latest_activity(
             "reason": str(meta.get("reason") or "").strip(),
             "gate": str(meta.get("gate") or "").strip(),
             "next_step": str(meta.get("next_step") or "").strip(),
+            "run_ledger_count": len(logs),
             "_seq": seq,
         }
         if not latest or _activity_sort_key(candidate) > _activity_sort_key(latest):
@@ -949,6 +966,7 @@ def _operation_latest_activity(
             "reason": str(operation.get("error") or operation_meta.get("result_message") or "").strip(),
             "gate": "",
             "next_step": "",
+            "run_ledger_count": 0,
             "_seq": -1,
         }
 
@@ -1175,6 +1193,293 @@ def _attach_mission_activity(
         enriched_item = dict(item)
         enriched_item["latest_activity"] = _mission_current_activity(item, log_limit=log_limit, cache=cache)
         enriched_item["current_task"] = _mission_current_task_projection(enriched_item)
+        enriched.append(enriched_item)
+    return enriched
+
+
+def _overview_loop_stage(
+    status: str,
+    detail: str,
+    *,
+    count: int | None = None,
+    gate: str = "",
+    approval_id: str = "",
+    approval_status: str = "",
+    operation_id: str = "",
+    trace_id: str = "",
+    run_id: str = "",
+    artifact_dir: str = "",
+    latest_event: str = "",
+    latest_receipt_status: str = "",
+    latest_ts: str = "",
+    next_step: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"status": status, "detail": detail}
+    if count is not None:
+        payload["count"] = count
+    if gate:
+        payload["gate"] = gate
+    if approval_id:
+        payload["approval_id"] = approval_id
+    if approval_status:
+        payload["approval_status"] = approval_status
+    if operation_id:
+        payload["operation_id"] = operation_id
+    if trace_id:
+        payload["trace_id"] = trace_id
+    if run_id:
+        payload["run_id"] = run_id
+    if artifact_dir:
+        payload["artifact_dir"] = artifact_dir
+    if latest_event:
+        payload["latest_event"] = latest_event
+    if latest_receipt_status:
+        payload["latest_receipt_status"] = latest_receipt_status
+    if latest_ts:
+        payload["latest_ts"] = latest_ts
+    if next_step:
+        payload["next_step"] = next_step
+    return payload
+
+
+def _mission_receipt_summary_projection(item: dict[str, Any]) -> dict[str, Any]:
+    current_task = item.get("current_task") if isinstance(item.get("current_task"), dict) else {}
+    latest_activity = item.get("latest_activity") if isinstance(item.get("latest_activity"), dict) else {}
+    latest_memory_receipt = (
+        item.get("latest_memory_receipt") if isinstance(item.get("latest_memory_receipt"), dict) else {}
+    )
+    action_target_id = _safe_str(item.get("action_target_id")).strip()
+    operation_id = _first_text(
+        current_task.get("operation_id"),
+        latest_activity.get("operation_id"),
+        item.get("last_task_id"),
+        action_target_id if action_target_id.startswith("tsk_") else "",
+        latest_memory_receipt.get("current_task_operation_id"),
+        latest_memory_receipt.get("handoff_operation_id"),
+        _memory_receipt_reference(latest_memory_receipt, "operation_id"),
+    )
+    return {
+        "linked_operation_count": _safe_nonnegative_int(item.get("linked_task_count")),
+        "run_ledger_count": _safe_nonnegative_int(latest_activity.get("run_ledger_count")),
+        "history_count": _safe_nonnegative_int(item.get("history_count")),
+        "memory_receipt_count": _safe_nonnegative_int(item.get("memory_receipt_count")),
+        "latest_memory_receipt": dict(latest_memory_receipt) if latest_memory_receipt else {},
+        "current_operation_id": operation_id,
+        "current_operation_status": _first_text(
+            current_task.get("operation_status"),
+            latest_activity.get("operation_status"),
+            latest_activity.get("status"),
+            item.get("last_task_status"),
+            latest_memory_receipt.get("operation_status"),
+        ),
+        "current_gate": _first_text(
+            current_task.get("gate"),
+            latest_activity.get("gate"),
+            latest_memory_receipt.get("current_task_gate"),
+            latest_memory_receipt.get("handoff_gate"),
+            item.get("last_task_gate"),
+        ),
+        "current_approval_id": _first_text(
+            current_task.get("approval_id"),
+            latest_activity.get("approval_id"),
+            item.get("last_task_approval_id"),
+            latest_memory_receipt.get("current_task_approval_id"),
+            latest_memory_receipt.get("handoff_approval_id"),
+            _memory_receipt_reference(latest_memory_receipt, "approval_id"),
+        ),
+        "current_trace_id": _first_text(
+            current_task.get("trace_id"),
+            latest_activity.get("trace_id"),
+            latest_memory_receipt.get("current_task_trace_id"),
+            latest_memory_receipt.get("handoff_trace_id"),
+            _memory_receipt_reference(latest_memory_receipt, "trace_id"),
+        ),
+        "current_run_id": _first_text(
+            current_task.get("run_id"),
+            latest_activity.get("run_id"),
+            latest_memory_receipt.get("current_task_run_id"),
+            latest_memory_receipt.get("handoff_run_id"),
+            _memory_receipt_reference(latest_memory_receipt, "run_id"),
+        ),
+        "current_artifact_dir": _first_text(
+            current_task.get("artifact_dir"),
+            latest_activity.get("artifact_dir"),
+            latest_memory_receipt.get("current_task_artifact_dir"),
+            latest_memory_receipt.get("handoff_artifact_dir"),
+            _memory_receipt_reference(latest_memory_receipt, "artifact_dir"),
+        ),
+        "latest_run_event": _first_text(current_task.get("latest_receipt_event"), latest_activity.get("name")),
+        "latest_run_status": _first_text(current_task.get("latest_receipt_status"), latest_activity.get("status")),
+        "latest_run_ts": _first_text(
+            current_task.get("latest_receipt_ts"), _stage_timestamp(latest_activity.get("ts"))
+        ),
+        "latest_history_event": _safe_str(item.get("latest_history_event")).strip(),
+        "latest_history_ts": _stage_timestamp(item.get("latest_history_ts")),
+    }
+
+
+def _mission_handoff_stage(item: dict[str, Any], action: str, receipt_summary: dict[str, Any]) -> str:
+    status = _safe_str(item.get("status")).strip().lower()
+    normalized_action = _safe_str(action).strip().lower()
+    gate = _safe_str(receipt_summary.get("current_gate")).strip()
+    approval_id = _safe_str(receipt_summary.get("current_approval_id")).strip()
+    if status == "deadlettered" or normalized_action in {"review_deadletter", "retry_or_deadletter"}:
+        return "deadletter"
+    if normalized_action in {"create_first_operation", "link_operation"}:
+        return "plan"
+    if gate or approval_id or normalized_action in {"raise_trust_or_reduce_risk", "review_pending_approval"}:
+        return "gate"
+    if normalized_action in {"run_linked_operation", "advance_once"}:
+        return "execute"
+    if _safe_str(receipt_summary.get("latest_run_event")).strip():
+        return "trace"
+    if _safe_nonnegative_int(receipt_summary.get("memory_receipt_count")) > 0:
+        return "memory"
+    return "interface"
+
+
+def _mission_handoff_projection(item: dict[str, Any], receipt_summary: dict[str, Any]) -> dict[str, Any]:
+    current_task = item.get("current_task") if isinstance(item.get("current_task"), dict) else {}
+    action = _first_text(
+        current_task.get("handoff_action"),
+        item.get("recommended_action"),
+        _mission_default_handoff_action(item),
+    )
+    stage = _mission_handoff_stage(item, action, receipt_summary)
+    payload = {
+        "stage": stage,
+        "action": action,
+        "detail": _first_text(
+            current_task.get("reason"),
+            item.get("operator_hint"),
+            item.get("last_task_reason"),
+        ),
+        "gate": _safe_str(receipt_summary.get("current_gate")).strip(),
+        "next_step": _first_text(current_task.get("next_step"), item.get("next_step")),
+        "approval_id": _safe_str(receipt_summary.get("current_approval_id")).strip(),
+        "approval_status": _first_text(current_task.get("approval_status"), item.get("last_task_approval_status")),
+        "operation_id": _safe_str(receipt_summary.get("current_operation_id")).strip(),
+        "trace_id": _safe_str(receipt_summary.get("current_trace_id")).strip(),
+        "run_id": _safe_str(receipt_summary.get("current_run_id")).strip(),
+        "artifact_dir": _safe_str(receipt_summary.get("current_artifact_dir")).strip(),
+        "latest_event": _first_text(
+            receipt_summary.get("latest_run_event"), receipt_summary.get("latest_history_event")
+        ),
+        "latest_ts": _first_text(receipt_summary.get("latest_run_ts"), receipt_summary.get("latest_history_ts")),
+    }
+    return {key: value for key, value in payload.items() if _safe_str(value).strip()}
+
+
+def _mission_overview_loop_state(
+    item: dict[str, Any], receipt_summary: dict[str, Any], handoff: dict[str, Any]
+) -> dict[str, Any]:
+    linked_count = _safe_nonnegative_int(receipt_summary.get("linked_operation_count"))
+    run_count = _safe_nonnegative_int(receipt_summary.get("run_ledger_count"))
+    history_count = _safe_nonnegative_int(receipt_summary.get("history_count"))
+    memory_count = _safe_nonnegative_int(receipt_summary.get("memory_receipt_count"))
+    operation_id = _safe_str(receipt_summary.get("current_operation_id")).strip()
+    operation_status = _safe_str(receipt_summary.get("current_operation_status")).strip()
+    gate = _safe_str(receipt_summary.get("current_gate")).strip()
+    approval_id = _safe_str(receipt_summary.get("current_approval_id")).strip()
+    approval_status = _safe_str(handoff.get("approval_status")).strip()
+    trace_id = _safe_str(receipt_summary.get("current_trace_id")).strip()
+    run_id = _safe_str(receipt_summary.get("current_run_id")).strip()
+    artifact_dir = _safe_str(receipt_summary.get("current_artifact_dir")).strip()
+    latest_event = _safe_str(receipt_summary.get("latest_run_event")).strip()
+    latest_status = _safe_str(receipt_summary.get("latest_run_status")).strip()
+    latest_ts = _safe_str(receipt_summary.get("latest_run_ts")).strip()
+    next_step = _first_text(handoff.get("next_step"), item.get("next_step"))
+
+    gate_status = "blocked" if gate or approval_id else "pending"
+    if approval_status in {"approved", "emergency"}:
+        gate_status = "clear"
+    execute_status = operation_status or ("linked" if operation_id else "pending")
+    trace_status = "available" if latest_event or trace_id or run_id or artifact_dir else "pending"
+    memory_status = "available" if memory_count > 0 else "pending"
+    memory_stage = _overview_loop_stage(
+        memory_status,
+        "Memory receipt count from mission continuity receipts.",
+        count=memory_count,
+        operation_id=operation_id,
+        latest_event=_safe_str(receipt_summary.get("latest_history_event")).strip(),
+        latest_ts=_safe_str(receipt_summary.get("latest_history_ts")).strip(),
+    )
+    latest_memory_receipt = receipt_summary.get("latest_memory_receipt")
+    if isinstance(latest_memory_receipt, dict) and latest_memory_receipt:
+        memory_stage["latest_memory_receipt"] = dict(latest_memory_receipt)
+
+    return {
+        "summary": "Mission overview exposes queue, gate, execution receipt, trace, memory, and interface handles.",
+        "active_stage": _safe_str(handoff.get("stage")).strip() or "interface",
+        "handoff": handoff,
+        "plan": _overview_loop_stage(
+            "linked" if linked_count else "pending",
+            "Linked operation count from mission queue state.",
+            count=linked_count,
+            operation_id=operation_id,
+            next_step=next_step,
+        ),
+        "gate": _overview_loop_stage(
+            gate_status,
+            "Gate and approval posture from current mission task receipts.",
+            gate=gate,
+            approval_id=approval_id,
+            approval_status=approval_status,
+            operation_id=operation_id,
+            next_step=next_step,
+        ),
+        "execute": _overview_loop_stage(
+            execute_status,
+            "Execution posture from linked operation and latest run receipt state.",
+            operation_id=operation_id,
+            latest_event=latest_event,
+            latest_receipt_status=latest_status,
+            latest_ts=latest_ts,
+            next_step=next_step,
+        ),
+        "trace": _overview_loop_stage(
+            trace_status,
+            "Trace handles from current task and latest run activity.",
+            count=run_count,
+            operation_id=operation_id,
+            trace_id=trace_id,
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            latest_event=latest_event,
+            latest_receipt_status=latest_status,
+            latest_ts=latest_ts,
+        ),
+        "memory": memory_stage,
+        "interface": _overview_loop_stage(
+            "available",
+            "World-state overview exposes a bounded operator handoff and receipt summary.",
+            count=sum(1 for value in (handoff, operation_id, latest_event, history_count, memory_count) if value),
+            gate=gate,
+            approval_id=approval_id,
+            approval_status=approval_status,
+            operation_id=operation_id,
+            trace_id=trace_id,
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            latest_event=_first_text(latest_event, receipt_summary.get("latest_history_event")),
+            latest_receipt_status=latest_status,
+            latest_ts=_first_text(latest_ts, receipt_summary.get("latest_history_ts")),
+            next_step=next_step,
+        ),
+    }
+
+
+def _attach_mission_overview_loop_projection(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        receipt_summary = _mission_receipt_summary_projection(item)
+        handoff = _mission_handoff_projection(item, receipt_summary)
+        enriched_item = dict(item)
+        enriched_item["receipt_summary"] = receipt_summary
+        enriched_item["handoff"] = handoff
+        enriched_item["loop_state"] = _mission_overview_loop_state(enriched_item, receipt_summary, handoff)
         enriched.append(enriched_item)
     return enriched
 
@@ -1884,6 +2189,10 @@ def mission_continuity_snapshot(
     mission_queue = _attach_mission_pending_approval_projection(mission_queue, approval_projection)
     failed_missions = _attach_mission_pending_approval_projection(failed_missions, approval_projection)
     deadletter_missions = _attach_mission_pending_approval_projection(deadletter_missions, approval_projection)
+    recent_missions = _attach_mission_overview_loop_projection(recent_missions)
+    mission_queue = _attach_mission_overview_loop_projection(mission_queue)
+    failed_missions = _attach_mission_overview_loop_projection(failed_missions)
+    deadletter_missions = _attach_mission_overview_loop_projection(deadletter_missions)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,

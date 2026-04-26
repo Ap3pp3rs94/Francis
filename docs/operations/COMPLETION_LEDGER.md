@@ -273,6 +273,17 @@ queue-level `loop_state`, `handoff`, `receipt_summary`, current-task receipt
 fields, and bounded linked-operation/run-ledger counts. This is a typed client
 contract only; it does not add new rendering claims or execution authority.
 
+As of `2026-04-26`, the world-state mission overview path also carries a
+bounded loop/readout projection for queue, failed, deadletter, and recent mission
+items. `/system/world_state` mission records now include overview-level
+`loop_state`, `handoff`, and `receipt_summary` data derived from existing
+mission queue, current-task, latest-activity, history, and memory receipt facts;
+the chat UI settings parser preserves those fields and the ORB mission queue
+cards render the loop stage, handoff action, receipt task, trace/run/artifact
+handles, and receipt counts before opening full mission detail. This is a
+read-only overview projection; it does not advance missions, create receipts,
+broaden approvals, or replace the full mission detail/log inspection route.
+
 As of `2026-04-26`, the explanation registry can preserve and query the same
 mission loop handles used by the Stage 3 trace and memory surfaces. Explanation
 records now lift `mission_id` and `operation_id` from either top-level fields or
@@ -3385,6 +3396,26 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 world-state mission
+overview loop projection slice:
+
+- `python -m pytest tests\test_api_system_settings.py::test_system_world_state_projects_mission_queue_and_deadletter_preview -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m ruff check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `2 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission queue loop
 client contract slice:

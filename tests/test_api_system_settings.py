@@ -816,6 +816,15 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert queue_items[0]["current_task"]["operation_id"] == blocked_operation_id
     assert queue_items[0]["current_task"]["gate"] == "trust_gate"
     assert queue_items[0]["current_task"]["latest_receipt_event"] == "governance_hold"
+    assert queue_items[0]["receipt_summary"]["linked_operation_count"] == 1
+    assert queue_items[0]["receipt_summary"]["run_ledger_count"] >= 1
+    assert queue_items[0]["receipt_summary"]["current_operation_id"] == blocked_operation_id
+    assert queue_items[0]["receipt_summary"]["current_gate"] == "trust_gate"
+    assert queue_items[0]["receipt_summary"]["latest_run_event"] == "governance_hold"
+    assert queue_items[0]["loop_state"]["active_stage"] == "gate"
+    assert queue_items[0]["loop_state"]["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert queue_items[0]["loop_state"]["gate"]["gate"] == "trust_gate"
+    assert queue_items[0]["loop_state"]["interface"]["status"] == "available"
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "create_first_operation"
     assert ready_item["advance"]["eligible"] is True
@@ -823,6 +832,10 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert ready_item["latest_activity"] == {}
     assert ready_item["current_task"]["source"] == "mission"
     assert ready_item["current_task"]["handoff_action"] == "create_first_operation"
+    assert ready_item["handoff"]["stage"] == "plan"
+    assert ready_item["handoff"]["action"] == "create_first_operation"
+    assert ready_item["loop_state"]["active_stage"] == "plan"
+    assert ready_item["receipt_summary"]["linked_operation_count"] == 0
     replacement_item = next(item for item in queue_items if item["id"] == replacement_id)
     assert replacement_item["status"] == "queued"
     assert replacement_item["replacement_for_mission_id"] == failed_id
