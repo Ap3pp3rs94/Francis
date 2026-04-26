@@ -372,7 +372,22 @@ def _cap_plan_create(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
     plan = create_plan(goal, constraints if isinstance(constraints, dict) else None)
     machine = PlanStateMachine(plan)
     machine.start()
-    return {"kind": "plan.create.result", "plan": plan.to_dict()}
+    plan_payload = plan.to_dict()
+    steps = plan_payload.get("steps") if isinstance(plan_payload.get("steps"), list) else []
+    checkpoints = plan_payload.get("checkpoints") if isinstance(plan_payload.get("checkpoints"), list) else []
+    current_step = next(
+        (step for step in steps if isinstance(step, dict) and _safe_str(step.get("status")).strip() == "in_progress"),
+        {},
+    )
+    return {
+        "kind": "plan.create.result",
+        "plan": plan_payload,
+        "plan_status": _safe_str(plan_payload.get("status")).strip() or None,
+        "plan_current_step_id": _safe_str(current_step.get("step_id")).strip() or None,
+        "plan_current_step_title": _safe_str(current_step.get("title")).strip() or None,
+        "plan_step_count": len(steps),
+        "plan_checkpoint_count": len(checkpoints),
+    }
 
 
 def _cap_plan_revise(inputs: dict[str, Any], objective: str) -> dict[str, Any]:

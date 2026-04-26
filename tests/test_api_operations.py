@@ -173,6 +173,15 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert run_now.status_code == 200
     run_body = run_now.json()
     assert run_body["status"] in {"succeeded", "failed"}
+    output = run_body["operation"]["output"]
+    assert isinstance(output, dict)
+    assert output["kind"] == "plan.create.result"
+    assert output["plan_status"] == "in_progress"
+    assert output["plan_current_step_id"] == "understand"
+    assert output["plan_current_step_title"] == "Understand goal + constraints"
+    assert output["plan_step_count"] == 4
+    assert output["plan_checkpoint_count"] == 3
+    assert output["plan"]["status"] == "in_progress"
 
     fetched = client.get(f"/operations/{operation_id}")
     assert fetched.status_code == 200
@@ -530,9 +539,7 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
 
     listed = client.get("/memory/timeline/list", params={"run_id": run_id})
     assert listed.status_code == 200
-    assert any(
-        item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"]
-    )
+    assert any(item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"])
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
