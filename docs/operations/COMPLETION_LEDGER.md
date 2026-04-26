@@ -287,6 +287,14 @@ already expose their own trace/run receipts, such as plugin execution, keep thei
 existing receipt-provided handles. No scheduling, approval, operation status
 mapping, or memory-write behavior is changed.
 
+As of `2026-04-26`, completed task audit events also carry the real execution
+receipt handles when they exist. The final `status_updated` task audit entry now
+records `trace_id`, `run_id`, and `artifact_dir` from the result payload, and
+operation log projections expose those handles as first-class log fields while
+preserving the same details inside `output`/`meta`. This makes the operation
+audit trail line up with the operation result trace without changing execution,
+approval, scheduling, or memory-write behavior.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2683,6 +2691,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation audit trace handles slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_run_executes_plan_create tests\test_api_operations.py::test_operations_plugin_run_action_executes -q`
+  Result: `passed`
+- `python -m ruff check src\francis\agent\executor.py src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\agent\executor.py src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 plan execution trace handles slice:
 

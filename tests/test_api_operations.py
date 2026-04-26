@@ -196,6 +196,15 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert fetched_body["operation"]["status"] in {"succeeded", "failed"}
     assert fetched_body["operation"]["trace_id"] == trace_id
     assert fetched_body["operation"]["run_id"] == run_id
+    final_status_log = next(
+        item
+        for item in fetched_body["logs"]
+        if item["kind"] == "audit_event" and item["name"] == "status_updated" and item["status"] == "succeeded"
+    )
+    assert final_status_log["trace_id"] == trace_id
+    assert final_status_log["run_id"] == run_id
+    assert final_status_log["output"]["trace_id"] == trace_id
+    assert final_status_log["output"]["run_id"] == run_id
 
     listed_by_trace = client.get("/operations/list", params={"trace_id": trace_id})
     assert listed_by_trace.status_code == 200

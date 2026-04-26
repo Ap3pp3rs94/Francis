@@ -98,6 +98,26 @@ def _payload_run_id(payload: dict[str, Any]) -> str:
     )
 
 
+def _payload_artifact_dir(payload: dict[str, Any]) -> str:
+    receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+    sandbox = payload.get("sandbox") if isinstance(payload.get("sandbox"), dict) else {}
+    receipt_sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    audit_event = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return (
+        _safe_str(payload.get("artifact_dir")).strip()
+        or _safe_str(payload.get("artifact_path")).strip()
+        or _safe_str(receipt.get("artifact_dir")).strip()
+        or _safe_str(receipt.get("artifact_path")).strip()
+        or _safe_str(sandbox.get("artifact_dir")).strip()
+        or _safe_str(sandbox.get("artifact_path")).strip()
+        or _safe_str(receipt_sandbox.get("artifact_dir")).strip()
+        or _safe_str(receipt_sandbox.get("artifact_path")).strip()
+        or _safe_str(audit_event.get("artifact_dir")).strip()
+        or _safe_str(sandbox_audit.get("artifact_dir")).strip()
+    )
+
+
 def _attach_execution_handles(payload: Any) -> None:
     if not isinstance(payload, dict):
         return
@@ -105,6 +125,17 @@ def _attach_execution_handles(payload: Any) -> None:
         payload["trace_id"] = _new_trace_id()
     if not _payload_run_id(payload):
         payload["run_id"] = _new_run_id()
+
+
+def _payload_audit_references(payload: Any) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        return {}
+    references = {
+        "trace_id": _payload_trace_id(payload),
+        "run_id": _payload_run_id(payload),
+        "artifact_dir": _payload_artifact_dir(payload),
+    }
+    return {key: value for key, value in references.items() if value}
 
 
 def tasks_dir() -> Path:
@@ -855,9 +886,9 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         "data": payload,
     }
     save_task(task)
-    _append_task_audit(
-        task_id, "status_updated", {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]}
-    )
+    audit_details = {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]}
+    audit_details.update(_payload_audit_references(payload))
+    _append_task_audit(task_id, "status_updated", audit_details)
     payload_status = ""
     if isinstance(payload, dict):
         payload_status = _safe_str(payload.get("status")).strip().lower()

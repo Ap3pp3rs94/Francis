@@ -481,6 +481,9 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
         held_status = _safe_str(details.get("status")).strip().lower()
         status = "blocked" if held_status in {"blocked", "denied"} else "queued"
         level = "warning"
+    trace_id = _safe_str(details.get("trace_id")).strip()
+    run_id = _safe_str(details.get("run_id")).strip()
+    artifact_dir = _safe_str(details.get("artifact_dir")).strip()
     return {
         "id": f"{task_id}:evt:{idx}",
         "ts": ts,
@@ -489,12 +492,18 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
         "status": status,
         "level": level,
         "actor": "system",
+        "trace_id": trace_id or None,
+        "run_id": run_id or None,
+        "artifact_dir": artifact_dir or None,
         "output": details or event.get("details"),
         "meta": {
             "task_id": task_id,
             "reason": redact_operation_optional_text(details.get("reason")),
             "gate": details.get("gate"),
             "next_step": redact_operation_optional_text(details.get("next_step")),
+            "trace_id": trace_id or None,
+            "run_id": run_id or None,
+            "artifact_dir": artifact_dir or None,
             "orb_plane": "P3_GOVERNANCE" if event_name == "governance_hold" else None,
         },
     }
