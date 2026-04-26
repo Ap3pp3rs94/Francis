@@ -162,15 +162,23 @@ def _print_supervised_exec_summary(task: dict[str, Any] | None) -> None:
     task_id = _sanitize_decision_field(task.get("task_id"), "")
 
     data = result.get("data")
+    approval_id = ""
+    trace_id = ""
     run_id = ""
     artifact_dir = ""
     if isinstance(data, dict):
+        approval_id = _sanitize_decision_field(data.get("approval_id"), "")
+        trace_id = _sanitize_decision_field(data.get("trace_id") or data.get("traceId"), "")
         run_id = _sanitize_decision_field(data.get("run_id"), "")
         artifact_dir = _sanitize_decision_field(data.get("artifact_dir"), "")
 
     print(f"SUMMARY: task_id={task_id or '-'} status={status} ok={ok}", file=sys.stderr)
     if reason:
         print(f"SUMMARY: reason={reason}", file=sys.stderr)
+    if approval_id:
+        print(f"SUMMARY: approval_id={approval_id}", file=sys.stderr)
+    if trace_id:
+        print(f"SUMMARY: trace_id={trace_id}", file=sys.stderr)
     if run_id:
         print(f"SUMMARY: run_id={run_id}", file=sys.stderr)
     if artifact_dir:

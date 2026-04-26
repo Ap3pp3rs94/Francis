@@ -506,6 +506,13 @@ preserving the same details inside `output`/`meta`. This makes the operation
 audit trail line up with the operation result trace without changing execution,
 approval, scheduling, or memory-write behavior.
 
+As of `2026-04-26`, the supervised-exec CLI human summary preserves the same
+gate and trace handles already present in the task result. `python -m francis
+supervised-exec --print-summary` now prints `approval_id` and `trace_id` when
+they exist, alongside the existing task/run/artifact summary lines. This is
+interface reachability only; stdout remains the JSON task record, and the CLI
+does not create approvals, traces, runs, or artifact state.
+
 As of `2026-04-26`, world-state mission activity projections preserve those
 operation-log receipt handles. Mission `latest_activity` now carries real
 `trace_id`, `run_id`, and `artifact_dir` values from the selected run-ledger log
@@ -3532,6 +3539,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` supervised-exec CLI summary handle slice:
+
+- `python -m ruff check src\francis\__main__.py tests\unit\test_cli_supervised_exec_summary.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\__main__.py tests\unit\test_cli_supervised_exec_summary.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_cli_supervised_exec_summary.py tests\test_api_supervised_exec.py`
+  Result: `5 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 approval gate loop-handle projection slice:
 
