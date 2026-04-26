@@ -384,6 +384,33 @@ function operationMemoryReceiptReferenceLine(receipt: OperationMemoryReceipt | n
   return parts.join(" / ");
 }
 
+function operationMemoryReceiptFromMeta(value: unknown): OperationMemoryReceipt | undefined {
+  if (!isRecord(value)) return undefined;
+  const referencesRaw = isRecord(value.references) ? value.references : {};
+  const references = {
+    mission_id: safeString(referencesRaw.mission_id).trim() || undefined,
+    operation_id: safeString(referencesRaw.operation_id).trim() || undefined,
+    trace_id: safeString(referencesRaw.trace_id).trim() || undefined,
+    approval_id: safeString(referencesRaw.approval_id).trim() || undefined,
+    run_id: safeString(referencesRaw.run_id).trim() || undefined,
+    artifact_dir: safeString(referencesRaw.artifact_dir).trim() || undefined,
+  };
+  const receipt: OperationMemoryReceipt = {
+    source: safeString(value.source).trim() || undefined,
+    kind: safeString(value.kind).trim() || undefined,
+    ts: safeNumber(value.ts, 0) || undefined,
+    role: safeString(value.role).trim() || undefined,
+    message: safeString(value.message).trim() || undefined,
+    scope: safeString(value.scope).trim() || undefined,
+    operation_status: safeString(value.operation_status).trim() || undefined,
+    approval_status: safeString(value.approval_status).trim() || undefined,
+    capability: safeString(value.capability).trim() || undefined,
+    subsystem: safeString(value.subsystem).trim() || undefined,
+  };
+  if (Object.values(references).some(Boolean)) receipt.references = references;
+  return Object.values(receipt).some((item) => item !== undefined) ? receipt : undefined;
+}
+
 function missionLoopStagePlanReceiptLine(stage: MissionLoopState["plan"] | null | undefined): React.ReactNode {
   const planStatus = safeString(stage?.plan_status).trim();
   const currentStepId = safeString(stage?.plan_current_step_id).trim();
@@ -9944,15 +9971,29 @@ function OperationsPanel(props: {
     safeString(selectedMissionCurrentTask?.approval_id).trim() ||
     safeString(selectedMissionLoopHandoff?.approval_id).trim() ||
     safeString(selectedMissionReceiptSummary?.current_approval_id).trim();
-  const selectedMissionEvidenceReceipt =
-    selectedMissionBridgeDetail?.latest_memory_receipt ??
-    selectedMissionReceiptSummary?.latest_memory_receipt ??
-    selectedMissionLoopState?.memory?.latest_memory_receipt ??
-    selectedMissionBridgeDetail?.memory_receipts?.[0];
+  const selectedOperationMemoryReceipt =
+    detail?.latest_memory_receipt ??
+    operationMemoryReceiptFromMeta(selectedMeta.latest_memory_receipt) ??
+    detail?.memory_receipts?.[0];
+  const selectedOperationMemoryReceiptRefs = operationMemoryReceiptReferenceLine(selectedOperationMemoryReceipt);
+  const selectedOperationMemoryReceiptAt = mixedLocaleTime(selectedOperationMemoryReceipt?.ts);
+  const selectedOperationMemoryReceiptCount =
+    detail?.memory_receipt_count ??
+    (safeNumber(selectedMeta.memory_receipt_count, 0) ||
+      detail?.memory_receipts?.length ||
+      (selectedOperationMemoryReceipt ? 1 : 0));
   const selectedMissionBridgeTaskId =
     selectedMissionCurrentTaskId ||
     safeString(selectedMissionLoopHandoff?.operation_id).trim() ||
     safeString(selectedMissionReceiptSummary?.current_operation_id).trim();
+  const selectedMissionEvidenceReceipt =
+    selectedOperationMemoryReceipt ??
+    selectedMissionBridgeDetail?.latest_memory_receipt ??
+    selectedMissionReceiptSummary?.latest_memory_receipt ??
+    selectedMissionLoopState?.memory?.latest_memory_receipt ??
+    selectedMissionBridgeDetail?.memory_receipts?.[0];
+  const selectedMemoryEvidenceOperationId =
+    safeString(selectedOperationMemoryReceipt?.references?.operation_id).trim() || selectedMissionBridgeTaskId;
   const selectedMissionMemoryTraceId =
     safeString(selectedMissionCurrentTask?.trace_id).trim() ||
     safeString(selectedMissionLoopHandoff?.trace_id).trim() ||
@@ -9962,7 +10003,7 @@ function OperationsPanel(props: {
     () =>
       buildMemoryEvidenceQueries({
         missionId: selectedMissionId,
-        operationId: selectedMissionBridgeTaskId,
+        operationId: selectedMemoryEvidenceOperationId,
         fallbackOperationId: selectedOperation?.id,
         operationStatus: [
           selectedMissionCurrentTaskStatus,
@@ -9976,11 +10017,11 @@ function OperationsPanel(props: {
       }),
     [
       selectedArtifactDir,
-      selectedMissionBridgeTaskId,
       selectedMissionId,
       selectedMissionCurrentTaskResultStatus,
       selectedMissionCurrentTaskStatus,
       selectedMissionEvidenceReceipt,
+      selectedMemoryEvidenceOperationId,
       selectedMissionMemoryTraceId,
       selectedOperation?.id,
       selectedRunId,
@@ -10867,6 +10908,22 @@ function OperationsPanel(props: {
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
+              {(selectedOperationMemoryReceiptCount || selectedOperationMemoryReceipt) ? (
+                <div style={{ fontSize: 12, overflowWrap: "anywhere" }}>
+                  Operation memory receipts: <code>{String(selectedOperationMemoryReceiptCount)}</code>
+                  {selectedOperationMemoryReceipt?.operation_status ? (
+                    <>
+                      {" / "}status <code>{selectedOperationMemoryReceipt.operation_status}</code>
+                    </>
+                  ) : null}
+                  {selectedOperationMemoryReceiptAt ? (
+                    <>
+                      {" / "}at <code>{selectedOperationMemoryReceiptAt}</code>
+                    </>
+                  ) : null}
+                  {selectedOperationMemoryReceiptRefs ? <>{" / "}{selectedOperationMemoryReceiptRefs}</> : null}
+                </div>
+              ) : null}
               {selectedPlanSummary ? (
                 <div style={{ fontSize: 12, display: "grid", gap: 4, overflowWrap: "anywhere" }}>
                   <div style={{ fontWeight: 600 }}>Plan Receipt</div>

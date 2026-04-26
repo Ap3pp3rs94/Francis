@@ -213,6 +213,14 @@ operations client preserves that receipt summary. This does not mint new memory
 or infer completion; it exposes existing continuity-ledger receipts for
 mission-linked operations that already reached a terminal status.
 
+As of `2026-04-26`, the chat UI operation detail panel uses those backed
+operation memory receipts when loading memory evidence for the selected
+operation. When an operation detail exposes `latest_memory_receipt`, the
+interface prefers that receipt's operation id and receipt references for the
+bounded memory-timeline query, and shows the operation memory receipt count plus
+reference line in the selected operation detail. This is a receipt-reachability
+slice only; it does not synthesize memory evidence or broaden query scope.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend
@@ -3655,6 +3663,13 @@ Latest targeted validation for the `2026-04-26` Stage 3 operation detail memory 
   Result: `passed`
 - `git diff --check`
   Result: `passed` (Git emitted a line-ending warning only)
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation memory receipt interface reachability slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `59 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory evidence interface slice:
 
