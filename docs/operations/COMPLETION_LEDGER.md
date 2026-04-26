@@ -220,6 +220,13 @@ receipt-backed status from event metadata onto public timeline events,
 memory timeline client can request and preserve it without inspecting raw
 payloads.
 
+As of `2026-04-26`, the operation memory-evidence interface can carry that
+terminal status into bounded timeline lookups. The evidence query helper accepts
+real operation status candidates from the selected mission task and selected
+operation, adds `operation_status=succeeded|failed` only when one of those
+statuses is terminal, and avoids broad status-only searches or non-terminal
+status as memory truth.
+
 As of `2026-04-25`, the operations detail surface can use that memory timeline
 contract from the mission loop bridge. When a selected operation exposes a real
 mission id, linked operation id, or trace id, the chat UI can issue bounded
@@ -3020,6 +3027,17 @@ Latest targeted validation for the `2026-04-25` Stage 3 memory evidence UI contr
 
 - `cd apps\chat_ui; npm run test`
   Result: `30 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory evidence interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
+  Result: `4 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
