@@ -888,6 +888,7 @@ def _operation_latest_activity(
         return {}
 
     operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    operation_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
     logs = detail.get("logs") if isinstance(detail.get("logs"), list) else []
     latest: dict[str, Any] = {}
 
@@ -900,6 +901,12 @@ def _operation_latest_activity(
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
+            "approval_id": _first_text(
+                log.get("approval_id"),
+                meta.get("approval_id"),
+                operation.get("approval_id"),
+                operation_meta.get("approval_id"),
+            ),
             "trace_id": _first_text(log.get("trace_id"), meta.get("trace_id"), operation.get("trace_id")),
             "run_id": _first_text(log.get("run_id"), meta.get("run_id"), operation.get("run_id")),
             "artifact_dir": _first_text(
@@ -920,12 +927,12 @@ def _operation_latest_activity(
             latest = candidate
 
     if not latest and operation:
-        op_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
         latest = {
             "source": "operation_state",
             "operation_id": op_id,
             "operation_name": str(operation.get("name") or "").strip(),
             "operation_status": str(operation.get("status") or "").strip(),
+            "approval_id": _first_text(operation.get("approval_id"), operation_meta.get("approval_id")),
             "trace_id": _safe_str(operation.get("trace_id")).strip(),
             "run_id": _safe_str(operation.get("run_id")).strip(),
             "artifact_dir": _safe_str(operation.get("artifact_dir")).strip(),
@@ -935,7 +942,7 @@ def _operation_latest_activity(
             "status": str(operation.get("status") or "").strip(),
             "level": str(operation.get("level") or "").strip() or "info",
             "ts": int(operation.get("ts") or 0),
-            "reason": str(operation.get("error") or op_meta.get("result_message") or "").strip(),
+            "reason": str(operation.get("error") or operation_meta.get("result_message") or "").strip(),
             "gate": "",
             "next_step": "",
             "_seq": -1,
@@ -1077,6 +1084,7 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         "approval_id": _first_text(
             existing.get("approval_id"),
             item.get("last_task_approval_id"),
+            latest_activity.get("approval_id"),
             _memory_receipt_reference(latest_memory_receipt, "approval_id"),
         ),
         "approval_status": _first_text(

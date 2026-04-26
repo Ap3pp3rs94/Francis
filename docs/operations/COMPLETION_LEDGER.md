@@ -545,10 +545,11 @@ does not create approvals, traces, runs, or artifact state.
 
 As of `2026-04-26`, world-state mission activity projections preserve those
 operation-log receipt handles. Mission `latest_activity` now carries real
-`trace_id`, `run_id`, and `artifact_dir` values from the selected run-ledger log
-or operation state, and the derived `current_task` projection keeps the same
-handles for chat UI settings/world-state clients. This is a read-model/interface
-handoff only; it does not create traces, mutate missions, or write memory.
+`approval_id`, `trace_id`, `run_id`, and `artifact_dir` values from the selected
+run-ledger log or operation state, and the derived `current_task` projection
+keeps the same handles for chat UI settings/world-state clients. This is a
+read-model/interface handoff only; it does not create approvals, traces, mutate
+missions, or write memory.
 
 As of `2026-04-26`, the chat UI operations client preserves bounded
 `plan.create` receipt summaries as typed operation data. When backend operation
@@ -3703,6 +3704,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 operation audit approval
   Result: `65 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 world-state latest-activity approval slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
+  Result: `1 passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `2 files already formatted`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 

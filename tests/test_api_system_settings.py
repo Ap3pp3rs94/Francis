@@ -1042,6 +1042,8 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert blocked_recent["last_task_gate"] == "approvals_gate"
     assert blocked_recent["last_task_approval_id"] == approval_id
     assert blocked_recent["last_task_approval_status"] == "pending"
+    assert blocked_recent["latest_activity"]["approval_id"] == approval_id
+    assert blocked_recent["current_task"]["approval_id"] == approval_id
 
     pending_approval = next(item for item in body["overview"]["pending_approvals"] if item["id"] == approval_id)
     assert pending_approval["action"] == "plugin.run"
