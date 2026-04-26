@@ -1863,6 +1863,9 @@ def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_p
     assert fetched_body["queue_item"]["current_task"]["operation_name"] == "plan.create"
     assert fetched_body["queue_item"]["current_task"]["operation_plane"] == "P7_EXECUTION"
     assert fetched_body["queue_item"]["current_task"]["advance_action"] == "create_first_operation"
+    assert fetched_body["current_task"]["operation_name"] == "plan.create"
+    assert fetched_body["current_task"]["operation_plane"] == "P7_EXECUTION"
+    assert fetched_body["current_task"]["advance_action"] == "create_first_operation"
     history_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert history_events
     assert history_events[-1]["details"]["operation_name"] == "plan.create"

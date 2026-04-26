@@ -856,10 +856,12 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["active_stage"] == "deadletter"
     assert receipt["handoff_stage"] == "deadletter"
     assert receipt["handoff_action"] == "retry_or_deadletter"
+    assert receipt["handoff_gate"] == "operator_review"
     assert receipt["handoff_operation_id"] == operation_id
     assert receipt["handoff_next_step"] == "review_operation_detail"
     assert receipt["current_task_source"] == "terminal_operation_receipt"
     assert receipt["current_task_operation_id"] == operation_id
+    assert receipt["current_task_gate"] == "operator_review"
     assert receipt["current_task_next_step"] == "review_operation_detail"
     assert receipt["memory_receipt_count"] == 1
     assert "Mission operation failed" in receipt["message"]
@@ -887,10 +889,12 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipts[0]["loop"]["active_stage"] == "deadletter"
     assert receipts[0]["loop"]["handoff_stage"] == "deadletter"
     assert receipts[0]["loop"]["handoff_action"] == "retry_or_deadletter"
+    assert receipts[0]["loop"]["handoff_gate"] == "operator_review"
     assert receipts[0]["loop"]["handoff_operation_id"] == operation_id
     assert receipts[0]["loop"]["handoff_next_step"] == "review_operation_detail"
     assert receipts[0]["loop"]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["loop"]["current_task_operation_id"] == operation_id
+    assert receipts[0]["loop"]["current_task_gate"] == "operator_review"
     assert receipts[0]["loop"]["current_task_next_step"] == "review_operation_detail"
     assert receipts[0]["loop"]["operation_error"] == "plugin_id_required"
     assert receipts[0]["loop"]["recovery_next_step"] == "review_operation_detail"
@@ -901,7 +905,9 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert fetched_body["latest_memory_receipt"]["operation_error"] == "plugin_id_required"
     assert fetched_body["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
     assert fetched_body["latest_memory_receipt"]["handoff_action"] == "retry_or_deadletter"
+    assert fetched_body["latest_memory_receipt"]["handoff_gate"] == "operator_review"
     assert fetched_body["latest_memory_receipt"]["current_task_source"] == "terminal_operation_receipt"
+    assert fetched_body["latest_memory_receipt"]["current_task_gate"] == "operator_review"
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:

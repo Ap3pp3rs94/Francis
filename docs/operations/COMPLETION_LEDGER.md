@@ -309,6 +309,14 @@ projections preserve those fields from receipt truth. This is receipt truth
 only; it does not add retry authority, deadletter mutation authority,
 scheduling behavior, or synthetic operation state.
 
+As of `2026-04-26`, that failed terminal operation receipt handoff also carries
+the same explicit `operator_review` gate on `handoff_gate` and
+`current_task_gate`. Downstream mission, world-state, and memory timeline
+surfaces already read those gate fields, so failed execution review now keeps
+stage, action, gate, operation, trace, run, artifact, and next-step handles
+together in one terminal receipt. This is receipt metadata only; it does not
+open retry or deadletter mutation paths.
+
 As of `2026-04-26`, the continuity briefing also uses those terminal
 mission-operation receipts as a fallback when projecting a mission's current
 task. Failed mission previews keep the receipt-backed operation id, trace
@@ -856,6 +864,14 @@ operation name and ORB plane from the operation projection, scoped to the same
 operation id so stale advance metadata is not attached to an unrelated current
 task. No operation creation, execution, governance, approval, or memory-write
 behavior is changed.
+
+As of `2026-04-26`, the top-level mission detail `current_task` projection now
+keeps that operation identity alongside the queue item's current-task view.
+`GET /missions/{mission_id}` carries the backend-provided operation name, ORB
+plane, and advance action for the same current operation, so interface consumers
+do not have to fall back to the nested queue item to render the real current
+plan/execute stage identity. This is read-model alignment only; it does not
+create operations, advance missions, or add execution authority.
 
 As of `2026-04-26`, the chat UI mission client preserves that advance operation
 identity without adding new visual claims. `MissionQueueItem` and
@@ -3249,6 +3265,30 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 top-level mission
+current-task identity slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_advance_creates_first_operation_with_receipt -q`
+  Result: `1 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed terminal receipt
+operator-review gate slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_mission_receipts.py -q`
+  Result: `3 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\operations\runtime.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\operations\runtime.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 failed terminal receipt
 handoff slice:

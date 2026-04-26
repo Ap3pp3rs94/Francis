@@ -421,9 +421,12 @@ def _mission_current_task_projection(
 ) -> dict[str, Any]:
     task_fields = _mission_current_task_fields(record)
     latest_detail = _current_operation_detail(record, linked_operations)
+    latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
+    latest_operation_meta = latest_operation.get("meta") if isinstance(latest_operation.get("meta"), dict) else {}
     linked_operation_id = _operation_id(latest_detail)
     handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
     queue_advance = queue_item.get("advance") if isinstance(queue_item.get("advance"), dict) else {}
+    queue_current_task = queue_item.get("current_task") if isinstance(queue_item.get("current_task"), dict) else {}
 
     operation_id = _first_text(
         task_fields["last_task_id"],
@@ -460,6 +463,14 @@ def _mission_current_task_projection(
     }
     values = {
         "operation_id": operation_id,
+        "operation_name": _first_text(
+            queue_current_task.get("operation_name"),
+            latest_operation.get("name"),
+        ),
+        "operation_plane": _first_text(
+            queue_current_task.get("operation_plane"),
+            latest_operation_meta.get("orb_plane"),
+        ),
         "task_status": _first_text(task_fields["last_task_status"], queue_item.get("last_task_status")),
         "operation_status": _first_text(
             _operation_status(latest_detail), queue_item.get("last_advance_operation_status")
@@ -487,6 +498,7 @@ def _mission_current_task_projection(
         "approval_status": queue_item.get("last_task_approval_status"),
         "handoff_stage": handoff.get("stage"),
         "handoff_action": handoff.get("action"),
+        "advance_action": _first_text(queue_current_task.get("advance_action"), queue_item.get("last_advance_action")),
         "trace_id": _first_text(_operation_trace_id(latest_detail), handoff.get("trace_id")),
         "run_id": _first_text(_operation_run_id(latest_detail), handoff.get("run_id")),
         "artifact_dir": _first_text(_operation_artifact_dir(latest_detail), handoff.get("artifact_dir")),

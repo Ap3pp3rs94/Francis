@@ -118,12 +118,14 @@ def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatc
             "active_stage": "deadletter",
             "handoff_stage": "deadletter",
             "handoff_action": "retry_or_deadletter",
+            "handoff_gate": "operator_review",
             "handoff_operation_id": "tsk_failure_refs",
             "handoff_trace_id": "trace_failure_refs",
             "handoff_run_id": "run_failure_refs",
             "handoff_next_step": "review_operation_detail",
             "current_task_source": "terminal_operation_receipt",
             "current_task_operation_id": "tsk_failure_refs",
+            "current_task_gate": "operator_review",
             "current_task_trace_id": "trace_failure_refs",
             "current_task_run_id": "run_failure_refs",
             "current_task_next_step": "review_operation_detail",
@@ -141,12 +143,14 @@ def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatc
     assert receipts[0]["active_stage"] == "deadletter"
     assert receipts[0]["handoff_stage"] == "deadletter"
     assert receipts[0]["handoff_action"] == "retry_or_deadletter"
+    assert receipts[0]["handoff_gate"] == "operator_review"
     assert receipts[0]["handoff_operation_id"] == "tsk_failure_refs"
     assert receipts[0]["handoff_trace_id"] == "trace_failure_refs"
     assert receipts[0]["handoff_run_id"] == "run_failure_refs"
     assert receipts[0]["handoff_next_step"] == "review_operation_detail"
     assert receipts[0]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["current_task_operation_id"] == "tsk_failure_refs"
+    assert receipts[0]["current_task_gate"] == "operator_review"
     assert receipts[0]["current_task_trace_id"] == "trace_failure_refs"
     assert receipts[0]["current_task_run_id"] == "run_failure_refs"
     assert receipts[0]["current_task_next_step"] == "review_operation_detail"
