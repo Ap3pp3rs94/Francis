@@ -35,6 +35,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     path: string;
     traceId: string | null;
     artifactDir: string | null;
+    approvalId: string | null;
     limit: string | null;
     method: string;
   }> = [];
@@ -44,6 +45,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
       path: parsed.pathname,
       traceId: parsed.searchParams.get("trace_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
+      approvalId: parsed.searchParams.get("approval_id"),
       limit: parsed.searchParams.get("limit"),
       method: (init?.method ?? "GET").toUpperCase(),
     });
@@ -59,7 +61,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           trace_id: "trace_alpha",
           artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
-          meta: { run_id: "run_alpha" },
+          meta: { run_id: "run_alpha", approval_id: "apr_alpha" },
         },
       ],
     });
@@ -70,6 +72,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     const response = await client.list({
       trace_id: "trace_alpha",
       artifact_dir: "runs/run_alpha/artifacts",
+      approval_id: "apr_alpha",
       limit: 25,
       timeoutMs: 50,
     });
@@ -79,6 +82,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
         path: "/explanations/list",
         traceId: "trace_alpha",
         artifactDir: "runs/run_alpha/artifacts",
+        approvalId: "apr_alpha",
         limit: "25",
         method: "GET",
       },
@@ -87,6 +91,7 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.equal(response.items[0]?.id, "exp-trace-alpha");
     assert.equal(response.items[0]?.trace_id, "trace_alpha");
     assert.equal(response.items[0]?.run_id, "run_alpha");
+    assert.equal(response.items[0]?.approval_id, "apr_alpha");
     assert.equal(response.items[0]?.artifact_dir, "runs/run_alpha/artifacts");
   } finally {
     restoreFetch();
@@ -99,6 +104,7 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     id: string | null;
     traceId: string | null;
     artifactDir: string | null;
+    approvalId: string | null;
     method: string;
   }> = [];
   const restoreFetch = installFetch(async (url, init) => {
@@ -108,6 +114,7 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
       id: parsed.searchParams.get("id"),
       traceId: parsed.searchParams.get("trace_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
+      approvalId: parsed.searchParams.get("approval_id"),
       method: (init?.method ?? "GET").toUpperCase(),
     });
 
@@ -123,6 +130,7 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
         kind: "audit",
         trace_id: "trace_detail",
         artifact_dir: "runs/run_detail/artifacts",
+        meta: { approval_id: "apr_detail" },
       },
       content: { outcome: "linked" },
     });
@@ -134,17 +142,20 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     await client.export("json", {
       trace_id: "trace_detail",
       artifact_dir: "runs/run_detail/artifacts",
+      approval_id: "apr_detail",
       timeoutMs: 50,
     });
 
     assert.equal(detail?.trace_id, "trace_detail");
     assert.equal(detail?.artifact_dir, "runs/run_detail/artifacts");
+    assert.equal(detail?.approval_id, "apr_detail");
     assert.deepEqual(requests, [
       {
         path: "/explanations/get",
         id: "exp-trace-detail",
         traceId: null,
         artifactDir: null,
+        approvalId: null,
         method: "GET",
       },
       {
@@ -152,6 +163,7 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
         id: null,
         traceId: "trace_detail",
         artifactDir: "runs/run_detail/artifacts",
+        approvalId: "apr_detail",
         method: "GET",
       },
     ]);

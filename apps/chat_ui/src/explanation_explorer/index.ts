@@ -386,7 +386,10 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const conversationId = safeString(raw.conversation_id, safeString(raw.thread_id, ""));
   if (conversationId) rec.conversation_id = conversationId;
 
-  const approvalId = safeString(raw.approval_id, "");
+  const approvalId = safeString(
+    raw.approval_id,
+    safeString(raw.approvalId, safeString(meta.approval_id, safeString(meta.approvalId, ""))),
+  );
   if (approvalId) rec.approval_id = approvalId;
 
   const pluginId = safeString(raw.plugin_id, "");
