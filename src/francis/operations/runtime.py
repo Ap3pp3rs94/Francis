@@ -389,12 +389,39 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _append_completed_mission_operation_receipt(task: dict[str, Any], operation: dict[str, Any]) -> None:
+def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+    references: dict[str, str] = {}
+    for key in ("mission_id", "operation_id", "trace_id", "approval_id", "run_id", "artifact_dir"):
+        value = _safe_str(meta.get(key)).strip()
+        if value:
+            references[key] = value
+    projection: dict[str, Any] = {
+        "source": "continuity.ledger",
+        "kind": "ledger_append",
+        "ts": entry.get("ts"),
+        "role": _safe_str(entry.get("role")).strip() or None,
+        "message": redact_operation_optional_text(entry.get("content")),
+    }
+    if references:
+        projection["references"] = references
+    for key in ("scope", "operation_status", "capability", "subsystem"):
+        value = _safe_str(meta.get(key)).strip()
+        if value:
+            projection[key] = value
+    return projection
+
+
+def _append_completed_mission_operation_receipt(
+    task: dict[str, Any], operation: dict[str, Any]
+) -> dict[str, Any] | None:
     mission_id = _task_mission_id(task)
     operation_id = _safe_str(operation.get("id")).strip() or _safe_str(task.get("task_id")).strip()
     operation_status = _safe_str(operation.get("status")).strip().lower()
     if not mission_id or not operation_id or operation_status != "succeeded":
-        return
+        return None
 
     trace_id = _safe_str(operation.get("trace_id")).strip()
     run_id = _safe_str(operation.get("run_id")).strip()
@@ -412,11 +439,12 @@ def _append_completed_mission_operation_receipt(task: dict[str, Any], operation:
         "capability": capability or None,
         "subsystem": "operations.runtime",
     }
-    append_continuity_ledger(
+    entry = append_continuity_ledger(
         "system",
         f"Mission operation completed: mission={mission_id} operation={operation_id} status={operation_status}",
         {key: value for key, value in meta.items() if value is not None},
     )
+    return _memory_receipt_projection(entry)
 
 
 def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
@@ -650,10 +678,14 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
     if isinstance(updated, dict):
         updated = _hold_retryable_governance_task(op_id, updated)
     operation = _task_to_operation(updated)
+    memory_receipt = None
     if isinstance(updated, dict):
-        _append_completed_mission_operation_receipt(updated, operation)
-    return {
+        memory_receipt = _append_completed_mission_operation_receipt(updated, operation)
+    response: dict[str, object] = {
         "ok": _operation_request_ok(operation.get("status")),
         "status": operation.get("status", "unknown"),
         "operation": operation,
     }
+    if memory_receipt:
+        response["memory_receipt"] = memory_receipt
+    return response

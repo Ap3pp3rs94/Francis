@@ -388,6 +388,78 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
     assert listed_operation["run_id"] == run_id
 
 
+def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Expose direct operation memory receipt",
+            "summary": "Completed mission-linked operation run should return the memory receipt handoff.",
+            "requester_id": "test.operations.memory_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Ops Memory Receipt Plugin", "description": "operation memory receipt"},
+    )
+    assert built.status_code == 200
+    plugin_id = str(built.json()["plugin_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "direct operation memory receipt",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "run", "input": "operation memory receipt"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    run_now = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.memory_receipt"})
+    assert run_now.status_code == 200
+    run_body = run_now.json()
+    assert run_body["status"] == "succeeded"
+    trace_id = str(run_body["operation"]["trace_id"])
+    run_id = str(run_body["operation"]["run_id"])
+    artifact_dir = str(run_body["operation"].get("artifact_dir") or "")
+
+    receipt = run_body["memory_receipt"]
+    assert receipt["source"] == "continuity.ledger"
+    assert receipt["kind"] == "ledger_append"
+    assert receipt["role"] == "system"
+    assert receipt["scope"] == "mission.loop"
+    assert receipt["operation_status"] == "succeeded"
+    assert receipt["subsystem"] == "operations.runtime"
+    expected_references = {
+        "mission_id": mission_id,
+        "operation_id": operation_id,
+        "trace_id": trace_id,
+        "run_id": run_id,
+    }
+    if artifact_dir:
+        expected_references["artifact_dir"] = artifact_dir
+    assert receipt["references"] == expected_references
+
+    listed = client.get("/memory/timeline/list", params={"run_id": run_id})
+    assert listed.status_code == 200
+    assert any(
+        item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"]
+    )
+
+
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -199,6 +199,14 @@ after an actual mission-linked operation returns the `succeeded` operation
 status, preserving the execution -> trace -> memory link without inventing
 memory state for blocked, failed, unlinked, or merely queued work.
 
+As of `2026-04-25`, direct mission-linked operation execution responses surface
+that completed-operation memory handoff when the continuity ledger append
+actually succeeds. `POST /operations/{operation_id}/run` now returns a bounded
+`memory_receipt` projection with the ledger source, role, message, scope,
+operation status, subsystem, and real mission/operation/trace/run references,
+so callers can move from execution result to receipt-backed memory retrieval
+without claiming memory for non-mission or non-succeeded runs.
+
 As of `2026-04-25`, the mission continuity/world-state projection now carries
 those completed mission operation receipts as bounded memory evidence. Stage 3
 mission readiness evidence exposes sampled missions with memory receipts,
@@ -2374,6 +2382,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation run memory receipt handoff slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py -q`
+  Result: `24 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 memory timeline run/artifact retrieval slice:
 
