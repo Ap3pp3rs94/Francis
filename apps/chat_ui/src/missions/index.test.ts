@@ -399,6 +399,22 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
         name: "plan.create",
         meta: { orb_plane: "P7_EXECUTION" },
       },
+      memory_receipt: {
+        source: "continuity.ledger",
+        kind: "ledger_append",
+        ts: 1770000200,
+        role: "system",
+        message: "Mission operation completed: mission=mission_alpha operation=tsk_mission_alpha status=succeeded",
+        scope: "mission.loop",
+        operation_status: "succeeded",
+        subsystem: "operations.runtime",
+        references: {
+          mission_id: "mission_alpha",
+          operation_id: "tsk_mission_alpha",
+          trace_id: "trace_mission_alpha",
+          run_id: "run_mission_alpha",
+        },
+      },
       history: [{ ts: "2026-04-21T19:45:00+00:00", mission_id: "mission_alpha", event: "advance_receipt" }],
       linked_operations: [
         {
@@ -458,6 +474,9 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
     assert.equal(response.mission?.status, "completed");
     assert.equal(response.operation?.id, "tsk_mission_alpha");
     assert.equal(response.operation?.meta?.orb_plane, "P7_EXECUTION");
+    assert.equal(response.memory_receipt?.source, "continuity.ledger");
+    assert.equal(response.memory_receipt?.references?.operation_id, "tsk_mission_alpha");
+    assert.equal(response.memory_receipt?.references?.run_id, "run_mission_alpha");
     assert.equal(response.history?.[0]?.event, "advance_receipt");
     assert.equal(response.linked_operations?.[0]?.operation?.id, "tsk_mission_alpha");
     assert.equal(response.loop_state?.active_stage, "gate");
@@ -771,6 +790,20 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             name: "plan.create",
             meta: { mission_id: "mission_ready" },
           },
+          memory_receipt: {
+            source: "continuity.ledger",
+            kind: "ledger_append",
+            role: "system",
+            scope: "mission.loop",
+            operation_status: "succeeded",
+            references: {
+              mission_id: "mission_ready",
+              operation_id: "tsk_ready",
+              trace_id: "trace_result",
+              run_id: "run_ready",
+              artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_ready",
+            },
+          },
           approval_id: "apr_ready",
           gate: "approvals_gate",
           next_step: "approve_exact_action",
@@ -902,6 +935,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.operation?.id, "tsk_ready");
     assert.equal(response.results?.[0]?.operation?.status, "queued");
+    assert.equal(response.results?.[0]?.memory_receipt?.source, "continuity.ledger");
+    assert.equal(response.results?.[0]?.memory_receipt?.references?.operation_id, "tsk_ready");
+    assert.equal(response.results?.[0]?.memory_receipt?.references?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_ready");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.queue_item?.recommended_action, "review_pending_approval");
     assert.equal(response.results?.[0]?.queue_item?.last_task_approval_id, "apr_ready");

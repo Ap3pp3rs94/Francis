@@ -207,6 +207,14 @@ operation status, subsystem, and real mission/operation/trace/run references,
 so callers can move from execution result to receipt-backed memory retrieval
 without claiming memory for non-mission or non-succeeded runs.
 
+As of `2026-04-25`, mission advance and bounded mission queue-run responses
+preserve that same completed-operation `memory_receipt` handoff when mission
+progression executes a linked operation through the governed runtime. Direct
+`POST /missions/{mission_id}/advance`, top-level `POST /missions/run_once`, and
+the chat UI missions client now retain the receipt-backed mission, operation,
+trace, run, and artifact references instead of dropping the execution-to-memory
+handoff at the mission boundary.
+
 As of `2026-04-25`, the mission continuity/world-state projection now carries
 those completed mission operation receipts as bounded memory evidence. Stage 3
 mission readiness evidence exposes sampled missions with memory receipts,
@@ -2382,6 +2390,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission memory receipt handoff slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_advance_runs_linked_queued_operation tests\test_api_missions.py::test_mission_run_once_executes_linked_queued_operation -q`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_operations.py tests\test_api_memory_timeline.py -q`
+  Result: `85 passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation run memory receipt handoff slice:
 

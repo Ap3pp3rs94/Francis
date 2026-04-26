@@ -231,7 +231,7 @@ def advance_mission(
         )
         if receipt_err:
             return {"ok": False, "applied": False, "error": receipt_err}
-        return {
+        response: dict[str, object] = {
             "ok": bool(run_result.get("ok")),
             "applied": bool(run_result.get("ok")),
             "action": action,
@@ -242,6 +242,10 @@ def advance_mission(
             "message": message,
             **_operation_handoff(run_result.get("operation")),
         }
+        memory_receipt = run_result.get("memory_receipt")
+        if isinstance(memory_receipt, dict):
+            response["memory_receipt"] = memory_receipt
+        return response
 
     if record_operator_receipt:
         updated_record, receipt_err = mission_store.record_advance_receipt(
@@ -354,6 +358,9 @@ def run_queue_once(
         operation = outcome.get("operation")
         if isinstance(operation, dict):
             result["operation"] = operation
+        memory_receipt = outcome.get("memory_receipt")
+        if isinstance(memory_receipt, dict):
+            result["memory_receipt"] = memory_receipt
         results.append(result)
         if bool(outcome.get("applied")):
             advanced += 1

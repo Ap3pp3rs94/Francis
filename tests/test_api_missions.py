@@ -1534,6 +1534,9 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert mission_result["action"] == "run_linked_operation"
     assert mission_result["operation_id"] == operation_id
     assert mission_result["operation"]["id"] == operation_id
+    assert mission_result["memory_receipt"]["source"] == "continuity.ledger"
+    assert mission_result["memory_receipt"]["references"]["mission_id"] == mission_id
+    assert mission_result["memory_receipt"]["references"]["operation_id"] == operation_id
     assert mission_result["mission"]["id"] == mission_id
     assert mission_result["loop_state"]["active_stage"] == "memory"
     assert mission_result["handoff"]["action"] == "review_continuity"
@@ -1681,6 +1684,9 @@ def test_mission_advance_runs_linked_queued_operation(monkeypatch, tmp_path: Pat
     assert advanced_body["applied"] is True
     assert advanced_body["action"] == "run_linked_operation"
     assert advanced_body["operation_id"] == operation_id
+    assert advanced_body["memory_receipt"]["source"] == "continuity.ledger"
+    assert advanced_body["memory_receipt"]["references"]["mission_id"] == mission_id
+    assert advanced_body["memory_receipt"]["references"]["operation_id"] == operation_id
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
