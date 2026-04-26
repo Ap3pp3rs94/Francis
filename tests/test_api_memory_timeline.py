@@ -139,9 +139,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert run_listed.status_code == 200
     assert [item["id"] for item in run_listed.json()["items"]] == ["evt-a"]
 
-    artifact_listed = client.get(
-        "/memory/timeline/list", params={"artifact_dir": "D:/francis/data/artifacts/memory-a"}
-    )
+    artifact_listed = client.get("/memory/timeline/list", params={"artifact_dir": "D:/francis/data/artifacts/memory-a"})
     assert artifact_listed.status_code == 200
     assert [item["id"] for item in artifact_listed.json()["items"]] == ["evt-a"]
 
@@ -299,6 +297,48 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     assert [event["id"] for event in run_listed.json()["items"]] == [item["id"]]
 
 
+def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    sent = client.post(
+        "/chat/send",
+        json={"message": "/mission Preserve memory loop projection token=memoryloopsecret123", "use_llm": False},
+    )
+    assert sent.status_code == 200
+    sent_body = sent.json()
+    mission_id = str(sent_body["mission_id"])
+
+    listed = client.get("/memory/timeline/list", params={"mission_id": mission_id})
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["kind"] == "ledger_append"
+    assert item["provenance"]["source"] == "continuity.ledger"
+    assert item["references"]["mission_id"] == mission_id
+    assert item["loop"] == {
+        "ingress_plane": "P1_INTERFACE",
+        "active_stage": "plan",
+        "handoff_stage": "plan",
+        "handoff_action": "link_operation",
+        "handoff_next_step": sent_body["loop_state"]["handoff"]["next_step"],
+        "current_task_source": "mission_handoff",
+        "current_task_next_step": sent_body["current_task"]["next_step"],
+        "linked_operation_count": 0,
+        "run_ledger_count": 0,
+        "memory_receipt_count": 0,
+    }
+    item_text = json.dumps(item, sort_keys=True)
+    assert "memoryloopsecret123" not in item_text
+
+
 def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -378,9 +418,7 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
 
     run_listed = client.get(f"/memory/timeline/list?run_id={run_id}")
     assert run_listed.status_code == 200
-    assert any(
-        item.get("references", {}).get("operation_id") == operation_id for item in run_listed.json()["items"]
-    )
+    assert any(item.get("references", {}).get("operation_id") == operation_id for item in run_listed.json()["items"])
 
 
 def test_memory_timeline_redacts_secrets_from_persistence_and_api(monkeypatch, tmp_path: Path) -> None:

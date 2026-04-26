@@ -233,6 +233,14 @@ source/next step, and receipt counts from the mission detail projection. The
 conversation ledger still redacts the operator objective before persistence and
 does not add execution, approval, or memory-timeline writes.
 
+As of `2026-04-26`, memory timeline public events project bounded ORB loop
+metadata from continuity ledger entries. Chat-declared missions can now be found
+through `/memory/timeline/list?mission_id=...` and expose a structured `loop`
+object with ingress plane, active stage, handoff stage/action/next step,
+current-task source/next step, and receipt counts when those values are already
+present in redacted ledger metadata. This is a read-model projection only; no
+execution, approval, policy, or memory-write behavior is changed.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2507,6 +2515,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop projection slice:
+
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `6 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:
 

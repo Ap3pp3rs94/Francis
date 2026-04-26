@@ -206,6 +206,51 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _meta_int(meta: dict[str, Any], key: str) -> int | None:
+    if key not in meta:
+        return None
+    value = meta.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = _safe_str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except Exception:
+        return None
+
+
+def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in (
+        "ingress_plane",
+        "active_stage",
+        "handoff_stage",
+        "handoff_action",
+        "handoff_gate",
+        "handoff_approval_id",
+        "handoff_operation_id",
+        "handoff_trace_id",
+        "handoff_next_step",
+        "current_task_source",
+        "current_task_operation_id",
+        "current_task_gate",
+        "current_task_next_step",
+    ):
+        value = _safe_str(meta.get(key)).strip()
+        if value:
+            out[key] = value
+
+    for key in ("linked_operation_count", "run_ledger_count", "memory_receipt_count"):
+        value = _meta_int(meta, key)
+        if value is not None:
+            out[key] = value
+    return out
+
+
 def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, Any]:
     meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
     out = {
@@ -242,6 +287,10 @@ def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, A
             references[key] = value
     if references:
         out["references"] = references
+
+    loop = _loop_projection(meta)
+    if loop:
+        out["loop"] = loop
 
     retention: dict[str, Any] = {}
     retention_policy = _safe_str(meta.get("retention_policy") or meta.get("retentionPolicy")).strip()
