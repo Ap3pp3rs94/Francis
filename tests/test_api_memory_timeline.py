@@ -346,6 +346,7 @@ def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch
     assert sent.status_code == 200
     sent_body = sent.json()
     mission_id = str(sent_body["mission_id"])
+    operation_id = str(sent_body["operation_id"])
 
     listed = client.get("/memory/timeline/list", params={"mission_id": mission_id})
     assert listed.status_code == 200
@@ -357,14 +358,16 @@ def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch
     assert item["references"]["mission_id"] == mission_id
     assert item["loop"] == {
         "ingress_plane": "P1_INTERFACE",
-        "active_stage": "plan",
-        "handoff_stage": "plan",
-        "handoff_action": "link_operation",
+        "active_stage": "execute",
+        "handoff_stage": "execute",
+        "handoff_action": "run_linked_operation",
+        "handoff_operation_id": operation_id,
         "handoff_next_step": sent_body["loop_state"]["handoff"]["next_step"],
-        "current_task_source": "mission_handoff",
+        "current_task_source": "mission_meta",
+        "current_task_operation_id": operation_id,
         "current_task_next_step": sent_body["current_task"]["next_step"],
-        "linked_operation_count": 0,
-        "run_ledger_count": 0,
+        "linked_operation_count": 1,
+        "run_ledger_count": 1,
         "memory_receipt_count": 0,
     }
     item_text = json.dumps(item, sort_keys=True)

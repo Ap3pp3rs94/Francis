@@ -27,29 +27,53 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert body["status"] == "queued"
     assert mission_id.startswith("msn_")
     assert mission_id in body["reply"]
+    operation_id = str(body["operation_id"])
+    assert operation_id.startswith("tsk_")
+    assert operation_id in body["reply"]
+    assert body["advance"]["ok"] is True
+    assert body["advance"]["applied"] is True
+    assert body["advance"]["action"] == "create_first_operation"
+    assert body["advance"]["operation_id"] == operation_id
+    assert body["operation"]["id"] == operation_id
+    assert body["operation"]["name"] == "plan.create"
+    assert body["operation"]["status"] == "queued"
     assert body["mission"]["id"] == mission_id
     assert body["mission"]["objective"] == "Prepare deploy token=[REDACTED:secret]"
     assert body["mission"]["requester_id"] == "chat.send"
     assert body["mission"]["meta"]["source"] == "chat.send"
     assert body["mission"]["meta"]["ingress_plane"] == "P1_INTERFACE"
-    assert body["queue_item"]["recommended_action"] == "create_first_operation"
-    assert body["loop_state"]["active_stage"] == "plan"
-    assert body["loop_state"]["handoff"]["action"] == "link_operation"
+    assert body["mission"]["linked_task_ids"] == [operation_id]
+    assert body["mission"]["meta"]["last_advance_action"] == "create_first_operation"
+    assert body["mission"]["meta"]["last_advance_operation_id"] == operation_id
+    assert body["mission"]["meta"]["last_advance_operation_name"] == "plan.create"
+    assert body["queue_item"]["recommended_action"] == "run_linked_operation"
+    assert body["queue_item"]["action_target_id"] == operation_id
+    assert body["queue_item"]["advance"]["eligible"] is True
+    assert body["queue_item"]["advance"]["action"] == "run_linked_operation"
+    assert body["loop_state"]["active_stage"] == "execute"
+    assert body["loop_state"]["handoff"]["action"] == "run_linked_operation"
+    assert body["loop_state"]["handoff"]["operation_id"] == operation_id
     assert body["loop_state"]["interface"]["status"] == "available"
-    assert body["current_task"]["source"] == "mission_handoff"
-    assert body["current_task"]["handoff_action"] == "link_operation"
+    assert body["loop_state"]["interface"]["operation_id"] == operation_id
+    assert body["current_task"]["source"] == "mission_meta"
+    assert body["current_task"]["operation_id"] == operation_id
+    assert body["current_task"]["handoff_action"] == "run_linked_operation"
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["mission"]["id"] == mission_id
-    assert fetched_body["loop_state"]["active_stage"] == "plan"
+    assert fetched_body["mission"]["linked_task_ids"] == [operation_id]
+    assert fetched_body["loop_state"]["active_stage"] == "execute"
+    assert fetched_body["current_task"]["operation_id"] == operation_id
 
     record_text = (data_root / "missions" / mission_id / "record.json").read_text(encoding="utf-8")
     history_text = (data_root / "missions" / mission_id / "history.jsonl").read_text(encoding="utf-8")
+    task_text = (data_root / "tasks" / operation_id / "record.json").read_text(encoding="utf-8")
     ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
     assert "chatmissionsecret123" not in record_text
     assert "chatmissionsecret123" not in history_text
+    assert "chatmissionsecret123" not in task_text
     assert "chatmissionsecret123" not in ledger_text
     assert "[REDACTED:secret]" in ledger_text
     ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
@@ -61,14 +85,16 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assistant_meta = assistant_entry["meta"]
     assert assistant_meta["mission_id"] == mission_id
     assert assistant_meta["ingress_plane"] == "P1_INTERFACE"
-    assert assistant_meta["active_stage"] == "plan"
-    assert assistant_meta["handoff_stage"] == "plan"
-    assert assistant_meta["handoff_action"] == "link_operation"
+    assert assistant_meta["active_stage"] == "execute"
+    assert assistant_meta["handoff_stage"] == "execute"
+    assert assistant_meta["handoff_action"] == "run_linked_operation"
+    assert assistant_meta["handoff_operation_id"] == operation_id
     assert assistant_meta["handoff_next_step"] == body["loop_state"]["handoff"]["next_step"]
-    assert assistant_meta["current_task_source"] == "mission_handoff"
+    assert assistant_meta["current_task_source"] == "mission_meta"
+    assert assistant_meta["current_task_operation_id"] == operation_id
     assert assistant_meta["current_task_next_step"] == body["current_task"]["next_step"]
-    assert assistant_meta["linked_operation_count"] == 0
-    assert assistant_meta["run_ledger_count"] == 0
+    assert assistant_meta["linked_operation_count"] == 1
+    assert assistant_meta["run_ledger_count"] == 1
     assert assistant_meta["memory_receipt_count"] == 0
 
 
@@ -135,12 +161,23 @@ def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_pat
     assert meta["status"] == "queued"
     assert meta["mission"]["id"] == mission_id
     assert meta["mission"]["objective"] == "Preserve websocket mission token=[REDACTED:secret]"
-    assert meta["queue_item"]["recommended_action"] == "create_first_operation"
-    assert meta["loop_state"]["active_stage"] == "plan"
+    operation_id = str(meta["operation_id"])
+    assert operation_id.startswith("tsk_")
+    assert meta["advance"]["action"] == "create_first_operation"
+    assert meta["advance"]["operation_id"] == operation_id
+    assert meta["operation"]["id"] == operation_id
+    assert meta["queue_item"]["recommended_action"] == "run_linked_operation"
+    assert meta["queue_item"]["action_target_id"] == operation_id
+    assert meta["loop_state"]["active_stage"] == "execute"
+    assert meta["loop_state"]["handoff"]["operation_id"] == operation_id
     assert meta["loop_state"]["interface"]["status"] == "available"
-    assert meta["current_task"]["handoff_action"] == "link_operation"
+    assert meta["loop_state"]["interface"]["operation_id"] == operation_id
+    assert meta["current_task"]["operation_id"] == operation_id
+    assert meta["current_task"]["handoff_action"] == "run_linked_operation"
 
     record_text = (data_root / "missions" / mission_id / "record.json").read_text(encoding="utf-8")
+    task_text = (data_root / "tasks" / operation_id / "record.json").read_text(encoding="utf-8")
     ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
     assert "chatwssecret123" not in record_text
+    assert "chatwssecret123" not in task_text
     assert "chatwssecret123" not in ledger_text

@@ -11,6 +11,7 @@ from francis.api.websocket import ConnectionManager
 from francis.chat.continuity.ledger import append
 from francis.chat.router import handle, parse_mission_ingress
 from francis.governance.redaction import redact_secret_text
+from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
 
@@ -61,6 +62,9 @@ def _mission_ingress_ws_event(payload: dict[str, object]) -> str:
             "error",
             "mission_id",
             "mission",
+            "operation_id",
+            "operation",
+            "advance",
             "queue_item",
             "loop_state",
             "current_task",
@@ -113,6 +117,29 @@ def _compact_mission_ingress_meta(
     return {key: value for key, value in meta.items() if value not in {"", None}}
 
 
+def _compact_mission_advance_result(outcome: dict[str, object]) -> dict[str, object]:
+    compact: dict[str, object] = {}
+    for key in ("ok", "applied"):
+        if key in outcome:
+            compact[key] = bool(outcome.get(key))
+    for key in (
+        "action",
+        "status",
+        "message",
+        "operation_id",
+        "approval_id",
+        "gate",
+        "next_step",
+        "trace_id",
+        "run_id",
+        "artifact_dir",
+    ):
+        text = str(outcome.get(key) or "").strip()
+        if text:
+            compact[key] = text
+    return compact
+
+
 def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
     intent = parse_mission_ingress(payload.message)
     if intent is None:
@@ -160,21 +187,41 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
         append("assistant", reply, {"mode": "mission_ingress", "status": "failed"})
         return {"ok": False, "mode": "mission_ingress", "status": "failed", "error": error, "reply": reply}
 
+    advance_result = mission_runtime.advance_mission(
+        record.mission_id,
+        actor="chat.send",
+        note="chat_mission_ingress_first_operation",
+        worker_id="chat.send",
+    )
+    projected_record = advance_result.get("mission_record")
+    if not isinstance(projected_record, mission_store.MissionRecord):
+        projected_record = record
+
     from francis.api.routes import missions as mission_routes
 
-    detail = mission_routes._mission_detail_projection(record)
+    detail = mission_routes._mission_detail_projection(projected_record)
     queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
     loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
     current_task = detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {}
     receipt_summary = detail.get("receipt_summary") if isinstance(detail.get("receipt_summary"), dict) else {}
     handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
     action = str(handoff.get("action") or "link_operation").strip()
-    reply = f"Mission {record.mission_id} declared. Next: {action}."
+    advance = _compact_mission_advance_result(advance_result)
+    operation_id = str(advance.get("operation_id") or "").strip()
+    if bool(advance.get("applied")) and operation_id:
+        reply = (
+            f"Mission {projected_record.mission_id} declared. First operation {operation_id} queued. Next: {action}."
+        )
+    elif advance_result.get("ok") is False:
+        error = str(advance_result.get("error") or advance_result.get("message") or "operation_link_failed").strip()
+        reply = f"Mission {projected_record.mission_id} declared, but first operation link failed: {error}"
+    else:
+        reply = f"Mission {projected_record.mission_id} declared. Next: {action}."
     append(
         "assistant",
         reply,
         _compact_mission_ingress_meta(
-            record=record,
+            record=projected_record,
             loop_state=loop_state,
             current_task=current_task,
             receipt_summary=receipt_summary,
@@ -182,13 +229,21 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
     )
 
     response: dict[str, Any] = {
-        "ok": True,
+        "ok": bool(advance_result.get("ok", True)),
         "mode": "mission_ingress",
-        "status": record.status.value,
+        "status": projected_record.status.value,
         "reply": reply,
-        "mission_id": record.mission_id,
-        "mission": mission_routes._serialize_mission(record, queue_item),
+        "mission_id": projected_record.mission_id,
+        "mission": mission_routes._serialize_mission(projected_record, queue_item),
+        "advance": advance,
     }
+    if operation_id:
+        response["operation_id"] = operation_id
+    operation = advance_result.get("operation")
+    if isinstance(operation, dict):
+        response["operation"] = operation
+    if advance_result.get("error"):
+        response["error"] = str(advance_result.get("error") or "").strip()
     response.update(detail)
     return response
 

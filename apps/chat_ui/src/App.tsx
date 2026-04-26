@@ -90,6 +90,7 @@ type ChatSession = {
 
 type ChatMissionSurface = {
   missionId: string;
+  operationId?: string;
   status?: string;
   activeStage?: string;
   nextStep?: string;
@@ -196,18 +197,25 @@ function chatMissionSurface(message: ChatMessage): ChatMissionSurface | null {
   const loopState = isRecord(meta.loop_state) ? meta.loop_state : {};
   const handoff = isRecord(loopState.handoff) ? loopState.handoff : {};
   const currentTask = isRecord(meta.current_task) ? meta.current_task : {};
+  const queueItem = isRecord(meta.queue_item) ? meta.queue_item : {};
   const missionId = safeString(meta.mission_id).trim() || safeString(mission.id).trim();
   if (!missionId) return null;
 
   const surface: ChatMissionSurface = { missionId };
   const status = safeString(meta.status).trim();
   const activeStage = safeString(loopState.active_stage).trim();
+  const operationId =
+    safeString(meta.operation_id).trim() ||
+    safeString(currentTask.operation_id).trim() ||
+    safeString(handoff.operation_id).trim() ||
+    safeString(queueItem.action_target_id).trim();
   const nextStep =
     safeString(currentTask.next_step).trim() ||
     safeString(handoff.next_step).trim() ||
     safeString(handoff.action).trim();
   if (status) surface.status = status;
   if (activeStage) surface.activeStage = activeStage;
+  if (operationId) surface.operationId = operationId;
   if (nextStep) surface.nextStep = nextStep;
   return surface;
 }
@@ -1629,6 +1637,11 @@ function ChatPanel(props: {
                   </div>
                   <div style={{ fontSize: 11, color: THEME.muted }}>
                     Mission <code>{missionSurface.missionId}</code>
+                    {missionSurface.operationId ? (
+                      <>
+                        {" / "}task <code>{missionSurface.operationId}</code>
+                      </>
+                    ) : null}
                     {missionSurface.nextStep ? ` / ${missionSurface.nextStep}` : ""}
                   </div>
                   <button

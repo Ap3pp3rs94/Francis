@@ -431,6 +431,17 @@ source/next step, and receipt counts from the mission detail projection. The
 conversation ledger still redacts the operator objective before persistence and
 does not add execution, approval, or memory-timeline writes.
 
+As of `2026-04-26`, explicit chat mission ingress also creates the first bounded
+mission-linked `plan.create` operation. `POST /chat/send` and websocket mission
+ingress still require an explicit `/mission` or `mission:` declaration and still
+respect operator posture before mutating state, but a successful declaration now
+advances the new mission through the existing mission runtime once so the first
+queued operation is linked immediately. The response, websocket event, assistant
+continuity metadata, memory timeline loop projection, and chat UI message
+surface preserve the real operation id and `create_first_operation` advance
+receipt. This queues the first plan operation only; it does not run the
+operation, bypass governance, make approval decisions, or claim terminal memory.
+
 As of `2026-04-26`, memory timeline public events project bounded ORB loop
 metadata from continuity ledger entries. Chat-declared missions can now be found
 through `/memory/timeline/list?mission_id=...` and expose a structured `loop`
@@ -2925,6 +2936,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `11 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` chat mission ingress first-operation slice:
+
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py::test_memory_timeline_projects_chat_mission_ingress_loop_metadata -q`
+  Result: `4 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\chat\index.test.ts`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `55 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
