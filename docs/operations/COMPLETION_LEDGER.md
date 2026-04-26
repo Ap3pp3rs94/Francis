@@ -932,6 +932,15 @@ plane, and advance action alongside existing receipt references. This is client
 contract preservation only; it does not add UI rendering, execute operations, or
 infer missing receipt fields.
 
+As of `2026-04-26`, terminal mission-linked operation receipts now emit that
+current-task operation identity from the backend receipt source. The continuity
+ledger append, returned operation-run `memory_receipt`, operation detail
+`latest_memory_receipt`, operation detail `memory_receipts`, and memory timeline
+loop projection now carry the operation name, operation ORB plane, and bounded
+advance action with the existing current-task operation id. This is
+receipt-contract alignment only; it does not add operation execution authority,
+infer missing operation records, or change mission advancement.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -4040,6 +4049,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receip
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal operation receipt current-task identity backend slice:
+
+- `python -m pytest tests\test_mission_receipts.py tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
+  Result: `5 passed`
+- `python -m ruff check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py`
+  Result: `passed` (non-blocking Ruff cache write warnings from local `.ruff_cache` access)
+- `python -m ruff format --check src\francis\operations\runtime.py src\francis\missions\runtime.py src\francis\memory\mission_receipts.py tests\test_api_operations.py tests\test_api_mission_loop_contract.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `python -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py tests/test_api_operations.py tests/test_api_mission_loop_contract.py tests/test_mission_receipts.py -q`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:

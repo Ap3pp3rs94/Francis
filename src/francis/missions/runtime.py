@@ -254,6 +254,7 @@ def advance_mission(
         run_result = operations_runtime.run_operation(
             action_target_id,
             worker_id=worker_id,
+            advance_action=action,
         )
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_run")
         operation_status = _safe_str(run_result.get("status")).strip()

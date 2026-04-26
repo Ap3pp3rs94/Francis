@@ -763,6 +763,9 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert receipt["subsystem"] == "operations.runtime"
     assert receipt["handoff_gate"] == "operator_review"
     assert receipt["current_task_gate"] == "operator_review"
+    assert receipt["current_task_operation_name"] == "plugin.run"
+    assert receipt["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipt["current_task_advance_action"] == "run_operation"
     expected_references = {
         "mission_id": mission_id,
         "operation_id": operation_id,
@@ -777,9 +780,15 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert run_body["operation"]["meta"]["memory_receipt_count"] == 1
     assert run_body["operation"]["meta"]["latest_memory_receipt"]["operation_id"] == operation_id
 
-    listed = client.get("/memory/timeline/list", params={"run_id": run_id})
+    listed = client.get("/memory/timeline/list", params={"run_id": run_id, "include_payload": 1})
     assert listed.status_code == 200
-    assert any(item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"])
+    listed_items = [
+        item for item in listed.json()["items"] if item.get("references", {}).get("operation_id") == operation_id
+    ]
+    assert listed_items
+    assert listed_items[0]["loop"]["current_task_operation_name"] == "plugin.run"
+    assert listed_items[0]["loop"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert listed_items[0]["loop"]["current_task_advance_action"] == "run_operation"
 
     fetched = client.get(f"/operations/{operation_id}")
     assert fetched.status_code == 200
@@ -788,6 +797,9 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
     assert fetched_body["latest_memory_receipt"]["handoff_gate"] == "operator_review"
     assert fetched_body["latest_memory_receipt"]["current_task_gate"] == "operator_review"
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_name"] == "plugin.run"
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert fetched_body["latest_memory_receipt"]["current_task_advance_action"] == "run_operation"
     assert fetched_body["latest_memory_receipt"]["current_task_trace_id"] == trace_id
     assert fetched_body["latest_memory_receipt"]["references"] == expected_references
     assert fetched_body["operation"]["meta"]["memory_receipt_count"] == 1
@@ -800,6 +812,9 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert many_item["latest_memory_receipt"]["operation_id"] == operation_id
     assert many_item["latest_memory_receipt"]["handoff_gate"] == "operator_review"
     assert many_item["latest_memory_receipt"]["current_task_gate"] == "operator_review"
+    assert many_item["latest_memory_receipt"]["current_task_operation_name"] == "plugin.run"
+    assert many_item["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert many_item["latest_memory_receipt"]["current_task_advance_action"] == "run_operation"
 
 
 def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:
@@ -861,6 +876,9 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["handoff_next_step"] == "review_operation_detail"
     assert receipt["current_task_source"] == "terminal_operation_receipt"
     assert receipt["current_task_operation_id"] == operation_id
+    assert receipt["current_task_operation_name"] == "plugin.run"
+    assert receipt["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipt["current_task_advance_action"] == "run_operation"
     assert receipt["current_task_gate"] == "operator_review"
     assert receipt["current_task_next_step"] == "review_operation_detail"
     assert receipt["memory_receipt_count"] == 1
@@ -894,6 +912,9 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipts[0]["loop"]["handoff_next_step"] == "review_operation_detail"
     assert receipts[0]["loop"]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["loop"]["current_task_operation_id"] == operation_id
+    assert receipts[0]["loop"]["current_task_operation_name"] == "plugin.run"
+    assert receipts[0]["loop"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipts[0]["loop"]["current_task_advance_action"] == "run_operation"
     assert receipts[0]["loop"]["current_task_gate"] == "operator_review"
     assert receipts[0]["loop"]["current_task_next_step"] == "review_operation_detail"
     assert receipts[0]["loop"]["operation_error"] == "plugin_id_required"
@@ -908,6 +929,9 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert fetched_body["latest_memory_receipt"]["handoff_gate"] == "operator_review"
     assert fetched_body["latest_memory_receipt"]["current_task_source"] == "terminal_operation_receipt"
     assert fetched_body["latest_memory_receipt"]["current_task_gate"] == "operator_review"
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_name"] == "plugin.run"
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert fetched_body["latest_memory_receipt"]["current_task_advance_action"] == "run_operation"
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:

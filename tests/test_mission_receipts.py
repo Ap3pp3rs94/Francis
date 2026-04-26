@@ -43,6 +43,9 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "current_task_approval_id": "apr_receipt_refs",
             "current_task_approval_status": "approved",
             "current_task_operation_id": "tsk_receipt_refs",
+            "current_task_operation_name": "plugin.run",
+            "current_task_operation_plane": "P9_OBSERVABILITY",
+            "current_task_advance_action": "run_operation",
             "current_task_gate": "operator_review",
             "current_task_trace_id": "trace_receipt_refs",
             "current_task_run_id": "run_receipt_refs",
@@ -73,6 +76,9 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["current_task_approval_id"] == "apr_receipt_refs"
     assert receipts[0]["current_task_approval_status"] == "approved"
     assert receipts[0]["current_task_operation_id"] == "tsk_receipt_refs"
+    assert receipts[0]["current_task_operation_name"] == "plugin.run"
+    assert receipts[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipts[0]["current_task_advance_action"] == "run_operation"
     assert receipts[0]["current_task_gate"] == "operator_review"
     assert receipts[0]["current_task_trace_id"] == "trace_receipt_refs"
     assert receipts[0]["current_task_run_id"] == "run_receipt_refs"
@@ -125,6 +131,9 @@ def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatc
             "handoff_next_step": "review_operation_detail",
             "current_task_source": "terminal_operation_receipt",
             "current_task_operation_id": "tsk_failure_refs",
+            "current_task_operation_name": "plugin.run",
+            "current_task_operation_plane": "P9_OBSERVABILITY",
+            "current_task_advance_action": "run_operation",
             "current_task_gate": "operator_review",
             "current_task_trace_id": "trace_failure_refs",
             "current_task_run_id": "run_failure_refs",
@@ -150,6 +159,9 @@ def test_mission_operation_receipts_preserve_failure_recovery_context(monkeypatc
     assert receipts[0]["handoff_next_step"] == "review_operation_detail"
     assert receipts[0]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["current_task_operation_id"] == "tsk_failure_refs"
+    assert receipts[0]["current_task_operation_name"] == "plugin.run"
+    assert receipts[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipts[0]["current_task_advance_action"] == "run_operation"
     assert receipts[0]["current_task_gate"] == "operator_review"
     assert receipts[0]["current_task_trace_id"] == "trace_failure_refs"
     assert receipts[0]["current_task_run_id"] == "run_failure_refs"

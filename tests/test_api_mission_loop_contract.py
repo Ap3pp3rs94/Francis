@@ -57,6 +57,9 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert memory_receipt["references"]["operation_id"] == operation_id
     assert memory_receipt["references"]["trace_id"] == trace_id
     assert memory_receipt["references"]["run_id"] == run_id
+    assert memory_receipt["current_task_operation_name"] == "plan.create"
+    assert memory_receipt["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert memory_receipt["current_task_advance_action"] == "run_linked_operation"
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -72,6 +75,9 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert fetched_body["loop_state"]["interface"]["operation_id"] == operation_id
     assert fetched_body["receipt_summary"]["memory_receipt_count"] == 1
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_name"] == "plan.create"
+    assert fetched_body["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert fetched_body["latest_memory_receipt"]["current_task_advance_action"] == "run_linked_operation"
 
     listed = client.get(
         "/memory/timeline/list",
@@ -127,6 +133,9 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert terminal_receipt["loop"]["handoff_next_step"] == "review_completed_mission"
     assert terminal_receipt["loop"]["current_task_source"] == "terminal_operation_receipt"
     assert terminal_receipt["loop"]["current_task_operation_id"] == operation_id
+    assert terminal_receipt["loop"]["current_task_operation_name"] == "plan.create"
+    assert terminal_receipt["loop"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert terminal_receipt["loop"]["current_task_advance_action"] == "run_linked_operation"
     assert terminal_receipt["loop"]["current_task_run_id"] == run_id
     assert terminal_receipt["loop"]["current_task_next_step"] == "review_completed_mission"
     assert terminal_receipt["loop"]["run_id"] == run_id

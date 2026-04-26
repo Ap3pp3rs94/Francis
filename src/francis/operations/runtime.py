@@ -473,6 +473,9 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
         "handoff_next_step",
         "current_task_source",
         "current_task_operation_id",
+        "current_task_operation_name",
+        "current_task_operation_plane",
+        "current_task_advance_action",
         "current_task_gate",
         "current_task_trace_id",
         "current_task_run_id",
@@ -532,7 +535,10 @@ def _operation_plan_receipt_meta(operation: dict[str, Any]) -> dict[str, Any]:
 
 
 def _append_terminal_mission_operation_receipt(
-    task: dict[str, Any], operation: dict[str, Any]
+    task: dict[str, Any],
+    operation: dict[str, Any],
+    *,
+    advance_action: str = "run_operation",
 ) -> dict[str, Any] | None:
     mission_id = _task_mission_id(task)
     operation_id = _safe_str(operation.get("id")).strip() or _safe_str(task.get("task_id")).strip()
@@ -545,6 +551,8 @@ def _append_terminal_mission_operation_receipt(
     artifact_dir = _safe_str(operation.get("artifact_dir")).strip()
     capability = _safe_str(operation.get("name")).strip()
     operation_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    operation_plane = _safe_str(operation_meta.get("orb_plane")).strip()
+    current_task_advance_action = _safe_str(advance_action).strip() or "run_operation"
     approval_id = _safe_str(operation_meta.get("approval_id")).strip() or _operation_approval_id(task)
     approval_status = _approval_status(approval_id)
     operation_error = redact_operation_optional_text(operation.get("error"))
@@ -570,6 +578,9 @@ def _append_terminal_mission_operation_receipt(
         "recovery_next_step": recovery_next_step or None,
         "capability": capability or None,
         "subsystem": "operations.runtime",
+        "current_task_operation_name": capability or None,
+        "current_task_operation_plane": operation_plane or None,
+        "current_task_advance_action": current_task_advance_action or None,
     }
     if operation_status == "succeeded":
         meta.update(
@@ -873,7 +884,12 @@ def create_operation(
     }
 
 
-def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> dict[str, object]:
+def run_operation(
+    operation_id: str,
+    *,
+    worker_id: str = "api.operations",
+    advance_action: str = "run_operation",
+) -> dict[str, object]:
     op_id = _safe_str(operation_id).strip()
     if not _validate_operation_id(op_id):
         return {"ok": False, "error": "invalid_operation_id"}
@@ -908,7 +924,11 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
     operation = _task_to_operation(updated)
     memory_receipt = None
     if isinstance(updated, dict):
-        memory_receipt = _append_terminal_mission_operation_receipt(updated, operation)
+        memory_receipt = _append_terminal_mission_operation_receipt(
+            updated,
+            operation,
+            advance_action=advance_action,
+        )
     response: dict[str, object] = {
         "ok": _operation_request_ok(operation.get("status")),
         "status": operation.get("status", "unknown"),
