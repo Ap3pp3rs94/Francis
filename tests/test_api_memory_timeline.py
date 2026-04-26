@@ -448,7 +448,19 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert receipt["provenance"]["scope"] == "mission.loop"
     assert receipt["references"]["trace_id"] == trace_id
     assert receipt["references"]["run_id"] == run_id
+    assert receipt["loop"]["active_stage"] == "interface"
+    assert receipt["loop"]["handoff_stage"] == "interface"
+    assert receipt["loop"]["handoff_action"] == "review_result"
+    assert receipt["loop"]["handoff_operation_id"] == operation_id
+    assert receipt["loop"]["handoff_trace_id"] == trace_id
+    assert receipt["loop"]["handoff_run_id"] == run_id
+    assert receipt["loop"]["handoff_next_step"] == "review_completed_mission"
+    assert receipt["loop"]["current_task_source"] == "terminal_operation_receipt"
+    assert receipt["loop"]["current_task_operation_id"] == operation_id
+    assert receipt["loop"]["current_task_run_id"] == run_id
+    assert receipt["loop"]["current_task_next_step"] == "review_completed_mission"
     assert receipt["loop"]["run_id"] == run_id
+    assert receipt["loop"]["memory_receipt_count"] == 1
     assert receipt["loop"]["plan_status"] == "in_progress"
     assert receipt["loop"]["plan_current_step_id"] == "understand"
     assert receipt["loop"]["plan_current_step_title"] == "Understand goal + constraints"

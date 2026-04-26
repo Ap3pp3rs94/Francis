@@ -762,6 +762,14 @@ artifact handles. This makes the final `memory -> interface` leg visible without
 adding execution authority or changing blocked, failed, deadlettered, or
 pre-memory missions.
 
+As of `2026-04-26`, succeeded terminal mission-operation memory receipts carry
+that same completed-loop interface handoff into continuity-ledger memory
+evidence. The receipt metadata now records `active_stage=interface`,
+`handoff_action=review_result`, the real operation/trace/run/artifact handles,
+and `review_completed_mission` next-step context for succeeded mission-linked
+operations. Failed terminal receipts remain on their existing recovery context
+path.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -2960,6 +2968,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 completed mission interf
   Result: `passed`
 - `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py`
   Result: `passed; ruff warned it could not write cache files under .ruff_cache due to access denied`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed mission memory evidence interface handoff slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_mission_loop_contract.py tests\test_api_memory_timeline.py -q`
+  Result: `8 passed`
+- `python -m ruff check src\francis\operations\runtime.py tests\test_api_mission_loop_contract.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\operations\runtime.py tests\test_api_mission_loop_contract.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_mission_receipts.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `95 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory plan receipt slice:
 

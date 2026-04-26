@@ -540,6 +540,25 @@ def _append_terminal_mission_operation_receipt(
         "capability": capability or None,
         "subsystem": "operations.runtime",
     }
+    if operation_status == "succeeded":
+        meta.update(
+            {
+                "active_stage": "interface",
+                "handoff_stage": "interface",
+                "handoff_action": "review_result",
+                "handoff_operation_id": operation_id,
+                "handoff_trace_id": trace_id or None,
+                "handoff_run_id": run_id or None,
+                "handoff_artifact_dir": artifact_dir or None,
+                "handoff_next_step": "review_completed_mission",
+                "current_task_source": "terminal_operation_receipt",
+                "current_task_operation_id": operation_id,
+                "current_task_run_id": run_id or None,
+                "current_task_artifact_dir": artifact_dir or None,
+                "current_task_next_step": "review_completed_mission",
+                "memory_receipt_count": 1,
+            }
+        )
     meta.update(_operation_plan_receipt_meta(operation))
     outcome = "completed" if operation_status == "succeeded" else "failed"
     entry = append_continuity_ledger(
