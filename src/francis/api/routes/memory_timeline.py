@@ -21,6 +21,51 @@ from francis.kernel.paths import data_dir
 
 router = APIRouter()
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+_REFERENCE_CSV_FIELDS = (
+    "mission_id",
+    "operation_id",
+    "trace_id",
+    "approval_id",
+    "run_id",
+    "artifact_dir",
+)
+_LOOP_CSV_FIELDS = (
+    "ingress_plane",
+    "active_stage",
+    "handoff_stage",
+    "handoff_action",
+    "handoff_gate",
+    "handoff_approval_id",
+    "handoff_approval_status",
+    "handoff_operation_id",
+    "handoff_trace_id",
+    "handoff_run_id",
+    "handoff_artifact_dir",
+    "handoff_next_step",
+    "current_task_source",
+    "current_task_approval_id",
+    "current_task_approval_status",
+    "current_task_operation_id",
+    "current_task_operation_name",
+    "current_task_operation_plane",
+    "current_task_gate",
+    "current_task_trace_id",
+    "current_task_run_id",
+    "current_task_artifact_dir",
+    "current_task_advance_action",
+    "current_task_next_step",
+    "plan_status",
+    "plan_current_step_id",
+    "plan_current_step_title",
+    "operation_error",
+    "result_message",
+    "recovery_next_step",
+    "linked_operation_count",
+    "run_ledger_count",
+    "memory_receipt_count",
+    "plan_step_count",
+    "plan_checkpoint_count",
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -622,6 +667,8 @@ def _csv(items: list[dict[str, Any]]) -> str:
             "kind",
             "severity",
             "operation_status",
+            *_REFERENCE_CSV_FIELDS,
+            *_LOOP_CSV_FIELDS,
             "domain",
             "actor",
             "scope",
@@ -637,28 +684,31 @@ def _csv(items: list[dict[str, Any]]) -> str:
     )
     writer.writeheader()
     for item in items:
-        writer.writerow(
-            {
-                "id": item.get("id"),
-                "ts": item.get("ts"),
-                "kind": item.get("kind"),
-                "severity": item.get("severity"),
-                "operation_status": item.get("operation_status"),
-                "domain": item.get("domain"),
-                "actor": item.get("actor"),
-                "scope": item.get("scope"),
-                "correlation_id": item.get("correlation_id"),
-                "parent_id": item.get("parent_id"),
-                "title": item.get("title"),
-                "message": item.get("message"),
-                "tags": ",".join(_parse_list(item.get("tags"))),
-                "artifacts": json.dumps(
-                    item.get("artifacts") if isinstance(item.get("artifacts"), list) else [], ensure_ascii=False
-                ),
-                "meta": json.dumps(item.get("meta") if isinstance(item.get("meta"), dict) else {}, ensure_ascii=False),
-                "payload": json.dumps(item.get("payload"), ensure_ascii=False, default=str),
-            }
-        )
+        references = item.get("references") if isinstance(item.get("references"), dict) else {}
+        loop = item.get("loop") if isinstance(item.get("loop"), dict) else {}
+        row = {
+            "id": item.get("id"),
+            "ts": item.get("ts"),
+            "kind": item.get("kind"),
+            "severity": item.get("severity"),
+            "operation_status": item.get("operation_status"),
+            "domain": item.get("domain"),
+            "actor": item.get("actor"),
+            "scope": item.get("scope"),
+            "correlation_id": item.get("correlation_id"),
+            "parent_id": item.get("parent_id"),
+            "title": item.get("title"),
+            "message": item.get("message"),
+            "tags": ",".join(_parse_list(item.get("tags"))),
+            "artifacts": json.dumps(
+                item.get("artifacts") if isinstance(item.get("artifacts"), list) else [], ensure_ascii=False
+            ),
+            "meta": json.dumps(item.get("meta") if isinstance(item.get("meta"), dict) else {}, ensure_ascii=False),
+            "payload": json.dumps(item.get("payload"), ensure_ascii=False, default=str),
+        }
+        row.update({key: references.get(key) for key in _REFERENCE_CSV_FIELDS})
+        row.update({key: loop.get(key) for key in _LOOP_CSV_FIELDS})
+        writer.writerow(row)
     return output.getvalue()
 
 

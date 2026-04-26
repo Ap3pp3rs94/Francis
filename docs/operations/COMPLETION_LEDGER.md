@@ -922,6 +922,14 @@ public event contract used by continuity-ledger receipts, including persistence
 reload. This is a memory write/read contract fix only; it does not create
 mission state, execute operations, or infer missing linkage.
 
+As of `2026-04-26`, memory timeline CSV exports now preserve the same explicit
+receipt references and loop handles that list/get/export JSON already expose.
+`/memory/timeline/export?format=csv` includes bounded mission, operation, trace,
+approval, run, artifact, handoff, current-task, plan, and receipt-count columns
+derived from the existing public event `references` and `loop` projections. This
+is export readback only; it does not create memory, inspect artifacts, change
+queries, execute operations, or synthesize missing receipts.
+
 As of `2026-04-26`, terminal mission-linked operation receipts can now feed that
 approval posture into memory evidence. When a completed or failed mission-linked
 operation carries a real approval id in the operation result or retained task
@@ -4140,6 +4148,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 structured memory timeli
 - `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
   Result: `passed` with non-blocking `.ruff_cache` write warnings
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 memory timeline CSV loop-handle export slice:
+
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_record_preserves_structured_references_and_loop -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py -q`
+  Result: `11 passed`
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 chat mission-ingress continuity metadata slice:

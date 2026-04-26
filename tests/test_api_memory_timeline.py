@@ -351,6 +351,26 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
     assert filtered.status_code == 200
     assert [item["id"] for item in filtered.json()["items"]] == ["evt-structured-loop"]
 
+    exported_csv = client.get("/memory/timeline/export?format=csv&operation_id=tsk-structured-loop")
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert [row["id"] for row in rows] == ["evt-structured-loop"]
+    assert rows[0]["mission_id"] == "msn-structured-loop"
+    assert rows[0]["operation_id"] == "tsk-structured-loop"
+    assert rows[0]["trace_id"] == "trace-structured-loop"
+    assert rows[0]["approval_id"] == "apr-structured-loop"
+    assert rows[0]["run_id"] == "run-structured-loop"
+    assert rows[0]["artifact_dir"] == "D:/francis/data/artifacts/structured-loop"
+    assert rows[0]["active_stage"] == "interface"
+    assert rows[0]["handoff_action"] == "review_result"
+    assert rows[0]["handoff_operation_id"] == "tsk-structured-loop"
+    assert rows[0]["current_task_source"] == "terminal_operation_receipt"
+    assert rows[0]["current_task_operation_name"] == "plan.create"
+    assert rows[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert rows[0]["current_task_advance_action"] == "run_linked_operation"
+    assert rows[0]["memory_receipt_count"] == "1"
+    assert rows[0]["run_ledger_count"] == "2"
+
     client2 = TestClient(create_app())
     persisted = client2.get("/memory/timeline/get?id=evt-structured-loop")
     assert persisted.status_code == 200
