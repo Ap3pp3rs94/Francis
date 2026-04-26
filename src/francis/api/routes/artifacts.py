@@ -43,6 +43,44 @@ def _resolve_artifact_handle(raw: str) -> tuple[Path | None, str]:
     return resolved, ""
 
 
+def _recovery_projection(error: str) -> dict[str, object]:
+    if error == "artifact_dir_required":
+        return {
+            "recovery_hint": "Open a mission or operation receipt with an artifact_dir before inspecting artifacts.",
+            "next_step": "select_artifact_handle",
+            "retryable": False,
+        }
+    if error == "artifact_path_invalid":
+        return {
+            "recovery_hint": "Use a local artifact handle returned by a Francis receipt.",
+            "next_step": "use_receipt_artifact_handle",
+            "retryable": False,
+        }
+    if error == "artifact_outside_data_root":
+        return {
+            "recovery_hint": "Use the artifact_dir handle from the originating Francis receipt; inspection is limited to data/artifacts.",
+            "next_step": "inspect_originating_receipt",
+            "retryable": False,
+        }
+    if error == "artifact_not_found":
+        return {
+            "recovery_hint": "Refresh the mission or operation receipt, then inspect the latest artifact_dir handle.",
+            "next_step": "refresh_originating_receipt",
+            "retryable": True,
+        }
+    if error.startswith("artifact_unreadable:"):
+        return {
+            "recovery_hint": "Check local file permissions for this artifact handle, then retry inspection.",
+            "next_step": "check_artifact_permissions",
+            "retryable": True,
+        }
+    return {
+        "recovery_hint": "Inspect the originating mission or operation receipt before retrying artifact inspection.",
+        "next_step": "inspect_originating_receipt",
+        "retryable": False,
+    }
+
+
 def _relative_artifact_path(root: Path, path: Path) -> str:
     try:
         return redact_secret_text(path.relative_to(root).as_posix())
@@ -83,6 +121,7 @@ def inspect_artifact(
             "error": error,
             "artifact_root": _display_path(root),
             "artifact_dir": redact_secret_text(artifact_dir.strip()),
+            **_recovery_projection(error),
         }
 
     if not target.exists():
@@ -93,6 +132,7 @@ def inspect_artifact(
             "artifact_dir": _display_path(target),
             "relative_path": _relative_artifact_path(root, target),
             "exists": False,
+            **_recovery_projection("artifact_not_found"),
         }
 
     projection = _entry_projection(root, target)
@@ -114,13 +154,15 @@ def inspect_artifact(
     try:
         children = sorted(target.iterdir(), key=lambda item: item.name.lower())
     except OSError as exc:
+        error = f"artifact_unreadable:{type(exc).__name__}"
         return {
             "ok": False,
-            "error": f"artifact_unreadable:{type(exc).__name__}",
+            "error": error,
             "artifact_root": _display_path(root),
             "artifact_dir": _display_path(target),
             "relative_path": _relative_artifact_path(root, target),
             "exists": True,
+            **_recovery_projection(error),
         }
 
     entries = [_entry_projection(root, child) for child in children[:limit]]

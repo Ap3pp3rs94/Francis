@@ -72,6 +72,9 @@ def test_artifact_inspect_rejects_paths_outside_artifact_root(monkeypatch, tmp_p
     assert body["ok"] is False
     assert body["error"] == "artifact_outside_data_root"
     assert str(outside) in body["artifact_dir"]
+    assert body["next_step"] == "inspect_originating_receipt"
+    assert body["retryable"] is False
+    assert "data/artifacts" in body["recovery_hint"]
 
 
 def test_artifact_inspect_reports_missing_handles_without_creating_state(monkeypatch, tmp_path: Path) -> None:
@@ -91,4 +94,7 @@ def test_artifact_inspect_reports_missing_handles_without_creating_state(monkeyp
     assert body["ok"] is False
     assert body["error"] == "artifact_not_found"
     assert body["exists"] is False
+    assert body["next_step"] == "refresh_originating_receipt"
+    assert body["retryable"] is True
+    assert "latest artifact_dir" in body["recovery_hint"]
     assert not missing.exists()

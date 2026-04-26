@@ -291,6 +291,13 @@ manual receipt-artifact inspection action backed by `ArtifactsClient.inspect`.
 The operation detail artifact inspector now uses the same shared panel component,
 so both surfaces preserve the same backend failure-state and no-content boundary.
 
+As of `2026-04-26`, artifact inspection failures include bounded recovery
+guidance. `GET /artifacts/inspect` now returns backend-authored
+`recovery_hint`, `next_step`, and `retryable` fields for missing, invalid,
+outside-root, and unreadable artifact handles, and the chat UI artifacts client
+and shared inspection panel preserve and render that guidance without requesting
+or displaying artifact file contents.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -2459,6 +2466,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 artifact inspection recovery guidance slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_artifacts.py -q`
+  Result: `4 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `38 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check -- src\francis\api\routes\artifacts.py tests\test_api_artifacts.py apps\chat_ui\src\artifacts\index.ts apps\chat_ui\src\artifacts\index.test.ts apps\chat_ui\src\artifacts\ArtifactInspectionPanel.tsx docs\operations\COMPLETION_LEDGER.md`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission receipt artifact inspection interface slice:
 

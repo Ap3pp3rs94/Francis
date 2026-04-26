@@ -123,6 +123,9 @@ test("ArtifactsClient.inspect preserves missing artifact state without fabricati
       artifact_dir: "D:/Francis/data/artifacts/missing/run_alpha",
       relative_path: "missing/run_alpha",
       exists: false,
+      recovery_hint: "Refresh the mission or operation receipt, then inspect the latest artifact_dir handle.",
+      next_step: "refresh_originating_receipt",
+      retryable: true,
     }),
   );
 
@@ -134,6 +137,12 @@ test("ArtifactsClient.inspect preserves missing artifact state without fabricati
     assert.equal(response.error, "artifact_not_found");
     assert.equal(response.exists, false);
     assert.equal(response.relative_path, "missing/run_alpha");
+    assert.equal(
+      response.recovery_hint,
+      "Refresh the mission or operation receipt, then inspect the latest artifact_dir handle.",
+    );
+    assert.equal(response.next_step, "refresh_originating_receipt");
+    assert.equal(response.retryable, true);
     assert.deepEqual(response.entries, []);
     assert.equal(response.kind, undefined);
   } finally {

@@ -22,6 +22,9 @@ export type ArtifactEntry = {
 export type ArtifactInspectResponse = {
   ok: boolean;
   error?: string;
+  recovery_hint?: string;
+  next_step?: string;
+  retryable?: boolean;
   artifact_root?: string;
   artifact_dir?: string;
   relative_path?: string;
@@ -237,6 +240,15 @@ export function parseArtifactInspectResponse(raw: unknown): ArtifactInspectRespo
 
   const error = safeString(raw.error).trim();
   if (error) response.error = error;
+
+  const recoveryHint = safeString(raw.recovery_hint).trim();
+  if (recoveryHint) response.recovery_hint = recoveryHint;
+
+  const nextStep = safeString(raw.next_step).trim();
+  if (nextStep) response.next_step = nextStep;
+
+  const retryable = safeBoolean(raw.retryable);
+  if (retryable !== undefined) response.retryable = retryable;
 
   const artifactRoot = safeString(raw.artifact_root).trim();
   if (artifactRoot) response.artifact_root = artifactRoot;

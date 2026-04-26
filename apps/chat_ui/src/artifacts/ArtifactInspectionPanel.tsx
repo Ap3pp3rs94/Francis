@@ -101,6 +101,10 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
     }
   }, [artifactDir, artifactsClient, limit]);
 
+  const hasRecoveryGuidance =
+    inspection &&
+    (inspection.recovery_hint || inspection.next_step || inspection.retryable !== undefined);
+
   if (!artifactDir) return null;
 
   return (
@@ -156,6 +160,22 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
               </>
             ) : null}
           </div>
+          {hasRecoveryGuidance ? (
+            <div style={{ fontSize: 11, color: inspection.ok ? mutedColor : warningColor, marginTop: 4 }}>
+              {inspection.recovery_hint ? <span>{inspection.recovery_hint}</span> : null}
+              {inspection.next_step ? (
+                <>
+                  {inspection.recovery_hint ? " / " : ""}next=<code>{inspection.next_step}</code>
+                </>
+              ) : null}
+              {inspection.retryable !== undefined ? (
+                <>
+                  {(inspection.recovery_hint || inspection.next_step) ? " / " : ""}
+                  retryable=<code>{String(inspection.retryable)}</code>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {loadedAt !== null ? (
             <div style={{ fontSize: 11, color: mutedColor, marginTop: 4 }}>
               inspected_at=<code>{formatTime(loadedAt)}</code>
