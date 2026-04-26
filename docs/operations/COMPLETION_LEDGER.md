@@ -326,6 +326,14 @@ read-only evidence display. This is trace/evidence readback only; it does not
 write memory, create explanation records, execute work, or synthesize missing
 task identity.
 
+As of `2026-04-26`, explanation evidence also promotes handoff-only receipt
+handles into the same normalized reference contract. When a mission loop
+handoff provides operation, approval, trace, run, artifact, or mission handles
+without top-level/current-task ids, the explanation registry now lifts those
+handles into list/get/export filters and persists the normalized `references`
+block. This is readback normalization only; it does not create handoff state,
+write memory, execute work, or infer missing evidence.
+
 As of `2026-04-26`, explanation evidence also preserves bounded recovery
 context from receipt-backed execution records. Explanation records can promote
 `operation_error`, `result_message`, and `recovery_next_step` from top-level
@@ -4921,6 +4929,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata app
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation handoff receipt readback slice:
+
+- `python -m pytest tests\test_api_explanation.py::test_explanations_promote_handoff_receipt_references -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_explanation.py -q`
+  Result: `5 passed`
+- `python -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `2 files already formatted`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation explanation evidence interface slice:

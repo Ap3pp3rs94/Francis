@@ -39,6 +39,60 @@ _RECEIPT_CONTEXT_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "result_message": ("result_message", "resultMessage"),
     "recovery_next_step": ("recovery_next_step", "recoveryNextStep"),
 }
+_REFERENCE_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "mission_id": (
+        "mission_id",
+        "missionId",
+        "current_task_mission_id",
+        "currentTaskMissionId",
+        "handoff_mission_id",
+        "handoffMissionId",
+    ),
+    "operation_id": (
+        "operation_id",
+        "operationId",
+        "task_id",
+        "taskId",
+        "current_task_operation_id",
+        "currentTaskOperationId",
+        "handoff_operation_id",
+        "handoffOperationId",
+    ),
+    "trace_id": (
+        "trace_id",
+        "traceId",
+        "current_task_trace_id",
+        "currentTaskTraceId",
+        "handoff_trace_id",
+        "handoffTraceId",
+    ),
+    "approval_id": (
+        "approval_id",
+        "approvalId",
+        "current_task_approval_id",
+        "currentTaskApprovalId",
+        "handoff_approval_id",
+        "handoffApprovalId",
+    ),
+    "run_id": (
+        "run_id",
+        "runId",
+        "current_task_run_id",
+        "currentTaskRunId",
+        "handoff_run_id",
+        "handoffRunId",
+    ),
+    "artifact_dir": (
+        "artifact_dir",
+        "artifactDir",
+        "artifact_path",
+        "artifactPath",
+        "current_task_artifact_dir",
+        "currentTaskArtifactDir",
+        "handoff_artifact_dir",
+        "handoffArtifactDir",
+    ),
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -94,37 +148,20 @@ def _meta(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _reference_handles(value: Any) -> dict[str, str]:
-    raw = _meta(value)
-    out = {
-        "mission_id": _safe_str(raw.get("mission_id") or raw.get("missionId")).strip(),
-        "operation_id": _safe_str(
-            raw.get("operation_id")
-            or raw.get("operationId")
-            or raw.get("task_id")
-            or raw.get("taskId")
-            or raw.get("current_task_operation_id")
-            or raw.get("currentTaskOperationId")
-        ).strip(),
-        "trace_id": _safe_str(raw.get("trace_id") or raw.get("traceId")).strip(),
-        "approval_id": _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip(),
-        "run_id": _safe_str(
-            raw.get("run_id") or raw.get("runId") or raw.get("current_task_run_id") or raw.get("currentTaskRunId")
-        ).strip(),
-        "artifact_dir": _safe_str(
-            raw.get("artifact_dir")
-            or raw.get("artifactDir")
-            or raw.get("artifact_path")
-            or raw.get("artifactPath")
-            or raw.get("current_task_artifact_dir")
-            or raw.get("currentTaskArtifactDir")
-        ).strip(),
+def _first_text(sources: tuple[Any, ...], aliases: tuple[str, ...]) -> str:
+    for source in sources:
+        raw = _meta(source)
+        for alias in aliases:
+            value = _safe_str(raw.get(alias)).strip()
+            if value:
+                return value
+    return ""
+
+
+def _reference_handles(*sources: Any) -> dict[str, str]:
+    return {
+        field: value for field, aliases in _REFERENCE_FIELD_ALIASES.items() if (value := _first_text(sources, aliases))
     }
-    if not out["trace_id"]:
-        out["trace_id"] = _safe_str(raw.get("current_task_trace_id") or raw.get("currentTaskTraceId")).strip()
-    if not out["approval_id"]:
-        out["approval_id"] = _safe_str(raw.get("current_task_approval_id") or raw.get("currentTaskApprovalId")).strip()
-    return {key: value for key, value in out.items() if value}
 
 
 def _current_task_fields(*sources: Any) -> dict[str, str]:
@@ -189,9 +226,9 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     tools_raw = raw.get("tools") if isinstance(raw.get("tools"), list) else []
     tools = [tool for tool in tools_raw if isinstance(tool, dict)]
     meta = _meta(raw.get("meta"))
-    raw_references = _meta(raw.get("references"))
-    references = _reference_handles(raw_references)
     loop = _meta(raw.get("loop"))
+    raw_references = _meta(raw.get("references"))
+    references = _reference_handles(raw_references, loop, meta, raw)
     current_task_fields = _current_task_fields(raw, loop, raw_references, meta)
     receipt_context_fields = _receipt_context_fields(raw, loop, raw_references, meta)
     trace_id = (
@@ -805,8 +842,10 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
         existing_obj = existing if isinstance(existing, dict) else {}
         payload_meta = _meta(payload.get("meta"))
         existing_meta = _meta(existing_obj.get("meta"))
-        payload_references = _reference_handles(payload.get("references"))
-        existing_references = _reference_handles(existing_obj.get("references"))
+        payload_references = _reference_handles(payload.get("references"), payload.get("loop"), payload_meta, payload)
+        existing_references = _reference_handles(
+            existing_obj.get("references"), existing_obj.get("loop"), existing_meta, existing_obj
+        )
         payload_current_task = _current_task_fields(
             payload, payload.get("loop"), payload.get("references"), payload_meta
         )
