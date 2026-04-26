@@ -238,9 +238,12 @@ export type MissionMemoryReceipt = {
   current_task_approval_id?: string;
   current_task_approval_status?: string;
   current_task_operation_id?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
+  current_task_advance_action?: string;
   current_task_next_step?: string;
   memory_receipt_count?: number;
   operation_id?: string;
@@ -1093,9 +1096,12 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     current_task_approval_id: safeString(raw.current_task_approval_id, "") || undefined,
     current_task_approval_status: safeString(raw.current_task_approval_status, "") || undefined,
     current_task_operation_id: safeString(raw.current_task_operation_id, "") || undefined,
+    current_task_operation_name: safeString(raw.current_task_operation_name, "") || undefined,
+    current_task_operation_plane: safeString(raw.current_task_operation_plane, "") || undefined,
     current_task_trace_id: safeString(raw.current_task_trace_id, "") || undefined,
     current_task_run_id: safeString(raw.current_task_run_id, "") || undefined,
     current_task_artifact_dir: safeString(raw.current_task_artifact_dir, "") || undefined,
+    current_task_advance_action: safeString(raw.current_task_advance_action, "") || undefined,
     current_task_next_step: safeString(raw.current_task_next_step, "") || undefined,
     memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
     operation_id,
@@ -1128,6 +1134,9 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.current_task_approval_id &&
     !receipt.current_task_approval_status &&
     !receipt.current_task_operation_id &&
+    !receipt.current_task_operation_name &&
+    !receipt.current_task_operation_plane &&
+    !receipt.current_task_advance_action &&
     !receipt.current_task_next_step &&
     !receipt.memory_receipt_count &&
     !receipt.references
