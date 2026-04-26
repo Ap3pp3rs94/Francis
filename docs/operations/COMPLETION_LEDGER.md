@@ -322,6 +322,14 @@ typed loop projection instead of dropping it during parsing. This keeps memory
 evidence aligned with the same run/artifact handles exposed by mission and
 operation loop surfaces without adding new execution or inspection behavior.
 
+As of `2026-04-26`, memory timeline loop projections also preserve approval
+posture when mission-loop continuity metadata already includes it. The backend
+structured `loop` object now keeps handoff and current-task approval ids and
+statuses, and the chat UI memory timeline client preserves those typed fields
+instead of reducing gate evidence to adjacent receipt ids. This is still a
+read-model/client contract change only; it does not create approvals, alter
+policy decisions, or advance mission execution.
+
 As of `2026-04-26`, mission advance receipts preserve the identity of the real
 operation they just created or ran. The mission record, queue item, current-task
 projection, and `advance_receipt` history entry now carry the existing

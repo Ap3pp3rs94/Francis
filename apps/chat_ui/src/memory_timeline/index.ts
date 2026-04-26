@@ -146,12 +146,15 @@ export type MemoryTimelineLoop = {
   handoff_action?: string;
   handoff_gate?: string;
   handoff_approval_id?: string;
+  handoff_approval_status?: string;
   handoff_operation_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
   handoff_next_step?: string;
   current_task_source?: string;
+  current_task_approval_id?: string;
+  current_task_approval_status?: string;
   current_task_operation_id?: string;
   current_task_gate?: string;
   current_task_run_id?: string;
@@ -504,12 +507,15 @@ function parseLoop(raw: unknown, fallback: Record<string, unknown>): MemoryTimel
     "handoff_action",
     "handoff_gate",
     "handoff_approval_id",
+    "handoff_approval_status",
     "handoff_operation_id",
     "handoff_trace_id",
     "handoff_run_id",
     "handoff_artifact_dir",
     "handoff_next_step",
     "current_task_source",
+    "current_task_approval_id",
+    "current_task_approval_status",
     "current_task_operation_id",
     "current_task_gate",
     "current_task_run_id",
