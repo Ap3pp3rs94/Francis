@@ -356,6 +356,54 @@ function operationMemoryReceiptReferenceLine(receipt: OperationMemoryReceipt | n
   return parts.join(" / ");
 }
 
+function missionLoopStagePlanReceiptLine(stage: MissionLoopState["plan"] | null | undefined): React.ReactNode {
+  const planStatus = safeString(stage?.plan_status).trim();
+  const currentStepId = safeString(stage?.plan_current_step_id).trim();
+  const currentStepTitle = safeString(stage?.plan_current_step_title).trim();
+  const stepCount =
+    typeof stage?.plan_step_count === "number" && Number.isFinite(stage.plan_step_count)
+      ? stage.plan_step_count
+      : undefined;
+  const checkpointCount =
+    typeof stage?.plan_checkpoint_count === "number" && Number.isFinite(stage.plan_checkpoint_count)
+      ? stage.plan_checkpoint_count
+      : undefined;
+
+  if (!planStatus && !currentStepId && !currentStepTitle && stepCount === undefined && checkpointCount === undefined) {
+    return null;
+  }
+
+  const hasCheckpointPrefix = Boolean(planStatus || currentStepId || currentStepTitle || stepCount !== undefined);
+
+  return (
+    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
+      {planStatus ? (
+        <>
+          plan_status <code>{planStatus}</code>
+        </>
+      ) : null}
+      {(currentStepId || currentStepTitle) ? (
+        <>
+          {planStatus ? " / " : ""}current_step{" "}
+          {currentStepId ? <code>{currentStepId}</code> : null}
+          {currentStepId && currentStepTitle ? " / " : null}
+          {currentStepTitle ? <code>{currentStepTitle}</code> : null}
+        </>
+      ) : null}
+      {stepCount !== undefined ? (
+        <>
+          {(planStatus || currentStepId || currentStepTitle) ? " / " : ""}steps <code>{String(stepCount)}</code>
+        </>
+      ) : null}
+      {checkpointCount !== undefined ? (
+        <>
+          {hasCheckpointPrefix ? " / " : ""}checkpoints <code>{String(checkpointCount)}</code>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function operationRecoveryGuidance(record: OperationRecord | null | undefined): string {
   if (!record) return "";
   const output = operationOutputRecord(record);
@@ -6997,6 +7045,7 @@ function SystemPanel(props: {
                             ) : null}
                           </div>
                         ) : null}
+                        {missionLoopStagePlanReceiptLine(item.stage)}
                         {item.stage?.artifact_dir ? (
                           <div style={{ marginTop: 8 }}>
                             <ArtifactInspectionPanel
@@ -11189,6 +11238,7 @@ function OperationsPanel(props: {
                                     {stageMemoryReceiptRefs ? <>{" / "}{stageMemoryReceiptRefs}</> : null}
                                   </div>
                                 ) : null}
+                                {missionLoopStagePlanReceiptLine(stage)}
                                 {stage?.artifact_dir ? (
                                   <div style={{ marginTop: 8 }}>
                                     <ArtifactInspectionPanel

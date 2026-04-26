@@ -324,6 +324,13 @@ or checkpoint count, `/missions/{mission_id}` includes those fields on
 stage data. This does not create or advance plans; it only connects existing
 operation receipt truth to the mission loop read model.
 
+As of `2026-04-26`, mission loop stage cards render that plan receipt handoff
+when it exists. The selected mission inspector and linked-operation mission
+bridge show backend-provided plan status, current step id/title, step count, and
+checkpoint count from `loop_state.plan`; stages without those fields render no
+plan receipt line. This is read-only interface exposure, not a new planning or
+execution behavior.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2720,6 +2727,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop plan receipt rendering slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission loop plan receipt handoff slice:
 
