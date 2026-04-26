@@ -54,6 +54,9 @@ test("buildExplanationEvidenceQueries follows completed handoff receipt handles"
   const queries = buildExplanationEvidenceQueries({
     receipt: {
       approval_id: "apr_legacy",
+      trace_id: "trace_top",
+      run_id: "run_top",
+      artifact_dir: "D:/francis/data/artifacts/top",
       current_task_approval_id: "apr_completed",
       current_task_trace_id: "trace_completed",
       current_task_run_id: "run_completed",
@@ -69,8 +72,8 @@ test("buildExplanationEvidenceQueries follows completed handoff receipt handles"
 
   assert.deepEqual(queries, [
     {
-      label: "approval=apr_legacy",
-      filters: { approval_id: "apr_legacy", limit: 8 },
+      label: "approval=apr_completed",
+      filters: { approval_id: "apr_completed", limit: 8 },
     },
     {
       label: "trace=trace_completed",

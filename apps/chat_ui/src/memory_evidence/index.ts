@@ -60,41 +60,41 @@ function receiptReferenceId(
   if (!receipt) return "";
   if (key === "operation_id") {
     return (
-      cleanId(receipt.operation_id) ||
       cleanId(receipt.current_task_operation_id) ||
       cleanId(receipt.handoff_operation_id) ||
+      cleanId(receipt.operation_id) ||
       cleanId(receipt.references?.operation_id)
     );
   }
   if (key === "approval_id") {
     return (
-      cleanId(receipt.approval_id) ||
       cleanId(receipt.current_task_approval_id) ||
       cleanId(receipt.handoff_approval_id) ||
+      cleanId(receipt.approval_id) ||
       cleanId(receipt.references?.approval_id)
     );
   }
   if (key === "trace_id") {
     return (
-      cleanId(receipt.trace_id) ||
       cleanId(receipt.current_task_trace_id) ||
       cleanId(receipt.handoff_trace_id) ||
+      cleanId(receipt.trace_id) ||
       cleanId(receipt.references?.trace_id)
     );
   }
   if (key === "run_id") {
     return (
-      cleanId(receipt.run_id) ||
       cleanId(receipt.current_task_run_id) ||
       cleanId(receipt.handoff_run_id) ||
+      cleanId(receipt.run_id) ||
       cleanId(receipt.references?.run_id)
     );
   }
   if (key === "artifact_dir") {
     return (
-      cleanId(receipt.artifact_dir) ||
       cleanId(receipt.current_task_artifact_dir) ||
       cleanId(receipt.handoff_artifact_dir) ||
+      cleanId(receipt.artifact_dir) ||
       cleanId(receipt.references?.artifact_dir)
     );
   }

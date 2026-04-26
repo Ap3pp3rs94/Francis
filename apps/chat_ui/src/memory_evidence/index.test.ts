@@ -142,7 +142,11 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
   const queries = buildMemoryEvidenceQueries({
     receipt: {
       mission_id: "mission_completed",
+      operation_id: "task_legacy",
       approval_id: "apr_legacy",
+      trace_id: "trace_top",
+      run_id: "run_top",
+      artifact_dir: "D:/francis/data/artifacts/top",
       operation_status: "succeeded",
       current_task_operation_id: "task_completed",
       current_task_approval_id: "apr_completed",
@@ -168,8 +172,8 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
       filters: { operation_id: "task_completed", operation_status: "succeeded", limit: 8, include_payload: false },
     },
     {
-      label: "approval=apr_legacy",
-      filters: { approval_id: "apr_legacy", operation_status: "succeeded", limit: 8, include_payload: false },
+      label: "approval=apr_completed",
+      filters: { approval_id: "apr_completed", operation_status: "succeeded", limit: 8, include_payload: false },
     },
     {
       label: "trace=trace_completed",

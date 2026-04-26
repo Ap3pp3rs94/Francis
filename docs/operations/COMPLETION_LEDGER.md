@@ -958,6 +958,14 @@ before giving up. This keeps completed `memory -> interface` handoff review
 connected to existing approval, trace, artifact, and memory evidence paths
 without creating new evidence or execution authority.
 
+As of `2026-04-26`, those browser-side evidence queries prefer loop-specific
+receipt handles when they exist. Explicit operator-selected ids still win, but
+selected mission receipt queries now choose `current_task_*` then `handoff_*`
+handles before older top-level or reference handles for operation, approval,
+trace, run, and artifact filters. This keeps completed handoff review pointed at
+the active loop evidence instead of stale receipt aliases without broadening the
+query scope or inventing evidence.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -4452,6 +4460,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal mission receipt
   Result: `1 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_api_operations.py -q`
   Result: `23 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed handoff evidence handle priority slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts src\explanation_evidence\index.test.ts`
+  Result: `11 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 
