@@ -133,6 +133,53 @@ test("buildMemoryEvidenceQueries falls back to terminal receipt references", () 
   ]);
 });
 
+test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () => {
+  const queries = buildMemoryEvidenceQueries({
+    receipt: {
+      mission_id: "mission_completed",
+      operation_status: "succeeded",
+      current_task_operation_id: "task_completed",
+      current_task_trace_id: "trace_completed",
+      current_task_run_id: "run_completed",
+      current_task_artifact_dir: "D:/francis/data/artifacts/completed",
+      references: {
+        operation_id: "task_legacy",
+        trace_id: "trace_legacy",
+        run_id: "run_legacy",
+        artifact_dir: "D:/francis/data/artifacts/legacy",
+      },
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "mission=mission_completed",
+      filters: { mission_id: "mission_completed", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "task=task_completed",
+      filters: { operation_id: "task_completed", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "trace=trace_completed",
+      filters: { trace_id: "trace_completed", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "run=run_completed",
+      filters: { run_id: "run_completed", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "artifact=D:/francis/data/artifacts/completed",
+      filters: {
+        artifact_dir: "D:/francis/data/artifacts/completed",
+        operation_status: "succeeded",
+        limit: 8,
+        include_payload: false,
+      },
+    },
+  ]);
+});
+
 test("mergeMemoryEvidenceResponses dedupes by event id, sorts newest first, and limits results", () => {
   const items = mergeMemoryEvidenceResponses(
     [

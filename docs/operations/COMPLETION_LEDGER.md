@@ -793,6 +793,15 @@ mission continuity receipts, and mission loop stage memory rows now show the
 backend `active_stage`, `handoff`, `next`, current-task handle, and receipt-count
 lineage without adding new mutation controls or UI-synthesized state.
 
+As of `2026-04-26`, memory and explanation evidence queries can also follow
+those completed-loop receipt handoff handles. Browser-side memory evidence now
+uses receipt `current_task_*` / `handoff_*` mission, operation, trace, run, and
+artifact handles as bounded fallbacks, and explanation evidence uses the same
+trace/run/artifact fallback from the selected mission receipt before giving up.
+This keeps completed `memory -> interface` handoff review connected to existing
+trace, artifact, and memory evidence paths without creating new evidence or
+execution authority.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -3027,6 +3036,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 completed mission receip
 
 - `cd apps\chat_ui; npm run test`
   Result: `60 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed mission evidence handoff query slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts src\explanation_evidence\index.test.ts`
+  Result: `10 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `62 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 

@@ -16,6 +16,14 @@ export type MemoryEvidenceReceiptReference = {
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  current_task_operation_id?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -44,7 +52,40 @@ function receiptReferenceId(
   receipt: MemoryEvidenceReceiptReference | undefined,
   key: "mission_id" | "operation_id" | "trace_id" | "run_id" | "artifact_dir",
 ): string {
-  return cleanId(receipt?.[key]) || cleanId(receipt?.references?.[key]);
+  if (!receipt) return "";
+  if (key === "operation_id") {
+    return (
+      cleanId(receipt.operation_id) ||
+      cleanId(receipt.current_task_operation_id) ||
+      cleanId(receipt.handoff_operation_id) ||
+      cleanId(receipt.references?.operation_id)
+    );
+  }
+  if (key === "trace_id") {
+    return (
+      cleanId(receipt.trace_id) ||
+      cleanId(receipt.current_task_trace_id) ||
+      cleanId(receipt.handoff_trace_id) ||
+      cleanId(receipt.references?.trace_id)
+    );
+  }
+  if (key === "run_id") {
+    return (
+      cleanId(receipt.run_id) ||
+      cleanId(receipt.current_task_run_id) ||
+      cleanId(receipt.handoff_run_id) ||
+      cleanId(receipt.references?.run_id)
+    );
+  }
+  if (key === "artifact_dir") {
+    return (
+      cleanId(receipt.artifact_dir) ||
+      cleanId(receipt.current_task_artifact_dir) ||
+      cleanId(receipt.handoff_artifact_dir) ||
+      cleanId(receipt.references?.artifact_dir)
+    );
+  }
+  return cleanId(receipt[key]) || cleanId(receipt.references?.[key]);
 }
 
 function terminalOperationStatus(value: string | string[] | undefined): string {

@@ -10204,8 +10204,9 @@ function OperationsPanel(props: {
         traceId: selectedMissionMemoryTraceId,
         runId: selectedRunId,
         artifactDir: selectedArtifactDir,
+        receipt: selectedMissionEvidenceReceipt,
       }),
-    [selectedArtifactDir, selectedMissionMemoryTraceId, selectedRunId],
+    [selectedArtifactDir, selectedMissionEvidenceReceipt, selectedMissionMemoryTraceId, selectedRunId],
   );
   const selectedExplanationEvidenceQueryKey = explanationEvidenceQueryKey(selectedExplanationEvidenceQueries);
   const selectedMissionLoopStages = [

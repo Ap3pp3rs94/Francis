@@ -45,6 +45,36 @@ test("buildExplanationEvidenceQueries ignores empty receipt handles", () => {
   );
 });
 
+test("buildExplanationEvidenceQueries follows completed handoff receipt handles", () => {
+  const queries = buildExplanationEvidenceQueries({
+    receipt: {
+      current_task_trace_id: "trace_completed",
+      current_task_run_id: "run_completed",
+      current_task_artifact_dir: "D:/francis/data/artifacts/completed",
+      references: {
+        trace_id: "trace_legacy",
+        run_id: "run_legacy",
+        artifact_dir: "D:/francis/data/artifacts/legacy",
+      },
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "trace=trace_completed",
+      filters: { trace_id: "trace_completed", limit: 8 },
+    },
+    {
+      label: "run=run_completed",
+      filters: { run_id: "run_completed", limit: 8 },
+    },
+    {
+      label: "artifact=D:/francis/data/artifacts/completed",
+      filters: { artifact_dir: "D:/francis/data/artifacts/completed", limit: 8 },
+    },
+  ]);
+});
+
 test("mergeExplanationEvidenceResponses dedupes by id, sorts newest first, and limits results", () => {
   const items = mergeExplanationEvidenceResponses(
     [
