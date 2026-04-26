@@ -1247,7 +1247,17 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           run_id: "run_loop",
           artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         },
-        plan: { status: "ready", detail: "1 linked operation(s) declared for this mission.", count: 1, operation_id: "tsk_loop" },
+        plan: {
+          status: "ready",
+          detail: "1 linked operation(s) declared for this mission.",
+          count: 1,
+          operation_id: "tsk_loop",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: 4,
+          plan_checkpoint_count: 3,
+        },
         gate: {
           status: "needs_approval",
           detail: "Governance is actively holding the current linked operation through gate approvals_gate, approval apr_loop.",
@@ -1342,6 +1352,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.handoff?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.handoff?.run_id, "run_loop");
     assert.equal(response.loop_state?.handoff?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
+    assert.equal(response.loop_state?.plan?.plan_status, "in_progress");
+    assert.equal(response.loop_state?.plan?.plan_current_step_id, "understand");
+    assert.equal(response.loop_state?.plan?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(response.loop_state?.plan?.plan_step_count, 4);
+    assert.equal(response.loop_state?.plan?.plan_checkpoint_count, 3);
     assert.equal(response.loop_state?.gate?.status, "needs_approval");
     assert.equal(response.loop_state?.gate?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.gate?.approval_status, "pending");

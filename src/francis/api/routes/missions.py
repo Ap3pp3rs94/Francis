@@ -304,6 +304,46 @@ def _operation_next_step(detail: dict[str, Any]) -> str:
     return _safe_str(governance.get("next_step")).strip() or _safe_str(output_governance.get("next_step")).strip()
 
 
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _operation_plan_summary(detail: dict[str, Any]) -> dict[str, Any]:
+    _operation, _meta, output, _receipt, _sandbox, _audit, _sandbox_audit = _operation_receipt_surfaces(detail)
+    if not output:
+        return {}
+
+    field_names = (
+        "plan_status",
+        "plan_current_step_id",
+        "plan_current_step_title",
+        "plan_step_count",
+        "plan_checkpoint_count",
+    )
+    kind = _safe_str(output.get("kind")).strip()
+    if kind != "plan.create.result" and not any(name in output for name in field_names):
+        return {}
+
+    summary: dict[str, Any] = {}
+    for name in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+        value = _safe_str(output.get(name)).strip()
+        if value:
+            summary[name] = value
+
+    for name in ("plan_step_count", "plan_checkpoint_count"):
+        value = _safe_nonnegative_int(output.get(name))
+        if value is not None:
+            summary[name] = value
+
+    return summary
+
+
 def _operation_id(detail: dict[str, Any]) -> str:
     operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
     return _safe_str(operation.get("id")).strip()
@@ -561,6 +601,11 @@ def _loop_stage(
     latest_receipt_status: str = "",
     latest_ts: str = "",
     next_step: str = "",
+    plan_status: str = "",
+    plan_current_step_id: str = "",
+    plan_current_step_title: str = "",
+    plan_step_count: int | None = None,
+    plan_checkpoint_count: int | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": status,
@@ -590,6 +635,16 @@ def _loop_stage(
         payload["latest_ts"] = latest_ts
     if next_step:
         payload["next_step"] = next_step
+    if plan_status:
+        payload["plan_status"] = plan_status
+    if plan_current_step_id:
+        payload["plan_current_step_id"] = plan_current_step_id
+    if plan_current_step_title:
+        payload["plan_current_step_title"] = plan_current_step_title
+    if plan_step_count is not None:
+        payload["plan_step_count"] = plan_step_count
+    if plan_checkpoint_count is not None:
+        payload["plan_checkpoint_count"] = plan_checkpoint_count
     return payload
 
 
@@ -655,6 +710,16 @@ def _mission_loop_state(
     latest_run_id = _operation_run_id(latest_detail)
     latest_artifact_dir = _operation_artifact_dir(latest_detail)
     latest_next_step = _operation_next_step(latest_detail)
+    latest_plan_summary = _operation_plan_summary(latest_detail)
+    latest_plan_status = _safe_str(latest_plan_summary.get("plan_status")).strip()
+    latest_plan_current_step_id = _safe_str(latest_plan_summary.get("plan_current_step_id")).strip()
+    latest_plan_current_step_title = _safe_str(latest_plan_summary.get("plan_current_step_title")).strip()
+    latest_plan_step_count = latest_plan_summary.get("plan_step_count")
+    latest_plan_checkpoint_count = latest_plan_summary.get("plan_checkpoint_count")
+    if not isinstance(latest_plan_step_count, int):
+        latest_plan_step_count = None
+    if not isinstance(latest_plan_checkpoint_count, int):
+        latest_plan_checkpoint_count = None
     queue_payload = queue_item if isinstance(queue_item, dict) else {}
     queue_current_task = (
         queue_payload.get("current_task") if isinstance(queue_payload.get("current_task"), dict) else {}
@@ -698,6 +763,11 @@ def _mission_loop_state(
             f"{len(linked_operations)} linked operation(s) declared for this mission.",
             count=len(linked_operations),
             operation_id=latest_operation_id,
+            plan_status=latest_plan_status,
+            plan_current_step_id=latest_plan_current_step_id,
+            plan_current_step_title=latest_plan_current_step_title,
+            plan_step_count=latest_plan_step_count,
+            plan_checkpoint_count=latest_plan_checkpoint_count,
         )
     elif record.linked_task_ids or latest_operation_id:
         plan_stage = _loop_stage(
@@ -705,6 +775,11 @@ def _mission_loop_state(
             f"{len(record.linked_task_ids) or 1} linked task id(s) declared for this mission.",
             count=len(record.linked_task_ids) or 1,
             operation_id=latest_operation_id,
+            plan_status=latest_plan_status,
+            plan_current_step_id=latest_plan_current_step_id,
+            plan_current_step_title=latest_plan_current_step_title,
+            plan_step_count=latest_plan_step_count,
+            plan_checkpoint_count=latest_plan_checkpoint_count,
         )
     else:
         plan_stage = _loop_stage(

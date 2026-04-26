@@ -1795,12 +1795,25 @@ def test_mission_advance_runs_linked_queued_operation(monkeypatch, tmp_path: Pat
     assert advanced_body["memory_receipt"]["source"] == "continuity.ledger"
     assert advanced_body["memory_receipt"]["references"]["mission_id"] == mission_id
     assert advanced_body["memory_receipt"]["references"]["operation_id"] == operation_id
+    operation_output = advanced_body["operation"]["output"]
+    assert operation_output["plan_status"] == "in_progress"
+    assert operation_output["plan_current_step_id"] == "understand"
+    assert operation_output["plan_current_step_title"] == "Understand goal + constraints"
+    assert operation_output["plan_step_count"] == 4
+    assert operation_output["plan_checkpoint_count"] == 3
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["mission"]["status"] == "completed"
     assert fetched_body["mission"]["meta"]["last_advance_action"] == "run_linked_operation"
+    plan_stage = fetched_body["loop_state"]["plan"]
+    assert plan_stage["operation_id"] == operation_id
+    assert plan_stage["plan_status"] == "in_progress"
+    assert plan_stage["plan_current_step_id"] == "understand"
+    assert plan_stage["plan_current_step_title"] == "Understand goal + constraints"
+    assert plan_stage["plan_step_count"] == 4
+    assert plan_stage["plan_checkpoint_count"] == 3
     advance_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert advance_events
     assert advance_events[-1]["details"]["operation_id"] == operation_id

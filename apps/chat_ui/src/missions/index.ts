@@ -124,6 +124,11 @@ export type MissionLoopStage = {
   latest_ts?: string;
   memory_receipt_count?: number;
   latest_memory_receipt?: MissionMemoryReceipt;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
 };
 
 export type MissionLoopHandoff = {
@@ -803,6 +808,11 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     latest_ts: safeString(raw.latest_ts, "") || undefined,
     memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
     latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt),
+    plan_status: safeString(raw.plan_status, "") || undefined,
+    plan_current_step_id: safeString(raw.plan_current_step_id, "") || undefined,
+    plan_current_step_title: safeString(raw.plan_current_step_title, "") || undefined,
+    plan_step_count: safeNumber(raw.plan_step_count, 0) || undefined,
+    plan_checkpoint_count: safeNumber(raw.plan_checkpoint_count, 0) || undefined,
   };
 
   if (
@@ -819,7 +829,12 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     !stage.latest_ts &&
     !stage.next_step &&
     !stage.memory_receipt_count &&
-    !stage.latest_memory_receipt
+    !stage.latest_memory_receipt &&
+    !stage.plan_status &&
+    !stage.plan_current_step_id &&
+    !stage.plan_current_step_title &&
+    !stage.plan_step_count &&
+    !stage.plan_checkpoint_count
   ) {
     return undefined;
   }

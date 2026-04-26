@@ -316,6 +316,14 @@ checkpoint count render those fields alongside existing trace/run/artifact
 handles while leaving the raw input/output payload visible. Operations without a
 real plan summary render no synthetic plan receipt.
 
+As of `2026-04-26`, mission loop plan stages can carry that same bounded
+`plan.create` receipt summary from the current linked operation. When the linked
+operation output contains real plan status, current step id/title, step count,
+or checkpoint count, `/missions/{mission_id}` includes those fields on
+`loop_state.plan`, and the chat UI missions client preserves them as typed loop
+stage data. This does not create or advance plans; it only connects existing
+operation receipt truth to the mission loop read model.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2712,6 +2720,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop plan receipt handoff slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py::test_mission_advance_runs_linked_queued_operation -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `11 passed`
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation plan receipt detail slice:
 
