@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -30,6 +30,21 @@ def health() -> dict[str, object]:
 class ChatIn(BaseModel):
     message: str
     use_llm: bool = False
+
+
+def _safe_dict(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value) if isinstance(value, dict) else {}
+
+
+def _safe_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str, bytes, bytearray)):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    return 0
 
 
 def _chat_text_from_wire(raw: str) -> str:
@@ -98,7 +113,7 @@ def _compact_mission_ingress_meta(
     current_task: dict[str, object],
     receipt_summary: dict[str, object],
 ) -> dict[str, object]:
-    handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    handoff = _safe_dict(loop_state.get("handoff"))
     meta: dict[str, object] = {
         "mode": "mission_ingress",
         "status": record.status.value,
@@ -124,9 +139,9 @@ def _compact_mission_ingress_meta(
         "current_task_run_id": str(current_task.get("run_id") or "").strip(),
         "current_task_artifact_dir": str(current_task.get("artifact_dir") or "").strip(),
         "current_task_next_step": str(current_task.get("next_step") or "").strip(),
-        "linked_operation_count": int(receipt_summary.get("linked_operation_count") or 0),
-        "run_ledger_count": int(receipt_summary.get("run_ledger_count") or 0),
-        "memory_receipt_count": int(receipt_summary.get("memory_receipt_count") or 0),
+        "linked_operation_count": _safe_int(receipt_summary.get("linked_operation_count") or 0),
+        "run_ledger_count": _safe_int(receipt_summary.get("run_ledger_count") or 0),
+        "memory_receipt_count": _safe_int(receipt_summary.get("memory_receipt_count") or 0),
     }
     return {key: value for key, value in meta.items() if value not in {"", None}}
 
@@ -257,11 +272,11 @@ def _mission_ingress_reply(
     from francis.api.routes import missions as mission_routes
 
     detail = mission_routes._mission_detail_projection(projected_record)
-    queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
-    loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
-    current_task = detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {}
-    receipt_summary = detail.get("receipt_summary") if isinstance(detail.get("receipt_summary"), dict) else {}
-    handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    queue_item = _safe_dict(detail.get("queue_item"))
+    loop_state = _safe_dict(detail.get("loop_state"))
+    current_task = _safe_dict(detail.get("current_task"))
+    receipt_summary = _safe_dict(detail.get("receipt_summary"))
+    handoff = _safe_dict(loop_state.get("handoff"))
     action = str(handoff.get("action") or "link_operation").strip()
     advance = _compact_mission_advance_result(advance_result)
     operation_id = str(advance.get("operation_id") or "").strip()

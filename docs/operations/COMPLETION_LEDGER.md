@@ -226,6 +226,19 @@ receipts, while preserving operation, approval, trace, run, and artifact handles
 This keeps direct advance and queue-run responses aligned without changing
 execution authority, queue eligibility, or approval behavior.
 
+As of `2026-04-26`, the explanation registry can preserve and query the same
+mission loop handles used by the Stage 3 trace and memory surfaces. Explanation
+records now lift `mission_id` and `operation_id` from either top-level fields or
+metadata, include those handles in list/get/export summaries, and support bounded
+list/export filtering by mission and operation id. This is evidence readback
+truth only; it does not create mission state, write memory, or add execution
+authority.
+
+As of `2026-04-26`, the repeated main-branch CI failure was traced to the
+workflow Mypy gate, not pytest runtime failures. The static typing gap in
+mission receipt readback and chat mission-ingress metadata compaction is now
+closed with typed dict narrowing while preserving existing runtime behavior.
+
 As of `2026-04-26`, terminal mission-operation memory receipts are reachable
 from operation detail surfaces after the immediate run response is gone. The
 shared receipt reader can query continuity-ledger receipts by operation id with
@@ -3169,6 +3182,25 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation handle readback and CI Mypy recovery slice:
+
+- `gh run list --branch main --limit 12 --json databaseId,displayTitle,conclusion,status,workflowName,createdAt,headSha,url`
+  Result: confirmed the latest 12 main-branch `ci` runs were failing.
+- `gh run view 24959187567 --log-failed`
+  Result: `Mypy` failed on all matrix jobs with 36 errors in `src/francis/memory/mission_receipts.py` and `src/francis/api/routes/chat.py`.
+- `.\.venv\Scripts\python.exe -m ruff format src\francis\memory\mission_receipts.py src\francis\api\routes\chat.py src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `4 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\memory\mission_receipts.py src\francis\api\routes\chat.py src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m mypy src`
+  Result: `Success: no issues found in 475 source files`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_mission_receipts.py tests/test_api_chat.py tests/test_api_explanation.py -q`
+  Result: `7 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission recovery handoff rendering slice:
 

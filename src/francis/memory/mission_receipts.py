@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from francis.chat.continuity.ledger import tail as continuity_tail
 
@@ -57,6 +57,10 @@ def _safe_nonnegative_int(value: Any) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return cast(dict[str, Any], value) if isinstance(value, dict) else {}
+
+
 def _operation_receipts_from_continuity(
     *,
     limit: int = 1000,
@@ -70,7 +74,7 @@ def _operation_receipts_from_continuity(
     for item in entries:
         if not isinstance(item, dict):
             continue
-        meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+        meta = _safe_dict(item.get("meta"))
         if _safe_str(meta.get("subsystem")).strip() != "operations.runtime":
             continue
         if _safe_str(meta.get("domain")).strip() != "operations":
@@ -101,7 +105,7 @@ def _operation_receipts_from_continuity(
             "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
         }
         references = {key: value for key, value in references.items() if value}
-        receipt = {
+        receipt: dict[str, Any] = {
             "id": f"ledger_{digest}",
             "source": "continuity.ledger",
             "ts": _parse_ts(ts_raw),
@@ -150,9 +154,9 @@ def _operation_receipts_from_continuity(
             if value:
                 receipt[key] = value
         for key in ("memory_receipt_count", "plan_step_count", "plan_checkpoint_count"):
-            value = _safe_nonnegative_int(meta.get(key))
-            if value is not None:
-                receipt[key] = value
+            numeric_value = _safe_nonnegative_int(meta.get(key))
+            if numeric_value is not None:
+                receipt[key] = numeric_value
         receipts.append({key: value for key, value in receipt.items() if value != "" and value != {}})
 
     receipts.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)

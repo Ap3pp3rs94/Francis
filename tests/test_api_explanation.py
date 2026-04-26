@@ -35,6 +35,8 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "run_id": "run-1",
             "trace_id": "trace-policy",
             "artifact_dir": "runs/run-1/artifacts",
+            "mission_id": "msn-alpha",
+            "operation_id": "tsk-alpha",
             "conversation_id": "conv-1",
             "approval_id": "appr-1",
             "plugin_id": "plugin-1",
@@ -78,7 +80,12 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "trace_id": "trace-rollout",
             "artifact_dir": "runs/run-2/artifacts",
             "tags": ["ops", "risk"],
-            "meta": {"run_id": "run-2", "approval_id": "appr-2"},
+            "meta": {
+                "run_id": "run-2",
+                "mission_id": "msn-gamma",
+                "operation_id": "tsk-gamma",
+                "approval_id": "appr-2",
+            },
             "content": {"step": "risk-check", "decision": "block"},
         },
     )
@@ -87,7 +94,8 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
 
     listed = client.get(
         "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout"
-        "&run_id=run-2&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts&approval_id=appr-2&limit=10"
+        "&run_id=run-2&trace_id=trace-rollout&artifact_dir=runs/run-2/artifacts"
+        "&mission_id=msn-gamma&operation_id=tsk-gamma&approval_id=appr-2&limit=10"
     )
     assert listed.status_code == 200
     listed_body = listed.json()
@@ -105,6 +113,8 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert fetched_body["item"]["run_id"] == "run-2"
     assert fetched_body["item"]["trace_id"] == "trace-rollout"
     assert fetched_body["item"]["artifact_dir"] == "runs/run-2/artifacts"
+    assert fetched_body["item"]["mission_id"] == "msn-gamma"
+    assert fetched_body["item"]["operation_id"] == "tsk-gamma"
     assert fetched_body["item"]["approval_id"] == "appr-2"
     assert fetched_body["content"]["decision"] == "block"
 
@@ -130,6 +140,13 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert {str(item.get("id")) for item in exported_approval_body["items"]} == {"exp-gamma"}
     assert exported_approval_body["items"][0]["approval_id"] == "appr-2"
 
+    exported_mission_json = client.get("/explanations/export?format=json&mission_id=msn-gamma&operation_id=tsk-gamma")
+    assert exported_mission_json.status_code == 200
+    exported_mission_body = json.loads(exported_mission_json.text)
+    assert {str(item.get("id")) for item in exported_mission_body["items"]} == {"exp-gamma"}
+    assert exported_mission_body["items"][0]["mission_id"] == "msn-gamma"
+    assert exported_mission_body["items"][0]["operation_id"] == "tsk-gamma"
+
     exported_csv = client.get("/explanations/export?format=csv&severity=error")
     assert exported_csv.status_code == 200
     assert exported_csv.headers["content-type"].startswith("text/csv")
@@ -139,6 +156,8 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert "exp-alpha" not in row_ids
     assert rows[0]["trace_id"] == "trace-rollout"
     assert rows[0]["artifact_dir"] == "runs/run-2/artifacts"
+    assert rows[0]["mission_id"] == "msn-gamma"
+    assert rows[0]["operation_id"] == "tsk-gamma"
 
 
 def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path: Path) -> None:

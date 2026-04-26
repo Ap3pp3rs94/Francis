@@ -115,6 +115,14 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
         or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
     )
+    mission_id = (
+        _safe_str(raw.get("mission_id") or raw.get("missionId")).strip()
+        or _safe_str(meta.get("mission_id") or meta.get("missionId")).strip()
+    )
+    operation_id = (
+        _safe_str(raw.get("operation_id") or raw.get("operationId")).strip()
+        or _safe_str(meta.get("operation_id") or meta.get("operationId")).strip()
+    )
     approval_id = (
         _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip()
         or _safe_str(meta.get("approval_id") or meta.get("approvalId")).strip()
@@ -139,6 +147,8 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "run_id": run_id,
         "trace_id": trace_id,
         "artifact_dir": artifact_dir,
+        "mission_id": mission_id,
+        "operation_id": operation_id,
         "domain": _safe_str(raw.get("domain")).strip(),
         "conversation_id": _safe_str(raw.get("conversation_id") or raw.get("thread_id")).strip(),
         "approval_id": approval_id,
@@ -164,6 +174,8 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "run_id": record.get("run_id"),
         "trace_id": record.get("trace_id"),
         "artifact_dir": record.get("artifact_dir"),
+        "mission_id": record.get("mission_id"),
+        "operation_id": record.get("operation_id"),
         "domain": record.get("domain"),
         "conversation_id": record.get("conversation_id"),
         "approval_id": record.get("approval_id"),
@@ -258,6 +270,8 @@ def _filter_records(
     run_id: str = "",
     trace_id: str = "",
     artifact_dir: str = "",
+    mission_id: str = "",
+    operation_id: str = "",
     conversation_id: str = "",
     approval_id: str = "",
     plugin_id: str = "",
@@ -272,6 +286,8 @@ def _filter_records(
     run_filter = run_id.strip().lower()
     trace_filter = trace_id.strip().lower()
     artifact_filter = artifact_dir.strip().lower()
+    mission_filter = mission_id.strip().lower()
+    operation_filter = operation_id.strip().lower()
     conversation_filter = conversation_id.strip().lower()
     approval_filter = approval_id.strip().lower()
     plugin_filter = plugin_id.strip().lower()
@@ -291,6 +307,10 @@ def _filter_records(
         if trace_filter and _safe_str(item.get("trace_id")).strip().lower() != trace_filter:
             continue
         if artifact_filter and _safe_str(item.get("artifact_dir")).strip().lower() != artifact_filter:
+            continue
+        if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
+            continue
+        if operation_filter and _safe_str(item.get("operation_id")).strip().lower() != operation_filter:
             continue
         if conversation_filter and _safe_str(item.get("conversation_id")).strip().lower() != conversation_filter:
             continue
@@ -338,6 +358,8 @@ def _csv(records: list[dict[str, Any]]) -> str:
             "run_id",
             "trace_id",
             "artifact_dir",
+            "mission_id",
+            "operation_id",
             "domain",
             "conversation_id",
             "approval_id",
@@ -359,6 +381,8 @@ def _csv(records: list[dict[str, Any]]) -> str:
                 "run_id": item.get("run_id"),
                 "trace_id": item.get("trace_id"),
                 "artifact_dir": item.get("artifact_dir"),
+                "mission_id": item.get("mission_id"),
+                "operation_id": item.get("operation_id"),
                 "domain": item.get("domain"),
                 "conversation_id": item.get("conversation_id"),
                 "approval_id": item.get("approval_id"),
@@ -384,6 +408,8 @@ def _query_records(
     run_id: str | None = None,
     trace_id: str | None = None,
     artifact_dir: str | None = None,
+    mission_id: str | None = None,
+    operation_id: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -401,6 +427,8 @@ def _query_records(
         run_id=_safe_str(run_id),
         trace_id=_safe_str(trace_id),
         artifact_dir=_safe_str(artifact_dir),
+        mission_id=_safe_str(mission_id),
+        operation_id=_safe_str(operation_id),
         conversation_id=_safe_str(conversation_id),
         approval_id=_safe_str(approval_id),
         plugin_id=_safe_str(plugin_id),
@@ -462,6 +490,8 @@ def list_explanations(
     run_id: str | None = None,
     trace_id: str | None = None,
     artifact_dir: str | None = None,
+    mission_id: str | None = None,
+    operation_id: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -478,6 +508,8 @@ def list_explanations(
             run_id=run_id,
             trace_id=trace_id,
             artifact_dir=artifact_dir,
+            mission_id=mission_id,
+            operation_id=operation_id,
             conversation_id=conversation_id,
             approval_id=approval_id,
             plugin_id=plugin_id,
@@ -530,6 +562,8 @@ def export_explanations(
     run_id: str | None = None,
     trace_id: str | None = None,
     artifact_dir: str | None = None,
+    mission_id: str | None = None,
+    operation_id: str | None = None,
     conversation_id: str | None = None,
     approval_id: str | None = None,
     plugin_id: str | None = None,
@@ -556,6 +590,8 @@ def export_explanations(
             run_id=run_id,
             trace_id=trace_id,
             artifact_dir=artifact_dir,
+            mission_id=mission_id,
+            operation_id=operation_id,
             conversation_id=conversation_id,
             approval_id=approval_id,
             plugin_id=plugin_id,
@@ -627,6 +663,18 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(payload_meta.get("artifact_dir") or payload_meta.get("artifactDir")).strip()
             or _safe_str(existing_meta.get("artifact_dir") or existing_meta.get("artifactDir")).strip()
         )
+        mission_id = (
+            _safe_str(payload.get("mission_id") or payload.get("missionId")).strip()
+            or _safe_str(existing_obj.get("mission_id") or existing_obj.get("missionId")).strip()
+            or _safe_str(payload_meta.get("mission_id") or payload_meta.get("missionId")).strip()
+            or _safe_str(existing_meta.get("mission_id") or existing_meta.get("missionId")).strip()
+        )
+        operation_id = (
+            _safe_str(payload.get("operation_id") or payload.get("operationId")).strip()
+            or _safe_str(existing_obj.get("operation_id") or existing_obj.get("operationId")).strip()
+            or _safe_str(payload_meta.get("operation_id") or payload_meta.get("operationId")).strip()
+            or _safe_str(existing_meta.get("operation_id") or existing_meta.get("operationId")).strip()
+        )
         approval_id = (
             _safe_str(payload.get("approval_id") or payload.get("approvalId")).strip()
             or _safe_str(existing_obj.get("approval_id") or existing_obj.get("approvalId")).strip()
@@ -646,6 +694,8 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "run_id": run_id,
             "trace_id": trace_id,
             "artifact_dir": artifact_dir,
+            "mission_id": mission_id,
+            "operation_id": operation_id,
             "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),
             "conversation_id": _safe_str(payload.get("conversation_id") or payload.get("thread_id")).strip()
             or _safe_str(existing_obj.get("conversation_id")).strip(),
