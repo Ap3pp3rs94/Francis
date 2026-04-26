@@ -33,6 +33,8 @@ function installFetch(handler: FetchHandler): () => void {
 test("ExplanationClient.list requests trace and artifact filters", async () => {
   const requests: Array<{
     path: string;
+    missionId: string | null;
+    operationId: string | null;
     traceId: string | null;
     artifactDir: string | null;
     approvalId: string | null;
@@ -43,6 +45,8 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     const parsed = new URL(url);
     requests.push({
       path: parsed.pathname,
+      missionId: parsed.searchParams.get("mission_id"),
+      operationId: parsed.searchParams.get("operation_id"),
       traceId: parsed.searchParams.get("trace_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
       approvalId: parsed.searchParams.get("approval_id"),
@@ -61,7 +65,12 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           trace_id: "trace_alpha",
           artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
-          meta: { run_id: "run_alpha", approval_id: "apr_alpha" },
+          meta: {
+            run_id: "run_alpha",
+            mission_id: "msn_alpha",
+            operation_id: "tsk_alpha",
+            approval_id: "apr_alpha",
+          },
         },
       ],
     });
@@ -70,6 +79,8 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
   try {
     const client = new ExplanationClient("http://127.0.0.1:8000");
     const response = await client.list({
+      mission_id: "msn_alpha",
+      operation_id: "tsk_alpha",
       trace_id: "trace_alpha",
       artifact_dir: "runs/run_alpha/artifacts",
       approval_id: "apr_alpha",
@@ -80,6 +91,8 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.deepEqual(requests, [
       {
         path: "/explanations/list",
+        missionId: "msn_alpha",
+        operationId: "tsk_alpha",
         traceId: "trace_alpha",
         artifactDir: "runs/run_alpha/artifacts",
         approvalId: "apr_alpha",
@@ -91,6 +104,8 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.equal(response.items[0]?.id, "exp-trace-alpha");
     assert.equal(response.items[0]?.trace_id, "trace_alpha");
     assert.equal(response.items[0]?.run_id, "run_alpha");
+    assert.equal(response.items[0]?.mission_id, "msn_alpha");
+    assert.equal(response.items[0]?.operation_id, "tsk_alpha");
     assert.equal(response.items[0]?.approval_id, "apr_alpha");
     assert.equal(response.items[0]?.artifact_dir, "runs/run_alpha/artifacts");
   } finally {
@@ -102,6 +117,8 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
   const requests: Array<{
     path: string;
     id: string | null;
+    missionId: string | null;
+    operationId: string | null;
     traceId: string | null;
     artifactDir: string | null;
     approvalId: string | null;
@@ -112,6 +129,8 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     requests.push({
       path: parsed.pathname,
       id: parsed.searchParams.get("id"),
+      missionId: parsed.searchParams.get("mission_id"),
+      operationId: parsed.searchParams.get("operation_id"),
       traceId: parsed.searchParams.get("trace_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
       approvalId: parsed.searchParams.get("approval_id"),
@@ -130,7 +149,11 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
         kind: "audit",
         trace_id: "trace_detail",
         artifact_dir: "runs/run_detail/artifacts",
-        meta: { approval_id: "apr_detail" },
+        meta: {
+          mission_id: "msn_detail",
+          operation_id: "tsk_detail",
+          approval_id: "apr_detail",
+        },
       },
       content: { outcome: "linked" },
     });
@@ -140,6 +163,8 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     const client = new ExplanationClient("http://127.0.0.1:8000");
     const detail = await client.get("exp-trace-detail", { timeoutMs: 50 });
     await client.export("json", {
+      mission_id: "msn_detail",
+      operation_id: "tsk_detail",
       trace_id: "trace_detail",
       artifact_dir: "runs/run_detail/artifacts",
       approval_id: "apr_detail",
@@ -148,11 +173,15 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
 
     assert.equal(detail?.trace_id, "trace_detail");
     assert.equal(detail?.artifact_dir, "runs/run_detail/artifacts");
+    assert.equal(detail?.mission_id, "msn_detail");
+    assert.equal(detail?.operation_id, "tsk_detail");
     assert.equal(detail?.approval_id, "apr_detail");
     assert.deepEqual(requests, [
       {
         path: "/explanations/get",
         id: "exp-trace-detail",
+        missionId: null,
+        operationId: null,
         traceId: null,
         artifactDir: null,
         approvalId: null,
@@ -161,6 +190,8 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
       {
         path: "/explanations/export",
         id: null,
+        missionId: "msn_detail",
+        operationId: "tsk_detail",
         traceId: "trace_detail",
         artifactDir: "runs/run_detail/artifacts",
         approvalId: "apr_detail",

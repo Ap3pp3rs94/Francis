@@ -48,6 +48,8 @@ export type ExplanationRecord = {
   run_id?: string;
   trace_id?: string;
   artifact_dir?: string;
+  mission_id?: string;
+  operation_id?: string;
   domain?: string;
   conversation_id?: string;
   approval_id?: string;
@@ -93,6 +95,8 @@ export type ExplanationListQuery = {
   run_id?: string;
   trace_id?: string;
   artifact_dir?: string;
+  mission_id?: string;
+  operation_id?: string;
   conversation_id?: string;
   approval_id?: string;
   plugin_id?: string;
@@ -380,6 +384,18 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const artifactDir = safeString(raw.artifact_dir, safeString(raw.artifactDir, ""));
   if (artifactDir) rec.artifact_dir = artifactDir;
 
+  const missionId = safeString(
+    raw.mission_id,
+    safeString(raw.missionId, safeString(meta.mission_id, safeString(meta.missionId, ""))),
+  );
+  if (missionId) rec.mission_id = missionId;
+
+  const operationId = safeString(
+    raw.operation_id,
+    safeString(raw.operationId, safeString(meta.operation_id, safeString(meta.operationId, ""))),
+  );
+  if (operationId) rec.operation_id = operationId;
+
   const domain = safeString(raw.domain, "");
   if (domain) rec.domain = domain;
 
@@ -453,6 +469,8 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         run_id: q?.run_id,
         trace_id: q?.trace_id,
         artifact_dir: q?.artifact_dir,
+        mission_id: q?.mission_id,
+        operation_id: q?.operation_id,
         conversation_id: q?.conversation_id,
         approval_id: q?.approval_id,
         plugin_id: q?.plugin_id,
@@ -473,6 +491,8 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         run_id: q.run_id,
         trace_id: q.trace_id,
         artifact_dir: q.artifact_dir,
+        mission_id: q.mission_id,
+        operation_id: q.operation_id,
         conversation_id: q.conversation_id,
         approval_id: q.approval_id,
         plugin_id: q.plugin_id,

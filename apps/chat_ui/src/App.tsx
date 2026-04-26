@@ -432,6 +432,8 @@ function explanationRecordSummary(record: ExplanationRecord): string {
 
 function explanationRecordReferenceLine(record: ExplanationRecord): string {
   const parts: string[] = [];
+  if (record.mission_id) parts.push(`mission ${record.mission_id}`);
+  if (record.operation_id) parts.push(`task ${record.operation_id}`);
   if (record.trace_id) parts.push(`trace ${record.trace_id}`);
   if (record.run_id) parts.push(`run ${record.run_id}`);
   if (record.artifact_dir) parts.push(`artifact ${record.artifact_dir}`);
@@ -10212,12 +10214,21 @@ function OperationsPanel(props: {
   const selectedExplanationEvidenceQueries = useMemo(
     () =>
       buildExplanationEvidenceQueries({
+        missionId: selectedMissionId,
+        operationId: selectedMemoryEvidenceOperationId,
         traceId: selectedMissionMemoryTraceId,
         runId: selectedRunId,
         artifactDir: selectedArtifactDir,
         receipt: selectedMissionEvidenceReceipt,
       }),
-    [selectedArtifactDir, selectedMissionEvidenceReceipt, selectedMissionMemoryTraceId, selectedRunId],
+    [
+      selectedArtifactDir,
+      selectedMemoryEvidenceOperationId,
+      selectedMissionEvidenceReceipt,
+      selectedMissionId,
+      selectedMissionMemoryTraceId,
+      selectedRunId,
+    ],
   );
   const selectedExplanationEvidenceQueryKey = explanationEvidenceQueryKey(selectedExplanationEvidenceQueries);
   const selectedMissionLoopStages = [
@@ -10368,7 +10379,7 @@ function OperationsPanel(props: {
     if (!selectedExplanationEvidenceQueries.length) {
       setSelectedExplanationEvidence([]);
       setSelectedExplanationEvidenceLoadedAt(null);
-      setSelectedExplanationEvidenceError("No trace, run, or artifact handle is available for explanation evidence.");
+      setSelectedExplanationEvidenceError("No mission, operation, trace, run, or artifact handle is available for explanation evidence.");
       return;
     }
 

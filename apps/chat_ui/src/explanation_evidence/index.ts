@@ -10,19 +10,25 @@ export type ExplanationEvidenceQuery = {
 };
 
 export type ExplanationEvidenceReceiptReference = {
+  mission_id?: string;
+  operation_id?: string;
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
   approval_id?: string;
+  handoff_operation_id?: string;
   handoff_approval_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
+  current_task_operation_id?: string;
   current_task_approval_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   references?: {
+    mission_id?: string;
+    operation_id?: string;
     approval_id?: string;
     trace_id?: string;
     run_id?: string;
@@ -31,6 +37,8 @@ export type ExplanationEvidenceReceiptReference = {
 };
 
 export type ExplanationEvidenceQueryInput = {
+  missionId?: string;
+  operationId?: string;
   approvalId?: string;
   traceId?: string;
   runId?: string;
@@ -44,9 +52,17 @@ function cleanId(value: string | undefined): string {
 
 function receiptReferenceId(
   receipt: ExplanationEvidenceReceiptReference | undefined,
-  key: "approval_id" | "trace_id" | "run_id" | "artifact_dir",
+  key: "mission_id" | "operation_id" | "approval_id" | "trace_id" | "run_id" | "artifact_dir",
 ): string {
   if (!receipt) return "";
+  if (key === "operation_id") {
+    return (
+      cleanId(receipt.current_task_operation_id) ||
+      cleanId(receipt.handoff_operation_id) ||
+      cleanId(receipt.operation_id) ||
+      cleanId(receipt.references?.operation_id)
+    );
+  }
   if (key === "approval_id") {
     return (
       cleanId(receipt.current_task_approval_id) ||
@@ -71,12 +87,15 @@ function receiptReferenceId(
       cleanId(receipt.references?.run_id)
     );
   }
-  return (
-    cleanId(receipt.current_task_artifact_dir) ||
-    cleanId(receipt.handoff_artifact_dir) ||
-    cleanId(receipt.artifact_dir) ||
-    cleanId(receipt.references?.artifact_dir)
-  );
+  if (key === "artifact_dir") {
+    return (
+      cleanId(receipt.current_task_artifact_dir) ||
+      cleanId(receipt.handoff_artifact_dir) ||
+      cleanId(receipt.artifact_dir) ||
+      cleanId(receipt.references?.artifact_dir)
+    );
+  }
+  return cleanId(receipt[key]) || cleanId(receipt.references?.[key]);
 }
 
 export function buildExplanationEvidenceQueries(input: ExplanationEvidenceQueryInput): ExplanationEvidenceQuery[] {
@@ -89,11 +108,15 @@ export function buildExplanationEvidenceQueries(input: ExplanationEvidenceQueryI
     queries.push({ label, filters: { ...filters, limit: 8 } });
   };
 
+  const missionId = cleanId(input.missionId) || receiptReferenceId(input.receipt, "mission_id");
+  const operationId = cleanId(input.operationId) || receiptReferenceId(input.receipt, "operation_id");
   const approvalId = cleanId(input.approvalId) || receiptReferenceId(input.receipt, "approval_id");
   const traceId = cleanId(input.traceId) || receiptReferenceId(input.receipt, "trace_id");
   const runId = cleanId(input.runId) || receiptReferenceId(input.receipt, "run_id");
   const artifactDir = cleanId(input.artifactDir) || receiptReferenceId(input.receipt, "artifact_dir");
 
+  if (missionId) push(`mission=${missionId}`, { mission_id: missionId });
+  if (operationId) push(`task=${operationId}`, { operation_id: operationId });
   if (approvalId) push(`approval=${approvalId}`, { approval_id: approvalId });
   if (traceId) push(`trace=${traceId}`, { trace_id: traceId });
   if (runId) push(`run=${runId}`, { run_id: runId });

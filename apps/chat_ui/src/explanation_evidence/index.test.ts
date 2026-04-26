@@ -9,6 +9,8 @@ import {
 
 test("buildExplanationEvidenceQueries builds bounded receipt filters", () => {
   const queries = buildExplanationEvidenceQueries({
+    missionId: " msn_alpha ",
+    operationId: " tsk_alpha ",
     approvalId: " apr_alpha ",
     traceId: " trace_alpha ",
     runId: "run_alpha",
@@ -16,6 +18,14 @@ test("buildExplanationEvidenceQueries builds bounded receipt filters", () => {
   });
 
   assert.deepEqual(queries, [
+    {
+      label: "mission=msn_alpha",
+      filters: { mission_id: "msn_alpha", limit: 8 },
+    },
+    {
+      label: "task=tsk_alpha",
+      filters: { operation_id: "tsk_alpha", limit: 8 },
+    },
     {
       label: "approval=apr_alpha",
       filters: { approval_id: "apr_alpha", limit: 8 },
@@ -35,7 +45,7 @@ test("buildExplanationEvidenceQueries builds bounded receipt filters", () => {
   ]);
   assert.equal(
     explanationEvidenceQueryKey(queries),
-    "approval=apr_alpha|trace=trace_alpha|run=run_alpha|artifact=D:/francis/data/artifacts/alpha",
+    "mission=msn_alpha|task=tsk_alpha|approval=apr_alpha|trace=trace_alpha|run=run_alpha|artifact=D:/francis/data/artifacts/alpha",
   );
 });
 
@@ -53,15 +63,20 @@ test("buildExplanationEvidenceQueries ignores empty receipt handles", () => {
 test("buildExplanationEvidenceQueries follows completed handoff receipt handles", () => {
   const queries = buildExplanationEvidenceQueries({
     receipt: {
+      mission_id: "msn_top",
+      operation_id: "tsk_top",
       approval_id: "apr_legacy",
       trace_id: "trace_top",
       run_id: "run_top",
       artifact_dir: "D:/francis/data/artifacts/top",
+      current_task_operation_id: "tsk_completed",
       current_task_approval_id: "apr_completed",
       current_task_trace_id: "trace_completed",
       current_task_run_id: "run_completed",
       current_task_artifact_dir: "D:/francis/data/artifacts/completed",
       references: {
+        mission_id: "msn_reference",
+        operation_id: "tsk_reference",
         approval_id: "apr_reference",
         trace_id: "trace_legacy",
         run_id: "run_legacy",
@@ -71,6 +86,14 @@ test("buildExplanationEvidenceQueries follows completed handoff receipt handles"
   });
 
   assert.deepEqual(queries, [
+    {
+      label: "mission=msn_top",
+      filters: { mission_id: "msn_top", limit: 8 },
+    },
+    {
+      label: "task=tsk_completed",
+      filters: { operation_id: "tsk_completed", limit: 8 },
+    },
     {
       label: "approval=apr_completed",
       filters: { approval_id: "apr_completed", limit: 8 },

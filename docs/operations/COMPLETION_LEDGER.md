@@ -234,6 +234,14 @@ list/export filtering by mission and operation id. This is evidence readback
 truth only; it does not create mission state, write memory, or add execution
 authority.
 
+As of `2026-04-26`, the chat UI explanation evidence path can use those
+mission and operation explanation filters. The selected operation/mission audit
+evidence helper now sends bounded `mission_id` and `operation_id` queries before
+falling back to approval, trace, run, or artifact handles, and explanation
+records render returned mission/task references when present. This is read-only
+interface reachability; it does not create explanation records or infer missing
+evidence.
+
 As of `2026-04-26`, the repeated main-branch CI failure was traced to the
 workflow Mypy gate, not pytest runtime failures. The static typing gap in
 mission receipt readback and chat mission-ingress metadata compaction is now
@@ -3182,6 +3190,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation mission-handle interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_evidence\index.test.ts src\explanation_explorer\index.test.ts`
+  Result: `6 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_explanation.py -q`
+  Result: `2 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation handle readback and CI Mypy recovery slice:
 
