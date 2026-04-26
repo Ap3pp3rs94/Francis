@@ -591,13 +591,14 @@ review_result` handoff instead of being pulled back to a stale approval gate
 from old operation metadata. This is a read-model truth fix only; it does not
 approve actions, execute work, create receipts, or change policy decisions.
 
-As of `2026-04-26`, the chat UI settings and continuity clients preserve those
-receipt-backed approval handoff handles when parsing world-state and continuity
-briefing mission memory receipts. Mission memory receipt projections now retain
-top-level `approval_id`, handoff/current-task approval id and status fields, and
-bounded receipt references including `references.approval_id`. This is a parser
-contract only; it does not render new authority, create receipts, approve work,
-or infer missing approval posture.
+As of `2026-04-26`, the chat UI settings, continuity, and dedicated missions
+clients preserve those receipt-backed approval handoff handles when parsing
+world-state, continuity briefing, and mission-detail mission memory receipts.
+Mission memory receipt projections now retain top-level `approval_id`,
+handoff/current-task approval id and status fields, and bounded receipt
+references including `references.approval_id`. This is a parser contract only;
+it does not render new authority, create receipts, approve work, or infer
+missing approval posture.
 
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
@@ -3585,6 +3586,17 @@ Latest targeted validation for the `2026-04-26` settings mission receipt approva
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
   Result: `12 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` missions client receipt approval-handle parser slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `14 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
 - `cd apps\chat_ui; npm run build`

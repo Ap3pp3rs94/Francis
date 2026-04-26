@@ -225,12 +225,16 @@ export type MissionMemoryReceipt = {
   active_stage?: string;
   handoff_stage?: string;
   handoff_action?: string;
+  handoff_approval_id?: string;
+  handoff_approval_status?: string;
   handoff_operation_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
   handoff_next_step?: string;
   current_task_source?: string;
+  current_task_approval_id?: string;
+  current_task_approval_status?: string;
   current_task_operation_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
@@ -1074,12 +1078,16 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     active_stage: safeString(raw.active_stage, "") || undefined,
     handoff_stage: safeString(raw.handoff_stage, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
+    handoff_approval_id: safeString(raw.handoff_approval_id, "") || undefined,
+    handoff_approval_status: safeString(raw.handoff_approval_status, "") || undefined,
     handoff_operation_id: safeString(raw.handoff_operation_id, "") || undefined,
     handoff_trace_id: safeString(raw.handoff_trace_id, "") || undefined,
     handoff_run_id: safeString(raw.handoff_run_id, "") || undefined,
     handoff_artifact_dir: safeString(raw.handoff_artifact_dir, "") || undefined,
     handoff_next_step: safeString(raw.handoff_next_step, "") || undefined,
     current_task_source: safeString(raw.current_task_source, "") || undefined,
+    current_task_approval_id: safeString(raw.current_task_approval_id, "") || undefined,
+    current_task_approval_status: safeString(raw.current_task_approval_status, "") || undefined,
     current_task_operation_id: safeString(raw.current_task_operation_id, "") || undefined,
     current_task_trace_id: safeString(raw.current_task_trace_id, "") || undefined,
     current_task_run_id: safeString(raw.current_task_run_id, "") || undefined,
@@ -1107,8 +1115,12 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.domain &&
     !receipt.active_stage &&
     !receipt.handoff_action &&
+    !receipt.handoff_approval_id &&
+    !receipt.handoff_approval_status &&
     !receipt.handoff_operation_id &&
     !receipt.handoff_next_step &&
+    !receipt.current_task_approval_id &&
+    !receipt.current_task_approval_status &&
     !receipt.current_task_operation_id &&
     !receipt.current_task_next_step &&
     !receipt.memory_receipt_count &&
