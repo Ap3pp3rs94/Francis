@@ -1349,6 +1349,21 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_status: "approved",
           domain: "operations",
           scope: "mission.loop",
+          active_stage: "interface",
+          handoff_stage: "interface",
+          handoff_action: "review_result",
+          handoff_operation_id: "tsk_loop",
+          handoff_trace_id: "trace_loop",
+          handoff_run_id: "run_loop",
+          handoff_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          handoff_next_step: "review_completed_mission",
+          current_task_source: "terminal_operation_receipt",
+          current_task_operation_id: "tsk_loop",
+          current_task_trace_id: "trace_loop",
+          current_task_run_id: "run_loop",
+          current_task_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          current_task_next_step: "review_completed_mission",
+          memory_receipt_count: 1,
         },
         current_operation_id: "tsk_loop",
         current_operation_status: "queued",
@@ -1378,6 +1393,21 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         capability: "plugin.run",
         domain: "operations",
         scope: "mission.loop",
+        active_stage: "interface",
+        handoff_stage: "interface",
+        handoff_action: "review_result",
+        handoff_operation_id: "tsk_loop",
+        handoff_trace_id: "trace_loop",
+        handoff_run_id: "run_loop",
+        handoff_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+        handoff_next_step: "review_completed_mission",
+        current_task_source: "terminal_operation_receipt",
+        current_task_operation_id: "tsk_loop",
+        current_task_trace_id: "trace_loop",
+        current_task_run_id: "run_loop",
+        current_task_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+        current_task_next_step: "review_completed_mission",
+        memory_receipt_count: 1,
       },
       memory_receipts: [
         {
@@ -1394,6 +1424,21 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           capability: "plugin.run",
           domain: "operations",
           scope: "mission.loop",
+          active_stage: "interface",
+          handoff_stage: "interface",
+          handoff_action: "review_result",
+          handoff_operation_id: "tsk_loop",
+          handoff_trace_id: "trace_loop",
+          handoff_run_id: "run_loop",
+          handoff_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          handoff_next_step: "review_completed_mission",
+          current_task_source: "terminal_operation_receipt",
+          current_task_operation_id: "tsk_loop",
+          current_task_trace_id: "trace_loop",
+          current_task_run_id: "run_loop",
+          current_task_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          current_task_next_step: "review_completed_mission",
+          memory_receipt_count: 1,
         },
       ],
       loop_state: {
@@ -1591,6 +1636,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.mission_id, "mission_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.approval_status, "approved");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.handoff_action, "review_result");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.handoff_next_step, "review_completed_mission");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_operation_id, "tsk_loop");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_next_step, "review_completed_mission");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.references?.mission_id, "mission_loop");
     assert.equal(response.receipt_summary?.current_operation_id, "tsk_loop");
     assert.equal(response.receipt_summary?.current_operation_status, "queued");
@@ -1605,10 +1654,23 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.latest_memory_receipt?.operation_id, "tsk_loop");
     assert.equal(response.latest_memory_receipt?.approval_status, "approved");
+    assert.equal(response.latest_memory_receipt?.active_stage, "interface");
+    assert.equal(response.latest_memory_receipt?.handoff_action, "review_result");
+    assert.equal(response.latest_memory_receipt?.handoff_operation_id, "tsk_loop");
+    assert.equal(response.latest_memory_receipt?.handoff_next_step, "review_completed_mission");
+    assert.equal(response.latest_memory_receipt?.current_task_source, "terminal_operation_receipt");
+    assert.equal(response.latest_memory_receipt?.current_task_operation_id, "tsk_loop");
+    assert.equal(response.latest_memory_receipt?.current_task_trace_id, "trace_loop");
+    assert.equal(response.latest_memory_receipt?.current_task_run_id, "run_loop");
+    assert.equal(response.latest_memory_receipt?.current_task_artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
+    assert.equal(response.latest_memory_receipt?.current_task_next_step, "review_completed_mission");
+    assert.equal(response.latest_memory_receipt?.memory_receipt_count, 1);
     assert.equal(response.latest_memory_receipt?.references?.operation_id, "tsk_loop");
     assert.equal(response.memory_receipts?.[0]?.id, "ledger_loop");
     assert.equal(response.memory_receipts?.[0]?.run_id, "run_loop");
     assert.equal(response.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(response.memory_receipts?.[0]?.handoff_action, "review_result");
+    assert.equal(response.memory_receipts?.[0]?.current_task_next_step, "review_completed_mission");
     assert.equal(response.memory_receipts?.[0]?.references?.run_id, "run_loop");
   } finally {
     restoreFetch();

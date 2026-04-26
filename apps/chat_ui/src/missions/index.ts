@@ -222,6 +222,21 @@ export type MissionMemoryReceipt = {
   subsystem?: string;
   domain?: string;
   mission_id?: string;
+  active_stage?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  handoff_next_step?: string;
+  current_task_source?: string;
+  current_task_operation_id?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
+  memory_receipt_count?: number;
   operation_id?: string;
   trace_id?: string;
   approval_id?: string;
@@ -1056,6 +1071,21 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     subsystem: safeString(raw.subsystem, "") || undefined,
     domain: safeString(raw.domain, "") || undefined,
     mission_id,
+    active_stage: safeString(raw.active_stage, "") || undefined,
+    handoff_stage: safeString(raw.handoff_stage, "") || undefined,
+    handoff_action: safeString(raw.handoff_action, "") || undefined,
+    handoff_operation_id: safeString(raw.handoff_operation_id, "") || undefined,
+    handoff_trace_id: safeString(raw.handoff_trace_id, "") || undefined,
+    handoff_run_id: safeString(raw.handoff_run_id, "") || undefined,
+    handoff_artifact_dir: safeString(raw.handoff_artifact_dir, "") || undefined,
+    handoff_next_step: safeString(raw.handoff_next_step, "") || undefined,
+    current_task_source: safeString(raw.current_task_source, "") || undefined,
+    current_task_operation_id: safeString(raw.current_task_operation_id, "") || undefined,
+    current_task_trace_id: safeString(raw.current_task_trace_id, "") || undefined,
+    current_task_run_id: safeString(raw.current_task_run_id, "") || undefined,
+    current_task_artifact_dir: safeString(raw.current_task_artifact_dir, "") || undefined,
+    current_task_next_step: safeString(raw.current_task_next_step, "") || undefined,
+    memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
     operation_id,
     trace_id,
     approval_id,
@@ -1075,6 +1105,13 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.recovery_next_step &&
     !receipt.approval_status &&
     !receipt.domain &&
+    !receipt.active_stage &&
+    !receipt.handoff_action &&
+    !receipt.handoff_operation_id &&
+    !receipt.handoff_next_step &&
+    !receipt.current_task_operation_id &&
+    !receipt.current_task_next_step &&
+    !receipt.memory_receipt_count &&
     !receipt.references
   ) {
     return undefined;

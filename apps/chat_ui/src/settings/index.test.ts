@@ -1696,7 +1696,8 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               operation_id: "tsk_done",
               task_status: "completed",
               result_status: "completed",
-              handoff_action: "review_completion",
+              next_step: "review_completed_mission",
+              handoff_action: "review_result",
             },
             memory_receipt_count: 1,
             latest_memory_receipt: {
@@ -1712,6 +1713,21 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               capability: "plugin.run",
               domain: "operations",
               scope: "mission.loop",
+              active_stage: "interface",
+              handoff_stage: "interface",
+              handoff_action: "review_result",
+              handoff_operation_id: "tsk_done",
+              handoff_trace_id: "trace_done",
+              handoff_run_id: "run_done",
+              handoff_artifact_dir: "D:/francis/data/artifacts/done",
+              handoff_next_step: "review_completed_mission",
+              current_task_source: "terminal_operation_receipt",
+              current_task_operation_id: "tsk_done",
+              current_task_trace_id: "trace_done",
+              current_task_run_id: "run_done",
+              current_task_artifact_dir: "D:/francis/data/artifacts/done",
+              current_task_next_step: "review_completed_mission",
+              memory_receipt_count: 1,
             },
             memory_receipts: [
               {
@@ -1727,6 +1743,21 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 capability: "plugin.run",
                 domain: "operations",
                 scope: "mission.loop",
+                active_stage: "interface",
+                handoff_stage: "interface",
+                handoff_action: "review_result",
+                handoff_operation_id: "tsk_done",
+                handoff_trace_id: "trace_done",
+                handoff_run_id: "run_done",
+                handoff_artifact_dir: "D:/francis/data/artifacts/done",
+                handoff_next_step: "review_completed_mission",
+                current_task_source: "terminal_operation_receipt",
+                current_task_operation_id: "tsk_done",
+                current_task_trace_id: "trace_done",
+                current_task_run_id: "run_done",
+                current_task_artifact_dir: "D:/francis/data/artifacts/done",
+                current_task_next_step: "review_completed_mission",
+                memory_receipt_count: 1,
               },
             ],
           },
@@ -1745,6 +1776,21 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             capability: "plugin.run",
             domain: "operations",
             scope: "mission.loop",
+            active_stage: "interface",
+            handoff_stage: "interface",
+            handoff_action: "review_result",
+            handoff_operation_id: "tsk_done",
+            handoff_trace_id: "trace_done",
+            handoff_run_id: "run_done",
+            handoff_artifact_dir: "D:/francis/data/artifacts/done",
+            handoff_next_step: "review_completed_mission",
+            current_task_source: "terminal_operation_receipt",
+            current_task_operation_id: "tsk_done",
+            current_task_trace_id: "trace_done",
+            current_task_run_id: "run_done",
+            current_task_artifact_dir: "D:/francis/data/artifacts/done",
+            current_task_next_step: "review_completed_mission",
+            memory_receipt_count: 1,
           },
         ],
         failed_preview: [
@@ -1872,17 +1918,39 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "idempotent_ticks");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_id, "tsk_done");
-    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.handoff_action, "review_completion");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.handoff_action, "review_result");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.next_step, "review_completed_mission");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_count, 4);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_history_event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipt_count, 1);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.operation_id, "tsk_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.approval_status, "approved");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.active_stage, "interface");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_action, "review_result");
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.handoff_next_step,
+      "review_completed_mission",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_operation_id,
+      "tsk_done",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_next_step,
+      "review_completed_mission",
+    );
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.memory_receipt_count, 1);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.trace_id, "trace_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.handoff_action, "review_result");
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.current_task_next_step,
+      "review_completed_mission",
+    );
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.id, "ledger_done");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_action, "review_result");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");

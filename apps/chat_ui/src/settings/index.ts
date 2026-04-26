@@ -345,6 +345,21 @@ export type MissionMemoryReceipt = {
   source?: string;
   ts?: UnixSeconds;
   mission_id?: string;
+  active_stage?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  handoff_next_step?: string;
+  current_task_source?: string;
+  current_task_operation_id?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
+  memory_receipt_count?: number;
   operation_id?: string;
   trace_id?: string;
   run_id?: string;
@@ -1358,6 +1373,21 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
     source: safeString(raw["source"], "").trim(),
     ts: normalizeUnixSeconds(raw["ts"]),
     mission_id: safeString(raw["mission_id"], "").trim(),
+    active_stage: safeString(raw["active_stage"], "").trim(),
+    handoff_stage: safeString(raw["handoff_stage"], "").trim(),
+    handoff_action: safeString(raw["handoff_action"], "").trim(),
+    handoff_operation_id: safeString(raw["handoff_operation_id"], "").trim(),
+    handoff_trace_id: safeString(raw["handoff_trace_id"], "").trim(),
+    handoff_run_id: safeString(raw["handoff_run_id"], "").trim(),
+    handoff_artifact_dir: safeString(raw["handoff_artifact_dir"], "").trim(),
+    handoff_next_step: safeString(raw["handoff_next_step"], "").trim(),
+    current_task_source: safeString(raw["current_task_source"], "").trim(),
+    current_task_operation_id: safeString(raw["current_task_operation_id"], "").trim(),
+    current_task_trace_id: safeString(raw["current_task_trace_id"], "").trim(),
+    current_task_run_id: safeString(raw["current_task_run_id"], "").trim(),
+    current_task_artifact_dir: safeString(raw["current_task_artifact_dir"], "").trim(),
+    current_task_next_step: safeString(raw["current_task_next_step"], "").trim(),
+    memory_receipt_count: safeNumber(raw["memory_receipt_count"], Number.NaN),
     operation_id: safeString(raw["operation_id"], "").trim(),
     trace_id: safeString(raw["trace_id"], "").trim(),
     run_id: safeString(raw["run_id"], "").trim(),
@@ -1373,6 +1403,21 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.source) delete receipt.source;
   if (!receipt.ts) delete receipt.ts;
   if (!receipt.mission_id) delete receipt.mission_id;
+  if (!receipt.active_stage) delete receipt.active_stage;
+  if (!receipt.handoff_stage) delete receipt.handoff_stage;
+  if (!receipt.handoff_action) delete receipt.handoff_action;
+  if (!receipt.handoff_operation_id) delete receipt.handoff_operation_id;
+  if (!receipt.handoff_trace_id) delete receipt.handoff_trace_id;
+  if (!receipt.handoff_run_id) delete receipt.handoff_run_id;
+  if (!receipt.handoff_artifact_dir) delete receipt.handoff_artifact_dir;
+  if (!receipt.handoff_next_step) delete receipt.handoff_next_step;
+  if (!receipt.current_task_source) delete receipt.current_task_source;
+  if (!receipt.current_task_operation_id) delete receipt.current_task_operation_id;
+  if (!receipt.current_task_trace_id) delete receipt.current_task_trace_id;
+  if (!receipt.current_task_run_id) delete receipt.current_task_run_id;
+  if (!receipt.current_task_artifact_dir) delete receipt.current_task_artifact_dir;
+  if (!receipt.current_task_next_step) delete receipt.current_task_next_step;
+  if (!Number.isFinite(receipt.memory_receipt_count)) delete receipt.memory_receipt_count;
   if (!receipt.operation_id) delete receipt.operation_id;
   if (!receipt.trace_id) delete receipt.trace_id;
   if (!receipt.run_id) delete receipt.run_id;
@@ -1383,7 +1428,15 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.domain) delete receipt.domain;
   if (!receipt.scope) delete receipt.scope;
 
-  return receipt.id || receipt.mission_id || receipt.operation_id || receipt.trace_id ? receipt : null;
+  const hasReceiptIdentity = Boolean(
+    receipt.id ||
+      receipt.mission_id ||
+      receipt.operation_id ||
+      receipt.trace_id ||
+      receipt.handoff_action ||
+      receipt.current_task_operation_id,
+  );
+  return hasReceiptIdentity ? receipt : null;
 }
 
 function parseMissionMemoryReceipts(raw: unknown, limit = 5): MissionMemoryReceipt[] {

@@ -778,6 +778,14 @@ receipt-backed `review_result` / `review_completed_mission` posture over the
 older status-derived `review_completion` fallback when a succeeded terminal
 receipt is present.
 
+As of `2026-04-26`, the chat UI mission and settings clients preserve those
+completed-loop receipt handoff fields at the browser contract boundary.
+Mission detail, receipt summary, memory receipt arrays, Shift Briefing
+recently-completed items, and shared briefing memory receipt projections now
+keep `active_stage`, `handoff_*`, `current_task_*`, and receipt count fields
+from backend memory receipts instead of dropping them before operator surfaces
+can render the completed `memory -> interface` handoff.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -2998,6 +3006,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 completed mission briefi
   Result: `passed; ruff warned it could not write cache files under .ruff_cache due to access denied`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_mission_receipts.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `95 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed mission receipt client contract slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts src\settings\index.test.ts`
+  Result: `26 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `60 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory plan receipt slice:
 
