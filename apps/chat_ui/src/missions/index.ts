@@ -214,6 +214,9 @@ export type MissionMemoryReceipt = {
   message?: string;
   scope?: string;
   operation_status?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
   approval_status?: string;
   capability?: string;
   subsystem?: string;
@@ -380,6 +383,9 @@ export type MissionAdvanceResponse = {
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
   run_id?: string;
   artifact_dir?: string;
   history?: MissionHistoryEntry[];
@@ -418,6 +424,9 @@ export type MissionRunOnceResult = {
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
@@ -1039,6 +1048,9 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     message: safeString(raw.message, "") || undefined,
     scope: safeString(raw.scope, "") || undefined,
     operation_status: safeString(raw.operation_status, "") || undefined,
+    operation_error: safeString(raw.operation_error, "") || undefined,
+    result_message: safeString(raw.result_message, "") || undefined,
+    recovery_next_step: safeString(raw.recovery_next_step, "") || undefined,
     approval_status: safeString(raw.approval_status, "") || undefined,
     capability: safeString(raw.capability, "") || undefined,
     subsystem: safeString(raw.subsystem, "") || undefined,
@@ -1058,6 +1070,9 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.message &&
     !receipt.scope &&
     !receipt.operation_status &&
+    !receipt.operation_error &&
+    !receipt.result_message &&
+    !receipt.recovery_next_step &&
     !receipt.approval_status &&
     !receipt.domain &&
     !receipt.references
@@ -1259,6 +1274,9 @@ function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
     approval_id: safeString(json.approval_id, "") || undefined,
     gate: safeString(json.gate, "") || undefined,
     next_step: safeString(json.next_step, "") || undefined,
+    operation_error: safeString(json.operation_error, "") || undefined,
+    result_message: safeString(json.result_message, "") || undefined,
+    recovery_next_step: safeString(json.recovery_next_step, "") || undefined,
     run_id: safeString(json.run_id, "") || undefined,
     artifact_dir: safeString(json.artifact_dir, "") || undefined,
     ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
@@ -1285,6 +1303,9 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     approval_id: safeString(raw.approval_id, "") || undefined,
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
+    operation_error: safeString(raw.operation_error, "") || undefined,
+    result_message: safeString(raw.result_message, "") || undefined,
+    recovery_next_step: safeString(raw.recovery_next_step, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
     run_id: safeString(raw.run_id, "") || undefined,
     artifact_dir: safeString(raw.artifact_dir, "") || undefined,

@@ -246,6 +246,14 @@ immediate mission result and queue error records. This keeps retry/deadletter
 decisions actionable from the mission handoff without creating retry authority
 or inferring recovery state outside the receipt.
 
+As of `2026-04-26`, the chat UI missions client also preserves that
+receipt-backed recovery context instead of dropping it at the browser contract
+boundary. Mission advance responses, mission queue-run results, queue error
+records, and terminal mission memory receipts keep `operation_error`,
+`result_message`, and `recovery_next_step` when the backend provides them. This
+is a client contract slice only; it does not add new execution controls or claim
+new visible rendering outside the existing mission result surfaces.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend

@@ -492,6 +492,66 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
   }
 });
 
+test("MissionsClient.advance preserves receipt-backed failed operation recovery handoff", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      ok: false,
+      applied: false,
+      action: "run_linked_operation",
+      operation_id: "tsk_failed",
+      status: "failed",
+      operation_error: "plugin_id_required",
+      result_message: "Plugin id is required.",
+      recovery_next_step: "review_operation_detail",
+      memory_receipt: {
+        source: "continuity.ledger",
+        kind: "ledger_append",
+        scope: "mission.loop",
+        operation_status: "failed",
+        operation_error: "plugin_id_required",
+        result_message: "Plugin id is required.",
+        recovery_next_step: "review_operation_detail",
+        references: {
+          mission_id: "mission_failed",
+          operation_id: "tsk_failed",
+          trace_id: "trace_failed",
+          run_id: "run_failed",
+        },
+      },
+      latest_memory_receipt: {
+        source: "continuity.ledger",
+        operation_id: "tsk_failed",
+        operation_status: "failed",
+        operation_error: "plugin_id_required",
+        recovery_next_step: "review_operation_detail",
+      },
+    }),
+  );
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.advance("mission_failed", { actor: "chat_ui.orb" }, { timeoutMs: 50 });
+
+    assert.equal(response.ok, false);
+    assert.equal(response.applied, false);
+    assert.equal(response.action, "run_linked_operation");
+    assert.equal(response.operation_id, "tsk_failed");
+    assert.equal(response.status, "failed");
+    assert.equal(response.operation_error, "plugin_id_required");
+    assert.equal(response.result_message, "Plugin id is required.");
+    assert.equal(response.recovery_next_step, "review_operation_detail");
+    assert.equal(response.memory_receipt?.operation_status, "failed");
+    assert.equal(response.memory_receipt?.operation_error, "plugin_id_required");
+    assert.equal(response.memory_receipt?.result_message, "Plugin id is required.");
+    assert.equal(response.memory_receipt?.recovery_next_step, "review_operation_detail");
+    assert.equal(response.memory_receipt?.references?.operation_id, "tsk_failed");
+    assert.equal(response.latest_memory_receipt?.operation_error, "plugin_id_required");
+    assert.equal(response.latest_memory_receipt?.recovery_next_step, "review_operation_detail");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("MissionsClient.advance preserves permission-gate denial details", async () => {
   const restoreFetch = installFetch(async () =>
     jsonResponse({
@@ -821,6 +881,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           },
           status: "queued",
           operation_id: "tsk_ready",
+          operation_error: "approval_pending",
+          result_message: "Operation is waiting on approval.",
+          recovery_next_step: "review_pending_approval",
           operation: {
             id: "tsk_ready",
             ts: 1770000010,
@@ -834,6 +897,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             role: "system",
             scope: "mission.loop",
             operation_status: "succeeded",
+            result_message: "Operation is waiting on approval.",
             references: {
               mission_id: "mission_ready",
               operation_id: "tsk_ready",
@@ -974,6 +1038,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.operation?.id, "tsk_ready");
     assert.equal(response.results?.[0]?.operation?.status, "queued");
     assert.equal(response.results?.[0]?.memory_receipt?.source, "continuity.ledger");
+    assert.equal(response.results?.[0]?.memory_receipt?.result_message, "Operation is waiting on approval.");
     assert.equal(response.results?.[0]?.memory_receipt?.references?.operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.memory_receipt?.references?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_ready");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
@@ -991,6 +1056,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.queue_item?.history_tail?.[1]?.event, "advance_receipt");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
+    assert.equal(response.results?.[0]?.operation_error, "approval_pending");
+    assert.equal(response.results?.[0]?.result_message, "Operation is waiting on approval.");
+    assert.equal(response.results?.[0]?.recovery_next_step, "review_pending_approval");
     assert.equal(response.results?.[0]?.trace_id, "trace_result");
     assert.equal(response.results?.[0]?.run_id, "run_ready");
     assert.equal(response.results?.[0]?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_ready");
@@ -1056,6 +1124,9 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
           gate: "runtime_gate",
           next_step: "inspect_task",
           trace_id: "trace_error",
+          operation_error: "plugin_id_required",
+          result_message: "Plugin id is required.",
+          recovery_next_step: "review_operation_detail",
           error: "advance_failed",
         },
       ],
@@ -1088,6 +1159,9 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
     assert.equal(response.errors?.[0]?.gate, "runtime_gate");
     assert.equal(response.errors?.[0]?.next_step, "inspect_task");
     assert.equal(response.errors?.[0]?.trace_id, "trace_error");
+    assert.equal(response.errors?.[0]?.operation_error, "plugin_id_required");
+    assert.equal(response.errors?.[0]?.result_message, "Plugin id is required.");
+    assert.equal(response.errors?.[0]?.recovery_next_step, "review_operation_detail");
     assert.equal(response.errors?.[0]?.error, "advance_failed");
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.status, "failed");
