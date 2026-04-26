@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -53,6 +54,57 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _new_trace_id() -> str:
+    return f"trace_{uuid.uuid4().hex[:16]}"
+
+
+def _new_run_id() -> str:
+    return f"run_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+
+
+def _payload_trace_id(payload: dict[str, Any]) -> str:
+    receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+    sandbox = payload.get("sandbox") if isinstance(payload.get("sandbox"), dict) else {}
+    receipt_sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    audit_event = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return (
+        _safe_str(payload.get("trace_id")).strip()
+        or _safe_str(payload.get("traceId")).strip()
+        or _safe_str(receipt.get("trace_id")).strip()
+        or _safe_str(sandbox.get("trace_id")).strip()
+        or _safe_str(receipt_sandbox.get("trace_id")).strip()
+        or _safe_str(audit_event.get("trace_id")).strip()
+        or _safe_str(sandbox_audit.get("trace_id")).strip()
+    )
+
+
+def _payload_run_id(payload: dict[str, Any]) -> str:
+    receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+    sandbox = payload.get("sandbox") if isinstance(payload.get("sandbox"), dict) else {}
+    receipt_sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    audit_event = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return (
+        _safe_str(payload.get("run_id")).strip()
+        or _safe_str(payload.get("runId")).strip()
+        or _safe_str(receipt.get("run_id")).strip()
+        or _safe_str(sandbox.get("run_id")).strip()
+        or _safe_str(receipt_sandbox.get("run_id")).strip()
+        or _safe_str(audit_event.get("run_id")).strip()
+        or _safe_str(sandbox_audit.get("run_id")).strip()
+    )
+
+
+def _attach_execution_handles(payload: Any) -> None:
+    if not isinstance(payload, dict):
+        return
+    if not _payload_trace_id(payload):
+        payload["trace_id"] = _new_trace_id()
+    if not _payload_run_id(payload):
+        payload["run_id"] = _new_run_id()
 
 
 def tasks_dir() -> Path:
@@ -775,6 +827,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     if ok and isinstance(payload, dict) and payload.get("ok") is False:
         ok = False
         status_reason = _safe_str(payload.get("error") or payload.get("status") or "capability_failed")
+    _attach_execution_handles(payload)
 
     finished = _utc_now_iso()
     task = load_task(task_id)

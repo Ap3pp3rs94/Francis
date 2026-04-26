@@ -277,8 +277,15 @@ receipt summary alongside the existing full plan payload. Completed plan-create
 operations now return the real plan status, current in-progress step id/title,
 step count, and checkpoint count from the generated `PlanStateMachine` state,
 so the cognition step can be inspected from operation output without parsing the
-entire plan object. No scheduling, approval, operation status mapping, execution,
-trace, or memory-write behavior is changed.
+entire plan object.
+
+As of `2026-04-26`, untraced capability execution results also receive bounded
+task execution trace/run handles. `plan.create` now returns `trace_id` and
+`run_id` from the persisted task result, so `/operations/list` can filter the
+completed cognition step by its real execution handles. Capability results that
+already expose their own trace/run receipts, such as plugin execution, keep their
+existing receipt-provided handles. No scheduling, approval, operation status
+mapping, or memory-write behavior is changed.
 
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
@@ -2676,6 +2683,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 plan execution trace handles slice:
+
+- `python -m ruff check src\francis\agent\executor.py tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\agent\executor.py tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_run_executes_plan_create tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_api_missions.py::test_mission_detail_surfaces_failed_operation_memory_receipt tests\test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 approved mission operation receipt posture slice:
 

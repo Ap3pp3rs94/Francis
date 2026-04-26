@@ -814,10 +814,11 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     failed_operation_body = failed_operation.json()
     assert failed_operation_body["status"] == "failed"
     assert failed_operation_body["memory_receipt"]["operation_status"] == "failed"
-    assert failed_operation_body["memory_receipt"]["references"] == {
-        "mission_id": mission_id,
-        "operation_id": operation_id,
-    }
+    receipt_refs = failed_operation_body["memory_receipt"]["references"]
+    assert receipt_refs["mission_id"] == mission_id
+    assert receipt_refs["operation_id"] == operation_id
+    assert str(receipt_refs["trace_id"]).startswith("trace_")
+    assert str(receipt_refs["run_id"]).startswith("run_")
 
     ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "test.continuity.failed"})
     assert ticked.status_code == 200

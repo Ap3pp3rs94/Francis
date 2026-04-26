@@ -182,12 +182,24 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert output["plan_step_count"] == 4
     assert output["plan_checkpoint_count"] == 3
     assert output["plan"]["status"] == "in_progress"
+    trace_id = str(output.get("trace_id") or "")
+    run_id = str(output.get("run_id") or "")
+    assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
+    assert run_body["operation"]["trace_id"] == trace_id
+    assert run_body["operation"]["run_id"] == run_id
 
     fetched = client.get(f"/operations/{operation_id}")
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert str(fetched_body["operation"]["id"]) == operation_id
     assert fetched_body["operation"]["status"] in {"succeeded", "failed"}
+    assert fetched_body["operation"]["trace_id"] == trace_id
+    assert fetched_body["operation"]["run_id"] == run_id
+
+    listed_by_trace = client.get("/operations/list", params={"trace_id": trace_id})
+    assert listed_by_trace.status_code == 200
+    assert [item["id"] for item in listed_by_trace.json()["items"]] == [operation_id]
 
 
 def test_operations_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
@@ -592,10 +604,10 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["operation_status"] == "failed"
     assert receipt["subsystem"] == "operations.runtime"
     assert "Mission operation failed" in receipt["message"]
-    assert receipt["references"] == {
-        "mission_id": mission_id,
-        "operation_id": operation_id,
-    }
+    assert receipt["references"]["mission_id"] == mission_id
+    assert receipt["references"]["operation_id"] == operation_id
+    assert str(receipt["references"]["trace_id"]).startswith("trace_")
+    assert str(receipt["references"]["run_id"]).startswith("run_")
 
     listed = client.get(
         "/memory/timeline/list",

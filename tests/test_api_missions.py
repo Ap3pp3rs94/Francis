@@ -686,10 +686,11 @@ def test_mission_detail_surfaces_failed_operation_memory_receipt(monkeypatch, tm
     assert executed_body["ok"] is False
     assert executed_body["status"] == "failed"
     assert executed_body["memory_receipt"]["operation_status"] == "failed"
-    assert executed_body["memory_receipt"]["references"] == {
-        "mission_id": mission_id,
-        "operation_id": operation_id,
-    }
+    receipt_refs = executed_body["memory_receipt"]["references"]
+    assert receipt_refs["mission_id"] == mission_id
+    assert receipt_refs["operation_id"] == operation_id
+    assert str(receipt_refs["trace_id"]).startswith("trace_")
+    assert str(receipt_refs["run_id"]).startswith("run_")
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
