@@ -778,6 +778,16 @@ the chat UI memory timeline client preserve those fields. This is a memory
 read/write contract only; it does not create plans, change execution, or alter
 approval behavior.
 
+As of `2026-04-26`, the terminal `plan.create` mission receipt readback contract
+is covered through operation detail surfaces too. A chat-ingressed mission that
+advances its linked `plan.create` operation now has test coverage proving the
+receipt-backed plan status, current step id/title, and plan step/checkpoint
+counts survive through mission latest receipt, operation detail
+`latest_memory_receipt`, operation metadata `latest_memory_receipt`,
+`operations/get_many`, and memory timeline loop projection. This is readback
+coverage for existing receipt metadata, not new execution authority or
+UI-synthesized plan state.
+
 As of `2026-04-26`, terminal successful mission-operation memory receipts also
 preserve the current-task trace handle alongside the existing current-task run
 and artifact handles. `operations.runtime` writes `current_task_trace_id` into
@@ -4429,6 +4439,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receip
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal plan receipt operation-readback contract slice:
+
+- `python -m pytest tests\test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_mission_loop_contract.py tests\test_api_operations.py::test_operations_run_executes_plan_create tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

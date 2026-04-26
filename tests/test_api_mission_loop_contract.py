@@ -60,6 +60,15 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert memory_receipt["current_task_operation_name"] == "plan.create"
     assert memory_receipt["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert memory_receipt["current_task_advance_action"] == "run_linked_operation"
+    expected_plan_receipt = {
+        "plan_status": "in_progress",
+        "plan_current_step_id": "understand",
+        "plan_current_step_title": "Understand goal + constraints",
+        "plan_step_count": 4,
+        "plan_checkpoint_count": 3,
+    }
+    for key, value in expected_plan_receipt.items():
+        assert memory_receipt[key] == value
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -78,6 +87,23 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert fetched_body["latest_memory_receipt"]["current_task_operation_name"] == "plan.create"
     assert fetched_body["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert fetched_body["latest_memory_receipt"]["current_task_advance_action"] == "run_linked_operation"
+    for key, value in expected_plan_receipt.items():
+        assert fetched_body["latest_memory_receipt"][key] == value
+
+    operation_detail = client.get(f"/operations/{operation_id}")
+    assert operation_detail.status_code == 200
+    operation_body = operation_detail.json()
+    assert operation_body["latest_memory_receipt"]["operation_id"] == operation_id
+    for key, value in expected_plan_receipt.items():
+        assert operation_body["latest_memory_receipt"][key] == value
+        assert operation_body["operation"]["meta"]["latest_memory_receipt"][key] == value
+
+    operation_many = client.post("/operations/get_many", json={"ids": [operation_id]})
+    assert operation_many.status_code == 200
+    operation_many_item = operation_many.json()["items"][0]
+    assert operation_many_item["latest_memory_receipt"]["operation_id"] == operation_id
+    for key, value in expected_plan_receipt.items():
+        assert operation_many_item["latest_memory_receipt"][key] == value
 
     listed = client.get(
         "/memory/timeline/list",
@@ -140,10 +166,8 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert terminal_receipt["loop"]["current_task_next_step"] == "review_completed_mission"
     assert terminal_receipt["loop"]["run_id"] == run_id
     assert terminal_receipt["loop"]["memory_receipt_count"] == 1
-    assert terminal_receipt["loop"]["plan_status"] == "in_progress"
-    assert terminal_receipt["loop"]["plan_current_step_id"] == "understand"
-    assert terminal_receipt["loop"]["plan_step_count"] == 4
-    assert terminal_receipt["loop"]["plan_checkpoint_count"] == 3
+    for key, value in expected_plan_receipt.items():
+        assert terminal_receipt["loop"][key] == value
     assert terminal_receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
     assert terminal_receipt["payload"]["meta"]["operation_status"] == "succeeded"
 
