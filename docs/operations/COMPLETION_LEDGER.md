@@ -561,6 +561,13 @@ changed. The chat UI approval client, world-state parser, approval panel, and
 pending-approvals cards preserve and render those handles so an operator can move
 from gate review back to the linked mission/task without raw JSON inspection.
 
+As of `2026-04-26`, that approval queue loop-handle projection also preserves
+trace/run/artifact handles when a linked task stores them only in task metadata
+or input metadata. Result and receipt handles remain the first source of truth;
+metadata is only a fallback for the approval read model. This keeps gate review
+connected to existing trace and artifact evidence without creating approvals,
+executing work, or inferring receipt state.
+
 As of `2026-04-26`, world-state governance incident evidence now preserves the
 same approval-gate loop handles for pending approvals. The
 `governance.pending_approvals` and `governance.awaiting_approval` incident
@@ -3530,17 +3537,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 approval gate loop-handl
 
 - `python -m ruff check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
   Result: `passed`
-- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py -q`
-  Result: `7 passed`
-- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+- `python -m ruff format --check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
   Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py -q`
+  Result: `8 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `17 passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
+  Result: `3 passed`
 - `cd apps\chat_ui; npm run test`
-  Result: `41 passed`
+  Result: `64 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
-- `git diff --check -- src\francis\governance\approval_projection.py tests\test_api_approvals.py apps\chat_ui\src\index.ts apps\chat_ui\src\index.test.ts apps\chat_ui\src\settings\index.ts apps\chat_ui\src\settings\index.test.ts apps\chat_ui\src\App.tsx`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operations receipt filter slice:

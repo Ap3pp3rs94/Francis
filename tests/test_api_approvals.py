@@ -225,6 +225,77 @@ def test_approval_list_surfaces_linked_operation_gate_handles(monkeypatch, tmp_p
     assert artifact_dir.parent.name == "supervised_exec"
 
 
+def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    approval = approvals.request("plugin.run", "metadata loop handles", {"plugin_id": "plugin.meta"})
+    approval_id = str(approval["id"])
+    operation_id = "tsk_approval_metadata_handles"
+    mission_id = "mission_approval_metadata_handles"
+    trace_id = "trace_approval_metadata_handles"
+    run_id = "run_approval_metadata_handles"
+    artifact_dir = str(data_root / "artifacts" / "metadata" / run_id)
+
+    task_dir = data_root / "tasks" / operation_id
+    task_dir.mkdir(parents=True)
+    (task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": operation_id,
+                "status": "pending",
+                "capability": "plugin.run",
+                "requester_id": "test.approvals.metadata_handles",
+                "created_at": "2024-03-09T16:00:00+00:00",
+                "updated_at": "2024-03-09T16:00:01+00:00",
+                "inputs": {
+                    "meta": {
+                        "approval_id": approval_id,
+                        "mission_id": mission_id,
+                        "run_id": run_id,
+                        "artifact_dir": artifact_dir,
+                    }
+                },
+                "meta": {
+                    "trace_id": trace_id,
+                },
+                "result": {
+                    "data": {
+                        "status": "needs_approval",
+                        "governance": {
+                            "gate": "approvals_gate",
+                            "next_step": "approve_exact_action",
+                        },
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(create_app())
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+
+    assert listed_item["operation_id"] == operation_id
+    assert listed_item["mission_id"] == mission_id
+    assert listed_item["operation_status"] == "queued"
+    assert listed_item["operation_result_status"] == "needs_approval"
+    assert listed_item["gate"] == "approvals_gate"
+    assert listed_item["next_step"] == "approve_exact_action"
+    assert listed_item["trace_id"] == trace_id
+    assert listed_item["run_id"] == run_id
+    assert listed_item["artifact_dir"] == artifact_dir
+
+
 def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

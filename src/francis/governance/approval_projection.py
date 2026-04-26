@@ -62,6 +62,18 @@ def _approval_task_match(task: dict[str, Any], approval_id: str) -> bool:
     return any(_safe_str(candidate).strip() == approval_id for candidate in candidates)
 
 
+def _task_handle_from_metadata(task: dict[str, Any], *keys: str) -> str:
+    task_meta = _as_dict(task.get("meta"))
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    for source in (task_meta, input_meta):
+        for key in keys:
+            value = _safe_str(source.get(key)).strip()
+            if value:
+                return value
+    return ""
+
+
 def approval_task_record(
     approval_id: str,
     *,
@@ -161,6 +173,7 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
         sandbox.get("trace_id"),
         audit.get("trace_id"),
         sandbox_audit.get("trace_id"),
+        _task_handle_from_metadata(task, "trace_id", "traceId"),
     )
     if trace_id:
         out["trace_id"] = trace_id
@@ -172,6 +185,7 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
         sandbox.get("run_id"),
         audit.get("run_id"),
         sandbox_audit.get("run_id"),
+        _task_handle_from_metadata(task, "run_id", "runId"),
     )
     if run_id:
         out["run_id"] = run_id
@@ -185,6 +199,7 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
         sandbox.get("artifact_path"),
         audit.get("artifact_dir"),
         sandbox_audit.get("artifact_dir"),
+        _task_handle_from_metadata(task, "artifact_dir", "artifact_path"),
     )
     if artifact_dir:
         out["artifact_dir"] = artifact_dir
