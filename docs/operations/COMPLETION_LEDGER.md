@@ -575,6 +575,14 @@ the fact that automatic retry is not enabled. Mission detail, world-state
 deadletter lists, continuity deadletter previews, and ORB deadletter cards can
 show this recovery posture without implying a reopen or retry mutation path.
 
+As of `2026-04-26`, linked-task transition receipts preserve the task record's
+own `updated_at` timestamp when syncing task state back into mission metadata.
+Mission ticks compare against the same task timestamp instead of a second
+mission-store clock sample, so a repeated tick does not create false
+`mission_ticked` progress just because the transition sync and task update
+landed on different seconds. This hardens Stage 3 tick idempotence without
+changing execution, approval, retry, or deadletter policy.
+
 As of `2026-04-25`, failed-but-not-deadlettered missions are visible as their
 own recovery queue. World-state snapshots expose `failed_missions`, continuity
 briefings expose `failed_preview`, mission queue-run responses preserve a
@@ -3122,7 +3130,20 @@ Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop han
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
-  Result: `failed once in tests/test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly; isolated rerun of that test passed`
+  Result: `failed once in tests/test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly; isolated rerun of that test passed; same bundle rerun passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission tick timestamp-idempotence slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\missions\store.py src\francis\operations\runtime.py src\francis\agent\executor.py src\francis\api\routes\operations.py tests\test_mission_store.py`
+  Result: `5 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\missions\store.py src\francis\operations\runtime.py src\francis\agent\executor.py src\francis\api\routes\operations.py tests\test_mission_store.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_mission_store.py tests\test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly -q`
+  Result: `7 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py -q`
+  Result: `26 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `93 passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 

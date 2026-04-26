@@ -182,6 +182,71 @@ def test_record_linked_task_transition_surfaces_exact_pending_approval(tmp_path:
     assert queue_item["operator_hint"] == "Approval apr_exact_123 is pending before the mission can continue."
 
 
+def test_record_linked_task_transition_preserves_task_timestamp_for_idempotent_tick(tmp_path: Path) -> None:
+    mission, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Keep blocked mission ticks idempotent.",
+            requester_id="test.mission.store",
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert mission is not None
+
+    task_id = "tsk_blocked_timestamp"
+    task_updated_at = "2026-04-26T06:30:27+00:00"
+    _write_task_record(
+        tmp_path,
+        task_id,
+        {
+            "task_id": task_id,
+            "status": "accepted",
+            "created_at": "2026-04-26T06:30:26+00:00",
+            "updated_at": task_updated_at,
+            "status_reason": "insufficient_trust",
+            "result": {
+                "data": {
+                    "status": "blocked",
+                    "governance": {
+                        "gate": "trust_gate",
+                        "next_step": "raise_trust_or_reduce_risk",
+                    },
+                }
+            },
+        },
+    )
+
+    updated, err = mission_store.record_linked_task_transition(
+        mission.mission_id,
+        task_id,
+        repo_root=tmp_path,
+        task_status="accepted",
+        result_status="blocked",
+        status_reason="insufficient_trust",
+        governance={"gate": "trust_gate", "next_step": "raise_trust_or_reduce_risk"},
+        task_updated_at=task_updated_at,
+        actor="test.mission.store",
+        note="sync blocked task",
+    )
+    assert err is None
+    assert updated is not None
+    assert updated.status == MissionStatus.BLOCKED
+    assert updated.meta["last_task_updated_at"] == task_updated_at
+
+    ticked, applied, err = mission_store.tick_mission(
+        mission.mission_id,
+        repo_root=tmp_path,
+        actor="test.mission.store",
+        note="repeat blocked task sync",
+    )
+    assert err is None
+    assert ticked is not None
+    assert applied is False
+
+    history_events = [item.get("event") for item in mission_store.read_history(mission.mission_id, repo_root=tmp_path)]
+    assert history_events.count("mission_ticked") == 0
+
+
 def test_mission_queue_refreshes_approved_gate_into_rerun_action(tmp_path: Path) -> None:
     mission, err = mission_store.create_mission(
         MissionCreateRequest(

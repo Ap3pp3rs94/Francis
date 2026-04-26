@@ -340,6 +340,7 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
             result_status=result_status,
             status_reason=_safe_str(updated.get("status_reason")).strip(),
             governance=governance,
+            task_updated_at=_safe_str(updated.get("updated_at")).strip(),
             actor="api.operations",
             note="governance_hold",
         )

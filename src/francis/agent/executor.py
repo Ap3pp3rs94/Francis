@@ -202,6 +202,7 @@ def _sync_task_transition_to_mission(task: dict[str, Any], *, note: str) -> None
         result_status=result_status,
         status_reason=_safe_str(task.get("status_reason")).strip(),
         governance=governance,
+        task_updated_at=_safe_str(task.get("updated_at")).strip(),
         actor=_safe_str(task.get("assigned_to")).strip() or "executor",
         note=note,
     )

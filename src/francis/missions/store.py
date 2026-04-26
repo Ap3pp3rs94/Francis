@@ -1374,6 +1374,7 @@ def record_linked_task_transition(
     approval_id: str = "",
     previous_approval_id: str = "",
     approval_status: str = "",
+    task_updated_at: str = "",
     actor: str | None = None,
     note: str | None = None,
 ) -> tuple[MissionRecord | None, str | None]:
@@ -1388,6 +1389,7 @@ def record_linked_task_transition(
     cleaned_approval_id = str(approval_id or "").strip()
     cleaned_previous_approval_id = str(previous_approval_id or "").strip()
     cleaned_approval_status = str(approval_status or governance_payload.get("approval_status") or "").strip().lower()
+    cleaned_task_updated_at = str(task_updated_at or "").strip()
     if not cleaned_task_id:
         return None, "task_id_required"
 
@@ -1423,7 +1425,7 @@ def record_linked_task_transition(
             "last_task_previous_approval_id": cleaned_previous_approval_id or None,
             "last_task_approval_status": cleaned_approval_status or None,
             "last_task_next_step": _redact_optional_text(governance_payload.get("next_step")),
-            "last_task_updated_at": _now(),
+            "last_task_updated_at": cleaned_task_updated_at or _now(),
         }
     )
 

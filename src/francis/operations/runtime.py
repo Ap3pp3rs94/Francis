@@ -282,6 +282,7 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
             governance=governance,
             approval_id=approval_id,
             previous_approval_id=previous_approval_id,
+            task_updated_at=_safe_str(updated.get("updated_at")).strip(),
             actor="operations.runtime",
             note="governance_hold",
         )
