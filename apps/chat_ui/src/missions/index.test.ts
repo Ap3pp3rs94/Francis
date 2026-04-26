@@ -1471,7 +1471,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           memory_receipt_count: 1,
         },
         current_operation_id: "tsk_loop",
+        current_operation_name: "plan.create",
+        current_operation_plane: "P9_OBSERVABILITY",
         current_operation_status: "queued",
+        current_advance_action: "run_linked_operation",
         current_gate: "approvals_gate",
         current_approval_id: "apr_loop",
         current_trace_id: "trace_loop",
@@ -1482,6 +1485,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         latest_run_ts: "2024-03-09T16:00:01Z",
         latest_history_event: "advance_receipt",
         latest_history_ts: "2026-04-15T12:05:00Z",
+        plan_status: "in_progress",
+        plan_current_step_id: "understand",
+        plan_current_step_title: "Understand goal + constraints",
+        plan_step_count: 4,
+        plan_checkpoint_count: 3,
       },
       memory_receipt_count: 1,
       latest_memory_receipt: {
@@ -1799,7 +1807,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.latest_memory_receipt?.references?.mission_id, "mission_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.references?.approval_id, "apr_loop");
     assert.equal(response.receipt_summary?.current_operation_id, "tsk_loop");
+    assert.equal(response.receipt_summary?.current_operation_name, "plan.create");
+    assert.equal(response.receipt_summary?.current_operation_plane, "P9_OBSERVABILITY");
     assert.equal(response.receipt_summary?.current_operation_status, "queued");
+    assert.equal(response.receipt_summary?.current_advance_action, "run_linked_operation");
     assert.equal(response.receipt_summary?.current_gate, "approvals_gate");
     assert.equal(response.receipt_summary?.current_approval_id, "apr_loop");
     assert.equal(response.receipt_summary?.current_trace_id, "trace_loop");
@@ -1807,6 +1818,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.current_artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.receipt_summary?.latest_run_event, "governance_hold");
     assert.equal(response.receipt_summary?.latest_history_event, "advance_receipt");
+    assert.equal(response.receipt_summary?.plan_status, "in_progress");
+    assert.equal(response.receipt_summary?.plan_current_step_id, "understand");
+    assert.equal(response.receipt_summary?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(response.receipt_summary?.plan_step_count, 4);
+    assert.equal(response.receipt_summary?.plan_checkpoint_count, 3);
     assert.equal(response.memory_receipt_count, 1);
     assert.equal(response.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.latest_memory_receipt?.operation_id, "tsk_loop");

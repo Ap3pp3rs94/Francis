@@ -1021,6 +1021,12 @@ and existing plan status/current-step/count fields inside `receipt_summary`
 when the linked operation already exposes them. This is compact readback only;
 it does not alter mission advancement, execution authority, or plan generation.
 
+As of `2026-04-26`, the chat UI mission client preserves those mission detail
+receipt-summary operation identity and plan fields. `MissionReceiptSummary`
+parsing now retains the current operation name, ORB plane, advance action, plan
+status, current plan step, and plan/checkpoint counts when the backend provides
+them, without adding new rendering claims or execution authority.
+
 As of `2026-04-26`, continuity and world-state mission current-task read models
 also preserve that backend-backed operation identity. Mission queue, recent
 mission, and shift-briefing current-task projections can now carry operation name,
@@ -3941,6 +3947,13 @@ Latest targeted validation for the `2026-04-26` mission receipt-summary operatio
 - `python -m pytest tests\test_api_missions.py -q`
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` mission client receipt-summary identity slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` chat mission ingress first-operation slice:
