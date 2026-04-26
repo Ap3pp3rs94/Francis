@@ -33,6 +33,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "summary": "Checked policy before execution.",
             "domain": "operations",
             "run_id": "run-1",
+            "trace_id": "trace-policy",
             "conversation_id": "conv-1",
             "approval_id": "appr-1",
             "plugin_id": "plugin-1",
@@ -74,6 +75,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
             "summary": "Rollout was blocked after risk check.",
             "domain": "operations",
             "run_id": "run-2",
+            "trace_id": "trace-rollout",
             "tags": ["ops", "risk"],
             "content": {"step": "risk-check", "decision": "block"},
         },
@@ -81,7 +83,9 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert third.status_code == 200
     assert third.json()["ok"] is True
 
-    listed = client.get("/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout&limit=10")
+    listed = client.get(
+        "/explanations/list?kind=decision&domain=operations&tags=ops&search=rollout&trace_id=trace-rollout&limit=10"
+    )
     assert listed.status_code == 200
     listed_body = listed.json()
     assert listed_body["limit"] == 10
@@ -95,15 +99,16 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     fetched_body = fetched.json()
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["id"] == "exp-gamma"
+    assert fetched_body["item"]["trace_id"] == "trace-rollout"
     assert fetched_body["content"]["decision"] == "block"
 
-    exported_json = client.get("/explanations/export?format=json&kind=decision")
+    exported_json = client.get("/explanations/export?format=json&kind=decision&trace_id=trace-policy")
     assert exported_json.status_code == 200
     assert exported_json.headers["content-type"].startswith("application/json")
     exported_json_body = json.loads(exported_json.text)
     exported_json_ids = {str(item.get("id")) for item in exported_json_body["items"]}
     assert "exp-alpha" in exported_json_ids
-    assert "exp-gamma" in exported_json_ids
+    assert "exp-gamma" not in exported_json_ids
     assert "exp-beta" not in exported_json_ids
 
     exported_csv = client.get("/explanations/export?format=csv&severity=error")
@@ -113,6 +118,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     row_ids = {str(row.get("id")) for row in rows}
     assert "exp-gamma" in row_ids
     assert "exp-alpha" not in row_ids
+    assert rows[0]["trace_id"] == "trace-rollout"
 
 
 def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path: Path) -> None:

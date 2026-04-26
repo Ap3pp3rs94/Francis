@@ -192,6 +192,13 @@ fallback-task, and trace filters from real ids, keeps payloads out of the bounde
 timeline list requests, de-duplicates returned events by id, and sorts newest
 receipt-backed evidence first before rendering it.
 
+As of `2026-04-26`, explanation and audit records can preserve and filter by
+`trace_id`. `/explanations/list` and `/explanations/export` accept bounded
+trace filters, summaries/detail/export payloads retain the trace id, and the
+chat UI explanation explorer client preserves the same trace linkage across
+list, get, and export calls. This gives trace-bearing mission and operation
+receipts another read path without adding execution or synthetic trace state.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2466,6 +2473,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link contract slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py -q`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `40 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check -- src\francis\api\routes\explanation.py tests\test_api_explanation.py apps\chat_ui\src\explanation_explorer\index.ts apps\chat_ui\src\explanation_explorer\index.test.ts apps\chat_ui\package.json docs\operations\COMPLETION_LEDGER.md`
+  Result: `passed` (line-ending warnings only for existing CRLF/LF normalization)
 
 Latest targeted validation for the `2026-04-26` Stage 3 artifact inspection recovery guidance slice:
 

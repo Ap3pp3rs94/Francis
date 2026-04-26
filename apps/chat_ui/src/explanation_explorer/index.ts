@@ -46,6 +46,7 @@ export type ExplanationRecord = {
 
   // Scoping / linkage
   run_id?: string;
+  trace_id?: string;
   domain?: string;
   conversation_id?: string;
   approval_id?: string;
@@ -89,6 +90,7 @@ export type ExplanationListQuery = {
 
   domain?: string;
   run_id?: string;
+  trace_id?: string;
   conversation_id?: string;
   approval_id?: string;
   plugin_id?: string;
@@ -169,7 +171,7 @@ function clampInt(n: number, min: number, max: number): number {
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const t = window.setTimeout(() => {
+    const t = globalThis.setTimeout(() => {
       cleanup();
       resolve();
     }, ms);
@@ -180,7 +182,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     };
 
     const cleanup = () => {
-      window.clearTimeout(t);
+      globalThis.clearTimeout(t);
       if (signal) signal.removeEventListener("abort", onAbort);
     };
 
@@ -243,9 +245,9 @@ function createAbortWiring(opts?: { timeoutMs?: number; signal?: AbortSignal }):
   const controller = new AbortController();
   let didTimeout = false;
 
-  let timeoutId: number | null = null;
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   if (timeoutMs > 0) {
-    timeoutId = window.setTimeout(() => {
+    timeoutId = globalThis.setTimeout(() => {
       didTimeout = true;
       controller.abort();
     }, timeoutMs);
@@ -259,7 +261,7 @@ function createAbortWiring(opts?: { timeoutMs?: number; signal?: AbortSignal }):
   }
 
   const cleanup = () => {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     if (external) external.removeEventListener("abort", onExternalAbort);
   };
 
@@ -368,6 +370,9 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const runId = safeString(raw.run_id, "");
   if (runId) rec.run_id = runId;
 
+  const traceId = safeString(raw.trace_id, safeString(raw.traceId, ""));
+  if (traceId) rec.trace_id = traceId;
+
   const domain = safeString(raw.domain, "");
   if (domain) rec.domain = domain;
 
@@ -436,6 +441,7 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         severity: q?.severity,
         domain: q?.domain,
         run_id: q?.run_id,
+        trace_id: q?.trace_id,
         conversation_id: q?.conversation_id,
         approval_id: q?.approval_id,
         plugin_id: q?.plugin_id,
@@ -454,6 +460,7 @@ export function defaultExplanationEndpoints(): ExplanationEndpoints {
         severity: q.severity,
         domain: q.domain,
         run_id: q.run_id,
+        trace_id: q.trace_id,
         conversation_id: q.conversation_id,
         approval_id: q.approval_id,
         plugin_id: q.plugin_id,
