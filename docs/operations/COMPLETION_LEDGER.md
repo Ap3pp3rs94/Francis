@@ -298,6 +298,17 @@ operation-detail memory summaries, mission receipt helpers, and memory timeline
 loop projections preserve those fields so failure review can start from the
 receipt itself instead of inferring the failure reason from mission detail state.
 
+As of `2026-04-26`, failed terminal mission-operation receipts also preserve a
+bounded deadletter handoff loop. The terminal operation receipt now carries
+`active_stage=deadletter`, `handoff_stage=deadletter`,
+`handoff_action=retry_or_deadletter`, terminal operation/trace/run/artifact
+handles, and `current_task_source=terminal_operation_receipt` so recovery
+surfaces can point at the real receipt-backed operation review path. Mission
+receipt helpers, operation detail memory summaries, and memory timeline loop
+projections preserve those fields from receipt truth. This is receipt truth
+only; it does not add retry authority, deadletter mutation authority,
+scheduling behavior, or synthetic operation state.
+
 As of `2026-04-26`, the continuity briefing also uses those terminal
 mission-operation receipts as a fallback when projecting a mission's current
 task. Failed mission previews keep the receipt-backed operation id, trace
@@ -3238,6 +3249,20 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 failed terminal receipt
+handoff slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_mission_receipts.py -q`
+  Result: `3 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\operations\runtime.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\operations\runtime.py tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 structured explanation
 reference readback slice:

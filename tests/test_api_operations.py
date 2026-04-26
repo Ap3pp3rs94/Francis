@@ -853,6 +853,15 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["operation_error"] == "plugin_id_required"
     assert receipt["recovery_next_step"] == "review_operation_detail"
     assert receipt["subsystem"] == "operations.runtime"
+    assert receipt["active_stage"] == "deadletter"
+    assert receipt["handoff_stage"] == "deadletter"
+    assert receipt["handoff_action"] == "retry_or_deadletter"
+    assert receipt["handoff_operation_id"] == operation_id
+    assert receipt["handoff_next_step"] == "review_operation_detail"
+    assert receipt["current_task_source"] == "terminal_operation_receipt"
+    assert receipt["current_task_operation_id"] == operation_id
+    assert receipt["current_task_next_step"] == "review_operation_detail"
+    assert receipt["memory_receipt_count"] == 1
     assert "Mission operation failed" in receipt["message"]
     assert receipt["references"]["mission_id"] == mission_id
     assert receipt["references"]["operation_id"] == operation_id
@@ -875,6 +884,14 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipts[0]["payload"]["meta"]["operation_status"] == "failed"
     assert receipts[0]["payload"]["meta"]["operation_error"] == "plugin_id_required"
     assert receipts[0]["payload"]["meta"]["recovery_next_step"] == "review_operation_detail"
+    assert receipts[0]["loop"]["active_stage"] == "deadletter"
+    assert receipts[0]["loop"]["handoff_stage"] == "deadletter"
+    assert receipts[0]["loop"]["handoff_action"] == "retry_or_deadletter"
+    assert receipts[0]["loop"]["handoff_operation_id"] == operation_id
+    assert receipts[0]["loop"]["handoff_next_step"] == "review_operation_detail"
+    assert receipts[0]["loop"]["current_task_source"] == "terminal_operation_receipt"
+    assert receipts[0]["loop"]["current_task_operation_id"] == operation_id
+    assert receipts[0]["loop"]["current_task_next_step"] == "review_operation_detail"
     assert receipts[0]["loop"]["operation_error"] == "plugin_id_required"
     assert receipts[0]["loop"]["recovery_next_step"] == "review_operation_detail"
 
@@ -883,6 +900,8 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     fetched_body = fetched.json()
     assert fetched_body["latest_memory_receipt"]["operation_error"] == "plugin_id_required"
     assert fetched_body["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
+    assert fetched_body["latest_memory_receipt"]["handoff_action"] == "retry_or_deadletter"
+    assert fetched_body["latest_memory_receipt"]["current_task_source"] == "terminal_operation_receipt"
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
