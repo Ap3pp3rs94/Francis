@@ -249,6 +249,13 @@ operation id so stale advance metadata is not attached to an unrelated current
 task. No operation creation, execution, governance, approval, or memory-write
 behavior is changed.
 
+As of `2026-04-26`, the chat UI mission client preserves that advance operation
+identity without adding new visual claims. `MissionQueueItem` and
+`MissionCurrentTask` parsing now retain the backend-provided operation name,
+operation ORB plane, and advance action, so later interface surfaces can render
+the real plan/execute stage identity from the typed mission contract instead of
+falling back to ids alone.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2523,6 +2530,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission advance operation-identity UI contract slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `41 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission advance operation-identity slice:
 

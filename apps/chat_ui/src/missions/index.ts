@@ -24,6 +24,8 @@ export type MissionRecord = {
   last_task_gate?: string;
   last_task_next_step?: string;
   last_advance_operation_id?: string;
+  last_advance_operation_name?: string;
+  last_advance_operation_plane?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
@@ -152,6 +154,8 @@ export type MissionCurrentTask = {
   mission_id?: string;
   source?: string;
   operation_id?: string;
+  operation_name?: string;
+  operation_plane?: string;
   task_status?: string;
   operation_status?: string;
   result_status?: string;
@@ -162,6 +166,7 @@ export type MissionCurrentTask = {
   approval_status?: string;
   handoff_stage?: string;
   handoff_action?: string;
+  advance_action?: string;
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
@@ -318,6 +323,8 @@ export type MissionQueueItem = MissionRecord & {
   last_advance_action?: string;
   last_advance_outcome?: string;
   last_advance_operation_id?: string;
+  last_advance_operation_name?: string;
+  last_advance_operation_plane?: string;
   last_advance_operation_status?: string;
   last_advance_message?: string;
   last_advance_actor?: string;
@@ -586,6 +593,8 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
     last_task_gate: safeString(raw.last_task_gate, "") || undefined,
     last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    last_advance_operation_name: safeString(raw.last_advance_operation_name, "") || undefined,
+    last_advance_operation_plane: safeString(raw.last_advance_operation_plane, "") || undefined,
     last_task_approval_id: safeString(raw.last_task_approval_id, "") || undefined,
     last_task_previous_approval_id: safeString(raw.last_task_previous_approval_id, "") || undefined,
     last_task_previous_approval_status: safeString(raw.last_task_previous_approval_status, "") || undefined,
@@ -736,6 +745,8 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_advance_action: safeString(raw.last_advance_action, "") || undefined,
     last_advance_outcome: safeString(raw.last_advance_outcome, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    last_advance_operation_name: safeString(raw.last_advance_operation_name, "") || undefined,
+    last_advance_operation_plane: safeString(raw.last_advance_operation_plane, "") || undefined,
     last_advance_operation_status: safeString(raw.last_advance_operation_status, "") || undefined,
     last_advance_message: safeString(raw.last_advance_message, "") || undefined,
     last_advance_actor: safeString(raw.last_advance_actor, "") || undefined,
@@ -878,6 +889,8 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     mission_id: safeString(raw.mission_id, "") || undefined,
     source: safeString(raw.source, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
+    operation_name: safeString(raw.operation_name, "") || undefined,
+    operation_plane: safeString(raw.operation_plane, "") || undefined,
     task_status: safeString(raw.task_status, "") || undefined,
     operation_status: safeString(raw.operation_status, "") || undefined,
     result_status: safeString(raw.result_status, "") || undefined,
@@ -888,6 +901,7 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     approval_status: safeString(raw.approval_status, "") || undefined,
     handoff_stage: safeString(raw.handoff_stage, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
+    advance_action: safeString(raw.advance_action, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
     run_id: safeString(raw.run_id, "") || undefined,
     artifact_dir: safeString(raw.artifact_dir, "") || undefined,
@@ -900,6 +914,8 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
   if (
     !task.mission_id &&
     !task.operation_id &&
+    !task.operation_name &&
+    !task.operation_plane &&
     !task.task_status &&
     !task.operation_status &&
     !task.result_status &&
@@ -907,6 +923,7 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     !task.next_step &&
     !task.approval_id &&
     !task.handoff_action &&
+    !task.advance_action &&
     !task.run_id &&
     !task.artifact_dir &&
     !task.latest_receipt_event &&

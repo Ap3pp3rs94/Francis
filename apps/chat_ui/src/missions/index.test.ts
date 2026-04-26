@@ -230,6 +230,8 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
           last_task_next_step: "review_pending_approval",
           last_task_reason: "Approval apr_alpha is pending.",
           last_advance_operation_id: "tsk_alpha",
+          last_advance_operation_name: "plan.create",
+          last_advance_operation_plane: "P7_EXECUTION",
           last_task_approval_id: "apr_alpha",
           last_task_previous_approval_id: "apr_previous",
           last_task_previous_approval_status: "approved",
@@ -265,6 +267,8 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
     assert.equal(response.items[0]?.last_task_next_step, "review_pending_approval");
     assert.equal(response.items[0]?.last_task_reason, "Approval apr_alpha is pending.");
     assert.equal(response.items[0]?.last_advance_operation_id, "tsk_alpha");
+    assert.equal(response.items[0]?.last_advance_operation_name, "plan.create");
+    assert.equal(response.items[0]?.last_advance_operation_plane, "P7_EXECUTION");
     assert.equal(response.items[0]?.last_task_approval_id, "apr_alpha");
     assert.equal(response.items[0]?.last_task_previous_approval_id, "apr_previous");
     assert.equal(response.items[0]?.last_task_previous_approval_status, "approved");
@@ -1124,6 +1128,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         last_advance_action: "run_linked_operation",
         last_advance_outcome: "requires_operator",
         last_advance_operation_id: "tsk_loop",
+        last_advance_operation_name: "plan.create",
+        last_advance_operation_plane: "P7_EXECUTION",
         last_advance_operation_status: "blocked",
         last_advance_message: "Approval apr_loop is pending before execution can continue.",
         last_advance_actor: "test.missions",
@@ -1140,6 +1146,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         mission_id: "mission_loop",
         source: "mission_meta",
         operation_id: "tsk_loop",
+        operation_name: "plan.create",
+        operation_plane: "P7_EXECUTION",
         task_status: "accepted",
         operation_status: "queued",
         result_status: "pending",
@@ -1150,6 +1158,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         approval_status: "pending",
         handoff_stage: "gate",
         handoff_action: "review_pending_approval",
+        advance_action: "run_linked_operation",
         trace_id: "trace_loop",
         run_id: "run_loop",
         artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
@@ -1346,10 +1355,14 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.queue_item?.last_advance_action, "run_linked_operation");
     assert.equal(response.queue_item?.last_advance_outcome, "requires_operator");
     assert.equal(response.queue_item?.last_advance_operation_id, "tsk_loop");
+    assert.equal(response.queue_item?.last_advance_operation_name, "plan.create");
+    assert.equal(response.queue_item?.last_advance_operation_plane, "P7_EXECUTION");
     assert.equal(response.queue_item?.last_advance_operation_status, "blocked");
     assert.equal(response.queue_item?.last_advance_applied, false);
     assert.equal(response.current_task?.source, "mission_meta");
     assert.equal(response.current_task?.operation_id, "tsk_loop");
+    assert.equal(response.current_task?.operation_name, "plan.create");
+    assert.equal(response.current_task?.operation_plane, "P7_EXECUTION");
     assert.equal(response.current_task?.task_status, "accepted");
     assert.equal(response.current_task?.operation_status, "queued");
     assert.equal(response.current_task?.result_status, "pending");
@@ -1358,6 +1371,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.current_task?.approval_status, "pending");
     assert.equal(response.current_task?.handoff_stage, "gate");
     assert.equal(response.current_task?.handoff_action, "review_pending_approval");
+    assert.equal(response.current_task?.advance_action, "run_linked_operation");
     assert.equal(response.current_task?.trace_id, "trace_loop");
     assert.equal(response.current_task?.run_id, "run_loop");
     assert.equal(response.current_task?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
