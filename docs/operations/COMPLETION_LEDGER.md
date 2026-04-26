@@ -753,6 +753,15 @@ that stage and the existing mission loop grids render it alongside the other
 loop stages, so operators can see when backend interface context is available
 without inventing UI-only state.
 
+As of `2026-04-26`, completed receipt-backed mission loops now return their
+active handoff to the `interface` stage after memory closes. A completed mission
+with a terminal operation memory receipt keeps the `memory` stage and receipt
+details intact, but `loop_state.active_stage` and the top-level handoff now
+point to `interface` / `review_result` with the real operation, trace, run, and
+artifact handles. This makes the final `memory -> interface` leg visible without
+adding execution authority or changing blocked, failed, deadlettered, or
+pre-memory missions.
+
 As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
 explicit `/mission ...` or `mission: ...` commands. That path creates only a
 queued mission, respects the same operator posture write guard as mission APIs,
@@ -2940,6 +2949,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission recovery handoff
   Result: `60 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 completed mission interface handoff slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_mission_loop_contract.py tests\test_api_missions.py -q`
+  Result: `28 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_mission_loop_contract.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py`
+  Result: `passed; ruff warned it could not write cache files under .ruff_cache due to access denied`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission memory plan receipt slice:
 

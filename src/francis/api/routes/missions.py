@@ -961,21 +961,37 @@ def _mission_loop_state(
             count=0,
         )
 
-    active_stage = "memory"
-    summary = "Mission continuity receipts are available for review."
-    handoff = _loop_handoff(
-        "memory",
-        "review_continuity",
-        "Trace and mission continuity receipts are recorded; review local history before declaring new work.",
-        operation_id=latest_operation_id,
-        trace_id=latest_trace_id,
-        run_id=latest_run_id,
-        artifact_dir=latest_artifact_dir,
-        latest_event=latest_history_event,
-        latest_ts=latest_history_ts,
-        next_step=record.next_step,
-    )
     record_status = record.status.value
+    if record_status == "completed" and memory_receipt_count:
+        active_stage = "interface"
+        summary = "Mission execution, trace, and memory receipts are ready for operator review."
+        handoff = _loop_handoff(
+            "interface",
+            "review_result",
+            "Review the completed mission result, trace, and memory receipt before declaring follow-up work.",
+            operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
+            trace_id=_first_text(latest_memory_receipt.get("trace_id"), latest_trace_id),
+            run_id=_first_text(latest_memory_receipt.get("run_id"), latest_run_id),
+            artifact_dir=_first_text(latest_memory_receipt.get("artifact_dir"), latest_artifact_dir),
+            latest_event=latest_history_event,
+            latest_ts=latest_history_ts,
+            next_step="review_completed_mission",
+        )
+    else:
+        active_stage = "memory"
+        summary = "Mission continuity receipts are available for review."
+        handoff = _loop_handoff(
+            "memory",
+            "review_continuity",
+            "Trace and mission continuity receipts are recorded; review local history before declaring new work.",
+            operation_id=latest_operation_id,
+            trace_id=latest_trace_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
+            latest_event=latest_history_event,
+            latest_ts=latest_history_ts,
+            next_step=record.next_step,
+        )
     if record_status == "deadlettered":
         active_stage = "deadletter"
         summary = "The mission is deadlettered and should be reviewed before any retry or replacement work."

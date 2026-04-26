@@ -62,8 +62,14 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["mission"]["status"] == "completed"
-    assert fetched_body["loop_state"]["active_stage"] == "memory"
+    assert fetched_body["loop_state"]["active_stage"] == "interface"
+    assert fetched_body["loop_state"]["handoff"]["stage"] == "interface"
+    assert fetched_body["loop_state"]["handoff"]["action"] == "review_result"
+    assert fetched_body["loop_state"]["handoff"]["operation_id"] == operation_id
+    assert fetched_body["loop_state"]["handoff"]["next_step"] == "review_completed_mission"
     assert fetched_body["loop_state"]["memory"]["memory_receipt_count"] == 1
+    assert fetched_body["loop_state"]["interface"]["status"] == "available"
+    assert fetched_body["loop_state"]["interface"]["operation_id"] == operation_id
     assert fetched_body["receipt_summary"]["memory_receipt_count"] == 1
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
 
