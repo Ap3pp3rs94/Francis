@@ -249,6 +249,12 @@ evidence, latest receipt handles, and receipt-summary counts derived from
 continuity-ledger entries for completed mission-linked operation runs; the memory
 loop stage exposes those receipts only when real mission and operation ids exist.
 
+As of `2026-04-26`, the chat UI missions client preserves that mission-detail
+memory receipt contract. `MissionsClient.get` now retains flat ledger receipt ids,
+mission, operation, trace, run, artifact, domain, scope, and count fields from
+mission detail, receipt summary, and the memory loop stage while still preserving
+direct action response receipt references.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,

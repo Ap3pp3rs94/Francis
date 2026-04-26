@@ -1162,6 +1162,20 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         linked_operation_count: 1,
         run_ledger_count: 1,
         history_count: 2,
+        memory_receipt_count: 1,
+        latest_memory_receipt: {
+          id: "ledger_loop",
+          source: "continuity.ledger",
+          ts: 1770000300,
+          mission_id: "mission_loop",
+          operation_id: "tsk_loop",
+          trace_id: "trace_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          operation_status: "succeeded",
+          domain: "operations",
+          scope: "mission.loop",
+        },
         current_operation_id: "tsk_loop",
         current_operation_status: "queued",
         current_gate: "approvals_gate",
@@ -1175,6 +1189,37 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         latest_history_event: "advance_receipt",
         latest_history_ts: "2026-04-15T12:05:00Z",
       },
+      memory_receipt_count: 1,
+      latest_memory_receipt: {
+        id: "ledger_loop",
+        source: "continuity.ledger",
+        ts: 1770000300,
+        mission_id: "mission_loop",
+        operation_id: "tsk_loop",
+        trace_id: "trace_loop",
+        run_id: "run_loop",
+        artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+        operation_status: "succeeded",
+        capability: "plugin.run",
+        domain: "operations",
+        scope: "mission.loop",
+      },
+      memory_receipts: [
+        {
+          id: "ledger_loop",
+          source: "continuity.ledger",
+          ts: 1770000300,
+          mission_id: "mission_loop",
+          operation_id: "tsk_loop",
+          trace_id: "trace_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+          operation_status: "succeeded",
+          capability: "plugin.run",
+          domain: "operations",
+          scope: "mission.loop",
+        },
+      ],
       loop_state: {
         summary: "The mission is waiting on a governance decision before it can continue.",
         active_stage: "gate",
@@ -1218,10 +1263,26 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         },
         memory: {
           status: "recorded",
-          detail: "2 mission continuity receipt(s) are stored in local history.",
-          count: 2,
+          detail: "Mission continuity is backed by 2 mission history receipt(s), 1 completed-operation memory receipt(s).",
+          count: 3,
+          operation_id: "tsk_loop",
+          trace_id: "trace_loop",
           latest_event: "advance_receipt",
           latest_ts: "2026-04-15T12:05:00Z",
+          memory_receipt_count: 1,
+          latest_memory_receipt: {
+            id: "ledger_loop",
+            source: "continuity.ledger",
+            ts: 1770000300,
+            mission_id: "mission_loop",
+            operation_id: "tsk_loop",
+            trace_id: "trace_loop",
+            run_id: "run_loop",
+            artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
+            operation_status: "succeeded",
+            domain: "operations",
+            scope: "mission.loop",
+          },
         },
         interface: {
           status: "available",
@@ -1266,6 +1327,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.trace?.latest_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.loop_state?.memory?.latest_event, "advance_receipt");
     assert.equal(response.loop_state?.memory?.latest_ts, "2026-04-15T12:05:00Z");
+    assert.equal(response.loop_state?.memory?.memory_receipt_count, 1);
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.id, "ledger_loop");
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.operation_id, "tsk_loop");
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.references?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.interface?.status, "available");
     assert.equal(response.loop_state?.interface?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.interface?.approval_id, "apr_loop");
@@ -1302,6 +1367,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.linked_operation_count, 1);
     assert.equal(response.receipt_summary?.run_ledger_count, 1);
     assert.equal(response.receipt_summary?.history_count, 2);
+    assert.equal(response.receipt_summary?.memory_receipt_count, 1);
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.id, "ledger_loop");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.mission_id, "mission_loop");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.references?.mission_id, "mission_loop");
     assert.equal(response.receipt_summary?.current_operation_id, "tsk_loop");
     assert.equal(response.receipt_summary?.current_operation_status, "queued");
     assert.equal(response.receipt_summary?.current_gate, "approvals_gate");
@@ -1311,6 +1380,13 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.current_artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.receipt_summary?.latest_run_event, "governance_hold");
     assert.equal(response.receipt_summary?.latest_history_event, "advance_receipt");
+    assert.equal(response.memory_receipt_count, 1);
+    assert.equal(response.latest_memory_receipt?.id, "ledger_loop");
+    assert.equal(response.latest_memory_receipt?.operation_id, "tsk_loop");
+    assert.equal(response.latest_memory_receipt?.references?.operation_id, "tsk_loop");
+    assert.equal(response.memory_receipts?.[0]?.id, "ledger_loop");
+    assert.equal(response.memory_receipts?.[0]?.run_id, "run_loop");
+    assert.equal(response.memory_receipts?.[0]?.references?.run_id, "run_loop");
   } finally {
     restoreFetch();
   }

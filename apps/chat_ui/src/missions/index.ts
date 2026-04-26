@@ -118,6 +118,8 @@ export type MissionLoopStage = {
   latest_event?: string;
   latest_receipt_status?: string;
   latest_ts?: string;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
 };
 
 export type MissionLoopHandoff = {
@@ -173,6 +175,8 @@ export type MissionReceiptSummary = {
   linked_operation_count?: number;
   run_ledger_count?: number;
   history_count?: number;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
   current_operation_id?: string;
   current_operation_status?: string;
   current_gate?: string;
@@ -188,6 +192,7 @@ export type MissionReceiptSummary = {
 };
 
 export type MissionMemoryReceipt = {
+  id?: string;
   source?: string;
   kind?: string;
   ts?: number;
@@ -197,6 +202,13 @@ export type MissionMemoryReceipt = {
   operation_status?: string;
   capability?: string;
   subsystem?: string;
+  domain?: string;
+  mission_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  approval_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -217,6 +229,9 @@ export type MissionDetail = {
   current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
   receipt_summary?: MissionReceiptSummary;
+  memory_receipts?: MissionMemoryReceipt[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
   error?: string;
 };
 
@@ -253,6 +268,10 @@ export type MissionCreateResponse = {
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
+  receipt_summary?: MissionReceiptSummary;
+  memory_receipts?: MissionMemoryReceipt[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
   message?: string;
   error?: string;
 };
@@ -342,6 +361,10 @@ export type MissionAdvanceResponse = {
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
+  receipt_summary?: MissionReceiptSummary;
+  memory_receipts?: MissionMemoryReceipt[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
   status?: string;
   message?: string;
   error?: string;
@@ -374,6 +397,9 @@ export type MissionRunOnceResult = {
   current_task?: MissionCurrentTask;
   handoff?: MissionLoopHandoff;
   receipt_summary?: MissionReceiptSummary;
+  memory_receipts?: MissionMemoryReceipt[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
   history_count?: number;
   linked_operation_count?: number;
   run_ledger_count?: number;
@@ -757,6 +783,8 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     latest_event: safeString(raw.latest_event, "") || undefined,
     latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_ts: safeString(raw.latest_ts, "") || undefined,
+    memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
+    latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt),
   };
 
   if (
@@ -769,7 +797,9 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     !stage.latest_event &&
     !stage.latest_receipt_status &&
     !stage.latest_ts &&
-    !stage.next_step
+    !stage.next_step &&
+    !stage.memory_receipt_count &&
+    !stage.latest_memory_receipt
   ) {
     return undefined;
   }
@@ -893,6 +923,8 @@ function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undef
     linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
     run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
     history_count: safeNumber(raw.history_count, 0) || undefined,
+    memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
+    latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt),
     current_operation_id: safeString(raw.current_operation_id, "") || undefined,
     current_operation_status: safeString(raw.current_operation_status, "") || undefined,
     current_gate: safeString(raw.current_gate, "") || undefined,
@@ -910,6 +942,8 @@ function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undef
     !summary.linked_operation_count &&
     !summary.run_ledger_count &&
     !summary.history_count &&
+    !summary.memory_receipt_count &&
+    !summary.latest_memory_receipt &&
     !summary.current_operation_id &&
     !summary.current_run_id &&
     !summary.current_artifact_dir &&
@@ -924,15 +958,22 @@ function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undef
 function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefined {
   if (!isRecord(raw)) return undefined;
   const referencesRaw = isRecord(raw.references) ? raw.references : {};
+  const mission_id = safeString(raw.mission_id, "") || safeString(referencesRaw.mission_id, "") || undefined;
+  const operation_id = safeString(raw.operation_id, "") || safeString(referencesRaw.operation_id, "") || undefined;
+  const trace_id = safeString(raw.trace_id, "") || safeString(referencesRaw.trace_id, "") || undefined;
+  const approval_id = safeString(raw.approval_id, "") || safeString(referencesRaw.approval_id, "") || undefined;
+  const run_id = safeString(raw.run_id, "") || safeString(referencesRaw.run_id, "") || undefined;
+  const artifact_dir = safeString(raw.artifact_dir, "") || safeString(referencesRaw.artifact_dir, "") || undefined;
   const references = {
-    mission_id: safeString(referencesRaw.mission_id, "") || undefined,
-    operation_id: safeString(referencesRaw.operation_id, "") || undefined,
-    trace_id: safeString(referencesRaw.trace_id, "") || undefined,
-    approval_id: safeString(referencesRaw.approval_id, "") || undefined,
-    run_id: safeString(referencesRaw.run_id, "") || undefined,
-    artifact_dir: safeString(referencesRaw.artifact_dir, "") || undefined,
+    mission_id,
+    operation_id,
+    trace_id,
+    approval_id,
+    run_id,
+    artifact_dir,
   };
   const receipt: MissionMemoryReceipt = {
+    id: safeString(raw.id, "") || undefined,
     source: safeString(raw.source, "") || undefined,
     kind: safeString(raw.kind, "") || undefined,
     ts: safeNumber(raw.ts, 0) || undefined,
@@ -942,19 +983,33 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     operation_status: safeString(raw.operation_status, "") || undefined,
     capability: safeString(raw.capability, "") || undefined,
     subsystem: safeString(raw.subsystem, "") || undefined,
+    domain: safeString(raw.domain, "") || undefined,
+    mission_id,
+    operation_id,
+    trace_id,
+    approval_id,
+    run_id,
+    artifact_dir,
   };
   if (Object.values(references).some((value) => value)) receipt.references = references;
   if (
+    !receipt.id &&
     !receipt.source &&
     !receipt.kind &&
     !receipt.message &&
     !receipt.scope &&
     !receipt.operation_status &&
+    !receipt.domain &&
     !receipt.references
   ) {
     return undefined;
   }
   return receipt;
+}
+
+function parseMissionMemoryReceipts(raw: unknown): MissionMemoryReceipt[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parseMissionMemoryReceipt).filter((item): item is MissionMemoryReceipt => item !== undefined);
 }
 
 function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
@@ -994,6 +1049,9 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
         })
         .filter((item): item is OperationRecord => item !== null)
     : [];
+  const memory_receipts = parseMissionMemoryReceipts(json.memory_receipts);
+  const latest_memory_receipt = parseMissionMemoryReceipt(json.latest_memory_receipt) ?? memory_receipts[0];
+  const memory_receipt_count = safeNumber(json.memory_receipt_count, Number.NaN);
 
   return {
     ok: safeBoolean(json.ok, Boolean(mission)),
@@ -1005,13 +1063,27 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
     current_task: parseMissionCurrentTask(json.current_task),
     queue_item: parseMissionQueueItem(json.queue_item),
     receipt_summary: parseMissionReceiptSummary(json.receipt_summary),
+    memory_receipts,
+    memory_receipt_count: Number.isFinite(memory_receipt_count)
+      ? memory_receipt_count
+      : memory_receipts.length || undefined,
+    latest_memory_receipt,
     error: safeString(json.error, "") || undefined,
   };
 }
 
 function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""): Pick<
   MissionDetail,
-  "history" | "linked_operations" | "run_ledger" | "loop_state" | "current_task" | "queue_item" | "receipt_summary"
+  | "history"
+  | "linked_operations"
+  | "run_ledger"
+  | "loop_state"
+  | "current_task"
+  | "queue_item"
+  | "receipt_summary"
+  | "memory_receipts"
+  | "memory_receipt_count"
+  | "latest_memory_receipt"
 > {
   const parsed = parseMissionDetail(json, missionId);
   return {
@@ -1022,6 +1094,9 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
     current_task: parsed.current_task,
     queue_item: parsed.queue_item,
     receipt_summary: parsed.receipt_summary,
+    memory_receipts: parsed.memory_receipts,
+    memory_receipt_count: parsed.memory_receipt_count,
+    latest_memory_receipt: parsed.latest_memory_receipt,
   };
 }
 
@@ -1139,6 +1214,9 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     current_task: parseMissionCurrentTask(raw.current_task),
     handoff: parseMissionLoopHandoff(raw.handoff),
     receipt_summary: parseMissionReceiptSummary(raw.receipt_summary),
+    memory_receipts: parseMissionMemoryReceipts(raw.memory_receipts),
+    memory_receipt_count: safeNumber(raw.memory_receipt_count, 0) || undefined,
+    latest_memory_receipt: parseMissionMemoryReceipt(raw.latest_memory_receipt),
     history_count: safeNumber(raw.history_count, 0) || undefined,
     linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
     run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
