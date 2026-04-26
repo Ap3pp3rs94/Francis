@@ -217,6 +217,14 @@ changed. The chat UI approval client, world-state parser, approval panel, and
 pending-approvals cards preserve and render those handles so an operator can move
 from gate review back to the linked mission/task without raw JSON inspection.
 
+As of `2026-04-26`, world-state governance incident evidence now preserves the
+same approval-gate loop handles for pending approvals. The
+`governance.pending_approvals` and `governance.awaiting_approval` incident
+evidence items carry `approval_id`, `mission_id`, `operation_id`, `gate`,
+`next_step`, `trace_id`, `run_id`, and `artifact_dir` when those values already
+exist in the pending approval projection. No approval decision behavior,
+execution path, policy rule, or memory-write path is changed.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2491,6 +2499,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:
+
+- `python -m ruff check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_system_settings.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 approval gate loop-handle projection slice:
 

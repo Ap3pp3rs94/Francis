@@ -1899,6 +1899,14 @@ def _incident_evidence_item(
     detail: str = "",
     path: str = "",
     ts: float = 0.0,
+    approval_id: str = "",
+    operation_id: str = "",
+    mission_id: str = "",
+    gate: str = "",
+    next_step: str = "",
+    trace_id: str = "",
+    run_id: str = "",
+    artifact_dir: str = "",
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "kind": str(kind or "").strip(),
@@ -1907,10 +1915,38 @@ def _incident_evidence_item(
         "status": str(status or "").strip(),
         "detail": str(detail or "").strip(),
         "path": str(path or "").strip(),
+        "approval_id": str(approval_id or "").strip(),
+        "operation_id": str(operation_id or "").strip(),
+        "mission_id": str(mission_id or "").strip(),
+        "gate": str(gate or "").strip(),
+        "next_step": str(next_step or "").strip(),
+        "trace_id": str(trace_id or "").strip(),
+        "run_id": str(run_id or "").strip(),
+        "artifact_dir": str(artifact_dir or "").strip(),
     }
     if ts > 0:
         item["ts"] = ts
     return {key: value for key, value in item.items() if value not in {"", None}}
+
+
+def _pending_approval_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
+    approval_id = str(item.get("id") or "").strip()
+    return _incident_evidence_item(
+        "approval",
+        evidence_id=approval_id,
+        label=str(item.get("action") or "").strip() or approval_id,
+        status=str(item.get("status") or "").strip(),
+        detail=str(item.get("reason") or "").strip(),
+        ts=_parse_ts(item.get("ts")),
+        approval_id=approval_id,
+        operation_id=str(item.get("operation_id") or "").strip(),
+        mission_id=str(item.get("mission_id") or "").strip(),
+        gate=str(item.get("gate") or "").strip(),
+        next_step=str(item.get("next_step") or "").strip(),
+        trace_id=str(item.get("trace_id") or "").strip(),
+        run_id=str(item.get("run_id") or "").strip(),
+        artifact_dir=str(item.get("artifact_dir") or "").strip(),
+    )
 
 
 def _first_task_for_status(recent_tasks: list[dict[str, Any]], status: str) -> dict[str, Any]:
@@ -2050,18 +2086,7 @@ def _governance_incidents(
 
     if queued_approval_count > 0:
         approval_id = str((pending_approvals[0] or {}).get("id") or "").strip()
-        evidence = [
-            _incident_evidence_item(
-                "approval",
-                evidence_id=str(item.get("id") or "").strip(),
-                label=str(item.get("action") or "").strip() or str(item.get("id") or "").strip(),
-                status=str(item.get("status") or "").strip(),
-                detail=str(item.get("reason") or "").strip(),
-                ts=_parse_ts(item.get("ts")),
-            )
-            for item in pending_approvals[:3]
-            if isinstance(item, dict)
-        ]
+        evidence = [_pending_approval_evidence_item(item) for item in pending_approvals[:3] if isinstance(item, dict)]
         incidents.append(
             _incident_record(
                 "governance.pending_approvals",
@@ -2095,17 +2120,7 @@ def _governance_incidents(
         if pending_approvals:
             first_pending = pending_approvals[0]
             if isinstance(first_pending, dict):
-                evidence.append(
-                    _incident_evidence_item(
-                        "approval",
-                        evidence_id=str(first_pending.get("id") or "").strip(),
-                        label=str(first_pending.get("action") or "").strip()
-                        or str(first_pending.get("id") or "").strip(),
-                        status=str(first_pending.get("status") or "").strip(),
-                        detail=str(first_pending.get("reason") or "").strip(),
-                        ts=_parse_ts(first_pending.get("ts")),
-                    )
-                )
+                evidence.append(_pending_approval_evidence_item(first_pending))
         incidents.append(
             _incident_record(
                 "governance.awaiting_approval",

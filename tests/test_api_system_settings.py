@@ -1037,6 +1037,16 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert pending_approval["payload_summary"]["input_keys"] == ["target"]
     assert "plugin_id" in pending_approval["payload_summary"]["payload_keys"]
 
+    pending_incident = next(
+        item for item in body["overview"]["incidents"] if item["id"] == "governance.pending_approvals"
+    )
+    approval_evidence = next(item for item in pending_incident["evidence"] if item["id"] == approval_id)
+    assert approval_evidence["approval_id"] == approval_id
+    assert approval_evidence["mission_id"] == blocked_id
+    assert approval_evidence["operation_id"] == operation_id
+    assert approval_evidence["gate"] == "approvals_gate"
+    assert approval_evidence["next_step"] == pending_approval["next_step"]
+
     focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == blocked_id)
     assert focus_item["recommended_action"] == "review_pending_approval"
     assert focus_item["advance"]["eligible"] is False
