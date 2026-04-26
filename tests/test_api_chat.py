@@ -196,6 +196,29 @@ def test_chat_mission_command_respects_observe_mode(monkeypatch, tmp_path: Path)
     assert body["status"] == "blocked"
     assert "Observe mode keeps Francis read-only." in body["error"]
     assert "Mission declaration blocked:" in body["reply"]
+    assert body["governance"]["gate"] == "operator_posture"
+    assert body["governance"]["reason"] == "observe_mode"
+    assert body["governance"]["next_step"] == "switch_operator_posture_before_declaring_chat_missions"
+
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(
+        item
+        for item in reversed(ledger_entries)
+        if item["role"] == "assistant" and item["meta"]["mode"] == "mission_ingress"
+    )
+    assistant_meta = assistant_entry["meta"]
+    assert assistant_meta["status"] == "blocked"
+    assert assistant_meta["error"] == body["error"]
+    assert assistant_meta["ingress_plane"] == "P1_INTERFACE"
+    assert assistant_meta["active_stage"] == "gate"
+    assert assistant_meta["handoff_stage"] == "gate"
+    assert assistant_meta["handoff_action"] == "switch_operator_posture"
+    assert assistant_meta["handoff_gate"] == "operator_posture"
+    assert assistant_meta["handoff_next_step"] == "switch_operator_posture_before_declaring_chat_missions"
+    assert assistant_meta["governance_gate"] == "operator_posture"
+    assert assistant_meta["governance_reason"] == "observe_mode"
+    assert assistant_meta["governance_next_step"] == "switch_operator_posture_before_declaring_chat_missions"
 
     mission_root = data_root / "missions"
     assert not mission_root.exists() or not any(mission_root.iterdir())

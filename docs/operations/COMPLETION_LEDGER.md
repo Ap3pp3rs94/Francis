@@ -243,6 +243,14 @@ that denial as a read-only loop event without creating mission or task records.
 This is trace/readback only; it does not grant mission authority, bypass policy,
 or synthesize mission state for denied ingress.
 
+As of `2026-04-26`, chat mission ingress posture blocks now use the same
+structured gate readback path. When observe mode or blocked operator posture
+prevents `/chat/send` or websocket mission ingress from creating mission state,
+the response and assistant continuity ledger entry carry an `operator_posture`
+governance gate, reason, next step, and gate-stage handoff action. This does not
+change posture enforcement, create missions, queue operations, or widen
+`chat.send` authority.
+
 As of `2026-04-26`, direct mission continuity text is redacted at the mission
 store boundary. Mission `objective`, `summary`, `next_step`, and
 `escalation_path` fields are normalized through the governed free-text secret
@@ -4169,6 +4177,27 @@ Latest targeted validation for the `2026-04-26` chat mission ingress permission-
 - `python -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py -q`
   Result: `15 passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` chat mission ingress posture-gate continuity slice:
+
+- `python -m pytest tests\test_api_chat.py::test_chat_mission_command_respects_observe_mode -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_chat.py -q`
+  Result: `5 passed`
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_projects_chat_mission_ingress_permission_gate -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `10 passed`
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\api\routes\chat.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` plugin lifecycle permission-gate slice:

@@ -175,6 +175,26 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
     }
 
 
+def _posture_block_governance(blocked_reason: str) -> dict[str, object]:
+    reason = "operator_posture_unverified"
+    next_step = "verify_operator_posture_before_declaring_chat_missions"
+    handoff_action = "verify_operator_posture"
+    if "Observe mode keeps Francis read-only." in blocked_reason:
+        reason = "observe_mode"
+        next_step = "switch_operator_posture_before_declaring_chat_missions"
+        handoff_action = "switch_operator_posture"
+    elif "Current operator posture blocks writes." in blocked_reason:
+        reason = "writes_blocked"
+        next_step = "adjust_environment_posture_before_declaring_chat_missions"
+        handoff_action = "adjust_environment_posture"
+    return {
+        "gate": "operator_posture",
+        "reason": reason,
+        "next_step": next_step,
+        "handoff_action": handoff_action,
+    }
+
+
 def _compact_mission_gate_meta(
     *,
     status: str,
@@ -258,12 +278,23 @@ def _mission_ingress_reply(
     blocked_reason = posture_write_guard("declaring a mission from chat")
     if blocked_reason:
         reply = f"Mission declaration blocked: {blocked_reason}"
-        append("assistant", reply, {"mode": "mission_ingress", "status": "blocked"})
+        governance = _posture_block_governance(blocked_reason)
+        append(
+            "assistant",
+            reply,
+            _compact_mission_gate_meta(
+                status="blocked",
+                error=blocked_reason,
+                governance=governance,
+                handoff_action=str(governance.get("handoff_action") or ""),
+            ),
+        )
         return {
             "ok": False,
             "mode": "mission_ingress",
             "status": "blocked",
             "error": blocked_reason,
+            "governance": {key: value for key, value in governance.items() if key != "handoff_action"},
             "reply": reply,
         }
 
