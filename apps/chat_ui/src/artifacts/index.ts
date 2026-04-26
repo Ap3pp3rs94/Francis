@@ -19,6 +19,36 @@ export type ArtifactEntry = {
   modified_ts?: number | null;
 };
 
+export type ArtifactOriginatingReceipt = {
+  source?: string;
+  matched_artifact_field?: string;
+  mission_id?: string;
+  operation_id?: string;
+  approval_id?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  operation_status?: string;
+  operation_error?: string;
+  result_message?: string;
+  recovery_next_step?: string;
+  handoff_action?: string;
+  handoff_gate?: string;
+  current_task_source?: string;
+  current_task_operation_id?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  references?: {
+    mission_id?: string;
+    operation_id?: string;
+    approval_id?: string;
+    trace_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
+  };
+};
+
 export type ArtifactInspectResponse = {
   ok: boolean;
   error?: string;
@@ -35,6 +65,7 @@ export type ArtifactInspectResponse = {
   entries: ArtifactEntry[];
   entry_count?: number;
   truncated?: boolean;
+  originating_receipt?: ArtifactOriginatingReceipt;
 };
 
 export type ArtifactInspectQuery = {
@@ -226,6 +257,47 @@ function parseEntry(raw: unknown): ArtifactEntry | null {
   return entry;
 }
 
+function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const receipt: ArtifactOriginatingReceipt = {};
+  for (const key of [
+    "source",
+    "matched_artifact_field",
+    "mission_id",
+    "operation_id",
+    "approval_id",
+    "trace_id",
+    "run_id",
+    "artifact_dir",
+    "operation_status",
+    "operation_error",
+    "result_message",
+    "recovery_next_step",
+    "handoff_action",
+    "handoff_gate",
+    "current_task_source",
+    "current_task_operation_id",
+    "current_task_trace_id",
+    "current_task_run_id",
+    "current_task_artifact_dir",
+  ] as const) {
+    const value = safeString(raw[key]).trim();
+    if (value) receipt[key] = value;
+  }
+
+  if (isRecord(raw.references)) {
+    const references: NonNullable<ArtifactOriginatingReceipt["references"]> = {};
+    for (const key of ["mission_id", "operation_id", "approval_id", "trace_id", "run_id", "artifact_dir"] as const) {
+      const value = safeString(raw.references[key]).trim();
+      if (value) references[key] = value;
+    }
+    if (Object.keys(references).length > 0) receipt.references = references;
+  }
+
+  return Object.keys(receipt).length > 0 ? receipt : undefined;
+}
+
 export function parseArtifactInspectResponse(raw: unknown): ArtifactInspectResponse {
   if (!isRecord(raw)) {
     return { ok: false, error: "artifact_response_invalid", entries: [] };
@@ -276,6 +348,9 @@ export function parseArtifactInspectResponse(raw: unknown): ArtifactInspectRespo
 
   const truncated = safeBoolean(raw.truncated);
   if (truncated !== undefined) response.truncated = truncated;
+
+  const originatingReceipt = parseOriginatingReceipt(raw.originating_receipt);
+  if (originatingReceipt) response.originating_receipt = originatingReceipt;
 
   return response;
 }

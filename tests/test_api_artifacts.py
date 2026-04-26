@@ -54,6 +54,65 @@ def test_artifact_inspect_accepts_artifact_root_relative_handles(monkeypatch, tm
     assert body["entries"] == []
 
 
+def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    artifact_dir = data_root / "artifacts" / "supervised_exec" / "apr_receipt"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "result.json").write_text("{}", encoding="utf-8")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Mission operation receipt with artifact handle.",
+        {
+            "subsystem": "operations.runtime",
+            "domain": "operations",
+            "scope": "mission.loop",
+            "mission_id": "msn_artifact_origin",
+            "operation_id": "tsk_artifact_origin",
+            "approval_id": "apr_artifact_origin",
+            "trace_id": "trace_artifact_origin",
+            "run_id": "run_artifact_origin",
+            "artifact_dir": str(artifact_dir),
+            "operation_status": "failed",
+            "operation_error": "plugin_id_required",
+            "result_message": "Plugin id is required. password=artifactsecret123",
+            "recovery_next_step": "review_operation_detail token=artifactrecovery123",
+            "handoff_action": "retry_or_deadletter",
+            "handoff_gate": "operator_review",
+            "current_task_source": "terminal_operation_receipt",
+        },
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/artifacts/inspect", params={"artifact_dir": "supervised_exec/apr_receipt"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["relative_path"] == "supervised_exec/apr_receipt"
+    receipt = body["originating_receipt"]
+    assert receipt["source"] == "continuity.ledger"
+    assert receipt["matched_artifact_field"] == "artifact_dir"
+    assert receipt["mission_id"] == "msn_artifact_origin"
+    assert receipt["operation_id"] == "tsk_artifact_origin"
+    assert receipt["approval_id"] == "apr_artifact_origin"
+    assert receipt["trace_id"] == "trace_artifact_origin"
+    assert receipt["run_id"] == "run_artifact_origin"
+    assert receipt["operation_status"] == "failed"
+    assert receipt["operation_error"] == "plugin_id_required"
+    assert receipt["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
+    assert receipt["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert receipt["references"]["artifact_dir"] == str(artifact_dir)
+    assert "artifactsecret123" not in str(body)
+    assert "artifactrecovery123" not in str(body)
+
+
 def test_artifact_inspect_rejects_paths_outside_artifact_root(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -52,6 +52,31 @@ test("ArtifactsClient.inspect requests bounded artifact metadata and preserves d
       relative_path: "supervised_exec/apr_alpha",
       exists: true,
       kind: "directory",
+      originating_receipt: {
+        source: "continuity.ledger",
+        matched_artifact_field: "artifact_dir",
+        mission_id: "msn_alpha",
+        operation_id: "tsk_alpha",
+        approval_id: "apr_alpha",
+        trace_id: "trace_alpha",
+        run_id: "run_alpha",
+        artifact_dir: "D:/Francis/data/artifacts/supervised_exec/apr_alpha",
+        operation_status: "failed",
+        operation_error: "plugin_id_required",
+        result_message: "Plugin id is required.",
+        recovery_next_step: "review_operation_detail",
+        handoff_action: "retry_or_deadletter",
+        handoff_gate: "operator_review",
+        current_task_source: "terminal_operation_receipt",
+        references: {
+          mission_id: "msn_alpha",
+          operation_id: "tsk_alpha",
+          approval_id: "apr_alpha",
+          trace_id: "trace_alpha",
+          run_id: "run_alpha",
+          artifact_dir: "D:/Francis/data/artifacts/supervised_exec/apr_alpha",
+        },
+      },
       entries: [
         {
           name: "result.json",
@@ -93,6 +118,31 @@ test("ArtifactsClient.inspect requests bounded artifact metadata and preserves d
     assert.equal(response.kind, "directory");
     assert.equal(response.entry_count, 2);
     assert.equal(response.truncated, false);
+    assert.deepEqual(response.originating_receipt, {
+      source: "continuity.ledger",
+      matched_artifact_field: "artifact_dir",
+      mission_id: "msn_alpha",
+      operation_id: "tsk_alpha",
+      approval_id: "apr_alpha",
+      trace_id: "trace_alpha",
+      run_id: "run_alpha",
+      artifact_dir: "D:/Francis/data/artifacts/supervised_exec/apr_alpha",
+      operation_status: "failed",
+      operation_error: "plugin_id_required",
+      result_message: "Plugin id is required.",
+      recovery_next_step: "review_operation_detail",
+      handoff_action: "retry_or_deadletter",
+      handoff_gate: "operator_review",
+      current_task_source: "terminal_operation_receipt",
+      references: {
+        mission_id: "msn_alpha",
+        operation_id: "tsk_alpha",
+        approval_id: "apr_alpha",
+        trace_id: "trace_alpha",
+        run_id: "run_alpha",
+        artifact_dir: "D:/Francis/data/artifacts/supervised_exec/apr_alpha",
+      },
+    });
     assert.deepEqual(response.entries, [
       {
         name: "result.json",

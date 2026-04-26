@@ -1185,6 +1185,17 @@ outside-root, and unreadable artifact handles, and the chat UI artifacts client
 and shared inspection panel preserve and render that guidance without requesting
 or displaying artifact file contents.
 
+As of `2026-04-26`, artifact inspection can also link the inspected handle back
+to its originating mission-operation receipt when the continuity ledger already
+contains that receipt truth. `GET /artifacts/inspect` now scans existing
+operation runtime ledger receipts for matching `artifact_dir`,
+`handoff_artifact_dir`, or `current_task_artifact_dir` handles and returns a
+bounded `originating_receipt` block with mission, operation, approval, trace,
+run, artifact, status, handoff, and redacted recovery context. The chat UI
+artifacts client and shared inspection panel preserve that origin readback.
+This is artifact-origin readback only; it does not inspect file contents, mint
+receipts, execute work, retry failed operations, or deadletter missions.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -4708,6 +4719,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation trace-link c
   Result: `passed`
 - `git diff --check -- src\francis\api\routes\explanation.py tests\test_api_explanation.py apps\chat_ui\src\explanation_explorer\index.ts apps\chat_ui\src\explanation_explorer\index.test.ts apps\chat_ui\package.json docs\operations\COMPLETION_LEDGER.md`
   Result: `passed` (line-ending warnings only for existing CRLF/LF normalization)
+
+Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin receipt readback slice:
+
+- `python -m pytest tests\test_api_artifacts.py -q`
+  Result: `5 passed`
+- `python -m ruff check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `2 files already formatted`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\artifacts\index.test.ts`
+  Result: `4 passed`
+- `python -m pytest tests\test_api_artifacts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 artifact inspection recovery guidance slice:
 

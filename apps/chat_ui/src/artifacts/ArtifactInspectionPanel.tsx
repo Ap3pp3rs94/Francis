@@ -176,6 +176,36 @@ export function ArtifactInspectionPanel(props: ArtifactInspectionPanelProps) {
               ) : null}
             </div>
           ) : null}
+          {inspection.originating_receipt ? (
+            <div style={{ fontSize: 11, color: mutedColor, marginTop: 4 }}>
+              origin=<code>{inspection.originating_receipt.source || "receipt"}</code>
+              {inspection.originating_receipt.mission_id ? (
+                <>
+                  {" / "}mission=<code>{inspection.originating_receipt.mission_id}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.operation_id ? (
+                <>
+                  {" / "}operation=<code>{inspection.originating_receipt.operation_id}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.trace_id ? (
+                <>
+                  {" / "}trace=<code>{inspection.originating_receipt.trace_id}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.operation_status ? (
+                <>
+                  {" / "}status=<code>{inspection.originating_receipt.operation_status}</code>
+                </>
+              ) : null}
+              {inspection.originating_receipt.recovery_next_step ? (
+                <>
+                  {" / "}recovery=<code>{inspection.originating_receipt.recovery_next_step}</code>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {loadedAt !== null ? (
             <div style={{ fontSize: 11, color: mutedColor, marginTop: 4 }}>
               inspected_at=<code>{formatTime(loadedAt)}</code>

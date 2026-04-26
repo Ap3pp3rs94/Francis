@@ -4,10 +4,33 @@ from pathlib import Path
 
 from fastapi import APIRouter, Query
 
+from francis.chat.continuity.ledger import tail as continuity_tail
+from francis.governance.operation_redaction import redact_operation_text
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+
+_RECEIPT_ARTIFACT_FIELDS = ("artifact_dir", "handoff_artifact_dir", "current_task_artifact_dir", "artifact_path")
+_ORIGIN_RECEIPT_FIELDS = (
+    "mission_id",
+    "operation_id",
+    "task_id",
+    "approval_id",
+    "trace_id",
+    "run_id",
+    "artifact_dir",
+    "handoff_artifact_dir",
+    "operation_status",
+    "handoff_action",
+    "handoff_gate",
+    "current_task_source",
+    "current_task_operation_id",
+    "current_task_trace_id",
+    "current_task_run_id",
+    "current_task_artifact_dir",
+)
+_ORIGIN_RECEIPT_TEXT_FIELDS = ("operation_error", "result_message", "recovery_next_step")
 
 
 def _artifact_root() -> Path:
@@ -16,6 +39,15 @@ def _artifact_root() -> Path:
 
 def _display_path(path: Path) -> str:
     return redact_secret_text(str(path))
+
+
+def _safe_str(value: object) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
 
 
 def _is_under(root: Path, target: Path) -> bool:
@@ -88,6 +120,82 @@ def _relative_artifact_path(root: Path, path: Path) -> str:
         return ""
 
 
+def _normalized_handle(value: object) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    return text.replace("\\", "/").rstrip("/").lower()
+
+
+def _artifact_match_handles(root: Path, target: Path, raw: str) -> set[str]:
+    handles: set[str] = set()
+    for value in (raw, str(target), _display_path(target), _relative_artifact_path(root, target)):
+        normalized = _normalized_handle(value)
+        if normalized:
+            handles.add(normalized)
+    return handles
+
+
+def _receipt_artifact_field(meta: dict[str, object], handles: set[str]) -> str:
+    for field in _RECEIPT_ARTIFACT_FIELDS:
+        if _normalized_handle(meta.get(field)) in handles:
+            return field
+    return ""
+
+
+def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[str, object]:
+    handles = _artifact_match_handles(root, target, raw)
+    if not handles:
+        return {}
+
+    try:
+        entries = continuity_tail(limit=1000)
+    except Exception:
+        return {}
+
+    for item in reversed(entries):
+        if not isinstance(item, dict):
+            continue
+        meta_obj = item.get("meta")
+        if not isinstance(meta_obj, dict):
+            continue
+        meta = {str(key): value for key, value in meta_obj.items()}
+        matched_field = _receipt_artifact_field(meta, handles)
+        if not matched_field:
+            continue
+        if _safe_str(meta.get("subsystem")).strip() != "operations.runtime":
+            continue
+        if _safe_str(meta.get("scope")).strip() != "mission.loop":
+            continue
+
+        projection: dict[str, object] = {
+            "source": "continuity.ledger",
+            "matched_artifact_field": matched_field,
+        }
+        for field in _ORIGIN_RECEIPT_FIELDS:
+            value = redact_secret_text(_safe_str(meta.get(field)).strip())
+            if value:
+                projection[field] = value
+        for field in _ORIGIN_RECEIPT_TEXT_FIELDS:
+            value = redact_operation_text(meta.get(field))
+            if value:
+                projection[field] = value
+
+        operation_id = _safe_str(projection.get("operation_id") or projection.get("task_id")).strip()
+        if operation_id:
+            projection["operation_id"] = operation_id
+        projection.pop("task_id", None)
+        references = {
+            key: projection[key]
+            for key in ("mission_id", "operation_id", "approval_id", "trace_id", "run_id", "artifact_dir")
+            if _safe_str(projection.get(key)).strip()
+        }
+        if references:
+            projection["references"] = references
+        return projection
+    return {}
+
+
 def _entry_projection(root: Path, path: Path) -> dict[str, object]:
     resolved = path.resolve(strict=False)
     base = {
@@ -124,8 +232,9 @@ def inspect_artifact(
             **_recovery_projection(error),
         }
 
+    originating_receipt = _originating_receipt_projection(root, target, artifact_dir)
     if not target.exists():
-        return {
+        body = {
             "ok": False,
             "error": "artifact_not_found",
             "artifact_root": _display_path(root),
@@ -134,10 +243,13 @@ def inspect_artifact(
             "exists": False,
             **_recovery_projection("artifact_not_found"),
         }
+        if originating_receipt:
+            body["originating_receipt"] = originating_receipt
+        return body
 
     projection = _entry_projection(root, target)
     if target.is_file():
-        return {
+        body = {
             "ok": True,
             "artifact_root": _display_path(root),
             "artifact_dir": _display_path(target),
@@ -150,12 +262,15 @@ def inspect_artifact(
             "entry_count": 0,
             "truncated": False,
         }
+        if originating_receipt:
+            body["originating_receipt"] = originating_receipt
+        return body
 
     try:
         children = sorted(target.iterdir(), key=lambda item: item.name.lower())
     except OSError as exc:
         error = f"artifact_unreadable:{type(exc).__name__}"
-        return {
+        body = {
             "ok": False,
             "error": error,
             "artifact_root": _display_path(root),
@@ -164,9 +279,12 @@ def inspect_artifact(
             "exists": True,
             **_recovery_projection(error),
         }
+        if originating_receipt:
+            body["originating_receipt"] = originating_receipt
+        return body
 
     entries = [_entry_projection(root, child) for child in children[:limit]]
-    return {
+    body = {
         "ok": True,
         "artifact_root": _display_path(root),
         "artifact_dir": _display_path(target),
@@ -177,3 +295,6 @@ def inspect_artifact(
         "entry_count": len(children),
         "truncated": len(children) > limit,
     }
+    if originating_receipt:
+        body["originating_receipt"] = originating_receipt
+    return body
