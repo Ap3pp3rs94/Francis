@@ -998,6 +998,8 @@ export type OperatorModeMutationResponse = {
   snapshot?: OperatorModeSnapshot;
 };
 
+const DEFAULT_SYSTEM_MUTATION_ACTOR = "chat_ui.system";
+
 export class SettingsApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -1029,6 +1031,19 @@ function safeString(v: unknown, fallback = ""): string {
 
 function safeBoolean(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
+}
+
+function systemMutationActor(actor?: string): string {
+  return actor?.trim() || DEFAULT_SYSTEM_MUTATION_ACTOR;
+}
+
+function assertSystemPermissionAllowed(json: unknown, fallback: string): void {
+  if (!isRecord(json)) return;
+  const status = safeString(json.status, "");
+  const error = safeString(json.error, "");
+  if (status === "denied" || error === "api_permission_denied") {
+    throw new SettingsApiError(error || safeString(json.message, "") || fallback);
+  }
 }
 
 function safeStringList(value: unknown): string[] {
@@ -3381,10 +3396,11 @@ export class SettingsClient {
     const { json } = await this.fetchFirstOk(this.endpoints.setOperatorMode(), {
       ...this.init(opts),
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify({ ...req, actor: systemMutationActor(req.actor) }),
     });
 
     if (!isRecord(json)) return { ok: false };
+    assertSystemPermissionAllowed(json, "Operator mode mutation denied.");
     return {
       ok: safeBoolean(json.ok, false),
       applied: safeBoolean(json.applied, false),
@@ -3445,10 +3461,11 @@ export class SettingsClient {
     const { json } = await this.fetchFirstOk(this.endpoints.mutateConfig(), {
       ...this.init(opts),
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify({ ...req, actor: systemMutationActor(req.actor) }),
     });
 
     if (!isRecord(json)) return { ok: true };
+    assertSystemPermissionAllowed(json, "System config mutation denied.");
     return {
       ok: safeBoolean(json.ok, true),
       approval_id: safeString(json.approval_id, ""),
@@ -3463,7 +3480,7 @@ export class SettingsClient {
   async setFeatureFlag(
     key: string,
     enabled: boolean,
-    opts?: { reason?: string; signal?: AbortSignal; timeoutMs?: number },
+    opts?: { reason?: string; actor?: string; signal?: AbortSignal; timeoutMs?: number },
   ): Promise<ConfigMutationResponse> {
     if (!this.mutationsEnabled) {
       throw new Error("SettingsClient.setFeatureFlag is disabled (mutationsEnabled=false).");
@@ -3477,8 +3494,9 @@ export class SettingsClient {
     //  - Fall back to generic setter endpoints: POST /system/flags/set with body { key, enabled, reason }
     const candidates = this.endpoints.setFeatureFlag(cleanedKey);
 
-    const primaryPayload = { enabled, reason: (opts?.reason || "").trim() || undefined };
-    const fallbackPayload = { key: cleanedKey, enabled, reason: (opts?.reason || "").trim() || undefined };
+    const actor = systemMutationActor(opts?.actor);
+    const primaryPayload = { enabled, reason: (opts?.reason || "").trim() || undefined, actor };
+    const fallbackPayload = { key: cleanedKey, enabled, reason: (opts?.reason || "").trim() || undefined, actor };
 
     let lastErr: unknown = null;
 
@@ -3494,6 +3512,7 @@ export class SettingsClient {
         });
 
         if (!isRecord(json)) return { ok: true };
+        assertSystemPermissionAllowed(json, "Feature flag mutation denied.");
 
         return {
           ok: safeBoolean(json.ok, true),

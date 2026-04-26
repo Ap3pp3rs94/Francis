@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  SettingsApiError,
   SettingsClient,
   missionReadinessEvidenceLines,
   presentMissionDeadletterItems,
@@ -1247,11 +1248,13 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
       path: "ui.preferences",
       value: { density: "compact" },
       reason: "compatibility mutation",
+      actor: "chat_ui.system",
     });
     assert.deepEqual(requests[7]?.body, {
       key: "ui.alias_mode",
       enabled: true,
       reason: "compatibility mutation",
+      actor: "chat_ui.system",
     });
     assert.equal(operatorResponse.ok, true);
     assert.equal(operatorResponse.applied, true);
@@ -1275,6 +1278,23 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.deepEqual(configResponse.resulting_value, { density: "compact" });
     assert.equal(flagResponse.ok, true);
     assert.equal(flagResponse.applied, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("SettingsClient treats system permission denials as mutation errors", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({ ok: false, status: "denied", error: "api_permission_denied" }),
+  );
+
+  try {
+    const client = new SettingsClient("http://127.0.0.1:8000", { mutationsEnabled: true });
+
+    await assert.rejects(
+      () => client.mutateConfig({ op: "set", path: "ui.preferences.theme", value: "dark" }, { timeoutMs: 50 }),
+      (err: unknown) => err instanceof SettingsApiError && err.message === "api_permission_denied",
+    );
   } finally {
     restoreFetch();
   }

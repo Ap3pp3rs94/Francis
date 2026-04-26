@@ -12,10 +12,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from francis.api.routes._operator_posture import posture_write_guard
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_metadata, redact_secret_text
 from francis.kernel import feature_flags
 from francis.kernel.health import health_report
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 _APP_STARTED_TS = int(time.time())
 _INSTANCE_ID = f"{socket.gethostname()}:{os.getpid()}"
 _MUTATION_OPS = {"set", "unset", "merge", "append", "remove"}
+_SYSTEM_WRITE_SCOPE = "system.write"
 
 
 def _safe_str(value: Any) -> str:
@@ -59,6 +61,30 @@ def _redact_free_text(value: Any) -> str:
 
 def _redact_meta(value: Any) -> dict[str, Any]:
     return redact_governed_metadata(value)
+
+
+def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_SYSTEM_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "applied": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_mutating_system_runtime",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _now_s() -> int:
@@ -356,6 +382,9 @@ def _apply_mutation(config: dict[str, Any], *, op: str, path: str, value: Any) -
 class ServiceActionIn(BaseModel):
     action: str
     services: list[str] = Field(default_factory=list)
+    reason: str | None = None
+    actor: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class ConfigMutationIn(BaseModel):
@@ -371,6 +400,7 @@ class ConfigMutationIn(BaseModel):
 class FlagSetIn(BaseModel):
     enabled: bool
     reason: str | None = None
+    actor: str | None = None
     source: str = "api"
     description: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -537,8 +567,12 @@ def operator_mode() -> dict[str, object]:
 
 @router.post("/operator_mode")
 @router.post("/operator-mode")
-def update_operator_mode(payload: ControlModeSetIn) -> dict[str, object]:
+def update_operator_mode(request: Request, payload: ControlModeSetIn) -> dict[str, object]:
     try:
+        permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         set_control_mode(
             payload.mode,
             reason=payload.reason or "",
@@ -561,7 +595,11 @@ def update_operator_mode(payload: ControlModeSetIn) -> dict[str, object]:
 
 
 @router.post("/services/action")
-def service_action(payload: ServiceActionIn) -> dict[str, object]:
+def service_action(request: Request, payload: ServiceActionIn) -> dict[str, object]:
+    permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+    if not permission.allowed:
+        return _permission_denied(permission)
+
     blocked_reason = _system_write_posture_guard("requesting service actions")
     if blocked_reason:
         return {"ok": False, "applied": False, "status": "blocked", "error": blocked_reason}
@@ -583,20 +621,25 @@ def list_feature_flags() -> dict[str, object]:
 
 @router.post("/flags/set")
 @router.post("/feature_flags/set")
-def set_feature_flag(payload: FlagSetNamedIn) -> dict[str, object]:
+def set_feature_flag(request: Request, payload: FlagSetNamedIn) -> dict[str, object]:
     body = FlagSetIn(
         enabled=payload.enabled,
         reason=payload.reason,
+        actor=payload.actor,
         source=payload.source,
         description=payload.description,
         meta=payload.meta,
     )
-    return set_feature_flag_for_key(payload.key, body)
+    return set_feature_flag_for_key(request, payload.key, body)
 
 
 @router.post("/flags/{key}")
 @router.post("/feature_flags/{key}")
-def set_feature_flag_for_key(key: str, payload: FlagSetIn) -> dict[str, object]:
+def set_feature_flag_for_key(request: Request, key: str, payload: FlagSetIn) -> dict[str, object]:
+    permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+    if not permission.allowed:
+        return _permission_denied(permission)
+
     blocked_reason = _system_write_posture_guard("changing feature flags")
     if blocked_reason:
         return {"ok": False, "applied": False, "status": "blocked", "error": blocked_reason}
@@ -609,6 +652,7 @@ def set_feature_flag_for_key(key: str, payload: FlagSetIn) -> dict[str, object]:
             meta={
                 **_redact_meta(payload.meta),
                 "reason": _redact_free_text(payload.reason or ""),
+                "actor": _redact_free_text(payload.actor or ""),
             },
         )
         return {"ok": True, "applied": True, "status": "applied", "item": item}
@@ -640,7 +684,13 @@ def effective_config() -> dict[str, object]:
 @router.post("/config/patch")
 @router.post("/settings/mutate")
 @router.post("/settings")
-def mutate_config(payload: ConfigMutationIn) -> dict[str, object]:
+def mutate_config(request: Request, payload: ConfigMutationIn) -> dict[str, object]:
+    permission = _write_permission(payload.actor, route=request.url.path, method="POST")
+    if not permission.allowed:
+        denied = _permission_denied(permission)
+        denied["message"] = denied["error"]
+        return denied
+
     blocked_reason = _system_write_posture_guard("mutating runtime settings")
     if blocked_reason:
         return {"ok": False, "applied": False, "status": "blocked", "message": blocked_reason}

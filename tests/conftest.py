@@ -30,6 +30,13 @@ CREDENTIAL_WRITE_TEST_ACTORS = (
     "operator.cleanup",
     "credential_manager_api",
 )
+SYSTEM_WRITE_TEST_SCOPE = "system.write"
+SYSTEM_WRITE_TEST_ACTORS = (
+    "test.system.write",
+    "chat_ui",
+    "chat_ui_alias_test",
+    "tests",
+)
 
 
 def _slug(value: str, *, default: str = "case") -> str:
@@ -92,6 +99,7 @@ def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
                 APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE],
                 **{actor: [TRUST_WRITE_TEST_SCOPE] for actor in TRUST_WRITE_TEST_ACTORS},
                 **{actor: [CREDENTIAL_WRITE_TEST_SCOPE] for actor in CREDENTIAL_WRITE_TEST_ACTORS},
+                **{actor: [SYSTEM_WRITE_TEST_SCOPE] for actor in SYSTEM_WRITE_TEST_ACTORS},
             }
         ),
     )

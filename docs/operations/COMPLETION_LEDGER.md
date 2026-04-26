@@ -140,6 +140,21 @@ responses as mutation errors instead of presenting request/revoke operations as
 successful. This is another narrow route integration, not a claim of API-wide
 permission enforcement.
 
+As of `2026-04-26`, system runtime mutation routes are also wired to the API
+permission gate. `POST /system/operator_mode`, `POST /system/operator-mode`,
+`POST /system/services/action`, `POST /system/flags/set`,
+`POST /system/feature_flags/set`, keyed feature-flag write aliases, and runtime
+settings/config mutation aliases deny before changing control mode, service
+action receipts, feature flags, or runtime settings unless the request actor is
+present in the server-side `FRANCIS_API_ACTOR_SCOPES` policy with the
+`system.write` scope. Read-only system status, health, world-state, ORB,
+operator-mode, flags, and config surfaces remain read-only. Observer scan is
+unchanged in this slice. The chat UI settings client now sends its bounded
+`chat_ui.system` actor for system mutations and treats permission-denial
+responses as mutation errors instead of presenting them as successful changes.
+This is another narrow route integration, not a claim of API-wide permission
+enforcement.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2895,6 +2910,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 Shift Briefing memory re
   Result: `11 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` system runtime permission-gate slice:
+
+- `python -m ruff check src\francis\api\routes\system.py tests\conftest.py tests\test_api_system_settings.py tests\test_api_system_permission_gate.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\system.py tests\conftest.py tests\test_api_system_settings.py tests\test_api_system_permission_gate.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_permission_gate.py tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `9 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `1 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `53 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 

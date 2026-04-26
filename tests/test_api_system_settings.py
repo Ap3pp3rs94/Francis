@@ -2307,6 +2307,7 @@ ui:
             "path": "ui.preferences.theme",
             "value": "dark",
             "reason": "alias_set",
+            "actor": "test.system.write",
         },
     )
     assert set_alias.status_code == 200
@@ -2320,6 +2321,7 @@ ui:
             "path": "ui.preferences",
             "value": {"density": "compact"},
             "reason": "alias_merge",
+            "actor": "test.system.write",
         },
     )
     assert merge_alias.status_code == 200
@@ -2338,6 +2340,7 @@ ui:
             "key": "ui.alias_mode",
             "enabled": True,
             "reason": "alias_enable",
+            "actor": "test.system.write",
         },
     )
     assert set_feature_flag.status_code == 200
@@ -2347,7 +2350,7 @@ ui:
 
     unset_feature_flag = client.post(
         "/system/feature_flags/ui.alias_mode",
-        json={"enabled": False, "reason": "alias_disable"},
+        json={"enabled": False, "reason": "alias_disable", "actor": "test.system.write"},
     )
     assert unset_feature_flag.status_code == 200
     unset_feature_flag_body = unset_feature_flag.json()
@@ -2377,6 +2380,7 @@ def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
             "key": "ui.experimental_mode",
             "enabled": True,
             "reason": "integration_test",
+            "actor": "test.system.write",
             "description": "Enable UI experiment",
         },
     )
@@ -2388,7 +2392,7 @@ def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
 
     by_key = client.post(
         "/system/flags/ui.experimental_mode",
-        json={"enabled": False, "reason": "turn_off"},
+        json={"enabled": False, "reason": "turn_off", "actor": "test.system.write"},
     )
     assert by_key.status_code == 200
     by_key_body = by_key.json()
@@ -2431,6 +2435,7 @@ def test_system_mutation_context_redacts_secret_text(monkeypatch, tmp_path: Path
             "key": "ui.secret_redaction",
             "enabled": True,
             "reason": "flag reason token=flagreasonsecret123",
+            "actor": "test.system.write",
             "description": "flag desc password=flagdescriptionsecret123",
             "meta": {"ticket": "FLAG-1", "operator_note": "token=flagnote_secret123"},
         },
@@ -2450,6 +2455,7 @@ def test_system_mutation_context_redacts_secret_text(monkeypatch, tmp_path: Path
             "path": "ui.preferences.redaction_mode",
             "value": "enabled",
             "reason": "config reason secret=configreasonsecret123",
+            "actor": "test.system.write",
             "meta": {"ticket": "CFG-1", "operator_note": "password=confignotesecret123"},
         },
     )
@@ -2462,7 +2468,7 @@ def test_system_mutation_context_redacts_secret_text(monkeypatch, tmp_path: Path
 
     services = client.post(
         "/system/services/action",
-        json={"action": "probe", "services": ["api", "token=serviceunknownsecret123"]},
+        json={"action": "probe", "services": ["api", "token=serviceunknownsecret123"], "actor": "test.system.write"},
     )
     assert services.status_code == 200
     services_body = services.json()
@@ -2501,7 +2507,9 @@ def test_system_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Pat
     client = TestClient(create_app())
     set_control_mode("observe", reason="test_system_mutation_block", actor="tests")
 
-    service_action = client.post("/system/services/action", json={"action": "restart", "services": ["daemon"]})
+    service_action = client.post(
+        "/system/services/action", json={"action": "restart", "services": ["daemon"], "actor": "test.system.write"}
+    )
     assert service_action.status_code == 200
     service_body = service_action.json()
     assert service_body["ok"] is False
@@ -2511,7 +2519,12 @@ def test_system_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Pat
 
     flag_set = client.post(
         "/system/flags/set",
-        json={"key": "ui.blocked_in_observe", "enabled": True, "reason": "should_not_apply"},
+        json={
+            "key": "ui.blocked_in_observe",
+            "enabled": True,
+            "reason": "should_not_apply",
+            "actor": "test.system.write",
+        },
     )
     assert flag_set.status_code == 200
     flag_body = flag_set.json()
@@ -2528,6 +2541,7 @@ def test_system_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Pat
             "path": "ui.preferences.theme",
             "value": "observe-should-not-write",
             "reason": "should_not_apply",
+            "actor": "test.system.write",
         },
     )
     assert config_mutation.status_code == 200
@@ -2570,6 +2584,7 @@ def test_system_config_mutate_reflects_in_effective_snapshot(monkeypatch, tmp_pa
             "path": "ui.preferences.theme",
             "value": "light",
             "reason": "test_set",
+            "actor": "test.system.write",
         },
     )
     assert set_mutation.status_code == 200
@@ -2585,6 +2600,7 @@ def test_system_config_mutate_reflects_in_effective_snapshot(monkeypatch, tmp_pa
             "path": "ui.preferences",
             "value": {"density": "compact"},
             "reason": "test_merge",
+            "actor": "test.system.write",
         },
     )
     assert merge_mutation.status_code == 200
