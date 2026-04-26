@@ -466,6 +466,15 @@ chat UI operations client can request the same filters without inventing
 receipt state. This makes execution -> trace/artifact inspection reachable from
 operations read models without changing worker execution or approvals.
 
+As of `2026-04-26`, operation records also preserve trace/run/artifact handles
+when those handles are only stored in task metadata or input metadata. The API
+operation projection and runtime mirror keep receipt/output handles as the first
+source of truth, then fall back to `trace_id`, `run_id`, and `artifact_dir`
+metadata for list, detail, filter, and export read models. The chat UI
+operations client preserves the same fallback when parsing operation records.
+This is read-model reachability only; it does not create traces, execute work,
+or infer receipt state.
+
 As of `2026-04-26`, `plan.create` operation results include a bounded plan
 receipt summary alongside the existing full plan payload. Completed plan-create
 operations now return the real plan status, current in-progress step id/title,
@@ -3893,6 +3902,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 operation detail memory 
   Result: `passed`
 - `git diff --check`
   Result: `passed` (Git emitted a line-ending warning only)
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation metadata receipt-handle reachability slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\operations.py src\francis\operations\runtime.py tests\test_api_operations.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `7 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `63 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operation memory receipt interface reachability slice:
 

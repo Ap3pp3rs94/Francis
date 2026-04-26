@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OperationsClient } from "./index.ts";
+import { OperationsClient, parseOperationRecord } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -96,6 +96,29 @@ test("OperationsClient.list requests receipt handle filters and preserves return
   } finally {
     restoreFetch();
   }
+});
+
+test("parseOperationRecord preserves trace handles from operation metadata", () => {
+  const parsed = parseOperationRecord({
+    id: "task_meta_handles",
+    ts: 1_710_000_120,
+    status: "succeeded",
+    name: "plugin.run",
+    meta: {
+      trace_id: "trace_meta_alpha",
+    },
+    input: {
+      meta: {
+        run_id: "run_input_meta_alpha",
+        artifact_dir: "D:/francis/data/artifacts/meta-alpha",
+      },
+    },
+  });
+
+  assert.equal(parsed?.id, "task_meta_handles");
+  assert.equal(parsed?.trace_id, "trace_meta_alpha");
+  assert.equal(parsed?.run_id, "run_input_meta_alpha");
+  assert.equal(parsed?.artifact_dir, "D:/francis/data/artifacts/meta-alpha");
 });
 
 test("OperationsClient.run posts the bounded worker request to the operation run route", async () => {

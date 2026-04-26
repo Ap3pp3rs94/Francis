@@ -498,6 +498,95 @@ def test_operations_list_and_export_filter_artifact_receipts(monkeypatch, tmp_pa
     assert rows[0]["artifact_dir"] == artifact_dir
 
 
+def test_operations_list_get_and_export_preserve_metadata_only_trace_handles(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    task_id = "tsk_metadata_handles"
+    trace_id = "trace_metadata_handles"
+    run_id = "run_metadata_handles"
+    artifact_dir = str(data_root / "artifacts" / "metadata" / "run_metadata_handles")
+    task_dir = data_root / "tasks" / task_id
+    task_dir.mkdir(parents=True)
+    (task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": task_id,
+                "status": "completed",
+                "capability": "plugin.run",
+                "requester_id": "test.operations.metadata_handles",
+                "created_at": "2024-03-09T16:00:00+00:00",
+                "updated_at": "2024-03-09T16:00:01+00:00",
+                "inputs": {
+                    "meta": {
+                        "run_id": run_id,
+                        "artifact_dir": artifact_dir,
+                    }
+                },
+                "meta": {
+                    "trace_id": trace_id,
+                },
+                "result": {
+                    "data": {
+                        "ok": True,
+                        "message": "completed without receipt handles",
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    listed = client.get("/operations/list")
+    assert listed.status_code == 200
+    listed_operation = next(item for item in listed.json()["items"] if item["id"] == task_id)
+    assert listed_operation["trace_id"] == trace_id
+    assert listed_operation["run_id"] == run_id
+    assert listed_operation["artifact_dir"] == artifact_dir
+    assert listed_operation["meta"]["trace_id"] == trace_id
+    assert listed_operation["meta"]["run_id"] == run_id
+    assert listed_operation["meta"]["artifact_dir"] == artifact_dir
+
+    listed_by_trace = client.get("/operations/list", params={"trace_id": trace_id})
+    assert listed_by_trace.status_code == 200
+    assert [item["id"] for item in listed_by_trace.json()["items"]] == [task_id]
+
+    listed_by_run = client.get("/operations/list", params={"run_id": run_id})
+    assert listed_by_run.status_code == 200
+    assert [item["id"] for item in listed_by_run.json()["items"]] == [task_id]
+
+    listed_by_artifact = client.get("/operations/list", params={"artifact_dir": artifact_dir})
+    assert listed_by_artifact.status_code == 200
+    assert [item["id"] for item in listed_by_artifact.json()["items"]] == [task_id]
+
+    fetched = client.get(f"/operations/{task_id}")
+    assert fetched.status_code == 200
+    fetched_operation = fetched.json()["operation"]
+    assert fetched_operation["trace_id"] == trace_id
+    assert fetched_operation["run_id"] == run_id
+    assert fetched_operation["artifact_dir"] == artifact_dir
+
+    exported_json = client.get("/operations/export", params={"format": "json", "run_id": run_id})
+    assert exported_json.status_code == 200
+    assert [item["id"] for item in exported_json.json()["items"]] == [task_id]
+    assert exported_json.json()["items"][0]["trace_id"] == trace_id
+
+    exported_csv = client.get("/operations/export", params={"format": "csv", "artifact_dir": artifact_dir})
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert [row["id"] for row in rows] == [task_id]
+    assert rows[0]["trace_id"] == trace_id
+    assert rows[0]["run_id"] == run_id
+    assert rows[0]["artifact_dir"] == artifact_dir
+
+
 def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

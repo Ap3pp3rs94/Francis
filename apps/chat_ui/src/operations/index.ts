@@ -615,10 +615,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
   const correlation_id =
     safeString(raw.correlation_id) || safeString(raw.correlationId) || safeString(raw.corr_id) || undefined;
 
-  const trace_id = safeString(raw.trace_id) || safeString(raw.traceId) || undefined;
-  const run_id = safeString(raw.run_id) || safeString(raw.runId) || undefined;
-  const span_id = safeString(raw.span_id) || safeString(raw.spanId) || undefined;
-  const artifact_dir = safeString(raw.artifact_dir) || safeString(raw.artifact_path) || undefined;
+  const meta = isRecord(raw.meta) ? raw.meta : undefined;
 
   const duration_ms =
     safeNumber(raw.duration_ms, 0) || safeNumber(raw.elapsed_ms, 0) || safeNumber(raw.latency_ms, 0) || 0;
@@ -627,14 +624,39 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
 
   const tags = safeStringArray(raw.tags);
 
-  const meta = isRecord(raw.meta) ? raw.meta : undefined;
-
   // payload aliases
   const input =
     "input" in raw ? raw.input :
     "request" in raw ? raw.request :
     "payload" in raw ? raw.payload :
     "context" in raw ? raw.context :
+    undefined;
+  const inputMeta = isRecord(input) && isRecord(input.meta) ? input.meta : undefined;
+
+  const trace_id =
+    safeString(raw.trace_id) ||
+    safeString(raw.traceId) ||
+    safeString(meta?.trace_id) ||
+    safeString(meta?.traceId) ||
+    safeString(inputMeta?.trace_id) ||
+    safeString(inputMeta?.traceId) ||
+    undefined;
+  const run_id =
+    safeString(raw.run_id) ||
+    safeString(raw.runId) ||
+    safeString(meta?.run_id) ||
+    safeString(meta?.runId) ||
+    safeString(inputMeta?.run_id) ||
+    safeString(inputMeta?.runId) ||
+    undefined;
+  const span_id = safeString(raw.span_id) || safeString(raw.spanId) || undefined;
+  const artifact_dir =
+    safeString(raw.artifact_dir) ||
+    safeString(raw.artifact_path) ||
+    safeString(meta?.artifact_dir) ||
+    safeString(meta?.artifact_path) ||
+    safeString(inputMeta?.artifact_dir) ||
+    safeString(inputMeta?.artifact_path) ||
     undefined;
 
   const output =

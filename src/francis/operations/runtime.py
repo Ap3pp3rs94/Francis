@@ -214,6 +214,18 @@ def _task_mission_id(task: dict[str, Any]) -> str:
     return ""
 
 
+def _task_handle_from_metadata(task: dict[str, Any], *keys: str) -> str:
+    task_meta = task.get("meta") if isinstance(task.get("meta"), dict) else {}
+    inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+    input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+    for source in (task_meta, input_meta):
+        for key in keys:
+            value = _safe_str(source.get(key)).strip()
+            if value:
+                return value
+    return ""
+
+
 def _approval_status(approval_id: str) -> str:
     cleaned = _safe_str(approval_id).strip()
     if not cleaned:
@@ -349,6 +361,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         or _safe_str(output_sandbox.get("trace_id")).strip()
         or _safe_str(output_audit.get("trace_id")).strip()
         or _safe_str(output_sandbox_audit.get("trace_id")).strip()
+        or _task_handle_from_metadata(task, "trace_id", "traceId")
     )
     run_id = (
         _safe_str(output_trace.get("run_id")).strip()
@@ -357,6 +370,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         or _safe_str(output_sandbox.get("run_id")).strip()
         or _safe_str(output_audit.get("run_id")).strip()
         or _safe_str(output_sandbox_audit.get("run_id")).strip()
+        or _task_handle_from_metadata(task, "run_id", "runId")
     )
     artifact_dir = (
         _safe_str(output_trace.get("artifact_dir")).strip()
@@ -367,6 +381,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         or _safe_str(output_sandbox.get("artifact_path")).strip()
         or _safe_str(output_audit.get("artifact_dir")).strip()
         or _safe_str(output_sandbox_audit.get("artifact_dir")).strip()
+        or _task_handle_from_metadata(task, "artifact_dir", "artifact_path")
     )
     result_status = _result_status(task)
     governance = _result_governance(task)
