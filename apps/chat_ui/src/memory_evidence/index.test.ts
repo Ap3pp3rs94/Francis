@@ -89,6 +89,50 @@ test("buildMemoryEvidenceQueries carries failed status into bounded evidence fil
   );
 });
 
+test("buildMemoryEvidenceQueries falls back to terminal receipt references", () => {
+  const queries = buildMemoryEvidenceQueries({
+    missionId: "mission_selected",
+    receipt: {
+      operation_status: "succeeded",
+      references: {
+        mission_id: "mission_receipt",
+        operation_id: "task_receipt",
+        trace_id: "trace_receipt",
+        run_id: "run_receipt",
+        artifact_dir: "D:/francis/data/artifacts/receipt",
+      },
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "mission=mission_selected",
+      filters: { mission_id: "mission_selected", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "task=task_receipt",
+      filters: { operation_id: "task_receipt", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "trace=trace_receipt",
+      filters: { trace_id: "trace_receipt", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "run=run_receipt",
+      filters: { run_id: "run_receipt", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "artifact=D:/francis/data/artifacts/receipt",
+      filters: {
+        artifact_dir: "D:/francis/data/artifacts/receipt",
+        operation_status: "succeeded",
+        limit: 8,
+        include_payload: false,
+      },
+    },
+  ]);
+});
+
 test("mergeMemoryEvidenceResponses dedupes by event id, sorts newest first, and limits results", () => {
   const items = mergeMemoryEvidenceResponses(
     [

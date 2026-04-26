@@ -9898,6 +9898,11 @@ function OperationsPanel(props: {
     safeString(selectedMissionCurrentTask?.approval_id).trim() ||
     safeString(selectedMissionLoopHandoff?.approval_id).trim() ||
     safeString(selectedMissionReceiptSummary?.current_approval_id).trim();
+  const selectedMissionEvidenceReceipt =
+    selectedMissionBridgeDetail?.latest_memory_receipt ??
+    selectedMissionReceiptSummary?.latest_memory_receipt ??
+    selectedMissionLoopState?.memory?.latest_memory_receipt ??
+    selectedMissionBridgeDetail?.memory_receipts?.[0];
   const selectedMissionBridgeTaskId =
     selectedMissionCurrentTaskId ||
     safeString(selectedMissionLoopHandoff?.operation_id).trim() ||
@@ -9921,6 +9926,7 @@ function OperationsPanel(props: {
         traceId: selectedMissionMemoryTraceId,
         runId: selectedRunId,
         artifactDir: selectedArtifactDir,
+        receipt: selectedMissionEvidenceReceipt,
       }),
     [
       selectedArtifactDir,
@@ -9928,6 +9934,7 @@ function OperationsPanel(props: {
       selectedMissionId,
       selectedMissionCurrentTaskResultStatus,
       selectedMissionCurrentTaskStatus,
+      selectedMissionEvidenceReceipt,
       selectedMissionMemoryTraceId,
       selectedOperation?.id,
       selectedRunId,
@@ -9961,11 +9968,7 @@ function OperationsPanel(props: {
     selectedMissionLoopState?.memory?.memory_receipt_count ??
     selectedMissionBridgeDetail?.memory_receipts?.length ??
     0;
-  const selectedMissionLatestMemoryReceipt =
-    selectedMissionBridgeDetail?.latest_memory_receipt ??
-    selectedMissionReceiptSummary?.latest_memory_receipt ??
-    selectedMissionLoopState?.memory?.latest_memory_receipt ??
-    selectedMissionBridgeDetail?.memory_receipts?.[0];
+  const selectedMissionLatestMemoryReceipt = selectedMissionEvidenceReceipt;
   const selectedMissionLatestMemoryReceiptRefs = selectedMissionLatestMemoryReceipt
     ? missionMemoryReceiptReferenceLine(selectedMissionLatestMemoryReceipt)
     : "";

@@ -311,6 +311,15 @@ operation, adds `operation_status=succeeded|failed` only when one of those
 statuses is terminal, and avoids broad status-only searches or non-terminal
 status as memory truth.
 
+As of `2026-04-26`, the operation memory-evidence interface can also fall back
+to terminal mission memory receipt references when the selected task projection
+is sparse. The evidence query helper accepts a parsed receipt reference and can
+derive mission, operation, trace, run, artifact, and terminal status filters
+from that receipt without including payloads. The selected-operation mission
+bridge passes the latest parsed mission memory receipt into that helper, so the
+operator can load memory evidence from backend receipt truth instead of UI-only
+state.
+
 As of `2026-04-25`, the operations detail surface can use that memory timeline
 contract from the mission loop bridge. When a selected operation exposes a real
 mission id, linked operation id, or trace id, the chat UI can issue bounded
@@ -3527,6 +3536,15 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory e
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal receipt memory evidence interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `58 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission loop receipt-handle projection slice:

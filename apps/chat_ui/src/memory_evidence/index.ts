@@ -9,6 +9,22 @@ export type MemoryEvidenceQuery = {
   filters: MemoryTimelineListFilters;
 };
 
+export type MemoryEvidenceReceiptReference = {
+  mission_id?: string;
+  operation_id?: string;
+  operation_status?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  references?: {
+    mission_id?: string;
+    operation_id?: string;
+    trace_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
+  };
+};
+
 export type MemoryEvidenceQueryInput = {
   missionId?: string;
   operationId?: string;
@@ -17,10 +33,18 @@ export type MemoryEvidenceQueryInput = {
   traceId?: string;
   runId?: string;
   artifactDir?: string;
+  receipt?: MemoryEvidenceReceiptReference;
 };
 
 function cleanId(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function receiptReferenceId(
+  receipt: MemoryEvidenceReceiptReference | undefined,
+  key: "mission_id" | "operation_id" | "trace_id" | "run_id" | "artifact_dir",
+): string {
+  return cleanId(receipt?.[key]) || cleanId(receipt?.references?.[key]);
 }
 
 function terminalOperationStatus(value: string | string[] | undefined): string {
@@ -45,13 +69,14 @@ export function buildMemoryEvidenceQueries(input: MemoryEvidenceQueryInput): Mem
     queries.push({ label, filters: { ...filters, limit: 8, include_payload: false } });
   };
 
-  const missionId = cleanId(input.missionId);
-  const operationId = cleanId(input.operationId);
+  const receipt = input.receipt;
+  const missionId = cleanId(input.missionId) || receiptReferenceId(receipt, "mission_id");
+  const operationId = cleanId(input.operationId) || receiptReferenceId(receipt, "operation_id");
   const fallbackOperationId = cleanId(input.fallbackOperationId);
-  const operationStatus = terminalOperationStatus(input.operationStatus);
-  const traceId = cleanId(input.traceId);
-  const runId = cleanId(input.runId);
-  const artifactDir = cleanId(input.artifactDir);
+  const operationStatus = terminalOperationStatus(input.operationStatus) || terminalOperationStatus(receipt?.operation_status);
+  const traceId = cleanId(input.traceId) || receiptReferenceId(receipt, "trace_id");
+  const runId = cleanId(input.runId) || receiptReferenceId(receipt, "run_id");
+  const artifactDir = cleanId(input.artifactDir) || receiptReferenceId(receipt, "artifact_dir");
   const withOperationStatus = (filters: MemoryTimelineListFilters): MemoryTimelineListFilters =>
     operationStatus ? { ...filters, operation_status: operationStatus } : filters;
 
