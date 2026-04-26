@@ -259,3 +259,99 @@ ui:
     assert focus_item["last_task_previous_approval_id"] == "apr_exact_320"
     assert focus_item["last_task_approval_status"] == "pending"
     assert focus_item["latest_activity"]["name"] == "governance_hold"
+    assert state["continuity"]["handoff_focus_source"] == "focus"
+    assert state["continuity"]["handoff_focus"]["id"] == "msn_approval_focus"
+    assert state["continuity"]["handoff_focus"]["last_task_approval_id"] == "apr_exact_321"
+
+
+def test_operator_mode_continuity_handoff_uses_failed_preview_when_focus_empty(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from francis.world_state import operator_mode as operator_mode_module
+
+    monkeypatch.setattr(
+        operator_mode_module,
+        "mission_continuity_snapshot",
+        lambda **_: {
+            "mission_status_counts": {"failed": 1},
+            "mission_briefing": {
+                "headline": "Failed mission needs receipt-backed recovery review",
+                "counts": {"failed": 1},
+                "focus": [],
+                "failed_preview": [
+                    {
+                        "id": "msn_failed_receipt",
+                        "status": "failed",
+                        "recommended_action": "retry_or_deadletter",
+                        "current_task": {
+                            "operation_id": "tsk_failed_receipt",
+                            "trace_id": "trace_failed_receipt",
+                            "run_id": "run_failed_receipt",
+                            "artifact_dir": "D:/Francis/.data/artifacts/run_failed_receipt",
+                            "handoff_action": "retry_or_deadletter",
+                            "next_step": "review_operation_detail",
+                        },
+                        "latest_memory_receipt": {
+                            "mission_id": "msn_failed_receipt",
+                            "operation_id": "tsk_failed_receipt",
+                            "operation_status": "failed",
+                            "operation_error": "plan_missing",
+                            "recovery_next_step": "review_operation_detail",
+                        },
+                    }
+                ],
+                "recently_completed": [],
+                "deadletter_preview": [],
+            },
+        },
+    )
+
+    state = operator_mode_module.snapshot()
+
+    continuity = state["continuity"]
+    assert continuity["handoff_focus_source"] == "failed_preview"
+    assert continuity["handoff_focus"]["id"] == "msn_failed_receipt"
+    assert continuity["handoff_focus"]["recommended_action"] == "retry_or_deadletter"
+    assert continuity["handoff_focus"]["current_task"]["operation_id"] == "tsk_failed_receipt"
+    assert continuity["handoff_focus"]["current_task"]["trace_id"] == "trace_failed_receipt"
+    assert continuity["handoff_focus"]["latest_memory_receipt"]["operation_status"] == "failed"
+    assert continuity["handoff_focus"]["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"

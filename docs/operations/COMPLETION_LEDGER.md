@@ -393,6 +393,14 @@ current-task, trace, run, artifact, and memory-receipt handles from backend
 truth. This is read-model focus selection only; it does not create retry,
 deadletter, execution, memory, or UI state.
 
+As of `2026-04-26`, operator-mode continuity readback exposes the same concrete
+handoff focus before ORB consumes it. `/system/operator_mode` now returns
+`continuity.handoff_focus` and `continuity.handoff_focus_source`, choosing the
+first existing item from focus, failed preview, deadletter preview, or recently
+completed continuity. Existing focus, preview, and receipt arrays remain
+unchanged; this is read-model selection only and does not create retry,
+deadletter, execution, memory, or UI state.
+
 As of `2026-04-26`, mission advance and queue-run handoff results preserve that
 receipt-backed recovery context when linked operation execution fails. The
 mission runtime projects `operation_error`, `result_message` when present, and
@@ -3612,6 +3620,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 ORB failed handback focu
   Result: `2 files already formatted` (cache warning only: `.ruff_cache` access denied)
 - `python -m pytest tests\unit\test_kernel_contracts.py tests\test_api_system_settings.py -q`
   Result: `33 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operator-mode handoff focus slice:
+
+- `python -m pytest tests\unit\test_operator_mode.py -q`
+  Result: `4 passed`
+- `python -m ruff check src\francis\world_state\operator_mode.py tests\unit\test_operator_mode.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\operator_mode.py tests\unit\test_operator_mode.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\unit\test_operator_mode.py tests\test_api_system_settings.py -q`
+  Result: `28 passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`

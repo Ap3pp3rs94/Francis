@@ -105,6 +105,26 @@ def _read_json(path: Path) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _briefing_list(briefing: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    return [dict(item) for item in _as_list(briefing.get(key)) if isinstance(item, dict)]
+
+
+def _continuity_handoff_focus(briefing: dict[str, Any]) -> dict[str, Any]:
+    for source in ("focus", "failed_preview", "deadletter_preview", "recently_completed"):
+        items = _briefing_list(briefing, source)
+        if items:
+            return {"source": source, "item": items[0]}
+    return {"source": "", "item": {}}
+
+
 def _control_mode_state_path(data: Path) -> Path:
     return data / "runtime" / "control_mode.json"
 
@@ -442,6 +462,8 @@ def snapshot() -> dict[str, Any]:
 
     operator_notes = profile_meta.get("operator_notes") if isinstance(profile_meta.get("operator_notes"), list) else []
     notes = [_safe_str(item).strip() for item in operator_notes if _safe_str(item).strip()][:3]
+    mission_briefing = _as_dict(continuity.get("mission_briefing"))
+    handoff_focus = _continuity_handoff_focus(mission_briefing)
 
     return {
         "ok": True,
@@ -471,26 +493,14 @@ def snapshot() -> dict[str, Any]:
         "focus": focus,
         "backlog": backlog,
         "continuity": {
-            "headline": _safe_str((continuity.get("mission_briefing") or {}).get("headline")).strip(),
-            "mission_counts": (continuity.get("mission_briefing") or {}).get("counts")
-            if isinstance((continuity.get("mission_briefing") or {}).get("counts"), dict)
-            else {},
-            "focus": continuity.get("mission_briefing", {}).get("focus")
-            if isinstance(continuity.get("mission_briefing"), dict)
-            and isinstance(continuity.get("mission_briefing", {}).get("focus"), list)
-            else [],
-            "recently_completed": continuity.get("mission_briefing", {}).get("recently_completed")
-            if isinstance(continuity.get("mission_briefing"), dict)
-            and isinstance(continuity.get("mission_briefing", {}).get("recently_completed"), list)
-            else [],
-            "failed_preview": continuity.get("mission_briefing", {}).get("failed_preview")
-            if isinstance(continuity.get("mission_briefing"), dict)
-            and isinstance(continuity.get("mission_briefing", {}).get("failed_preview"), list)
-            else [],
-            "deadletter_preview": continuity.get("mission_briefing", {}).get("deadletter_preview")
-            if isinstance(continuity.get("mission_briefing"), dict)
-            and isinstance(continuity.get("mission_briefing", {}).get("deadletter_preview"), list)
-            else [],
+            "headline": _safe_str(mission_briefing.get("headline")).strip(),
+            "mission_counts": _as_dict(mission_briefing.get("counts")),
+            "focus": _briefing_list(mission_briefing, "focus"),
+            "recently_completed": _briefing_list(mission_briefing, "recently_completed"),
+            "failed_preview": _briefing_list(mission_briefing, "failed_preview"),
+            "deadletter_preview": _briefing_list(mission_briefing, "deadletter_preview"),
+            "handoff_focus": _as_dict(handoff_focus.get("item")),
+            "handoff_focus_source": _safe_str(handoff_focus.get("source")).strip(),
         },
         "notes": notes,
     }
