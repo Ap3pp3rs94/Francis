@@ -1271,7 +1271,17 @@ def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, 
 
 
 @router.post("/tick")
-def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
+def tick_missions(request: Request, payload: MissionTickManyIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        denied = _permission_denied(permission)
+        return {
+            **denied,
+            "items": [],
+            "total": 0,
+            "applied": 0,
+            "errors": [{"error": denied["error"], "governance": denied["governance"]}],
+        }
     blocked_reason = _mission_write_posture_guard("reconciling the mission queue")
     if blocked_reason:
         return {
@@ -1394,7 +1404,10 @@ def get_mission(mission_id: str) -> dict[str, object]:
 
 
 @router.patch("/{mission_id}")
-def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]:
+def patch_mission(mission_id: str, request: Request, payload: MissionPatchIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
     blocked_reason = _mission_write_posture_guard("updating a mission")
     if blocked_reason:
         return {"ok": False, "error": blocked_reason, "status": "blocked"}
@@ -1430,7 +1443,10 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
 
 
 @router.post("/{mission_id}/tick")
-def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
+def tick_mission(mission_id: str, request: Request, payload: MissionTickIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return {**_permission_denied(permission), "applied": False}
     blocked_reason = _mission_write_posture_guard("ticking mission continuity")
     if blocked_reason:
         return {"ok": False, "applied": False, "error": blocked_reason, "status": "blocked"}
@@ -1456,7 +1472,10 @@ def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
 
 
 @router.post("/{mission_id}/deadletter")
-def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[str, object]:
+def deadletter_mission(mission_id: str, request: Request, payload: MissionDeadletterIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
     blocked_reason = _mission_write_posture_guard("deadlettering a mission")
     if blocked_reason:
         return {"ok": False, "error": blocked_reason, "status": "blocked"}
@@ -1483,7 +1502,10 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
 
 
 @router.post("/{mission_id}/replace")
-def replace_mission(mission_id: str, payload: MissionReplaceIn) -> dict[str, object]:
+def replace_mission(mission_id: str, request: Request, payload: MissionReplaceIn) -> dict[str, object]:
+    permission = _mission_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
     blocked_reason = _mission_write_posture_guard("declaring a replacement mission")
     if blocked_reason:
         return {"ok": False, "error": blocked_reason, "status": "blocked"}
