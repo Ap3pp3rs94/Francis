@@ -1209,6 +1209,126 @@ def test_operations_approved_mission_run_receipt_preserves_approval_posture(monk
     assert receipts[0]["loop"]["handoff_approval_status"] == "approved"
 
 
+def test_operations_approved_supervised_exec_preserves_receipt_handles(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Preserve approved supervised execution handles",
+            "summary": "Approved supervised execution should keep trace, run, and artifact handles.",
+            "requester_id": "test.operations.approved_mission_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "approved supervised operation",
+            "mission_id": mission_id,
+            "input": {"user_command": "echo approved operation receipt", "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["ok"] is True
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.approved_handles"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approved = client.post(
+        "/approvals/decision", json={"id": approval_id, "action": "approve", "actor": "test.approvals.decision"}
+    )
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.approved_handles"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    operation = executed_body["operation"]
+    assert operation["meta"]["approval_id"] == approval_id
+    trace_id = str(operation["trace_id"])
+    run_id = str(operation["run_id"])
+    artifact_dir = str(operation["artifact_dir"])
+    assert trace_id.startswith("trace_")
+    assert run_id
+    assert artifact_dir
+
+    receipt = executed_body["memory_receipt"]
+    assert receipt["operation_status"] == "succeeded"
+    assert receipt["approval_status"] == "approved"
+    assert receipt["references"]["mission_id"] == mission_id
+    assert receipt["references"]["operation_id"] == operation_id
+    assert receipt["references"]["approval_id"] == approval_id
+    assert receipt["references"]["trace_id"] == trace_id
+    assert receipt["references"]["run_id"] == run_id
+    assert receipt["references"]["artifact_dir"] == artifact_dir
+    assert receipt["handoff_trace_id"] == trace_id
+    assert receipt["handoff_run_id"] == run_id
+    assert receipt["handoff_artifact_dir"] == artifact_dir
+    assert receipt["current_task_trace_id"] == trace_id
+    assert receipt["current_task_run_id"] == run_id
+    assert receipt["current_task_artifact_dir"] == artifact_dir
+
+    detail = client.get(f"/operations/{operation_id}")
+    assert detail.status_code == 200
+    detail_body = detail.json()
+    assert detail_body["operation"]["meta"]["approval_id"] == approval_id
+    assert detail_body["operation"]["trace_id"] == trace_id
+    assert detail_body["operation"]["run_id"] == run_id
+    assert detail_body["operation"]["artifact_dir"] == artifact_dir
+    assert detail_body["latest_memory_receipt"]["references"]["approval_id"] == approval_id
+    assert detail_body["latest_memory_receipt"]["references"]["trace_id"] == trace_id
+    assert detail_body["latest_memory_receipt"]["references"]["run_id"] == run_id
+    assert detail_body["latest_memory_receipt"]["references"]["artifact_dir"] == artifact_dir
+
+    listed = client.get(
+        "/memory/timeline/list",
+        params={
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "approval_id": approval_id,
+            "trace_id": trace_id,
+            "run_id": run_id,
+            "artifact_dir": artifact_dir,
+            "include_payload": 1,
+        },
+    )
+    assert listed.status_code == 200
+    receipts = [
+        item for item in listed.json()["items"] if item.get("references", {}).get("operation_id") == operation_id
+    ]
+    assert receipts
+    assert receipts[0]["references"]["approval_id"] == approval_id
+    assert receipts[0]["references"]["trace_id"] == trace_id
+    assert receipts[0]["references"]["run_id"] == run_id
+    assert receipts[0]["references"]["artifact_dir"] == artifact_dir
+    assert receipts[0]["loop"]["handoff_approval_id"] == approval_id
+    assert receipts[0]["loop"]["handoff_approval_status"] == "approved"
+    assert receipts[0]["loop"]["handoff_trace_id"] == trace_id
+    assert receipts[0]["loop"]["handoff_run_id"] == run_id
+    assert receipts[0]["loop"]["handoff_artifact_dir"] == artifact_dir
+    assert receipts[0]["loop"]["current_task_trace_id"] == trace_id
+    assert receipts[0]["loop"]["current_task_run_id"] == run_id
+    assert receipts[0]["loop"]["current_task_artifact_dir"] == artifact_dir
+
+
 def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

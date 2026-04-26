@@ -805,6 +805,16 @@ review_result` handoff instead of being pulled back to a stale approval gate
 from old operation metadata. This is a read-model truth fix only; it does not
 approve actions, execute work, create receipts, or change policy decisions.
 
+As of `2026-04-26`, approved mission-linked supervised execution is covered for
+full receipt-handle continuity across execution readbacks. The approved
+operation response, operation detail, terminal mission memory receipt, and
+`/memory/timeline/list` filters preserve the same `approval_id`,
+`approval_status`, `trace_id`, `run_id`, and `artifact_dir` values for the
+completed run. This proves the real `gate -> execute -> trace -> memory`
+readback path for artifact-backed supervised execution; it does not widen
+approval authority, auto-rerun approved work, or synthesize artifact handles for
+operation types that do not emit them.
+
 As of `2026-04-26`, the chat UI settings, continuity, and dedicated missions
 clients preserve those receipt-backed approval handoff handles when parsing
 world-state, continuity briefing, and mission-detail mission memory receipts.
@@ -5478,6 +5488,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal mission receipt
   Result: `1 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_api_operations.py -q`
   Result: `23 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 approved execution receipt-handle continuity slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_approved_mission_run_receipt_preserves_approval_posture tests\test_api_operations.py::test_operations_approved_supervised_exec_preserves_receipt_handles -q`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py -q`
+  Result: `26 passed`
+- `python -m ruff check --no-cache tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_api_operations.py`
+  Result: `1 file already formatted`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `64 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 completed handoff evidence handle priority slice:
 
