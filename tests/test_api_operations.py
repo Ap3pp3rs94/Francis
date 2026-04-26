@@ -311,6 +311,7 @@ def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch,
     patched_body = patched.json()
     assert patched_body["ok"] is False
     assert patched_body["status"] == "queued"
+    assert patched_body["operation"]["id"] == patch_operation_id
     assert "Observe mode keeps Francis read-only." in patched_body["message"]
 
     cancelled = client.post(f"/operations/{cancel_operation_id}/cancel", json={"reason": "observe_cancel"})
@@ -318,6 +319,7 @@ def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch,
     cancelled_body = cancelled.json()
     assert cancelled_body["ok"] is False
     assert cancelled_body["status"] == "queued"
+    assert cancelled_body["operation"]["id"] == cancel_operation_id
     assert "Observe mode keeps Francis read-only." in cancelled_body["message"]
 
     deleted = client.request("DELETE", f"/operations/{delete_operation_id}", json={"reason": "observe_delete"})
@@ -325,6 +327,7 @@ def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch,
     deleted_body = deleted.json()
     assert deleted_body["ok"] is False
     assert deleted_body["status"] == "queued"
+    assert deleted_body["operation"]["id"] == delete_operation_id
     assert "Observe mode keeps Francis read-only." in deleted_body["message"]
 
     patch_record = json.loads((data_root / "tasks" / patch_operation_id / "record.json").read_text(encoding="utf-8"))
@@ -336,6 +339,42 @@ def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch,
         fetched = client.get(f"/operations/{operation_id}")
         assert fetched.status_code == 200
         assert fetched.json()["operation"]["status"] == "queued"
+
+
+def test_operations_lifecycle_observe_block_does_not_fabricate_missing_operations(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "francis_data"))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+    set_control_mode("observe", reason="test_observe_missing_operation_block", actor="tests")
+
+    requests = [
+        (
+            "tsk_missing_patch",
+            client.patch("/operations/tsk_missing_patch", json={"tags": ["should-not-apply"]}),
+        ),
+        (
+            "tsk_missing_cancel",
+            client.post("/operations/tsk_missing_cancel/cancel", json={"reason": "observe_cancel"}),
+        ),
+        (
+            "tsk_missing_delete",
+            client.request("DELETE", "/operations/tsk_missing_delete", json={"reason": "observe_delete"}),
+        ),
+    ]
+
+    for operation_id, response in requests:
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is False
+        assert body["status"] == "blocked"
+        assert body["operation_id"] == operation_id
+        assert "operation" not in body
+        assert "Observe mode keeps Francis read-only." in body["message"]
 
 
 def test_operations_run_once_worker_route_completes_cleanly(monkeypatch, tmp_path: Path) -> None:

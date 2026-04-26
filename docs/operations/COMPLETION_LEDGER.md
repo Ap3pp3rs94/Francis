@@ -106,6 +106,14 @@ posture. Operation create, direct run, and worker-cycle routes already had
 posture guards. This is a posture guard integration only; it does not add an
 API-scope permission gate to operation lifecycle routes.
 
+As of `2026-04-26`, those operation lifecycle posture-denial responses no longer
+fabricate operation projections for missing operation records. When the blocked
+target exists, the response still carries the current operation projection and
+status. When it does not exist, the response carries the requested `operation_id`
+plus blocked posture without inventing an `operation` object. This tightens
+operator-surface truthfulness only; it does not alter Observe-mode enforcement,
+allowed lifecycle mutations, execution, approval, or memory behavior.
+
 As of `2026-04-26`, domain registry write routes are also wired to the API
 permission gate. `POST /domains/create`, `PATCH /domains/update`, and
 `POST /domains/delete` now deny before mutating local domain registry state unless
@@ -3476,6 +3484,19 @@ Latest targeted validation for the `2026-04-26` operation lifecycle posture guar
 - `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py`
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` operation lifecycle posture-denial truthfulness slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git -c safe.directory=D:/Francis diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` mission execution permission-gate slice:
