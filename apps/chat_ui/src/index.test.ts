@@ -50,6 +50,15 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
           replacement_expected_payload_keys: ["action", "input", "plugin_id"],
           replacement_previous_payload_keys: ["action", "input", "plugin_id"],
           replacement_changed_keys: ["input"],
+          operation_id: "tsk_projection",
+          mission_id: "msn_projection",
+          operation_status: "queued",
+          operation_result_status: "needs_approval",
+          gate: "approvals_gate",
+          next_step: "approve_exact_action",
+          trace_id: "trace_projection",
+          run_id: "run_projection",
+          artifact_dir: "D:/Francis/.data/artifacts/supervised_exec/run_projection",
           payload_summary: {
             requested_action: "deploy",
             plugin_id: "plugin.deploy",
@@ -76,6 +85,15 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
     assert.deepEqual(result.items[0]?.replacement_expected_payload_keys, ["action", "input", "plugin_id"]);
     assert.deepEqual(result.items[0]?.replacement_previous_payload_keys, ["action", "input", "plugin_id"]);
     assert.deepEqual(result.items[0]?.replacement_changed_keys, ["input"]);
+    assert.equal(result.items[0]?.operation_id, "tsk_projection");
+    assert.equal(result.items[0]?.mission_id, "msn_projection");
+    assert.equal(result.items[0]?.operation_status, "queued");
+    assert.equal(result.items[0]?.operation_result_status, "needs_approval");
+    assert.equal(result.items[0]?.gate, "approvals_gate");
+    assert.equal(result.items[0]?.next_step, "approve_exact_action");
+    assert.equal(result.items[0]?.trace_id, "trace_projection");
+    assert.equal(result.items[0]?.run_id, "run_projection");
+    assert.equal(result.items[0]?.artifact_dir, "D:/Francis/.data/artifacts/supervised_exec/run_projection");
     assert.equal(result.items[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(result.items[0]?.payload_summary?.plugin_id, "plugin.deploy");
     assert.equal(result.items[0]?.payload_summary?.required_trust, 5);

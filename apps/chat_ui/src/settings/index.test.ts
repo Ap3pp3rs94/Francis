@@ -373,6 +373,15 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               replacement_expected_payload_keys: ["action", "input", "plugin_id"],
               replacement_previous_payload_keys: ["action", "input", "plugin_id"],
               replacement_changed_keys: ["input"],
+              operation_id: "tsk_plugin_refresh",
+              mission_id: "mission_plugin_refresh",
+              operation_status: "queued",
+              operation_result_status: "needs_approval",
+              gate: "approvals_gate",
+              next_step: "approve_exact_action",
+              trace_id: "trace_plugin_refresh",
+              run_id: "run_plugin_refresh",
+              artifact_dir: "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
               payload_summary: {
                 requested_action: "deploy",
                 plugin_id: "plugin.deploy",
@@ -883,6 +892,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       "plugin_id",
     ]);
     assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.replacement_changed_keys, ["input"]);
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_id, "tsk_plugin_refresh");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.mission_id, "mission_plugin_refresh");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_status, "queued");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.operation_result_status, "needs_approval");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.gate, "approvals_gate");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.next_step, "approve_exact_action");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.trace_id, "trace_plugin_refresh");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.run_id, "run_plugin_refresh");
+    assert.equal(
+      worldState.overview?.pending_approvals?.[0]?.artifact_dir,
+      "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
+    );
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.plugin_id, "plugin.deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.required_trust, 5);

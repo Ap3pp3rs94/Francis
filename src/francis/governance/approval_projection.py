@@ -27,6 +27,171 @@ def _read_json(path: Path) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _task_payload(task: dict[str, Any]) -> dict[str, Any]:
+    result = _as_dict(task.get("result"))
+    return _as_dict(result.get("data"))
+
+
+def _task_inputs(task: dict[str, Any]) -> dict[str, Any]:
+    return _as_dict(task.get("inputs"))
+
+
+def _approval_task_match(task: dict[str, Any], approval_id: str) -> bool:
+    if not approval_id:
+        return False
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    payload = _task_payload(task)
+    candidates = (
+        inputs.get("approval_id"),
+        input_meta.get("approval_id"),
+        payload.get("approval_id"),
+    )
+    return any(_safe_str(candidate).strip() == approval_id for candidate in candidates)
+
+
+def approval_task_record(
+    approval_id: str,
+    *,
+    task_root: Path | None = None,
+    max_records: int = 5000,
+) -> dict[str, Any]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return {}
+
+    tasks_base = task_root if task_root is not None else data_dir() / "tasks"
+    if not tasks_base.exists():
+        return {}
+
+    candidates: list[tuple[float, Path]] = []
+    try:
+        paths = tasks_base.glob("*/record.json")
+        for path in paths:
+            try:
+                candidates.append((path.stat().st_mtime, path))
+            except Exception:
+                candidates.append((0.0, path))
+    except Exception:
+        return {}
+
+    bounded = max(1, min(int(max_records), 50_000))
+    for _, path in sorted(candidates, key=lambda item: item[0], reverse=True)[:bounded]:
+        record = _read_json(path)
+        if record and _approval_task_match(record, resolved_id):
+            return record
+    return {}
+
+
+def _task_operation_status(task: dict[str, Any], result_status: str) -> str:
+    raw_status = _safe_str(task.get("status")).strip().lower()
+    if result_status in {"blocked", "denied"}:
+        return "blocked"
+    if result_status in {"pending", "needs_approval"}:
+        return "queued"
+    if raw_status in {"pending", "accepted"}:
+        return "queued"
+    if raw_status == "running":
+        return "running"
+    if raw_status in {"complete", "completed"}:
+        return "succeeded"
+    if raw_status == "failed":
+        return "failed"
+    if raw_status in {"canceled", "cancelled"}:
+        return "canceled"
+    return raw_status or ""
+
+
+def approval_task_projection(approval_id: str, *, task_root: Path | None = None) -> dict[str, Any]:
+    task = approval_task_record(approval_id, task_root=task_root)
+    if not task:
+        return {}
+
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    payload = _task_payload(task)
+    governance = _as_dict(payload.get("governance"))
+    receipt = _as_dict(payload.get("receipt"))
+    sandbox = _as_dict(payload.get("sandbox"))
+    audit = _as_dict(receipt.get("audit_event"))
+    sandbox_audit = _as_dict(sandbox.get("audit_event"))
+
+    result_status = _safe_str(payload.get("status")).strip().lower()
+    out: dict[str, Any] = {}
+
+    operation_id = _safe_str(task.get("task_id")).strip()
+    if operation_id:
+        out["operation_id"] = operation_id
+
+    mission_id = _first_text(inputs.get("mission_id"), input_meta.get("mission_id"))
+    if mission_id:
+        out["mission_id"] = mission_id
+
+    operation_status = _task_operation_status(task, result_status)
+    if operation_status:
+        out["operation_status"] = operation_status
+    if result_status:
+        out["operation_result_status"] = result_status
+
+    gate = _safe_str(governance.get("gate")).strip()
+    if gate:
+        out["gate"] = gate
+
+    next_step = redact_governed_display_value(governance.get("next_step"))
+    next_step_text = _safe_str(next_step).strip()
+    if next_step_text:
+        out["next_step"] = next_step_text
+
+    trace_id = _first_text(
+        payload.get("trace_id"),
+        payload.get("traceId"),
+        receipt.get("trace_id"),
+        sandbox.get("trace_id"),
+        audit.get("trace_id"),
+        sandbox_audit.get("trace_id"),
+    )
+    if trace_id:
+        out["trace_id"] = trace_id
+
+    run_id = _first_text(
+        payload.get("run_id"),
+        payload.get("runId"),
+        receipt.get("run_id"),
+        sandbox.get("run_id"),
+        audit.get("run_id"),
+        sandbox_audit.get("run_id"),
+    )
+    if run_id:
+        out["run_id"] = run_id
+
+    artifact_dir = _first_text(
+        payload.get("artifact_dir"),
+        payload.get("artifact_path"),
+        receipt.get("artifact_dir"),
+        receipt.get("artifact_path"),
+        sandbox.get("artifact_dir"),
+        sandbox.get("artifact_path"),
+        audit.get("artifact_dir"),
+        sandbox_audit.get("artifact_dir"),
+    )
+    if artifact_dir:
+        out["artifact_dir"] = artifact_dir
+
+    return out
+
+
 def approval_payload_summary(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
@@ -217,7 +382,12 @@ def _payload_keys(payload: Any) -> list[str]:
     return sorted(_safe_str(key).strip() for key in payload.keys() if _safe_str(key).strip())[:8]
 
 
-def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | None = None) -> dict[str, Any]:
+def approval_projection_fields(
+    record: dict[str, Any],
+    *,
+    artifact_root: Path | None = None,
+    task_root: Path | None = None,
+) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     approval_id = _safe_str(item.get("id")).strip()
 
@@ -267,5 +437,7 @@ def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | 
     changed_keys = _changed_payload_keys(expected_payload, previous_payload)
     if changed_keys:
         out["replacement_changed_keys"] = changed_keys
+
+    out.update(approval_task_projection(approval_id, task_root=task_root))
 
     return out

@@ -136,6 +136,15 @@ export type WorldStateApprovalSummary = {
   replacement_expected_payload_keys?: string[];
   replacement_previous_payload_keys?: string[];
   replacement_changed_keys?: string[];
+  operation_id?: string;
+  mission_id?: string;
+  operation_status?: string;
+  operation_result_status?: string;
+  gate?: string;
+  next_step?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   payload_summary?: WorldStateApprovalPayloadSummary;
 };
 
@@ -2079,6 +2088,15 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         replacement_expected_payload_keys: safeStringArray(item.replacement_expected_payload_keys),
         replacement_previous_payload_keys: safeStringArray(item.replacement_previous_payload_keys),
         replacement_changed_keys: safeStringArray(item.replacement_changed_keys),
+        operation_id: safeString(item.operation_id, ""),
+        mission_id: safeString(item.mission_id, ""),
+        operation_status: safeString(item.operation_status, ""),
+        operation_result_status: safeString(item.operation_result_status, ""),
+        gate: safeString(item.gate, ""),
+        next_step: safeString(item.next_step, ""),
+        trace_id: safeString(item.trace_id, ""),
+        run_id: safeString(item.run_id, ""),
+        artifact_dir: safeString(item.artifact_dir, ""),
         payload_summary: isRecord(item.payload_summary)
           ? parseWorldStateApprovalPayloadSummary(item.payload_summary)
           : undefined,

@@ -142,6 +142,63 @@ def test_approval_api_redacts_sealed_payload_digests(monkeypatch, tmp_path: Path
     assert approved_body["item"]["payload"]["user_command"] == "echo password=[REDACTED:secret]"
 
 
+def test_approval_list_surfaces_linked_operation_gate_handles(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Approval list should point back to the held mission operation.",
+            "summary": "A governed operation should be reviewable from the approval queue.",
+            "next_step": "Approve the exact action and rerun the linked operation.",
+            "requester_id": "test.approvals.loop_handles",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "approval projection operation linkage",
+            "mission_id": mission_id,
+            "input": {"user_command": "echo approval projection", "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.approvals.loop_handles"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+
+    assert listed_item["operation_id"] == operation_id
+    assert listed_item["mission_id"] == mission_id
+    assert listed_item["operation_status"] == "queued"
+    assert listed_item["operation_result_status"] == "needs_approval"
+    assert listed_item["gate"] == "approvals_gate"
+    assert listed_item["next_step"] == "approve_exact_action"
+    assert listed_item["run_id"] == approval_id
+    artifact_dir = Path(str(listed_item["artifact_dir"]))
+    assert artifact_dir.name == approval_id
+    assert artifact_dir.parent.name == "supervised_exec"
+
+
 def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

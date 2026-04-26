@@ -42,6 +42,15 @@ export type ApprovalItem = {
   replacement_expected_payload_keys?: string[];
   replacement_previous_payload_keys?: string[];
   replacement_changed_keys?: string[];
+  operation_id?: string;
+  mission_id?: string;
+  operation_status?: string;
+  operation_result_status?: string;
+  gate?: string;
+  next_step?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   payload_summary?: ApprovalPayloadSummary;
 };
 
@@ -154,6 +163,15 @@ function parseApprovalItem(raw: unknown): ApprovalItem | null {
     replacement_expected_payload_keys: safeStringList(raw.replacement_expected_payload_keys),
     replacement_previous_payload_keys: safeStringList(raw.replacement_previous_payload_keys),
     replacement_changed_keys: safeStringList(raw.replacement_changed_keys),
+    operation_id: safeString(raw.operation_id) || undefined,
+    mission_id: safeString(raw.mission_id) || undefined,
+    operation_status: safeString(raw.operation_status) || undefined,
+    operation_result_status: safeString(raw.operation_result_status) || undefined,
+    gate: safeString(raw.gate) || undefined,
+    next_step: safeString(raw.next_step) || undefined,
+    trace_id: safeString(raw.trace_id) || undefined,
+    run_id: safeString(raw.run_id) || undefined,
+    artifact_dir: safeString(raw.artifact_dir) || undefined,
   };
   if (isRecord(raw.payload_summary)) {
     item.payload_summary = parseApprovalPayloadSummary(raw.payload_summary);

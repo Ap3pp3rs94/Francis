@@ -945,6 +945,28 @@ function approvalProjectionReplacementScopeLine(item: ApprovalProjectionLike | n
   return parts.join(" · ");
 }
 
+function approvalProjectionLoopLine(item: ApprovalProjectionLike | null | undefined): string {
+  const missionId = safeString(item?.mission_id).trim();
+  const operationId = safeString(item?.operation_id).trim();
+  const gate = safeString(item?.gate).trim();
+  const nextStep = safeString(item?.next_step).trim();
+  const operationStatus = safeString(item?.operation_status).trim();
+  const resultStatus = safeString(item?.operation_result_status).trim();
+  const traceId = safeString(item?.trace_id).trim();
+  const runId = safeString(item?.run_id).trim();
+  const parts: string[] = [];
+  if (missionId) parts.push(`mission ${missionId}`);
+  if (operationId) parts.push(`task ${operationId}`);
+  if (gate) parts.push(`gate ${gate}`);
+  if (nextStep) parts.push(`next ${nextStep}`);
+  if (operationStatus || resultStatus) {
+    parts.push(`status ${[operationStatus, resultStatus].filter(Boolean).join("/")}`);
+  }
+  if (traceId) parts.push(`trace ${traceId}`);
+  if (runId) parts.push(`run ${runId}`);
+  return parts.slice(0, 6).join(" · ");
+}
+
 function approvalProjectionDetail(item: ApprovalProjectionLike | null | undefined): string {
   const factLine = approvalProjectionFactLine(item);
   if (factLine) return factLine;
@@ -1022,12 +1044,13 @@ function approvalActionField(payload: Record<string, unknown>, fallback: string)
   return approvalTextField(payload, "action", "name") || fallback;
 }
 
-function approvalContextField(item: ApprovalItem | null | undefined, ...keys: string[]): string {
-  const payload = approvalPayload(item);
+function approvalContextField(item: ApprovalProjectionLike | null | undefined, ...keys: string[]): string {
+  const payload = approvalPayload(item as ApprovalItem | null | undefined);
   const input = isRecord(payload.input) ? payload.input : {};
   const payloadMeta = isRecord(payload.meta) ? payload.meta : {};
   const inputMeta = isRecord(input.meta) ? input.meta : {};
-  const sources = [payload, payloadMeta, input, inputMeta];
+  const itemFields = isRecord(item) ? item : {};
+  const sources = [itemFields, payload, payloadMeta, input, inputMeta];
   for (const source of sources) {
     const value = approvalTextField(source, ...keys);
     if (value) return value;
@@ -3131,6 +3154,9 @@ function ApprovalsPanel(props: {
             {approvalProjectionExactActionLine(selectedApproval) ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>Exact action: {approvalProjectionExactActionLine(selectedApproval)}</div>
             ) : null}
+            {approvalProjectionLoopLine(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>Loop: {approvalProjectionLoopLine(selectedApproval)}</div>
+            ) : null}
             {approvalProjectionLineage(selectedApproval) ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>Lineage: {approvalProjectionLineage(selectedApproval)}</div>
             ) : null}
@@ -3247,6 +3273,7 @@ function ApprovalsPanel(props: {
           const selected = a.id === selectedApproval?.id;
           const detail = approvalProjectionDetail(a);
           const exactAction = approvalProjectionExactActionLine(a);
+          const loopLine = approvalProjectionLoopLine(a);
           const lineage = approvalProjectionLineage(a);
           const replacement = approvalProjectionReplacementLine(a);
           const replacementScope = approvalProjectionReplacementScopeLine(a);
@@ -3272,6 +3299,7 @@ function ApprovalsPanel(props: {
               {reason && reason !== detail ? <div style={{ fontSize: 12, color: "#ffcf9d", marginTop: 4 }}>{reason}</div> : null}
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>{inspection.scopeLabel}</div>
               {exactAction ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div> : null}
+              {loopLine ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>loop: {loopLine}</div> : null}
               {lineage ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div> : null}
               {replacement ? (
                 <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>replacement: {replacement}</div>
@@ -8966,6 +8994,7 @@ function SystemPanel(props: {
               (() => {
                 const detail = approvalProjectionDetail(item);
                 const exactAction = approvalProjectionExactActionLine(item);
+                const loopLine = approvalProjectionLoopLine(item);
                 const lineage = approvalProjectionLineage(item);
                 const replacement = approvalProjectionReplacementLine(item);
                 const reason = safeString(item.reason).trim();
@@ -8984,6 +9013,9 @@ function SystemPanel(props: {
                     ) : null}
                     {exactAction ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div>
+                    ) : null}
+                    {loopLine ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>loop: {loopLine}</div>
                     ) : null}
                     {lineage ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div>

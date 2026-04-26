@@ -207,6 +207,16 @@ chat UI operations client can request the same filters without inventing
 receipt state. This makes execution -> trace/artifact inspection reachable from
 operations read models without changing worker execution or approvals.
 
+As of `2026-04-26`, approval queue projections can expose the real held
+mission/operation loop handles for approval-gated work. Approval list items now
+derive `mission_id`, `operation_id`, `operation_status`,
+`operation_result_status`, `gate`, `next_step`, `trace_id`, `run_id`, and
+`artifact_dir` from existing task records that already reference the approval id;
+no approval decision behavior, exact-action matching, or execution path is
+changed. The chat UI approval client, world-state parser, approval panel, and
+pending-approvals cards preserve and render those handles so an operator can move
+from gate review back to the linked mission/task without raw JSON inspection.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2481,6 +2491,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 approval gate loop-handle projection slice:
+
+- `python -m ruff check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py -q`
+  Result: `7 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `41 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check -- src\francis\governance\approval_projection.py tests\test_api_approvals.py apps\chat_ui\src\index.ts apps\chat_ui\src\index.test.ts apps\chat_ui\src\settings\index.ts apps\chat_ui\src\settings\index.test.ts apps\chat_ui\src\App.tsx`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 operations receipt filter slice:
 
