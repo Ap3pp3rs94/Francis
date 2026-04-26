@@ -207,6 +207,13 @@ operation status, subsystem, and real mission/operation/trace/run references,
 so callers can move from execution result to receipt-backed memory retrieval
 without claiming memory for non-mission or non-succeeded runs.
 
+As of `2026-04-25`, the chat UI operations client preserves that direct
+operation-run memory handoff. `OperationsClient.run` now keeps the returned
+`memory_receipt` projection with source/kind, receipt scope, operation status,
+capability/subsystem, and real mission/operation/trace/run/artifact references,
+so interface code consuming direct operation execution results no longer drops
+the execution-to-memory receipt bridge.
+
 As of `2026-04-25`, mission advance and bounded mission queue-run responses
 preserve that same completed-operation `memory_receipt` handoff when mission
 progression executes a linked operation through the governed runtime. Direct
@@ -2390,6 +2397,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation client memory receipt contract slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `34 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt -q`
+  Result: `1 passed`
+- `git diff --check`
+  Result: `passed` (Git emitted a line-ending warning for `apps/chat_ui/src/operations/index.ts`)
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission memory receipt handoff slice:
 

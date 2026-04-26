@@ -250,9 +250,30 @@ export type OperationRunRequest = {
   worker_id?: string;
 };
 
+export type OperationMemoryReceipt = {
+  source?: string;
+  kind?: string;
+  ts?: number;
+  role?: string;
+  message?: string;
+  scope?: string;
+  operation_status?: string;
+  capability?: string;
+  subsystem?: string;
+  references?: {
+    mission_id?: string;
+    operation_id?: string;
+    trace_id?: string;
+    approval_id?: string;
+    run_id?: string;
+    artifact_dir?: string;
+  };
+};
+
 export type OperationRunResponse = {
   ok: boolean;
   operation?: OperationRecord;
+  memory_receipt?: OperationMemoryReceipt;
   status?: OperationStatus;
   message?: string;
 };
@@ -716,6 +737,36 @@ export function parseOperationDetail(json: unknown, idHint: string): OperationDe
   return { operation: op };
 }
 
+function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const referencesRaw = isRecord(raw.references) ? raw.references : {};
+  const references = {
+    mission_id: safeString(referencesRaw.mission_id) || undefined,
+    operation_id: safeString(referencesRaw.operation_id) || undefined,
+    trace_id: safeString(referencesRaw.trace_id) || undefined,
+    approval_id: safeString(referencesRaw.approval_id) || undefined,
+    run_id: safeString(referencesRaw.run_id) || undefined,
+    artifact_dir: safeString(referencesRaw.artifact_dir) || undefined,
+  };
+
+  const receipt: OperationMemoryReceipt = {
+    source: safeString(raw.source) || undefined,
+    kind: safeString(raw.kind) || undefined,
+    ts: safeNumber(raw.ts, 0) || undefined,
+    role: safeString(raw.role) || undefined,
+    message: safeString(raw.message) || undefined,
+    scope: safeString(raw.scope) || undefined,
+    operation_status: safeString(raw.operation_status) || undefined,
+    capability: safeString(raw.capability) || undefined,
+    subsystem: safeString(raw.subsystem) || undefined,
+  };
+
+  if (Object.values(references).some((value) => value)) receipt.references = references;
+  if (Object.values(receipt).some((value) => value !== undefined)) return receipt;
+  return undefined;
+}
+
 /* ----------------------------- endpoints (overrideable) ----------------------------- */
 
 export type OperationsEndpoints = {
@@ -1050,6 +1101,7 @@ export class OperationsClient {
     return {
       ok: Boolean(json.ok ?? true),
       operation: op ?? undefined,
+      memory_receipt: parseOperationMemoryReceipt(json.memory_receipt),
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
       message: safeString(json.message) || undefined,
     };
