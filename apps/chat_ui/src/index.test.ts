@@ -114,7 +114,33 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
   let capturedBody: Record<string, unknown> | null = null;
   const restoreFetch = installFetch(async (_url, init) => {
     capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    return jsonResponse({ ok: true, status: "approved", item: { id: "apr_1", ts: 1, action: "plugin.run", status: "approved" } });
+    return jsonResponse({
+      ok: true,
+      status: "approved",
+      item: {
+        id: "apr_1",
+        ts: 1,
+        action: "plugin.run",
+        status: "approved",
+        operation_id: "tsk_projection",
+        operation_name: "plugin.run",
+        operation_plane: "P3_GOVERNANCE",
+        advance_action: "run_linked_operation",
+        mission_id: "msn_projection",
+        operation_status: "queued",
+        operation_result_status: "needs_approval",
+        gate: "approvals_gate",
+        next_step: "approve_exact_action",
+        trace_id: "trace_projection",
+        run_id: "run_projection",
+        artifact_dir: "D:/Francis/.data/artifacts/supervised_exec/run_projection",
+        payload_summary: {
+          requested_action: "deploy",
+          plugin_id: "plugin.deploy",
+          input_keys: ["target"],
+        },
+      },
+    });
   });
 
   try {
@@ -125,6 +151,21 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
     assert.equal(capturedBody?.id, "apr_1");
     assert.equal(capturedBody?.action, "approve");
     assert.equal(capturedBody?.actor, "chat_ui.approvals");
+    assert.equal(result.item?.operation_id, "tsk_projection");
+    assert.equal(result.item?.operation_name, "plugin.run");
+    assert.equal(result.item?.operation_plane, "P3_GOVERNANCE");
+    assert.equal(result.item?.advance_action, "run_linked_operation");
+    assert.equal(result.item?.mission_id, "msn_projection");
+    assert.equal(result.item?.operation_status, "queued");
+    assert.equal(result.item?.operation_result_status, "needs_approval");
+    assert.equal(result.item?.gate, "approvals_gate");
+    assert.equal(result.item?.next_step, "approve_exact_action");
+    assert.equal(result.item?.trace_id, "trace_projection");
+    assert.equal(result.item?.run_id, "run_projection");
+    assert.equal(result.item?.artifact_dir, "D:/Francis/.data/artifacts/supervised_exec/run_projection");
+    assert.equal(result.item?.payload_summary?.requested_action, "deploy");
+    assert.equal(result.item?.payload_summary?.plugin_id, "plugin.deploy");
+    assert.deepEqual(result.item?.payload_summary?.input_keys, ["target"]);
   } finally {
     restoreFetch();
   }

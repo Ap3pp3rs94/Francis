@@ -226,6 +226,29 @@ def test_approval_list_surfaces_linked_operation_gate_handles(monkeypatch, tmp_p
     assert artifact_dir.name == approval_id
     assert artifact_dir.parent.name == "supervised_exec"
 
+    approved = client.post(
+        "/approvals/decision",
+        json={"id": approval_id, "action": "approve", "actor": _APPROVAL_ACTOR},
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["status"] == "approved"
+    approved_item = approved_body["item"]
+    assert approved_item["status"] == "approved"
+    assert approved_item["operation_id"] == operation_id
+    assert approved_item["operation_name"] == "codex.supervised_exec"
+    assert approved_item["operation_plane"] == "P3_GOVERNANCE"
+    assert approved_item["mission_id"] == mission_id
+    assert approved_item["operation_status"] == "queued"
+    assert approved_item["operation_result_status"] == "needs_approval"
+    assert approved_item["gate"] == "approvals_gate"
+    assert approved_item["next_step"] == "approve_exact_action"
+    assert approved_item["run_id"] == approval_id
+    approved_artifact_dir = Path(str(approved_item["artifact_dir"]))
+    assert approved_artifact_dir.name == approval_id
+    assert approved_artifact_dir.parent.name == "supervised_exec"
+
 
 def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"

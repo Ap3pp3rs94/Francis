@@ -858,6 +858,15 @@ for read-only review. This keeps gate review connected to the exact operation
 that is blocked without changing approval decisions, exact-action matching,
 execution behavior, or mission mutation.
 
+As of `2026-04-26`, approval decision responses are also covered for the same
+mission/operation loop-handle readback. When an approval decision returns the
+approved item, the API projection and chat UI approvals client preserve the
+linked `operation_id`, `operation_name`, `operation_plane`, `mission_id`,
+operation status/result status, approval gate, next step, run id, artifact
+directory, and payload summary fields. This is response truth only; it does not
+auto-advance approved work, broaden approval authority, or change exact-action
+matching.
+
 As of `2026-04-26`, world-state governance incident evidence now preserves the
 same approval-gate loop handles for pending approvals. The
 `governance.pending_approvals` and `governance.awaiting_approval` incident
@@ -4714,6 +4723,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 approval gate loop-handl
   Result: `3 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `64 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 approval decision loop-handle readback slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py::test_approval_list_surfaces_linked_operation_gate_handles -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `17 passed`
+- `python -m ruff check tests\test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_approvals.py`
+  Result: `1 file already formatted`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
