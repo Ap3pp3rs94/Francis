@@ -1082,6 +1082,14 @@ plane, and advance action alongside existing receipt references. This is client
 contract preservation only; it does not add UI rendering, execute operations, or
 infer missing receipt fields.
 
+As of `2026-04-26`, the chat UI operations client also preserves plan readback
+fields on operation memory receipts. Direct operation-run `memory_receipt`
+responses, operation detail `latest_memory_receipt`, and operation detail
+`memory_receipts` arrays now keep receipt-backed `plan_status`, current plan
+step id/title, and plan step/checkpoint counts when the backend supplies them.
+This is typed client-boundary preservation only; it does not add rendering,
+infer missing plan state, or change operation execution authority.
+
 As of `2026-04-26`, terminal mission-linked operation receipts now emit that
 current-task operation identity from the backend receipt source. The continuity
 ledger append, returned operation-run `memory_receipt`, operation detail
@@ -4409,6 +4417,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receip
   Result: `8 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receipt plan-readback client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

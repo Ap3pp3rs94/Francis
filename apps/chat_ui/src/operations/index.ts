@@ -282,6 +282,11 @@ export type OperationMemoryReceipt = {
   current_task_operation_name?: string;
   current_task_operation_plane?: string;
   current_task_advance_action?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -863,6 +868,9 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     artifact_dir: safeString(referencesRaw.artifact_dir) || undefined,
   };
 
+  const rawPlanStepCount = safeNumber(raw.plan_step_count, Number.NaN);
+  const rawPlanCheckpointCount = safeNumber(raw.plan_checkpoint_count, Number.NaN);
+
   const receipt: OperationMemoryReceipt = {
     source: safeString(raw.source) || undefined,
     kind: safeString(raw.kind) || undefined,
@@ -877,6 +885,13 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     current_task_operation_name: safeString(raw.current_task_operation_name) || undefined,
     current_task_operation_plane: safeString(raw.current_task_operation_plane) || undefined,
     current_task_advance_action: safeString(raw.current_task_advance_action) || undefined,
+    plan_status: safeString(raw.plan_status) || undefined,
+    plan_current_step_id: safeString(raw.plan_current_step_id) || undefined,
+    plan_current_step_title: safeString(raw.plan_current_step_title) || undefined,
+    plan_step_count: Number.isFinite(rawPlanStepCount) ? Math.max(0, Math.floor(rawPlanStepCount)) : undefined,
+    plan_checkpoint_count: Number.isFinite(rawPlanCheckpointCount)
+      ? Math.max(0, Math.floor(rawPlanCheckpointCount))
+      : undefined,
   };
 
   if (Object.values(references).some((value) => value)) receipt.references = references;

@@ -205,6 +205,11 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         current_task_operation_name: "plugin.run",
         current_task_operation_plane: "P7_EXECUTION",
         current_task_advance_action: "run_operation",
+        plan_status: "in_progress",
+        plan_current_step_id: "understand",
+        plan_current_step_title: "Understand goal + constraints",
+        plan_step_count: 4,
+        plan_checkpoint_count: 3,
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_alpha",
@@ -253,6 +258,11 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.memory_receipt?.current_task_operation_name, "plugin.run");
     assert.equal(response.memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(response.memory_receipt?.current_task_advance_action, "run_operation");
+    assert.equal(response.memory_receipt?.plan_status, "in_progress");
+    assert.equal(response.memory_receipt?.plan_current_step_id, "understand");
+    assert.equal(response.memory_receipt?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(response.memory_receipt?.plan_step_count, 4);
+    assert.equal(response.memory_receipt?.plan_checkpoint_count, 3);
     assert.equal(response.memory_receipt?.references?.mission_id, "mission_alpha");
     assert.equal(response.memory_receipt?.references?.operation_id, "task_alpha");
     assert.equal(response.memory_receipt?.references?.trace_id, "trace_task_alpha");
@@ -295,6 +305,11 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
         current_task_operation_name: "plugin.run",
         current_task_operation_plane: "P7_EXECUTION",
         current_task_advance_action: "run_operation",
+        plan_status: "in_progress",
+        plan_current_step_id: "understand",
+        plan_current_step_title: "Understand goal + constraints",
+        plan_step_count: 4,
+        plan_checkpoint_count: 3,
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_memory_alpha",
@@ -309,6 +324,11 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
           current_task_operation_name: "plugin.run",
           current_task_operation_plane: "P7_EXECUTION",
           current_task_advance_action: "run_operation",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: 4,
+          plan_checkpoint_count: 3,
           references: {
             mission_id: "mission_alpha",
             operation_id: "task_memory_alpha",
@@ -332,10 +352,20 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(detail?.latest_memory_receipt?.current_task_advance_action, "run_operation");
+    assert.equal(detail?.latest_memory_receipt?.plan_status, "in_progress");
+    assert.equal(detail?.latest_memory_receipt?.plan_current_step_id, "understand");
+    assert.equal(detail?.latest_memory_receipt?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(detail?.latest_memory_receipt?.plan_step_count, 4);
+    assert.equal(detail?.latest_memory_receipt?.plan_checkpoint_count, 3);
     assert.equal(detail?.memory_receipts?.[0]?.references?.operation_id, "task_memory_alpha");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_advance_action, "run_operation");
+    assert.equal(detail?.memory_receipts?.[0]?.plan_status, "in_progress");
+    assert.equal(detail?.memory_receipts?.[0]?.plan_current_step_id, "understand");
+    assert.equal(detail?.memory_receipts?.[0]?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(detail?.memory_receipts?.[0]?.plan_step_count, 4);
+    assert.equal(detail?.memory_receipts?.[0]?.plan_checkpoint_count, 3);
   } finally {
     restoreFetch();
   }
