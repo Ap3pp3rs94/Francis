@@ -68,6 +68,7 @@ export type OperationRecord = {
   // Context / attribution
   actor?: string;
   domain?: string;
+  approval_id?: string;
   correlation_id?: string;
   trace_id?: string;
   run_id?: string;
@@ -665,6 +666,17 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     "response" in raw ? raw.response :
     "result" in raw ? raw.result :
     undefined;
+  const outputRecord = isRecord(output) ? output : undefined;
+  const approval_id =
+    safeString(raw.approval_id) ||
+    safeString(raw.approvalId) ||
+    safeString(meta?.approval_id) ||
+    safeString(meta?.approvalId) ||
+    safeString(inputMeta?.approval_id) ||
+    safeString(inputMeta?.approvalId) ||
+    safeString(outputRecord?.approval_id) ||
+    safeString(outputRecord?.approvalId) ||
+    undefined;
   const plan_summary = parseOperationPlanSummary(output);
 
   const error =
@@ -688,6 +700,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
       status,
       actor,
       domain,
+      approval_id,
       correlation_id,
       trace_id,
       run_id,
@@ -713,6 +726,7 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     status,
     actor,
     domain,
+    approval_id,
     correlation_id,
     trace_id,
     run_id,

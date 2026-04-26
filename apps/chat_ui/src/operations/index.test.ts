@@ -119,9 +119,13 @@ test("parseOperationRecord preserves trace handles from operation metadata", () 
         artifact_dir: "D:/francis/data/artifacts/meta-alpha",
       },
     },
+    output: {
+      approval_id: "apr_output_meta_alpha",
+    },
   });
 
   assert.equal(parsed?.id, "task_meta_handles");
+  assert.equal(parsed?.approval_id, "apr_output_meta_alpha");
   assert.equal(parsed?.trace_id, "trace_meta_alpha");
   assert.equal(parsed?.run_id, "run_input_meta_alpha");
   assert.equal(parsed?.artifact_dir, "D:/francis/data/artifacts/meta-alpha");

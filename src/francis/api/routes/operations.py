@@ -499,6 +499,7 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
     trace_id = _safe_str(details.get("trace_id")).strip()
     run_id = _safe_str(details.get("run_id")).strip()
     artifact_dir = _safe_str(details.get("artifact_dir")).strip()
+    approval_id = _safe_str(details.get("approval_id")).strip()
     return {
         "id": f"{task_id}:evt:{idx}",
         "ts": ts,
@@ -507,6 +508,7 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
         "status": status,
         "level": level,
         "actor": "system",
+        "approval_id": approval_id or None,
         "trace_id": trace_id or None,
         "run_id": run_id or None,
         "artifact_dir": artifact_dir or None,
@@ -516,6 +518,7 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
             "reason": redact_operation_optional_text(details.get("reason")),
             "gate": details.get("gate"),
             "next_step": redact_operation_optional_text(details.get("next_step")),
+            "approval_id": approval_id or None,
             "trace_id": trace_id or None,
             "run_id": run_id or None,
             "artifact_dir": artifact_dir or None,
