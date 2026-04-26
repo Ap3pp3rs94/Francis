@@ -71,6 +71,14 @@ delegation/list projections preserve operator context while replacing
 secret-like password, token, key, and credential strings before persistence or
 return.
 
+As of `2026-04-26`, credential request and revoke receipts can carry explicit
+actor identity instead of relying on a fixed API actor. The actor is redacted
+through the same secret filter as credential reasons, then preserved in
+approval payloads, approval artifacts, credential list projections, registry
+events, delegation projections, and revocation metadata. This is receipt
+identity only; it does not mint credentials, bypass approvals, or change
+approval decision behavior.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2530,6 +2538,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` credential actor receipt identity slice:
+
+- `python -m ruff check src\francis\api\routes\credentials.py tests\test_api_credentials.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\credentials.py tests\test_api_credentials.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_credentials.py -q`
+  Result: `7 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission advance operation-identity UI contract slice:
 

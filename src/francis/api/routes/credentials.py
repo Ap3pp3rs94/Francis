@@ -117,6 +117,10 @@ def _redact_reason(value: Any) -> str:
     return redact_secret_text(_safe_str(value).strip())
 
 
+def _receipt_actor(value: Any) -> str:
+    return _redact_reason(value) or "credential_manager_api"
+
+
 def _default_registry() -> dict[str, Any]:
     return {"version": 1, "updated_at": _now_s(), "credentials": {}, "events": []}
 
@@ -695,12 +699,14 @@ class CredentialRequestIn(BaseModel):
     type: str = "api_key"
     label: str = ""
     reason: str = "requested"
+    actor: str = "credential_manager_api"
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class CredentialRevokeIn(BaseModel):
     id: str
     reason: str = "requested"
+    actor: str = "credential_manager_api"
 
 
 @router.get("/status")
@@ -815,6 +821,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
         cred_type = _safe_str(payload.type).strip().lower() or "api_key"
         reason = _safe_str(payload.reason).strip() or "requested"
         display_reason = _redact_reason(reason) or "requested"
+        actor = _receipt_actor(payload.actor)
         label = _safe_str(payload.label).strip() or f"{provider or 'credential'}:{scope_id}"
         request_meta = _credential_meta(payload.meta, drop_control_keys=True)
 
@@ -828,6 +835,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "type": cred_type,
                 "label": label,
                 "request_id": request_id,
+                "actor": actor,
                 "meta": request_meta,
             },
         )
@@ -841,6 +849,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
             "type": cred_type,
             "label": label,
             "request_id": request_id,
+            "actor": actor,
             "meta": request_meta,
         }
         _atomic_write_display_json(
@@ -863,6 +872,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "status": "pending",
                 "scope_id": scope_id,
                 "provider": provider,
+                "actor": actor,
                 "created_ts": _now_s(),
                 "last_used_ts": 0,
                 "label": label,
@@ -887,7 +897,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "request_id": request_id,
                 "approval_id": approval_id,
                 "reason": display_reason,
-                "actor": "credential_manager_api",
+                "actor": actor,
             },
         )
         if changed:
@@ -899,6 +909,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
             "id": credential_id,
             "request_id": request_id,
             "approval_id": approval_id,
+            "actor": actor,
             "status": "pending",
         }
     except Exception as exc:
@@ -911,6 +922,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
         credential_id = _validate_credential_id(payload.id)
         reason = _safe_str(payload.reason).strip() or "requested"
         display_reason = _redact_reason(reason) or "requested"
+        actor = _receipt_actor(payload.actor)
 
         registry = _load_registry()
         changed = _seed_from_vault(registry)
@@ -926,6 +938,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
                 "id": credential_id,
                 "scope_id": _safe_str(current.get("scope_id")).strip(),
                 "provider": _safe_str(current.get("provider")).strip(),
+                "actor": actor,
             },
         )
         approval_id = _safe_str(approval.get("id")).strip()
@@ -939,6 +952,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
                     "credential_id": credential_id,
                     "scope_id": _safe_str(current.get("scope_id")).strip(),
                     "provider": _safe_str(current.get("provider")).strip(),
+                    "actor": actor,
                     "reason": display_reason,
                 },
             },
@@ -953,6 +967,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
         current_meta_obj["revocation_approval_id"] = approval_id
         current_meta_obj["revocation_approval_status"] = _safe_str(approval.get("status")).strip() or "pending"
         current_meta_obj["revocation_reason"] = display_reason
+        current_meta_obj["revocation_actor"] = actor
         current["meta"] = current_meta_obj
         _write_credential(registry, _normalize_credential_record(credential_id, current))
         _append_event(
@@ -963,13 +978,13 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
                 "approval_id": approval_id,
                 "reason": display_reason,
                 "scope_id": _safe_str(current.get("scope_id")).strip(),
-                "actor": "credential_manager_api",
+                "actor": actor,
             },
         )
         if changed:
             _append_event(registry, "credential.vault_seed", {"count": len(registry.get("credentials", {}))})
         _save_registry(registry)
 
-        return {"ok": True, "id": credential_id, "approval_id": approval_id, "status": "pending"}
+        return {"ok": True, "id": credential_id, "approval_id": approval_id, "actor": actor, "status": "pending"}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

@@ -56,6 +56,7 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
             "type": "api_key",
             "label": "OpenAI Primary",
             "reason": "integration_test",
+            "actor": "operator.credentials",
             "meta": {"ticket": "FR-123"},
         },
     )
@@ -66,23 +67,37 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     approval_id = str(requested_body["approval_id"])
     assert requested_body["status"] == "pending"
     assert requested_body["request_id"]
+    assert requested_body["actor"] == "operator.credentials"
 
     approval_file = data_root / "approvals" / "pending" / f"{approval_id}.json"
     assert approval_file.exists()
+    approval_payload = json.loads(approval_file.read_text(encoding="utf-8"))
+    assert approval_payload["payload"]["actor"] == "operator.credentials"
 
     listed_pending = client.get("/credentials/list?status=pending")
     assert listed_pending.status_code == 200
     listed_pending_body = listed_pending.json()
     pending_ids = {str(item.get("id")) for item in listed_pending_body["items"]}
     assert credential_id in pending_ids
+    listed_credential = next(item for item in listed_pending_body["items"] if item.get("id") == credential_id)
+    assert listed_credential["actor"] == "operator.credentials"
 
-    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    revoked = client.post(
+        "/credentials/revoke",
+        json={"id": credential_id, "reason": "cleanup", "actor": "operator.cleanup"},
+    )
     assert revoked.status_code == 200
     revoked_body = revoked.json()
     assert revoked_body["ok"] is True
     assert revoked_body["id"] == credential_id
     assert revoked_body["status"] == "pending"
     assert revoked_body["approval_id"]
+    assert revoked_body["actor"] == "operator.cleanup"
+    revoke_artifact = (
+        data_root / "artifacts" / "credentials" / "approvals" / str(revoked_body["approval_id"]) / "request.json"
+    )
+    revoke_payload = json.loads(revoke_artifact.read_text(encoding="utf-8"))
+    assert revoke_payload["request"]["actor"] == "operator.cleanup"
 
     delegations = client.get("/credentials/delegations")
     assert delegations.status_code == 200
@@ -91,11 +106,16 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     delegation_ids = {str(item.get("id")) for item in delegations_body["items"]}
     assert approval_id in delegation_ids
     assert str(revoked_body["approval_id"]) in delegation_ids
+    delegation_actors = {str(item.get("id")): str(item.get("to")) for item in delegations_body["items"]}
+    assert delegation_actors[approval_id] == "operator.credentials"
+    assert delegation_actors[str(revoked_body["approval_id"])] == "operator.cleanup"
 
     registry_path = data_root / "credentials" / "_registry.json"
     assert registry_path.exists()
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     assert credential_id in registry["credentials"]
+    assert registry["credentials"][credential_id]["actor"] == "operator.credentials"
+    assert registry["credentials"][credential_id]["meta"]["revocation_actor"] == "operator.cleanup"
 
 
 def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approval_surfaces(
@@ -114,6 +134,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     raw_github_pat = "ghp_" + ("b" * 36)
     raw_password = "supersecret123"
     raw_reason_secret = "credentialreasonsecret123"
+    raw_actor_secret = "credentialactorsecret123"
 
     requested = client.post(
         "/credentials/request",
@@ -123,6 +144,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
             "type": "api_key",
             "label": "OpenAI Redacted",
             "reason": f"secret_redaction_contract password={raw_reason_secret}",
+            "actor": f"operator password={raw_actor_secret}",
             "meta": {
                 "ticket": "FR-SEC",
                 "api_key": raw_openai_key,
@@ -148,6 +170,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
 
     approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
     assert approval_payload["reason"] == "secret_redaction_contract password=[REDACTED:secret]"
+    assert approval_payload["payload"]["actor"] == "operator password=[REDACTED:secret]"
     approval_meta = approval_payload["payload"]["meta"]
     assert approval_meta["ticket"] == "FR-SEC"
     assert approval_meta["api_key"] == "[REDACTED:secret]"
@@ -158,10 +181,12 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
 
     artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert artifact_payload["request"]["meta"] == approval_meta
+    assert artifact_payload["request"]["actor"] == "operator password=[REDACTED:secret]"
 
     listed = client.get("/credentials/list?status=pending")
     assert listed.status_code == 200
     listed_item = next(item for item in listed.json()["items"] if item["id"] == credential_id)
+    assert listed_item["actor"] == "operator password=[REDACTED:secret]"
     listed_meta = listed_item["meta"]
     assert listed_meta["ticket"] == "FR-SEC"
     assert listed_meta["api_key"] == "[REDACTED:secret]"
@@ -173,6 +198,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
     event = next(item for item in registry_payload["events"] if item.get("event_type") == "credential.request")
     assert event["reason"] == "secret_redaction_contract password=[REDACTED:secret]"
+    assert event["actor"] == "operator password=[REDACTED:secret]"
 
     persisted_text = "\n".join(
         [
@@ -186,6 +212,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     assert raw_github_pat not in persisted_text
     assert raw_password not in persisted_text
     assert raw_reason_secret not in persisted_text
+    assert raw_actor_secret not in persisted_text
 
 
 def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_path: Path) -> None:
