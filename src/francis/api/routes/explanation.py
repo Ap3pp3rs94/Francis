@@ -18,6 +18,21 @@ from francis.kernel.paths import data_dir
 
 router = APIRouter()
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+_CURRENT_TASK_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "operation_status": ("operation_status", "operationStatus"),
+    "current_task_source": ("current_task_source", "currentTaskSource"),
+    "current_task_approval_id": ("current_task_approval_id", "currentTaskApprovalId"),
+    "current_task_approval_status": ("current_task_approval_status", "currentTaskApprovalStatus"),
+    "current_task_operation_id": ("current_task_operation_id", "currentTaskOperationId"),
+    "current_task_operation_name": ("current_task_operation_name", "currentTaskOperationName"),
+    "current_task_operation_plane": ("current_task_operation_plane", "currentTaskOperationPlane"),
+    "current_task_advance_action": ("current_task_advance_action", "currentTaskAdvanceAction"),
+    "current_task_gate": ("current_task_gate", "currentTaskGate"),
+    "current_task_trace_id": ("current_task_trace_id", "currentTaskTraceId"),
+    "current_task_run_id": ("current_task_run_id", "currentTaskRunId"),
+    "current_task_artifact_dir": ("current_task_artifact_dir", "currentTaskArtifactDir"),
+    "current_task_next_step": ("current_task_next_step", "currentTaskNextStep"),
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -78,16 +93,48 @@ def _reference_handles(value: Any) -> dict[str, str]:
     out = {
         "mission_id": _safe_str(raw.get("mission_id") or raw.get("missionId")).strip(),
         "operation_id": _safe_str(
-            raw.get("operation_id") or raw.get("operationId") or raw.get("task_id") or raw.get("taskId")
+            raw.get("operation_id")
+            or raw.get("operationId")
+            or raw.get("task_id")
+            or raw.get("taskId")
+            or raw.get("current_task_operation_id")
+            or raw.get("currentTaskOperationId")
         ).strip(),
         "trace_id": _safe_str(raw.get("trace_id") or raw.get("traceId")).strip(),
         "approval_id": _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip(),
-        "run_id": _safe_str(raw.get("run_id") or raw.get("runId")).strip(),
+        "run_id": _safe_str(
+            raw.get("run_id") or raw.get("runId") or raw.get("current_task_run_id") or raw.get("currentTaskRunId")
+        ).strip(),
         "artifact_dir": _safe_str(
-            raw.get("artifact_dir") or raw.get("artifactDir") or raw.get("artifact_path") or raw.get("artifactPath")
+            raw.get("artifact_dir")
+            or raw.get("artifactDir")
+            or raw.get("artifact_path")
+            or raw.get("artifactPath")
+            or raw.get("current_task_artifact_dir")
+            or raw.get("currentTaskArtifactDir")
         ).strip(),
     }
+    if not out["trace_id"]:
+        out["trace_id"] = _safe_str(raw.get("current_task_trace_id") or raw.get("currentTaskTraceId")).strip()
+    if not out["approval_id"]:
+        out["approval_id"] = _safe_str(raw.get("current_task_approval_id") or raw.get("currentTaskApprovalId")).strip()
     return {key: value for key, value in out.items() if value}
+
+
+def _current_task_fields(*sources: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for field, aliases in _CURRENT_TASK_FIELD_ALIASES.items():
+        for source in sources:
+            raw = _meta(source)
+            value = ""
+            for alias in aliases:
+                value = _safe_str(raw.get(alias)).strip()
+                if value:
+                    break
+            if value:
+                out[field] = value
+                break
+    return out
 
 
 def _validate_id(value: str, field: str = "id") -> str:
@@ -120,20 +167,26 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     tools_raw = raw.get("tools") if isinstance(raw.get("tools"), list) else []
     tools = [tool for tool in tools_raw if isinstance(tool, dict)]
     meta = _meta(raw.get("meta"))
-    references = _reference_handles(raw.get("references"))
+    raw_references = _meta(raw.get("references"))
+    references = _reference_handles(raw_references)
+    loop = _meta(raw.get("loop"))
+    current_task_fields = _current_task_fields(raw, loop, raw_references, meta)
     trace_id = (
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
         or references.get("trace_id", "")
+        or current_task_fields.get("current_task_trace_id", "")
         or _safe_str(meta.get("trace_id") or meta.get("traceId")).strip()
     )
     run_id = (
         _safe_str(raw.get("run_id") or raw.get("runId")).strip()
         or references.get("run_id", "")
+        or current_task_fields.get("current_task_run_id", "")
         or _safe_str(meta.get("run_id") or meta.get("runId")).strip()
     )
     artifact_dir = (
         _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
         or references.get("artifact_dir", "")
+        or current_task_fields.get("current_task_artifact_dir", "")
         or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
     )
     mission_id = (
@@ -144,11 +197,13 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     operation_id = (
         _safe_str(raw.get("operation_id") or raw.get("operationId")).strip()
         or references.get("operation_id", "")
+        or current_task_fields.get("current_task_operation_id", "")
         or _safe_str(meta.get("operation_id") or meta.get("operationId")).strip()
     )
     approval_id = (
         _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip()
         or references.get("approval_id", "")
+        or current_task_fields.get("current_task_approval_id", "")
         or _safe_str(meta.get("approval_id") or meta.get("approvalId")).strip()
     )
     normalized_references = {
@@ -173,7 +228,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     else:
         content = None
 
-    return {
+    normalized = {
         "id": record_id,
         "ts": ts,
         "kind": _safe_str(raw.get("kind")).strip() or "audit",
@@ -198,10 +253,12 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "tools": tools,
         "meta": meta,
     }
+    normalized.update(current_task_fields)
+    return normalized
 
 
 def _summary(record: dict[str, Any]) -> dict[str, Any]:
-    return {
+    summary = {
         "id": record.get("id"),
         "ts": record.get("ts"),
         "kind": record.get("kind"),
@@ -221,6 +278,11 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "tags": record.get("tags") or [],
         "meta": record.get("meta") if isinstance(record.get("meta"), dict) else {},
     }
+    for key in _CURRENT_TASK_FIELD_ALIASES:
+        value = _safe_str(record.get(key)).strip()
+        if value:
+            summary[key] = value
+    return summary
 
 
 def _load_registry() -> dict[str, Any]:
@@ -398,6 +460,19 @@ def _csv(records: list[dict[str, Any]]) -> str:
             "artifact_dir",
             "mission_id",
             "operation_id",
+            "operation_status",
+            "current_task_source",
+            "current_task_approval_id",
+            "current_task_approval_status",
+            "current_task_operation_id",
+            "current_task_operation_name",
+            "current_task_operation_plane",
+            "current_task_advance_action",
+            "current_task_gate",
+            "current_task_trace_id",
+            "current_task_run_id",
+            "current_task_artifact_dir",
+            "current_task_next_step",
             "domain",
             "conversation_id",
             "approval_id",
@@ -421,6 +496,19 @@ def _csv(records: list[dict[str, Any]]) -> str:
                 "artifact_dir": item.get("artifact_dir"),
                 "mission_id": item.get("mission_id"),
                 "operation_id": item.get("operation_id"),
+                "operation_status": item.get("operation_status"),
+                "current_task_source": item.get("current_task_source"),
+                "current_task_approval_id": item.get("current_task_approval_id"),
+                "current_task_approval_status": item.get("current_task_approval_status"),
+                "current_task_operation_id": item.get("current_task_operation_id"),
+                "current_task_operation_name": item.get("current_task_operation_name"),
+                "current_task_operation_plane": item.get("current_task_operation_plane"),
+                "current_task_advance_action": item.get("current_task_advance_action"),
+                "current_task_gate": item.get("current_task_gate"),
+                "current_task_trace_id": item.get("current_task_trace_id"),
+                "current_task_run_id": item.get("current_task_run_id"),
+                "current_task_artifact_dir": item.get("current_task_artifact_dir"),
+                "current_task_next_step": item.get("current_task_next_step"),
                 "domain": item.get("domain"),
                 "conversation_id": item.get("conversation_id"),
                 "approval_id": item.get("approval_id"),
@@ -685,11 +773,19 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
         existing_meta = _meta(existing_obj.get("meta"))
         payload_references = _reference_handles(payload.get("references"))
         existing_references = _reference_handles(existing_obj.get("references"))
+        payload_current_task = _current_task_fields(
+            payload, payload.get("loop"), payload.get("references"), payload_meta
+        )
+        existing_current_task = _current_task_fields(
+            existing_obj, existing_obj.get("loop"), existing_obj.get("references"), existing_meta
+        )
+        current_task_fields = {**existing_current_task, **payload_current_task}
         trace_id = (
             _safe_str(payload.get("trace_id") or payload.get("traceId")).strip()
             or _safe_str(existing_obj.get("trace_id") or existing_obj.get("traceId")).strip()
             or payload_references.get("trace_id", "")
             or existing_references.get("trace_id", "")
+            or current_task_fields.get("current_task_trace_id", "")
             or _safe_str(payload_meta.get("trace_id") or payload_meta.get("traceId")).strip()
             or _safe_str(existing_meta.get("trace_id") or existing_meta.get("traceId")).strip()
         )
@@ -698,6 +794,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(existing_obj.get("run_id") or existing_obj.get("runId")).strip()
             or payload_references.get("run_id", "")
             or existing_references.get("run_id", "")
+            or current_task_fields.get("current_task_run_id", "")
             or _safe_str(payload_meta.get("run_id") or payload_meta.get("runId")).strip()
             or _safe_str(existing_meta.get("run_id") or existing_meta.get("runId")).strip()
         )
@@ -706,6 +803,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(existing_obj.get("artifact_dir") or existing_obj.get("artifactDir")).strip()
             or payload_references.get("artifact_dir", "")
             or existing_references.get("artifact_dir", "")
+            or current_task_fields.get("current_task_artifact_dir", "")
             or _safe_str(payload_meta.get("artifact_dir") or payload_meta.get("artifactDir")).strip()
             or _safe_str(existing_meta.get("artifact_dir") or existing_meta.get("artifactDir")).strip()
         )
@@ -722,6 +820,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(existing_obj.get("operation_id") or existing_obj.get("operationId")).strip()
             or payload_references.get("operation_id", "")
             or existing_references.get("operation_id", "")
+            or current_task_fields.get("current_task_operation_id", "")
             or _safe_str(payload_meta.get("operation_id") or payload_meta.get("operationId")).strip()
             or _safe_str(existing_meta.get("operation_id") or existing_meta.get("operationId")).strip()
         )
@@ -730,6 +829,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(existing_obj.get("approval_id") or existing_obj.get("approvalId")).strip()
             or payload_references.get("approval_id", "")
             or existing_references.get("approval_id", "")
+            or current_task_fields.get("current_task_approval_id", "")
             or _safe_str(payload_meta.get("approval_id") or payload_meta.get("approvalId")).strip()
             or _safe_str(existing_meta.get("approval_id") or existing_meta.get("approvalId")).strip()
         )
@@ -749,6 +849,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
 
         merged = {
             **existing_obj,
+            **current_task_fields,
             "id": explanation_id,
             "ts": ts,
             "kind": kind or _safe_str(existing_obj.get("kind")).strip() or "audit",

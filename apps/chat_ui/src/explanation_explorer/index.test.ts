@@ -65,6 +65,21 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           trace_id: "trace_alpha",
           artifact_dir: "runs/run_alpha/artifacts",
           domain: "operations",
+          operation_status: "succeeded",
+          current_task_source: "terminal_operation_receipt",
+          current_task_operation_name: "plan.create",
+          current_task_operation_plane: "P9_OBSERVABILITY",
+          current_task_advance_action: "run_linked_operation",
+          current_task_gate: "operator_review",
+          current_task_next_step: "review_completed_mission",
+          references: {
+            mission_id: "msn_alpha",
+            operation_id: "tsk_alpha",
+            approval_id: "apr_alpha",
+            trace_id: "trace_alpha",
+            run_id: "run_alpha",
+            artifact_dir: "runs/run_alpha/artifacts",
+          },
           meta: {
             run_id: "run_alpha",
             mission_id: "msn_alpha",
@@ -108,6 +123,25 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.equal(response.items[0]?.operation_id, "tsk_alpha");
     assert.equal(response.items[0]?.approval_id, "apr_alpha");
     assert.equal(response.items[0]?.artifact_dir, "runs/run_alpha/artifacts");
+    assert.equal(response.items[0]?.operation_status, "succeeded");
+    assert.equal(response.items[0]?.current_task_source, "terminal_operation_receipt");
+    assert.equal(response.items[0]?.current_task_operation_id, "tsk_alpha");
+    assert.equal(response.items[0]?.current_task_operation_name, "plan.create");
+    assert.equal(response.items[0]?.current_task_operation_plane, "P9_OBSERVABILITY");
+    assert.equal(response.items[0]?.current_task_advance_action, "run_linked_operation");
+    assert.equal(response.items[0]?.current_task_gate, "operator_review");
+    assert.equal(response.items[0]?.current_task_trace_id, "trace_alpha");
+    assert.equal(response.items[0]?.current_task_run_id, "run_alpha");
+    assert.equal(response.items[0]?.current_task_artifact_dir, "runs/run_alpha/artifacts");
+    assert.equal(response.items[0]?.current_task_next_step, "review_completed_mission");
+    assert.deepEqual(response.items[0]?.references, {
+      mission_id: "msn_alpha",
+      operation_id: "tsk_alpha",
+      approval_id: "apr_alpha",
+      trace_id: "trace_alpha",
+      run_id: "run_alpha",
+      artifact_dir: "runs/run_alpha/artifacts",
+    });
   } finally {
     restoreFetch();
   }
@@ -149,6 +183,9 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
         kind: "audit",
         trace_id: "trace_detail",
         artifact_dir: "runs/run_detail/artifacts",
+        current_task_operation_name: "plan.create",
+        current_task_operation_plane: "P9_OBSERVABILITY",
+        current_task_advance_action: "run_linked_operation",
         meta: {
           mission_id: "msn_detail",
           operation_id: "tsk_detail",
@@ -176,6 +213,9 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     assert.equal(detail?.mission_id, "msn_detail");
     assert.equal(detail?.operation_id, "tsk_detail");
     assert.equal(detail?.approval_id, "apr_detail");
+    assert.equal(detail?.current_task_operation_name, "plan.create");
+    assert.equal(detail?.current_task_operation_plane, "P9_OBSERVABILITY");
+    assert.equal(detail?.current_task_advance_action, "run_linked_operation");
     assert.deepEqual(requests, [
       {
         path: "/explanations/get",

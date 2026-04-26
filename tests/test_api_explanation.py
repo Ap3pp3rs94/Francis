@@ -253,6 +253,106 @@ def test_explanations_promote_structured_receipt_references(monkeypatch, tmp_pat
     assert [item["id"] for item in persisted.json()["items"]] == ["exp-references"]
 
 
+def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    written = client.post(
+        "/explanations/record",
+        json={
+            "id": "exp-current-task",
+            "ts": 1_700_000_020,
+            "kind": "audit",
+            "severity": "info",
+            "title": "Current task receipt",
+            "summary": "Receipt-backed current task identity reached explanation evidence.",
+            "domain": "operations",
+            "references": {
+                "mission_id": "msn-loop",
+                "current_task_operation_id": "tsk-loop",
+                "current_task_approval_id": "appr-loop",
+                "current_task_trace_id": "trace-loop",
+                "current_task_run_id": "run-loop",
+                "current_task_artifact_dir": "runs/loop/artifacts",
+            },
+            "loop": {
+                "operation_status": "succeeded",
+                "current_task_source": "terminal_operation_receipt",
+                "current_task_operation_name": "plan.create",
+                "current_task_operation_plane": "P9_OBSERVABILITY",
+                "current_task_advance_action": "run_linked_operation",
+                "current_task_gate": "operator_review",
+                "current_task_next_step": "review_completed_mission",
+            },
+        },
+    )
+    assert written.status_code == 200
+    written_item = written.json()["item"]
+    assert written_item["mission_id"] == "msn-loop"
+    assert written_item["operation_id"] == "tsk-loop"
+    assert written_item["approval_id"] == "appr-loop"
+    assert written_item["trace_id"] == "trace-loop"
+    assert written_item["run_id"] == "run-loop"
+    assert written_item["artifact_dir"] == "runs/loop/artifacts"
+    assert written_item["operation_status"] == "succeeded"
+    assert written_item["current_task_operation_id"] == "tsk-loop"
+    assert written_item["current_task_operation_name"] == "plan.create"
+    assert written_item["current_task_operation_plane"] == "P9_OBSERVABILITY"
+    assert written_item["current_task_advance_action"] == "run_linked_operation"
+    assert written_item["current_task_gate"] == "operator_review"
+    assert written_item["current_task_next_step"] == "review_completed_mission"
+    assert written_item["references"] == {
+        "mission_id": "msn-loop",
+        "operation_id": "tsk-loop",
+        "trace_id": "trace-loop",
+        "approval_id": "appr-loop",
+        "run_id": "run-loop",
+        "artifact_dir": "runs/loop/artifacts",
+    }
+
+    listed = client.get(
+        "/explanations/list",
+        params={
+            "operation_id": "tsk-loop",
+            "approval_id": "appr-loop",
+            "trace_id": "trace-loop",
+            "run_id": "run-loop",
+            "artifact_dir": "runs/loop/artifacts",
+        },
+    )
+    assert listed.status_code == 200
+    listed_items = listed.json()["items"]
+    assert [item["id"] for item in listed_items] == ["exp-current-task"]
+    assert listed_items[0]["current_task_source"] == "terminal_operation_receipt"
+
+    fetched = client.get("/explanations/get?id=exp-current-task")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["current_task_operation_name"] == "plan.create"
+    assert fetched_item["current_task_operation_plane"] == "P9_OBSERVABILITY"
+
+    exported_json = client.get("/explanations/export", params={"format": "json", "operation_id": "tsk-loop"})
+    assert exported_json.status_code == 200
+    exported_json_body = json.loads(exported_json.text)
+    assert exported_json_body["items"][0]["current_task_advance_action"] == "run_linked_operation"
+
+    exported_csv = client.get("/explanations/export?format=csv&operation_id=tsk-loop")
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert rows[0]["current_task_operation_name"] == "plan.create"
+    assert rows[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"
+
+    registry_path = data_root / "explanations" / "_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert registry["records"]["exp-current-task"]["current_task_advance_action"] == "run_linked_operation"
+
+
 def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

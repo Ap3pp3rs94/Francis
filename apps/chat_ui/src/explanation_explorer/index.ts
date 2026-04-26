@@ -34,6 +34,15 @@ export type ExplanationKind =
 
 export type ExplanationSeverity = "debug" | "info" | "warning" | "error" | "critical" | string;
 
+export type ExplanationReceiptReferences = {
+  mission_id?: string;
+  operation_id?: string;
+  approval_id?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+};
+
 export type ExplanationRecord = {
   id: string;
   ts: number; // unix seconds preferred; ms tolerated
@@ -50,10 +59,24 @@ export type ExplanationRecord = {
   artifact_dir?: string;
   mission_id?: string;
   operation_id?: string;
+  operation_status?: string;
   domain?: string;
   conversation_id?: string;
   approval_id?: string;
   plugin_id?: string;
+  references?: ExplanationReceiptReferences;
+  current_task_source?: string;
+  current_task_approval_id?: string;
+  current_task_approval_status?: string;
+  current_task_operation_id?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
+  current_task_advance_action?: string;
+  current_task_gate?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
 
   // Forward-compatible metadata
   tags?: string[];
@@ -138,8 +161,51 @@ function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
 
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = safeString(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function parseReceiptReferences(raw: unknown): ExplanationReceiptReferences | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const references: ExplanationReceiptReferences = {};
+  const missionId = firstString(raw.mission_id, raw.missionId);
+  const operationId = firstString(
+    raw.operation_id,
+    raw.operationId,
+    raw.task_id,
+    raw.taskId,
+    raw.current_task_operation_id,
+    raw.currentTaskOperationId,
+  );
+  const approvalId = firstString(raw.approval_id, raw.approvalId, raw.current_task_approval_id, raw.currentTaskApprovalId);
+  const traceId = firstString(raw.trace_id, raw.traceId, raw.current_task_trace_id, raw.currentTaskTraceId);
+  const runId = firstString(raw.run_id, raw.runId, raw.current_task_run_id, raw.currentTaskRunId);
+  const artifactDir = firstString(
+    raw.artifact_dir,
+    raw.artifactDir,
+    raw.artifact_path,
+    raw.artifactPath,
+    raw.current_task_artifact_dir,
+    raw.currentTaskArtifactDir,
+  );
+
+  if (missionId) references.mission_id = missionId;
+  if (operationId) references.operation_id = operationId;
+  if (approvalId) references.approval_id = approvalId;
+  if (traceId) references.trace_id = traceId;
+  if (runId) references.run_id = runId;
+  if (artifactDir) references.artifact_dir = artifactDir;
+
+  return Object.keys(references).length > 0 ? references : undefined;
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -374,27 +440,32 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   if (summary) rec.summary = summary;
 
   const meta = isRecord(raw.meta) ? raw.meta : {};
+  const loop = isRecord(raw.loop) ? raw.loop : {};
+  const references = parseReceiptReferences(raw.references);
 
-  const runId = safeString(raw.run_id, safeString(raw.runId, safeString(meta.run_id, safeString(meta.runId, ""))));
+  const runId = firstString(raw.run_id, raw.runId, references?.run_id, meta.run_id, meta.runId);
   if (runId) rec.run_id = runId;
 
-  const traceId = safeString(raw.trace_id, safeString(raw.traceId, ""));
+  const traceId = firstString(raw.trace_id, raw.traceId, references?.trace_id);
   if (traceId) rec.trace_id = traceId;
 
-  const artifactDir = safeString(raw.artifact_dir, safeString(raw.artifactDir, ""));
+  const artifactDir = firstString(raw.artifact_dir, raw.artifactDir, references?.artifact_dir);
   if (artifactDir) rec.artifact_dir = artifactDir;
 
-  const missionId = safeString(
-    raw.mission_id,
-    safeString(raw.missionId, safeString(meta.mission_id, safeString(meta.missionId, ""))),
-  );
+  const missionId = firstString(raw.mission_id, raw.missionId, references?.mission_id, meta.mission_id, meta.missionId);
   if (missionId) rec.mission_id = missionId;
 
-  const operationId = safeString(
+  const operationId = firstString(
     raw.operation_id,
-    safeString(raw.operationId, safeString(meta.operation_id, safeString(meta.operationId, ""))),
+    raw.operationId,
+    references?.operation_id,
+    meta.operation_id,
+    meta.operationId,
   );
   if (operationId) rec.operation_id = operationId;
+
+  const operationStatus = firstString(raw.operation_status, raw.operationStatus, loop.operation_status, meta.operation_status);
+  if (operationStatus) rec.operation_status = operationStatus;
 
   const domain = safeString(raw.domain, "");
   if (domain) rec.domain = domain;
@@ -402,14 +473,110 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
   const conversationId = safeString(raw.conversation_id, safeString(raw.thread_id, ""));
   if (conversationId) rec.conversation_id = conversationId;
 
-  const approvalId = safeString(
+  const approvalId = firstString(
     raw.approval_id,
-    safeString(raw.approvalId, safeString(meta.approval_id, safeString(meta.approvalId, ""))),
+    raw.approvalId,
+    references?.approval_id,
+    meta.approval_id,
+    meta.approvalId,
   );
   if (approvalId) rec.approval_id = approvalId;
 
   const pluginId = safeString(raw.plugin_id, "");
   if (pluginId) rec.plugin_id = pluginId;
+
+  if (references) rec.references = references;
+
+  const currentTaskSource = firstString(raw.current_task_source, raw.currentTaskSource, loop.current_task_source, meta.current_task_source);
+  if (currentTaskSource) rec.current_task_source = currentTaskSource;
+
+  const currentTaskApprovalId = firstString(
+    raw.current_task_approval_id,
+    raw.currentTaskApprovalId,
+    loop.current_task_approval_id,
+    meta.current_task_approval_id,
+    references?.approval_id,
+  );
+  if (currentTaskApprovalId) rec.current_task_approval_id = currentTaskApprovalId;
+
+  const currentTaskApprovalStatus = firstString(
+    raw.current_task_approval_status,
+    raw.currentTaskApprovalStatus,
+    loop.current_task_approval_status,
+    meta.current_task_approval_status,
+  );
+  if (currentTaskApprovalStatus) rec.current_task_approval_status = currentTaskApprovalStatus;
+
+  const currentTaskOperationId = firstString(
+    raw.current_task_operation_id,
+    raw.currentTaskOperationId,
+    loop.current_task_operation_id,
+    meta.current_task_operation_id,
+    references?.operation_id,
+  );
+  if (currentTaskOperationId) rec.current_task_operation_id = currentTaskOperationId;
+
+  const currentTaskOperationName = firstString(
+    raw.current_task_operation_name,
+    raw.currentTaskOperationName,
+    loop.current_task_operation_name,
+    meta.current_task_operation_name,
+  );
+  if (currentTaskOperationName) rec.current_task_operation_name = currentTaskOperationName;
+
+  const currentTaskOperationPlane = firstString(
+    raw.current_task_operation_plane,
+    raw.currentTaskOperationPlane,
+    loop.current_task_operation_plane,
+    meta.current_task_operation_plane,
+  );
+  if (currentTaskOperationPlane) rec.current_task_operation_plane = currentTaskOperationPlane;
+
+  const currentTaskAdvanceAction = firstString(
+    raw.current_task_advance_action,
+    raw.currentTaskAdvanceAction,
+    loop.current_task_advance_action,
+    meta.current_task_advance_action,
+  );
+  if (currentTaskAdvanceAction) rec.current_task_advance_action = currentTaskAdvanceAction;
+
+  const currentTaskGate = firstString(raw.current_task_gate, raw.currentTaskGate, loop.current_task_gate, meta.current_task_gate);
+  if (currentTaskGate) rec.current_task_gate = currentTaskGate;
+
+  const currentTaskTraceId = firstString(
+    raw.current_task_trace_id,
+    raw.currentTaskTraceId,
+    loop.current_task_trace_id,
+    meta.current_task_trace_id,
+    references?.trace_id,
+  );
+  if (currentTaskTraceId) rec.current_task_trace_id = currentTaskTraceId;
+
+  const currentTaskRunId = firstString(
+    raw.current_task_run_id,
+    raw.currentTaskRunId,
+    loop.current_task_run_id,
+    meta.current_task_run_id,
+    references?.run_id,
+  );
+  if (currentTaskRunId) rec.current_task_run_id = currentTaskRunId;
+
+  const currentTaskArtifactDir = firstString(
+    raw.current_task_artifact_dir,
+    raw.currentTaskArtifactDir,
+    loop.current_task_artifact_dir,
+    meta.current_task_artifact_dir,
+    references?.artifact_dir,
+  );
+  if (currentTaskArtifactDir) rec.current_task_artifact_dir = currentTaskArtifactDir;
+
+  const currentTaskNextStep = firstString(
+    raw.current_task_next_step,
+    raw.currentTaskNextStep,
+    loop.current_task_next_step,
+    meta.current_task_next_step,
+  );
+  if (currentTaskNextStep) rec.current_task_next_step = currentTaskNextStep;
 
   if (Array.isArray(raw.tags)) {
     const tags = (raw.tags as unknown[]).map((x) => safeString(x)).filter((x) => x.length > 0);

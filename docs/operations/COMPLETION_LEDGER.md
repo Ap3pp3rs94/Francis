@@ -263,6 +263,17 @@ backend promotes those handles into the existing list/get/export query contract
 and persists a normalized `references` block. This is trace/evidence readback
 only; it does not synthesize explanation evidence or broaden execution authority.
 
+As of `2026-04-26`, explanation evidence also preserves receipt-backed current
+task identity. Explanation records can now promote `current_task_*` receipt
+handles from top-level fields, `loop`, `references`, or metadata into bounded
+mission/operation/approval/trace/run/artifact filters, and list/get/export
+summaries keep the current task source, status, operation name, ORB plane, gate,
+advance action, and next step when backend truth provides them. The chat UI
+explanation client preserves those fields and normalized receipt references for
+read-only evidence display. This is trace/evidence readback only; it does not
+write memory, create explanation records, execute work, or synthesize missing
+task identity.
+
 As of `2026-04-26`, the chat UI explanation evidence path can use those
 mission and operation explanation filters. The selected operation/mission audit
 evidence helper now sends bounded `mission_id` and `operation_id` queries before
@@ -4078,6 +4089,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 selected-operation recei
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation current-task receipt identity evidence slice:
+
+- `python -m pytest tests\test_api_explanation.py -q`
+  Result: `4 passed`
+- `ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:
