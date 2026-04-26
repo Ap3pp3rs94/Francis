@@ -10,6 +10,7 @@ from francis.api.routes._operator_posture import posture_write_guard
 from francis.api.websocket import ConnectionManager
 from francis.chat.continuity.ledger import append
 from francis.chat.router import handle, parse_mission_ingress
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
@@ -17,6 +18,8 @@ from francis.missions.store import MissionCreateRequest
 
 router = APIRouter()
 manager = ConnectionManager()
+_CHAT_MISSION_ACTOR = "chat.send"
+_MISSION_WRITE_SCOPE = "missions.write"
 
 
 @router.get("/health")
@@ -69,6 +72,7 @@ def _mission_ingress_ws_event(payload: dict[str, object]) -> str:
             "loop_state",
             "current_task",
             "receipt_summary",
+            "governance",
         )
         if key in payload
     }
@@ -117,6 +121,32 @@ def _compact_mission_ingress_meta(
     return {key: value for key, value in meta.items() if value not in {"", None}}
 
 
+def _mission_write_permission(actor: object, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_MISSION_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    governance = {
+        "gate": "permission_gate",
+        "reason": decision.reason,
+        "next_step": "configure_actor_scope_before_declaring_chat_missions",
+        "evidence": decision.evidence,
+    }
+    return {
+        "ok": False,
+        "mode": "mission_ingress",
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": governance,
+        "reply": "Mission declaration denied by permission gate.",
+    }
+
+
 def _compact_mission_advance_result(outcome: dict[str, object]) -> dict[str, object]:
     compact: dict[str, object] = {}
     for key in ("ok", "applied"):
@@ -140,7 +170,9 @@ def _compact_mission_advance_result(outcome: dict[str, object]) -> dict[str, obj
     return compact
 
 
-def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
+def _mission_ingress_reply(
+    payload: ChatIn, *, route: str = "/chat/send", method: str = "POST"
+) -> dict[str, object] | None:
     intent = parse_mission_ingress(payload.message)
     if intent is None:
         return None
@@ -170,15 +202,30 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
             "reply": reply,
         }
 
+    permission = _mission_write_permission(_CHAT_MISSION_ACTOR, route=route, method=method)
+    if not permission.allowed:
+        denied = _permission_denied(permission)
+        append(
+            "assistant",
+            str(denied["reply"]),
+            {
+                "mode": "mission_ingress",
+                "status": "denied",
+                "governance_gate": "permission_gate",
+                "governance_reason": permission.reason,
+            },
+        )
+        return denied
+
     record, err = mission_store.create_mission(
         MissionCreateRequest(
             objective=objective,
             summary="Mission declared from chat ingress.",
             next_step="Declare or advance the first bounded operation for this mission.",
-            requester_id="chat.send",
-            owner_id="chat.send",
+            requester_id=_CHAT_MISSION_ACTOR,
+            owner_id=_CHAT_MISSION_ACTOR,
             status=mission_store.MissionStatus.QUEUED,
-            meta={"source": "chat.send", "ingress_plane": "P1_INTERFACE"},
+            meta={"source": _CHAT_MISSION_ACTOR, "ingress_plane": "P1_INTERFACE"},
         )
     )
     if not record:
@@ -189,9 +236,9 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
 
     advance_result = mission_runtime.advance_mission(
         record.mission_id,
-        actor="chat.send",
+        actor=_CHAT_MISSION_ACTOR,
         note="chat_mission_ingress_first_operation",
-        worker_id="chat.send",
+        worker_id=_CHAT_MISSION_ACTOR,
     )
     projected_record = advance_result.get("mission_record")
     if not isinstance(projected_record, mission_store.MissionRecord):
@@ -251,7 +298,7 @@ def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
 @router.post("/send")
 def send(payload: ChatIn) -> dict[str, object]:
     try:
-        mission_reply = _mission_ingress_reply(payload)
+        mission_reply = _mission_ingress_reply(payload, route="/chat/send", method="POST")
         if mission_reply is not None:
             return mission_reply
         return {"reply": handle(payload.message, use_llm=payload.use_llm)}
@@ -266,7 +313,9 @@ async def ws(websocket: WebSocket) -> None:
         while True:
             raw_msg = await websocket.receive_text()
             msg = _chat_text_from_wire(raw_msg)
-            mission_reply = _mission_ingress_reply(ChatIn(message=msg, use_llm=False))
+            mission_reply = _mission_ingress_reply(
+                ChatIn(message=msg, use_llm=False), route="/chat/ws", method="WEBSOCKET"
+            )
             if mission_reply is not None:
                 await websocket.send_text(_mission_ingress_ws_event(mission_reply))
                 continue

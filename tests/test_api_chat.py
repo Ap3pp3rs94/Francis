@@ -127,6 +127,41 @@ def test_chat_mission_command_respects_observe_mode(monkeypatch, tmp_path: Path)
     assert not mission_root.exists() or not any(mission_root.iterdir())
 
 
+def test_chat_mission_command_denies_unscoped_actor_before_mutation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    sent = client.post(
+        "/chat/send",
+        json={"message": "/mission Permission gate should stop this before mission state", "use_llm": True},
+    )
+    assert sent.status_code == 200
+    body = sent.json()
+
+    assert body["ok"] is False
+    assert body["mode"] == "mission_ingress"
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["reply"] == "Mission declaration denied by permission gate."
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_declaring_chat_missions"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    mission_root = data_root / "missions"
+    task_root = data_root / "tasks"
+    assert not mission_root.exists() or not any(mission_root.iterdir())
+    assert not task_root.exists() or not any(task_root.iterdir())
+
+
 def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -45,6 +45,7 @@ PLUGIN_WRITE_TEST_ACTORS = (
 )
 MISSION_WRITE_TEST_SCOPE = "missions.write"
 MISSION_WRITE_TEST_ACTORS = (
+    "chat.send",
     "test.missions.write",
     "test.missions.queue",
     "test.missions.dependencies",

@@ -180,6 +180,15 @@ slice and remain governed by their existing operator-posture, history, and
 receipt contracts. This is a narrow execution-gate integration for Stage 3
 mission flow, not a claim of API-wide mission permission enforcement.
 
+As of `2026-04-26`, chat mission ingress is also wired to that mission write
+permission gate. `/chat/send` and `/chat/ws` mission commands use the bounded
+`chat.send` actor and deny before creating mission records or the first
+`plan.create` operation unless that actor has `missions.write` in
+`FRANCIS_API_ACTOR_SCOPES`. Denials return the same bounded `governance`
+envelope with gate, reason, next step, and count-only evidence, and the chat UI
+chat client preserves that envelope in mission-ingress metadata instead of
+collapsing policy truth to a plain error string.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend
@@ -3538,6 +3547,27 @@ Latest targeted validation for the `2026-04-25` Stage 3 memory evidence UI contr
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 chat mission ingress permission-gate slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_chat.py tests\test_api_missions_permission_gate.py -q`
+  Result: `7 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `16 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_api_permission_gate.py tests\unit\test_scope_checker.py -q`
+  Result: `7 passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\api\routes\chat.py tests\conftest.py tests\test_api_chat.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\api\routes\chat.py tests\conftest.py tests\test_api_chat.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test -- src/chat/index.test.ts`
+  Result: `58 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` (Git emitted a line-ending warning only)
 
 Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory evidence interface slice:
 

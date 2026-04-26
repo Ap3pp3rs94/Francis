@@ -87,6 +87,7 @@ const CHAT_SEND_META_KEYS = [
   "loop_state",
   "current_task",
   "receipt_summary",
+  "governance",
 ] as const;
 
 function chatResponseMeta(raw: Record<string, unknown>): Record<string, unknown> | undefined {

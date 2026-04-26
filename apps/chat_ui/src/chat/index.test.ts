@@ -26,6 +26,11 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
       handoff_action: "run_linked_operation",
       next_step: "Run linked operation.",
     },
+    governance: {
+      gate: "permission_gate",
+      reason: "missing_scopes",
+      next_step: "configure_actor_scope_before_declaring_chat_missions",
+    },
   });
 
   assert.equal(result.error, undefined);
@@ -50,6 +55,10 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
   assert.equal(currentTask.source, "mission_meta");
   assert.equal(currentTask.operation_id, "tsk_chat");
   assert.equal(currentTask.handoff_action, "run_linked_operation");
+
+  const governance = meta.governance as Record<string, unknown>;
+  assert.equal(governance.gate, "permission_gate");
+  assert.equal(governance.reason, "missing_scopes");
 });
 
 test("parseChatEvent preserves websocket mission ingress metadata", () => {
