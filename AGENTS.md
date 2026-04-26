@@ -21,6 +21,11 @@ Follow `.editorconfig`: 4 spaces for Python and PowerShell, 2 spaces for TypeScr
 ## Testing Guidelines
 Run the narrowest meaningful validation for the surface you touch, then run `.\scripts\check.ps1` before handoff when practical. Python tests use `pytest`; markers include `unit` and `smoke`. Name Python files `test_<surface>.py` and UI tests `*.test.ts`. If you change mission, governance, memory, or UI contract behavior, add or update direct tests for that exact path.
 
+## Completion Percentage Evidence Rules
+Completion percentages are evidence claims, not status decoration. Do not include them when the active user instruction says to omit them. When a prompt requires percentages, every percentage must name its baseline source, the new validated evidence, and what remains incomplete, fragile, or blocked. If there is no current baseline or no materially validated repo posture change, keep the prior percentage unchanged or state that the evidence gate was not met; do not invent a new number.
+
+Overall Francis and current build-phase percentages may move only when repo truth materially changes and the change is backed by validation such as targeted tests, `.\scripts\check.ps1`, CI, browser proof where relevant, or a ledger-backed milestone/gate closure. Prompt-only, bookkeeping-only, diagnosis-only, or documentation-only turns do not move overall or phase percentages unless they close a documented governance or readiness gate. Round downward when uncertain, prefer coarse stable numbers over fake precision, and never convert effort, elapsed time, cleanup, or one passing check into project maturity.
+
 ## Commit & Pull Request Guidelines
 Recent history uses Conventional Commit style with scopes, for example `feat(observability): surface watcher state age` and `fix(observability): pin francis observer to one session`. Current maintainer workflow is direct-on-`main`: sync `origin/main`, make a bounded change, validate, commit, and push `main`. Use temporary branches such as `codex/<slice-name>` or `hotfix/<slice-name>` only when isolated review or recovery safety is needed. PRs should state the roadmap area touched, summarize validation actually run, include screenshots for UI changes, and call out any policy, shell, orb, HUD, or memory-contract risk explicitly.
 

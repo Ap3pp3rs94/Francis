@@ -36,6 +36,11 @@ Automation rule:
   changed
 - update `docs/canonical/BUILD_MANIFEST.md` or other canonical roadmap docs only
   when their own update contracts are actually met
+- completion percentages are evidence claims, not progress decoration. They must
+  be tied to a known baseline, validated repo evidence, and explicit remaining
+  blockers; prompt-only, admin-only, diagnosis-only, or documentation-only turns
+  must not move overall Francis or current build-phase percentages unless they
+  close a documented governance/readiness gate with validation evidence.
 
 ## 2. Current build phase
 
