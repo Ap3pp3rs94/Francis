@@ -262,6 +262,8 @@ export type WorldStateMissionCurrentTask = {
   mission_id?: string;
   source?: string;
   operation_id?: string;
+  operation_name?: string;
+  operation_plane?: string;
   task_status?: string;
   operation_status?: string;
   result_status?: string;
@@ -278,6 +280,7 @@ export type WorldStateMissionCurrentTask = {
   latest_receipt_status?: string;
   latest_receipt_ts?: string;
   last_advance_operation_id?: string;
+  advance_action?: string;
 };
 
 export type WorldStateMissionDependencyItem = {
@@ -357,9 +360,12 @@ export type MissionMemoryReceipt = {
   current_task_source?: string;
   current_task_gate?: string;
   current_task_operation_id?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
+  current_task_advance_action?: string;
   current_task_next_step?: string;
   memory_receipt_count?: number;
   operation_id?: string;
@@ -1409,9 +1415,12 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
     current_task_source: safeString(raw["current_task_source"], "").trim(),
     current_task_gate: safeString(raw["current_task_gate"], "").trim(),
     current_task_operation_id: safeString(raw["current_task_operation_id"], "").trim(),
+    current_task_operation_name: safeString(raw["current_task_operation_name"], "").trim(),
+    current_task_operation_plane: safeString(raw["current_task_operation_plane"], "").trim(),
     current_task_trace_id: safeString(raw["current_task_trace_id"], "").trim(),
     current_task_run_id: safeString(raw["current_task_run_id"], "").trim(),
     current_task_artifact_dir: safeString(raw["current_task_artifact_dir"], "").trim(),
+    current_task_advance_action: safeString(raw["current_task_advance_action"], "").trim(),
     current_task_next_step: safeString(raw["current_task_next_step"], "").trim(),
     memory_receipt_count: safeNumber(raw["memory_receipt_count"], Number.NaN),
     operation_id: safeString(raw["operation_id"], "").trim(),
@@ -1448,9 +1457,12 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.current_task_source) delete receipt.current_task_source;
   if (!receipt.current_task_gate) delete receipt.current_task_gate;
   if (!receipt.current_task_operation_id) delete receipt.current_task_operation_id;
+  if (!receipt.current_task_operation_name) delete receipt.current_task_operation_name;
+  if (!receipt.current_task_operation_plane) delete receipt.current_task_operation_plane;
   if (!receipt.current_task_trace_id) delete receipt.current_task_trace_id;
   if (!receipt.current_task_run_id) delete receipt.current_task_run_id;
   if (!receipt.current_task_artifact_dir) delete receipt.current_task_artifact_dir;
+  if (!receipt.current_task_advance_action) delete receipt.current_task_advance_action;
   if (!receipt.current_task_next_step) delete receipt.current_task_next_step;
   if (!Number.isFinite(receipt.memory_receipt_count)) delete receipt.memory_receipt_count;
   if (!receipt.operation_id) delete receipt.operation_id;
@@ -2096,6 +2108,8 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     mission_id: safeString(raw.mission_id, "") || undefined,
     source: safeString(raw.source, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
+    operation_name: safeString(raw.operation_name, "") || undefined,
+    operation_plane: safeString(raw.operation_plane, "") || undefined,
     task_status: safeString(raw.task_status, "") || undefined,
     operation_status: safeString(raw.operation_status, "") || undefined,
     result_status: safeString(raw.result_status, "") || undefined,
@@ -2112,10 +2126,13 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    advance_action: safeString(raw.advance_action, "") || undefined,
   };
   if (
     !task.mission_id &&
     !task.operation_id &&
+    !task.operation_name &&
+    !task.operation_plane &&
     !task.task_status &&
     !task.operation_status &&
     !task.result_status &&
@@ -2128,7 +2145,8 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     !task.artifact_dir &&
     !task.handoff_action &&
     !task.latest_receipt_event &&
-    !task.latest_receipt_status
+    !task.latest_receipt_status &&
+    !task.advance_action
   ) {
     return undefined;
   }

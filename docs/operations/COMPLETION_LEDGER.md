@@ -910,6 +910,13 @@ with the existing current-task operation id. This is contract propagation only; 
 does not create memory writes outside the existing chat ingress path, infer
 missing operation records, or add execution authority.
 
+As of `2026-04-26`, the chat UI settings/world-state client also preserves that
+current-task operation identity across world-state mission projections,
+continuity briefing handoff lists, and mission memory receipts. The parser now
+keeps operation name, operation ORB plane, and advance action when the backend
+already supplies those fields. This is typed interface preservation only; it does
+not add new rendering, infer missing operation records, or widen backend state.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -3982,6 +3989,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 chat ingress current-tas
   Result: `65 passed`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 settings current-task identity client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

@@ -416,12 +416,15 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 mission_id: "mission_alpha",
                 source: "mission_meta",
                 operation_id: "tsk_alpha",
+                operation_name: "plan.create",
+                operation_plane: "P7_EXECUTION",
                 task_status: "accepted",
                 trace_id: "trace_activity_alpha",
                 run_id: "run_activity_alpha",
                 artifact_dir: "D:/francis/data/artifacts/activity_alpha",
                 latest_receipt_event: "created",
                 latest_receipt_status: "queued",
+                advance_action: "create_first_operation",
               },
               memory_receipt_count: 1,
               latest_memory_receipt: {
@@ -439,6 +442,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 handoff_approval_status: "approved",
                 current_task_approval_id: "apr_alpha",
                 current_task_approval_status: "approved",
+                current_task_operation_id: "tsk_alpha",
+                current_task_operation_name: "plan.create",
+                current_task_operation_plane: "P7_EXECUTION",
+                current_task_advance_action: "create_first_operation",
                 domain: "operations",
                 scope: "mission.loop",
                 references: {
@@ -465,6 +472,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   handoff_approval_status: "approved",
                   current_task_approval_id: "apr_alpha",
                   current_task_approval_status: "approved",
+                  current_task_operation_id: "tsk_alpha",
+                  current_task_operation_name: "plan.create",
+                  current_task_operation_plane: "P7_EXECUTION",
+                  current_task_advance_action: "create_first_operation",
                   domain: "operations",
                   scope: "mission.loop",
                   references: {
@@ -676,6 +687,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 trace_id: "trace_alpha",
                 operation_status: "succeeded",
                 approval_status: "approved",
+                current_task_operation_id: "tsk_alpha",
+                current_task_operation_name: "plan.create",
+                current_task_operation_plane: "P7_EXECUTION",
+                current_task_advance_action: "create_first_operation",
                 domain: "operations",
                 scope: "mission.loop",
               },
@@ -812,6 +827,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.name, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_id, "tsk_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_name, "plan.create");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_plane, "P7_EXECUTION");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.advance_action, "create_first_operation");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.trace_id, "trace_activity_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.run_id, "run_activity_alpha");
     assert.equal(
@@ -832,9 +850,22 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_approval_id,
       "apr_alpha",
     );
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_operation_name,
+      "plan.create",
+    );
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_operation_plane,
+      "P7_EXECUTION",
+    );
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_advance_action,
+      "create_first_operation",
+    );
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.trace_id, "trace_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.references?.approval_id, "apr_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
@@ -920,6 +951,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.operation_id, "tsk_alpha");
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.approval_status, "approved");
+    assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
     assert.deepEqual(
       missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
       [
@@ -1728,10 +1760,13 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               mission_id: "mission_done",
               source: "mission_meta",
               operation_id: "tsk_done",
+              operation_name: "plan.create",
+              operation_plane: "P9_OBSERVABILITY",
               task_status: "completed",
               result_status: "completed",
               next_step: "review_completed_mission",
               handoff_action: "review_result",
+              advance_action: "run_linked_operation",
             },
             memory_receipt_count: 1,
             latest_memory_receipt: {
@@ -1769,11 +1804,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               current_task_source: "terminal_operation_receipt",
               current_task_gate: "operator_review",
               current_task_operation_id: "tsk_done",
+              current_task_operation_name: "plan.create",
+              current_task_operation_plane: "P9_OBSERVABILITY",
               current_task_approval_id: "apr_done",
               current_task_approval_status: "approved",
               current_task_trace_id: "trace_done",
               current_task_run_id: "run_done",
               current_task_artifact_dir: "D:/francis/data/artifacts/done",
+              current_task_advance_action: "run_linked_operation",
               current_task_next_step: "review_completed_mission",
               memory_receipt_count: 1,
             },
@@ -1813,11 +1851,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 current_task_source: "terminal_operation_receipt",
                 current_task_gate: "operator_review",
                 current_task_operation_id: "tsk_done",
+                current_task_operation_name: "plan.create",
+                current_task_operation_plane: "P9_OBSERVABILITY",
                 current_task_approval_id: "apr_done",
                 current_task_approval_status: "approved",
                 current_task_trace_id: "trace_done",
                 current_task_run_id: "run_done",
                 current_task_artifact_dir: "D:/francis/data/artifacts/done",
+                current_task_advance_action: "run_linked_operation",
                 current_task_next_step: "review_completed_mission",
                 memory_receipt_count: 1,
               },
@@ -1860,11 +1901,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             current_task_source: "terminal_operation_receipt",
             current_task_gate: "operator_review",
             current_task_operation_id: "tsk_done",
+            current_task_operation_name: "plan.create",
+            current_task_operation_plane: "P9_OBSERVABILITY",
             current_task_approval_id: "apr_done",
             current_task_approval_status: "approved",
             current_task_trace_id: "trace_done",
             current_task_run_id: "run_done",
             current_task_artifact_dir: "D:/francis/data/artifacts/done",
+            current_task_advance_action: "run_linked_operation",
             current_task_next_step: "review_completed_mission",
             memory_receipt_count: 1,
           },
@@ -1994,6 +2038,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "idempotent_ticks");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_id, "tsk_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_name, "plan.create");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_plane, "P9_OBSERVABILITY");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.advance_action, "run_linked_operation");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.handoff_action, "review_result");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.next_step, "review_completed_mission");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_count, 4);
@@ -2026,6 +2073,18 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       "tsk_done",
     );
     assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_operation_name,
+      "plan.create",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_operation_plane,
+      "P9_OBSERVABILITY",
+    );
+    assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_advance_action,
+      "run_linked_operation",
+    );
+    assert.equal(
       briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.current_task_gate,
       "operator_review",
     );
@@ -2047,6 +2106,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       "operator_review",
     );
     assert.equal(
+      briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.current_task_operation_name,
+      "plan.create",
+    );
+    assert.equal(
       briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.current_task_next_step,
       "review_completed_mission",
     );
@@ -2058,6 +2121,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_action, "review_result");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.handoff_gate, "operator_review");
     assert.equal(briefing.briefing?.memory_receipts?.[0]?.current_task_gate, "operator_review");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");
