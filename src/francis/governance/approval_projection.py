@@ -126,6 +126,43 @@ def _task_operation_status(task: dict[str, Any], result_status: str) -> str:
     return raw_status or ""
 
 
+def _task_operation_plane(task: dict[str, Any], result_status: str, governance: dict[str, Any]) -> str:
+    task_meta = _as_dict(task.get("meta"))
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    explicit_plane = _first_text(
+        task_meta.get("orb_plane"),
+        task_meta.get("operation_plane"),
+        input_meta.get("orb_plane"),
+        input_meta.get("operation_plane"),
+    )
+    if explicit_plane:
+        return explicit_plane
+
+    raw_status = _safe_str(task.get("status")).strip().lower()
+    if governance or result_status in {"pending", "needs_approval", "blocked", "denied"}:
+        return "P3_GOVERNANCE"
+    if raw_status in {"pending", "accepted", "running"}:
+        return "P7_EXECUTION"
+    if raw_status:
+        return "P9_OBSERVABILITY"
+    return ""
+
+
+def _task_advance_action(task: dict[str, Any]) -> str:
+    task_meta = _as_dict(task.get("meta"))
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    return _first_text(
+        task_meta.get("advance_action"),
+        task_meta.get("current_task_advance_action"),
+        task_meta.get("last_advance_action"),
+        input_meta.get("advance_action"),
+        input_meta.get("current_task_advance_action"),
+        input_meta.get("last_advance_action"),
+    )
+
+
 def approval_task_projection(approval_id: str, *, task_root: Path | None = None) -> dict[str, Any]:
     task = approval_task_record(approval_id, task_root=task_root)
     if not task:
@@ -147,6 +184,10 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
     if operation_id:
         out["operation_id"] = operation_id
 
+    operation_name = _safe_str(task.get("capability")).strip()
+    if operation_name:
+        out["operation_name"] = operation_name
+
     mission_id = _first_text(inputs.get("mission_id"), input_meta.get("mission_id"))
     if mission_id:
         out["mission_id"] = mission_id
@@ -160,6 +201,14 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
     gate = _safe_str(governance.get("gate")).strip()
     if gate:
         out["gate"] = gate
+
+    operation_plane = _task_operation_plane(task, result_status, governance)
+    if operation_plane:
+        out["operation_plane"] = operation_plane
+
+    advance_action = _task_advance_action(task)
+    if advance_action:
+        out["advance_action"] = advance_action
 
     next_step = redact_governed_display_value(governance.get("next_step"))
     next_step_text = _safe_str(next_step).strip()

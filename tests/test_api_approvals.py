@@ -214,6 +214,8 @@ def test_approval_list_surfaces_linked_operation_gate_handles(monkeypatch, tmp_p
     listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
 
     assert listed_item["operation_id"] == operation_id
+    assert listed_item["operation_name"] == "codex.supervised_exec"
+    assert listed_item["operation_plane"] == "P3_GOVERNANCE"
     assert listed_item["mission_id"] == mission_id
     assert listed_item["operation_status"] == "queued"
     assert listed_item["operation_result_status"] == "needs_approval"
@@ -259,6 +261,7 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
                         "mission_id": mission_id,
                         "run_id": run_id,
                         "artifact_dir": artifact_dir,
+                        "advance_action": "run_linked_operation",
                     }
                 },
                 "meta": {
@@ -286,6 +289,9 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
     listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
 
     assert listed_item["operation_id"] == operation_id
+    assert listed_item["operation_name"] == "plugin.run"
+    assert listed_item["operation_plane"] == "P3_GOVERNANCE"
+    assert listed_item["advance_action"] == "run_linked_operation"
     assert listed_item["mission_id"] == mission_id
     assert listed_item["operation_status"] == "queued"
     assert listed_item["operation_result_status"] == "needs_approval"

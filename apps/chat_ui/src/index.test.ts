@@ -51,6 +51,9 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
           replacement_previous_payload_keys: ["action", "input", "plugin_id"],
           replacement_changed_keys: ["input"],
           operation_id: "tsk_projection",
+          operation_name: "plugin.run",
+          operation_plane: "P3_GOVERNANCE",
+          advance_action: "run_linked_operation",
           mission_id: "msn_projection",
           operation_status: "queued",
           operation_result_status: "needs_approval",
@@ -86,6 +89,9 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
     assert.deepEqual(result.items[0]?.replacement_previous_payload_keys, ["action", "input", "plugin_id"]);
     assert.deepEqual(result.items[0]?.replacement_changed_keys, ["input"]);
     assert.equal(result.items[0]?.operation_id, "tsk_projection");
+    assert.equal(result.items[0]?.operation_name, "plugin.run");
+    assert.equal(result.items[0]?.operation_plane, "P3_GOVERNANCE");
+    assert.equal(result.items[0]?.advance_action, "run_linked_operation");
     assert.equal(result.items[0]?.mission_id, "msn_projection");
     assert.equal(result.items[0]?.operation_status, "queued");
     assert.equal(result.items[0]?.operation_result_status, "needs_approval");

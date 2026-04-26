@@ -754,6 +754,14 @@ metadata is only a fallback for the approval read model. This keeps gate review
 connected to existing trace and artifact evidence without creating approvals,
 executing work, or inferring receipt state.
 
+As of `2026-04-26`, approval queue projections also preserve the held task's
+operation identity. Pending approval items can now expose `operation_name`,
+`operation_plane`, and backend-provided `advance_action` from the linked task
+record or task metadata, and the chat UI approvals client preserves those fields
+for read-only review. This keeps gate review connected to the exact operation
+that is blocked without changing approval decisions, exact-action matching,
+execution behavior, or mission mutation.
+
 As of `2026-04-26`, world-state governance incident evidence now preserves the
 same approval-gate loop handles for pending approvals. The
 `governance.pending_approvals` and `governance.awaiting_approval` incident
@@ -4108,6 +4116,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation current-task
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 approval queue task identity readback slice:
+
+- `python -m pytest tests\unit\test_approval_projection.py tests\test_api_approvals.py::test_approval_list_surfaces_linked_operation_gate_handles tests\test_api_approvals.py::test_approval_list_preserves_metadata_only_loop_handles -q`
+  Result: `4 passed`
+- `ruff check src\francis\governance\approval_projection.py tests\unit\test_approval_projection.py tests\test_api_approvals.py`
+  Result: `passed`
+- `ruff format --check src\francis\governance\approval_projection.py tests\unit\test_approval_projection.py tests\test_api_approvals.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
+  Result: `3 passed`
+- `python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `17 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:

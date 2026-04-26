@@ -43,6 +43,9 @@ export type ApprovalItem = {
   replacement_previous_payload_keys?: string[];
   replacement_changed_keys?: string[];
   operation_id?: string;
+  operation_name?: string;
+  operation_plane?: string;
+  advance_action?: string;
   mission_id?: string;
   operation_status?: string;
   operation_result_status?: string;
@@ -166,6 +169,9 @@ function parseApprovalItem(raw: unknown): ApprovalItem | null {
     replacement_previous_payload_keys: safeStringList(raw.replacement_previous_payload_keys),
     replacement_changed_keys: safeStringList(raw.replacement_changed_keys),
     operation_id: safeString(raw.operation_id) || undefined,
+    operation_name: safeString(raw.operation_name) || undefined,
+    operation_plane: safeString(raw.operation_plane) || undefined,
+    advance_action: safeString(raw.advance_action) || undefined,
     mission_id: safeString(raw.mission_id) || undefined,
     operation_status: safeString(raw.operation_status) || undefined,
     operation_result_status: safeString(raw.operation_result_status) || undefined,
