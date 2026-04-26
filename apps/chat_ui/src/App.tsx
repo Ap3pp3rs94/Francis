@@ -2598,6 +2598,50 @@ export default function App() {
     [modeClient, operatorMode?.control_mode?.id],
   );
 
+  const recordObserverScan = useCallback(async () => {
+    if (!modeClient) {
+      setObserverScanNotice({ tone: "error", text: "API base URL is required before observer scans can be recorded." });
+      setOperatorModeError("API base URL is required before observer scans can be recorded.");
+      return;
+    }
+
+    setObserverScanBusy(true);
+    setObserverScanNotice(null);
+    try {
+      const response = await modeClient.recordObserverScan(
+        {
+          reason: "chat_ui.command_palette",
+          actor: "chat_ui.command_palette",
+        },
+        { timeoutMs: 10_000 },
+      );
+      if (!response.ok) {
+        throw new Error("Observer scan failed.");
+      }
+      const receiptId = safeString(response.receipt?.receipt_id).trim();
+      const decision = safeString(response.decision).trim() || safeString(response.receipt?.decision).trim();
+      setObserverScanNotice({
+        tone: "info",
+        text: receiptId
+          ? `Observer scan recorded as ${receiptId}${decision ? ` (${decision})` : ""}.`
+          : "Observer scan recorded.",
+      });
+      setPanel("system");
+      setOperatorModeError(null);
+    } catch (err) {
+      const msg =
+        err instanceof SettingsApiError
+          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+          : err instanceof Error
+            ? err.message
+            : "Observer scan request failed.";
+      setObserverScanNotice({ tone: "error", text: msg });
+      setOperatorModeError(msg);
+    } finally {
+      setObserverScanBusy(false);
+    }
+  }, [modeClient]);
+
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
     const pendingApprovals = safeNumber(operatorMode?.backlog?.pending_approvals, 0);
     return [
@@ -3466,6 +3510,8 @@ function SystemPanel(props: {
   const [observerEventsError, setObserverEventsError] = useState<string | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
   const [orbStatusError, setOrbStatusError] = useState<string | null>(null);
+  const [observerScanBusy, setObserverScanBusy] = useState(false);
+  const [observerScanNotice, setObserverScanNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
   const [takeoverOperationsLoadedAt, setTakeoverOperationsLoadedAt] = useState<number | null>(null);

@@ -320,6 +320,18 @@ bridge passes the latest parsed mission memory receipt into that helper, so the
 operator can load memory evidence from backend receipt truth instead of UI-only
 state.
 
+As of `2026-04-26`, that selected-operation mission bridge path has headless
+browser proof against a mock API shaped like the backend receipt contract. The
+proof opens the real Vite UI, enters Operations, loads memory evidence from a
+mission loop bridge, and confirms timeline requests include receipt-derived
+`trace_id`, `run_id`, and `artifact_dir` filters with no browser HTTP failures.
+
+As of `2026-04-26`, the chat UI no longer crashes during initial Vite render
+when the command palette builds its observer-scan command. `App` now owns a real
+observer-scan command handler for the command palette, while `SystemPanel` owns
+its local observer-scan button state. This restores the explicit operator scan
+entry points without adding background scanning or hidden observer activity.
+
 As of `2026-04-25`, the operations detail surface can use that memory timeline
 contract from the mission loop bridge. When a selected operation exposes a real
 mission id, linked operation id, or trace id, the chat UI can issue bounded
@@ -3542,6 +3554,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal receipt memory 
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
   Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `58 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 terminal receipt memory evidence browser-proof slice:
+
+- `npx --yes --package @playwright/test playwright install chromium`
+  Result: `passed`
+- `npx --yes --package @playwright/test playwright test --config data\test_runs\playwright\playwright.config.ts`
+  Result: `1 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `58 passed`
 - `cd apps\chat_ui; npm run build`
