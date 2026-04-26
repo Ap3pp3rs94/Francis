@@ -824,6 +824,16 @@ references including `references.approval_id`. This is a parser contract only;
 it does not render new authority, create receipts, approve work, or infer
 missing approval posture.
 
+As of `2026-04-26`, the chat UI operations client preserves operation memory
+receipt handoff and current-task handles from operation detail responses.
+`OperationsClient.get` now keeps receipt `active_stage`, handoff
+stage/action/gate/approval/trace/run/artifact/next-step handles, current-task
+source/approval/operation/gate/trace/run/artifact/next-step handles, and memory
+receipt counts alongside existing references. This keeps approved supervised
+execution receipt truth available to the existing operation-detail and memory
+evidence client paths without creating evidence, inspecting artifacts, or
+widening execution authority.
+
 As of `2026-04-26`, the shared terminal mission receipt reader also carries the
 same receipt-backed approval and gate posture from continuity-ledger metadata.
 `francis.memory.mission_receipts` now preserves `handoff_gate`,
@@ -5501,6 +5511,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 approved execution recei
   Result: `1 file already formatted`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `64 passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations memory receipt handoff-handle client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 completed handoff evidence handle priority slice:
 

@@ -302,9 +302,31 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
         source: "continuity.ledger",
         kind: "ledger_append",
         operation_status: "succeeded",
+        approval_status: "approved",
+        active_stage: "interface",
+        handoff_stage: "interface",
+        handoff_action: "review_result",
+        handoff_gate: "operator_review",
+        handoff_approval_id: "apr_memory_alpha",
+        handoff_approval_status: "approved",
+        handoff_operation_id: "task_memory_alpha",
+        handoff_trace_id: "trace_memory_alpha",
+        handoff_run_id: "run_memory_alpha",
+        handoff_artifact_dir: "D:/francis/data/artifacts/memory-alpha",
+        handoff_next_step: "review_completed_mission",
+        current_task_source: "terminal_operation_receipt",
+        current_task_approval_id: "apr_memory_alpha",
+        current_task_approval_status: "approved",
+        current_task_operation_id: "task_memory_alpha",
         current_task_operation_name: "plugin.run",
         current_task_operation_plane: "P7_EXECUTION",
         current_task_advance_action: "run_operation",
+        current_task_gate: "operator_review",
+        current_task_trace_id: "trace_memory_alpha",
+        current_task_run_id: "run_memory_alpha",
+        current_task_artifact_dir: "D:/francis/data/artifacts/memory-alpha",
+        current_task_next_step: "review_completed_mission",
+        memory_receipt_count: 1,
         plan_status: "in_progress",
         plan_current_step_id: "understand",
         plan_current_step_title: "Understand goal + constraints",
@@ -313,7 +335,10 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
         references: {
           mission_id: "mission_alpha",
           operation_id: "task_memory_alpha",
+          approval_id: "apr_memory_alpha",
+          trace_id: "trace_memory_alpha",
           run_id: "run_memory_alpha",
+          artifact_dir: "D:/francis/data/artifacts/memory-alpha",
         },
       },
       memory_receipts: [
@@ -321,9 +346,31 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
           source: "continuity.ledger",
           kind: "ledger_append",
           operation_status: "succeeded",
+          approval_status: "approved",
+          active_stage: "interface",
+          handoff_stage: "interface",
+          handoff_action: "review_result",
+          handoff_gate: "operator_review",
+          handoff_approval_id: "apr_memory_alpha",
+          handoff_approval_status: "approved",
+          handoff_operation_id: "task_memory_alpha",
+          handoff_trace_id: "trace_memory_alpha",
+          handoff_run_id: "run_memory_alpha",
+          handoff_artifact_dir: "D:/francis/data/artifacts/memory-alpha",
+          handoff_next_step: "review_completed_mission",
+          current_task_source: "terminal_operation_receipt",
+          current_task_approval_id: "apr_memory_alpha",
+          current_task_approval_status: "approved",
+          current_task_operation_id: "task_memory_alpha",
           current_task_operation_name: "plugin.run",
           current_task_operation_plane: "P7_EXECUTION",
           current_task_advance_action: "run_operation",
+          current_task_gate: "operator_review",
+          current_task_trace_id: "trace_memory_alpha",
+          current_task_run_id: "run_memory_alpha",
+          current_task_artifact_dir: "D:/francis/data/artifacts/memory-alpha",
+          current_task_next_step: "review_completed_mission",
+          memory_receipt_count: 1,
           plan_status: "in_progress",
           plan_current_step_id: "understand",
           plan_current_step_title: "Understand goal + constraints",
@@ -332,7 +379,10 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
           references: {
             mission_id: "mission_alpha",
             operation_id: "task_memory_alpha",
+            approval_id: "apr_memory_alpha",
+            trace_id: "trace_memory_alpha",
             run_id: "run_memory_alpha",
+            artifact_dir: "D:/francis/data/artifacts/memory-alpha",
           },
         },
       ],
@@ -348,10 +398,35 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.latest_memory_receipt?.source, "continuity.ledger");
     assert.equal(detail?.latest_memory_receipt?.references?.mission_id, "mission_alpha");
     assert.equal(detail?.latest_memory_receipt?.references?.operation_id, "task_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.references?.approval_id, "apr_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.references?.trace_id, "trace_memory_alpha");
     assert.equal(detail?.latest_memory_receipt?.references?.run_id, "run_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.references?.artifact_dir, "D:/francis/data/artifacts/memory-alpha");
+    assert.equal(detail?.latest_memory_receipt?.approval_status, "approved");
+    assert.equal(detail?.latest_memory_receipt?.active_stage, "interface");
+    assert.equal(detail?.latest_memory_receipt?.handoff_stage, "interface");
+    assert.equal(detail?.latest_memory_receipt?.handoff_action, "review_result");
+    assert.equal(detail?.latest_memory_receipt?.handoff_gate, "operator_review");
+    assert.equal(detail?.latest_memory_receipt?.handoff_approval_id, "apr_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.handoff_approval_status, "approved");
+    assert.equal(detail?.latest_memory_receipt?.handoff_operation_id, "task_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.handoff_trace_id, "trace_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.handoff_run_id, "run_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.handoff_artifact_dir, "D:/francis/data/artifacts/memory-alpha");
+    assert.equal(detail?.latest_memory_receipt?.handoff_next_step, "review_completed_mission");
+    assert.equal(detail?.latest_memory_receipt?.current_task_source, "terminal_operation_receipt");
+    assert.equal(detail?.latest_memory_receipt?.current_task_approval_id, "apr_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_approval_status, "approved");
+    assert.equal(detail?.latest_memory_receipt?.current_task_operation_id, "task_memory_alpha");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(detail?.latest_memory_receipt?.current_task_advance_action, "run_operation");
+    assert.equal(detail?.latest_memory_receipt?.current_task_gate, "operator_review");
+    assert.equal(detail?.latest_memory_receipt?.current_task_trace_id, "trace_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_run_id, "run_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_artifact_dir, "D:/francis/data/artifacts/memory-alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_next_step, "review_completed_mission");
+    assert.equal(detail?.latest_memory_receipt?.memory_receipt_count, 1);
     assert.equal(detail?.latest_memory_receipt?.plan_status, "in_progress");
     assert.equal(detail?.latest_memory_receipt?.plan_current_step_id, "understand");
     assert.equal(detail?.latest_memory_receipt?.plan_current_step_title, "Understand goal + constraints");
@@ -361,6 +436,9 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_advance_action, "run_operation");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_trace_id, "trace_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_run_id, "run_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_artifact_dir, "D:/francis/data/artifacts/memory-alpha");
     assert.equal(detail?.memory_receipts?.[0]?.plan_status, "in_progress");
     assert.equal(detail?.memory_receipts?.[0]?.plan_current_step_id, "understand");
     assert.equal(detail?.memory_receipts?.[0]?.plan_current_step_title, "Understand goal + constraints");

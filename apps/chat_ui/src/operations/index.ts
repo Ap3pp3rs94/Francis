@@ -279,9 +279,30 @@ export type OperationMemoryReceipt = {
   approval_status?: string;
   capability?: string;
   subsystem?: string;
+  active_stage?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  handoff_gate?: string;
+  handoff_approval_id?: string;
+  handoff_approval_status?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  handoff_next_step?: string;
+  current_task_source?: string;
+  current_task_approval_id?: string;
+  current_task_approval_status?: string;
+  current_task_operation_id?: string;
   current_task_operation_name?: string;
   current_task_operation_plane?: string;
   current_task_advance_action?: string;
+  current_task_gate?: string;
+  current_task_trace_id?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
+  memory_receipt_count?: number;
   plan_status?: string;
   plan_current_step_id?: string;
   plan_current_step_title?: string;
@@ -870,6 +891,7 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
 
   const rawPlanStepCount = safeNumber(raw.plan_step_count, Number.NaN);
   const rawPlanCheckpointCount = safeNumber(raw.plan_checkpoint_count, Number.NaN);
+  const rawMemoryReceiptCount = safeNumber(raw.memory_receipt_count, Number.NaN);
 
   const receipt: OperationMemoryReceipt = {
     source: safeString(raw.source) || undefined,
@@ -882,9 +904,32 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     approval_status: safeString(raw.approval_status) || undefined,
     capability: safeString(raw.capability) || undefined,
     subsystem: safeString(raw.subsystem) || undefined,
+    active_stage: safeString(raw.active_stage) || undefined,
+    handoff_stage: safeString(raw.handoff_stage) || undefined,
+    handoff_action: safeString(raw.handoff_action) || undefined,
+    handoff_gate: safeString(raw.handoff_gate) || undefined,
+    handoff_approval_id: safeString(raw.handoff_approval_id) || undefined,
+    handoff_approval_status: safeString(raw.handoff_approval_status) || undefined,
+    handoff_operation_id: safeString(raw.handoff_operation_id) || undefined,
+    handoff_trace_id: safeString(raw.handoff_trace_id) || undefined,
+    handoff_run_id: safeString(raw.handoff_run_id) || undefined,
+    handoff_artifact_dir: safeString(raw.handoff_artifact_dir) || undefined,
+    handoff_next_step: safeString(raw.handoff_next_step) || undefined,
+    current_task_source: safeString(raw.current_task_source) || undefined,
+    current_task_approval_id: safeString(raw.current_task_approval_id) || undefined,
+    current_task_approval_status: safeString(raw.current_task_approval_status) || undefined,
+    current_task_operation_id: safeString(raw.current_task_operation_id) || undefined,
     current_task_operation_name: safeString(raw.current_task_operation_name) || undefined,
     current_task_operation_plane: safeString(raw.current_task_operation_plane) || undefined,
     current_task_advance_action: safeString(raw.current_task_advance_action) || undefined,
+    current_task_gate: safeString(raw.current_task_gate) || undefined,
+    current_task_trace_id: safeString(raw.current_task_trace_id) || undefined,
+    current_task_run_id: safeString(raw.current_task_run_id) || undefined,
+    current_task_artifact_dir: safeString(raw.current_task_artifact_dir) || undefined,
+    current_task_next_step: safeString(raw.current_task_next_step) || undefined,
+    memory_receipt_count: Number.isFinite(rawMemoryReceiptCount)
+      ? Math.max(0, Math.floor(rawMemoryReceiptCount))
+      : undefined,
     plan_status: safeString(raw.plan_status) || undefined,
     plan_current_step_id: safeString(raw.plan_current_step_id) || undefined,
     plan_current_step_title: safeString(raw.plan_current_step_title) || undefined,
