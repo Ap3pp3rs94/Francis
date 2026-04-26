@@ -524,17 +524,30 @@ def _mission_receipt_summary(
     memory_receipts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     latest_detail = _current_operation_detail(record, linked_operations)
+    latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
+    latest_operation_meta = latest_operation.get("meta") if isinstance(latest_operation.get("meta"), dict) else {}
     latest_receipt = run_ledger[0] if run_ledger and isinstance(run_ledger[0], dict) else {}
     latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
     receipt_items = [dict(item) for item in memory_receipts or [] if isinstance(item, dict)]
-    return {
+    record_meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    summary = {
         "linked_operation_count": len(linked_operations),
         "run_ledger_count": len(run_ledger),
         "history_count": len(history),
         "memory_receipt_count": len(receipt_items),
         "latest_memory_receipt": dict(receipt_items[0]) if receipt_items else {},
         "current_operation_id": _operation_id(latest_detail),
+        "current_operation_name": _first_text(
+            latest_operation.get("name"),
+            record_meta.get("last_advance_operation_name"),
+        ),
+        "current_operation_plane": _first_text(
+            latest_operation_meta.get("orb_plane"),
+            latest_operation_meta.get("operation_plane"),
+            record_meta.get("last_advance_operation_plane"),
+        ),
         "current_operation_status": _operation_status(latest_detail),
+        "current_advance_action": _safe_str(record_meta.get("last_advance_action")).strip(),
         "current_gate": _operation_gate(latest_detail),
         "current_approval_id": _operation_approval_id(latest_detail),
         "current_trace_id": _operation_trace_id(latest_detail),
@@ -546,6 +559,8 @@ def _mission_receipt_summary(
         "latest_history_event": _safe_str(latest_history.get("event")).strip(),
         "latest_history_ts": _stage_timestamp(latest_history.get("ts")),
     }
+    summary.update(_operation_plan_summary(latest_detail))
+    return summary
 
 
 def _mission_interface_stage(

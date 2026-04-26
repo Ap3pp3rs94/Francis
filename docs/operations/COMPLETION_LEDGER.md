@@ -1014,6 +1014,13 @@ current-task id and receipt posture. This is interface exposure only; it does
 not add mission controls, infer missing operation identity, or change execution
 authority.
 
+As of `2026-04-26`, mission detail receipt summaries also preserve the current
+operation identity and plan summary. `GET /missions/{mission_id}` now carries
+`current_operation_name`, `current_operation_plane`, `current_advance_action`,
+and existing plan status/current-step/count fields inside `receipt_summary`
+when the linked operation already exposes them. This is compact readback only;
+it does not alter mission advancement, execution authority, or plan generation.
+
 As of `2026-04-26`, continuity and world-state mission current-task read models
 also preserve that backend-backed operation identity. Mission queue, recent
 mission, and shift-briefing current-task projections can now carry operation name,
@@ -3920,6 +3927,21 @@ Latest targeted validation for the `2026-04-26` mission execution permission-gat
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
   Result: `16 passed`
+
+Latest targeted validation for the `2026-04-26` mission receipt-summary operation identity slice:
+
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m mypy src\francis\api\routes\missions.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py::test_mission_advance_creates_first_operation_with_receipt tests\test_api_missions.py::test_mission_advance_runs_linked_queued_operation -q`
+  Result: `2 passed`
+- `python -m pytest tests\test_api_missions.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` chat mission ingress first-operation slice:
 

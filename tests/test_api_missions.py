@@ -1882,6 +1882,9 @@ def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_p
     assert fetched_body["current_task"]["operation_name"] == "plan.create"
     assert fetched_body["current_task"]["operation_plane"] == "P7_EXECUTION"
     assert fetched_body["current_task"]["advance_action"] == "create_first_operation"
+    assert fetched_body["receipt_summary"]["current_operation_name"] == "plan.create"
+    assert fetched_body["receipt_summary"]["current_operation_plane"] == "P7_EXECUTION"
+    assert fetched_body["receipt_summary"]["current_advance_action"] == "create_first_operation"
     history_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert history_events
     assert history_events[-1]["details"]["operation_name"] == "plan.create"
@@ -1954,6 +1957,15 @@ def test_mission_advance_runs_linked_queued_operation(monkeypatch, tmp_path: Pat
     assert plan_stage["plan_current_step_title"] == "Understand goal + constraints"
     assert plan_stage["plan_step_count"] == 4
     assert plan_stage["plan_checkpoint_count"] == 3
+    receipt_summary = fetched_body["receipt_summary"]
+    assert receipt_summary["current_operation_name"] == "plan.create"
+    assert receipt_summary["current_operation_plane"] == "P9_OBSERVABILITY"
+    assert receipt_summary["current_advance_action"] == "run_linked_operation"
+    assert receipt_summary["plan_status"] == "in_progress"
+    assert receipt_summary["plan_current_step_id"] == "understand"
+    assert receipt_summary["plan_current_step_title"] == "Understand goal + constraints"
+    assert receipt_summary["plan_step_count"] == 4
+    assert receipt_summary["plan_checkpoint_count"] == 3
     advance_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert advance_events
     assert advance_events[-1]["details"]["operation_id"] == operation_id
