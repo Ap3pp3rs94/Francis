@@ -758,7 +758,8 @@ def test_continuity_briefing_reports_ready_stage3_mission_posture(monkeypatch, t
     assert completed_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
     assert deadlettered_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
     assert completed_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_memory_receipts"]
-    assert mission_readiness_by_id["session_continuity"]["evidence"]["memory_receipt_count"] >= 1
+    session_continuity_evidence = mission_readiness_by_id["session_continuity"]["evidence"]
+    assert session_continuity_evidence["memory_receipt_count"] >= 1
     assert completed_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
     assert deadlettered_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
     assert completed_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["memory_context_ids"]
@@ -772,6 +773,13 @@ def test_continuity_briefing_reports_ready_stage3_mission_posture(monkeypatch, t
     assert completed_receipts
     assert completed_receipts[0]["source"] == "continuity.ledger"
     assert completed_receipts[0]["operation_id"]
+    assert isinstance(session_continuity_evidence["memory_receipt_approval_ids"], list)
+    assert isinstance(session_continuity_evidence["memory_receipt_artifact_dirs"], list)
+    if completed_receipts[0].get("approval_id"):
+        assert completed_receipts[0]["approval_id"] in session_continuity_evidence["memory_receipt_approval_ids"]
+    assert completed_receipts[0]["run_id"] in session_continuity_evidence["memory_receipt_run_ids"]
+    if completed_receipts[0].get("artifact_dir"):
+        assert completed_receipts[0]["artifact_dir"] in session_continuity_evidence["memory_receipt_artifact_dirs"]
 
     recently_completed = body["briefing"]["recently_completed"]
     completed_projection = next(item for item in recently_completed if item["id"] == completed_id)

@@ -153,6 +153,21 @@ def _memory_receipt_reference(receipt: dict[str, Any], key: str) -> str:
     return _first_text(receipt.get(key), references.get(key))
 
 
+def _memory_receipt_reference_values(
+    receipt_index: dict[str, list[dict[str, Any]]],
+    key: str,
+) -> list[str]:
+    return sorted(
+        {
+            value
+            for receipts in receipt_index.values()
+            for receipt in receipts
+            if isinstance(receipt, dict)
+            if (value := _memory_receipt_reference(receipt, key))
+        }
+    )
+
+
 def _observer_anomaly_projection(raw: Any) -> dict[str, Any]:
     payload = raw if isinstance(raw, dict) else {}
     level = _safe_str(payload.get("level")).strip().lower()
@@ -1640,22 +1655,11 @@ def _mission_readiness(
     memory_receipt_mission_ids = sorted(
         mission_id for mission_id, receipts in sampled_memory_receipts.items() if mission_id and receipts
     )
-    memory_receipt_operation_ids = sorted(
-        {
-            _safe_str(receipt.get("operation_id")).strip()
-            for receipts in sampled_memory_receipts.values()
-            for receipt in receipts
-            if isinstance(receipt, dict) and _safe_str(receipt.get("operation_id")).strip()
-        }
-    )
-    memory_receipt_trace_ids = sorted(
-        {
-            _safe_str(receipt.get("trace_id")).strip()
-            for receipts in sampled_memory_receipts.values()
-            for receipt in receipts
-            if isinstance(receipt, dict) and _safe_str(receipt.get("trace_id")).strip()
-        }
-    )
+    memory_receipt_operation_ids = _memory_receipt_reference_values(sampled_memory_receipts, "operation_id")
+    memory_receipt_approval_ids = _memory_receipt_reference_values(sampled_memory_receipts, "approval_id")
+    memory_receipt_trace_ids = _memory_receipt_reference_values(sampled_memory_receipts, "trace_id")
+    memory_receipt_run_ids = _memory_receipt_reference_values(sampled_memory_receipts, "run_id")
+    memory_receipt_artifact_dirs = _memory_receipt_reference_values(sampled_memory_receipts, "artifact_dir")
     memory_receipt_count = sum(len(receipts) for receipts in sampled_memory_receipts.values())
 
     failed_count = int(mission_status_counts.get("failed") or 0)
@@ -1849,7 +1853,10 @@ def _mission_readiness(
                 "missions_with_memory_receipts": memory_receipt_mission_ids,
                 "memory_receipt_count": memory_receipt_count,
                 "memory_receipt_operation_ids": memory_receipt_operation_ids,
+                "memory_receipt_approval_ids": memory_receipt_approval_ids,
                 "memory_receipt_trace_ids": memory_receipt_trace_ids,
+                "memory_receipt_run_ids": memory_receipt_run_ids,
+                "memory_receipt_artifact_dirs": memory_receipt_artifact_dirs,
             },
         },
         {

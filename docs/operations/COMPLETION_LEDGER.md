@@ -1234,6 +1234,12 @@ mission briefing failed-preview and recent-completion payloads expose the latest
 receipt without changing readiness status semantics or creating new execution
 behavior.
 
+As of `2026-04-26`, Stage 3 session-continuity readiness evidence also preserves
+normalized memory receipt approval, run, and artifact handles from the same
+bounded mission receipt samples. This keeps continuity readbacks linked to the
+existing governed operation handoff receipts without widening execution,
+approval, or memory-write authority.
+
 As of `2026-04-26`, mission detail projections carry the same terminal-operation
 memory receipts without requiring a world-state or briefing lookup. The
 `GET /missions/{mission_id}` route returns bounded receipt-backed memory
@@ -5512,6 +5518,21 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt h
 - `python -m ruff check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
   Result: `passed`
 - `python -m ruff format --check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 continuity memory receipt handle evidence slice:
+
+- `python -m pytest tests\test_api_continuity.py::test_continuity_briefing_reports_ready_stage3_mission_posture -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_continuity.py -q`
+  Result: `12 passed`
+- `python -m ruff check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
