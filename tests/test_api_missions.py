@@ -781,6 +781,9 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
     assert fetched_body["current_task"]["trace_id"] == trace_id
     assert fetched_body["current_task"]["run_id"] == run_id
     assert fetched_body["loop_state"]["trace"]["trace_id"] == trace_id
+    assert fetched_body["loop_state"]["trace"]["run_id"] == run_id
+    assert fetched_body["loop_state"]["memory"]["run_id"] == run_id
+    assert fetched_body["loop_state"]["interface"]["run_id"] == run_id
 
 
 def test_mission_linked_supervised_exec_surfaces_artifact_handle(monkeypatch, tmp_path: Path) -> None:
@@ -848,6 +851,10 @@ def test_mission_linked_supervised_exec_surfaces_artifact_handle(monkeypatch, tm
     assert fetched_body["receipt_summary"]["current_run_id"] == run_id
     assert fetched_body["current_task"]["artifact_dir"] == artifact_dir
     assert fetched_body["current_task"]["run_id"] == run_id
+    assert fetched_body["loop_state"]["trace"]["artifact_dir"] == artifact_dir
+    assert fetched_body["loop_state"]["trace"]["run_id"] == run_id
+    assert fetched_body["loop_state"]["interface"]["artifact_dir"] == artifact_dir
+    assert fetched_body["loop_state"]["interface"]["run_id"] == run_id
 
 
 def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_path: Path) -> None:

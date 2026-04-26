@@ -779,6 +779,14 @@ enrichment prefer the mission record's current task target before falling back
 to newest linked-operation receipts, so a stale linked task with a later audit
 receipt cannot mask the active blocker the operator needs to review.
 
+As of `2026-04-26`, mission detail loop-state projections carry receipt handles
+past the trace id. Loop stages and handoffs can now include the current
+`run_id` and `artifact_dir` alongside `operation_id` and `trace_id`, and the
+chat UI mission client preserves those handles in the typed mission loop
+contract. This keeps trace/artifact reachability tied to backend receipts rather
+than requiring operators or interface code to reconstruct handles from raw task
+JSON.
+
 As of `2026-04-25`, the ORB chat UI also prefers current mission task truth for
 mission recovery links. Selected mission recovery posture, return-to-work
 mission actions, and recent mission progress cards use `last_task_id`, loop
@@ -3036,6 +3044,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal status memory e
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
   Result: `4 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop receipt-handle projection slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_missions.py::test_mission_linked_supervised_exec_surfaces_artifact_handle -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `11 passed`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\missions.py tests\test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 - `cd apps\chat_ui; npm run test`
   Result: `45 passed`
 - `cd apps\chat_ui; npm run build`

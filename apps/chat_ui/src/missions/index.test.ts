@@ -1241,6 +1241,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_id: "apr_loop",
           approval_status: "pending",
           operation_id: "tsk_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         },
         plan: { status: "ready", detail: "1 linked operation(s) declared for this mission.", count: 1, operation_id: "tsk_loop" },
         gate: {
@@ -1251,6 +1253,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_id: "apr_loop",
           approval_status: "pending",
           operation_id: "tsk_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         },
         execute: {
           status: "queued",
@@ -1258,6 +1262,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           operation_id: "tsk_loop",
           approval_id: "apr_loop",
           approval_status: "pending",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           next_step: "review_pending_approval",
         },
         trace: {
@@ -1266,6 +1272,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           count: 2,
           operation_id: "tsk_loop",
           trace_id: "trace_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           latest_event: "governance_hold",
           latest_receipt_status: "queued",
           latest_ts: "2024-03-09T16:00:01Z",
@@ -1276,6 +1284,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           count: 3,
           operation_id: "tsk_loop",
           trace_id: "trace_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           latest_event: "advance_receipt",
           latest_ts: "2026-04-15T12:05:00Z",
           memory_receipt_count: 1,
@@ -1303,6 +1313,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           approval_status: "pending",
           operation_id: "tsk_loop",
           trace_id: "trace_loop",
+          run_id: "run_loop",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
           latest_event: "governance_hold",
           latest_receipt_status: "queued",
           latest_ts: "2024-03-09T16:00:01Z",
@@ -1324,18 +1336,26 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.handoff?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.handoff?.approval_status, "pending");
     assert.equal(response.loop_state?.handoff?.operation_id, "tsk_loop");
+    assert.equal(response.loop_state?.handoff?.run_id, "run_loop");
+    assert.equal(response.loop_state?.handoff?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.gate?.status, "needs_approval");
     assert.equal(response.loop_state?.gate?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.gate?.approval_status, "pending");
     assert.equal(response.loop_state?.gate?.next_step, "review_pending_approval");
     assert.equal(response.loop_state?.execute?.approval_status, "pending");
+    assert.equal(response.loop_state?.execute?.run_id, "run_loop");
+    assert.equal(response.loop_state?.execute?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.execute?.next_step, "review_pending_approval");
     assert.equal(response.loop_state?.trace?.trace_id, "trace_loop");
+    assert.equal(response.loop_state?.trace?.run_id, "run_loop");
+    assert.equal(response.loop_state?.trace?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.trace?.latest_event, "governance_hold");
     assert.equal(response.loop_state?.trace?.latest_receipt_status, "queued");
     assert.equal(response.loop_state?.trace?.latest_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.loop_state?.memory?.latest_event, "advance_receipt");
     assert.equal(response.loop_state?.memory?.latest_ts, "2026-04-15T12:05:00Z");
+    assert.equal(response.loop_state?.memory?.run_id, "run_loop");
+    assert.equal(response.loop_state?.memory?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.memory?.memory_receipt_count, 1);
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.id, "ledger_loop");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.operation_id, "tsk_loop");
@@ -1343,6 +1363,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.interface?.status, "available");
     assert.equal(response.loop_state?.interface?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.interface?.approval_id, "apr_loop");
+    assert.equal(response.loop_state?.interface?.run_id, "run_loop");
+    assert.equal(response.loop_state?.interface?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.loop_state?.interface?.latest_receipt_status, "queued");
     assert.equal(response.queue_item?.recommended_action, "review_pending_approval");
     assert.equal(response.queue_item?.action_target_id, "tsk_loop");

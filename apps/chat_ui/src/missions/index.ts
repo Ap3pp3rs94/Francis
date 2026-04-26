@@ -117,6 +117,8 @@ export type MissionLoopStage = {
   approval_status?: string;
   operation_id?: string;
   trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   latest_event?: string;
   latest_receipt_status?: string;
   latest_ts?: string;
@@ -134,6 +136,8 @@ export type MissionLoopHandoff = {
   approval_status?: string;
   operation_id?: string;
   trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   latest_event?: string;
   latest_ts?: string;
 };
@@ -791,6 +795,8 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     approval_status: safeString(raw.approval_status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     latest_event: safeString(raw.latest_event, "") || undefined,
     latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_ts: safeString(raw.latest_ts, "") || undefined,
@@ -805,6 +811,8 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     !stage.approval_id &&
     !stage.approval_status &&
     !stage.trace_id &&
+    !stage.run_id &&
+    !stage.artifact_dir &&
     !stage.latest_event &&
     !stage.latest_receipt_status &&
     !stage.latest_ts &&
@@ -830,6 +838,8 @@ function parseMissionLoopHandoff(raw: unknown): MissionLoopHandoff | undefined {
     approval_status: safeString(raw.approval_status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     latest_event: safeString(raw.latest_event, "") || undefined,
     latest_ts: safeString(raw.latest_ts, "") || undefined,
   };
@@ -842,6 +852,8 @@ function parseMissionLoopHandoff(raw: unknown): MissionLoopHandoff | undefined {
     !handoff.approval_id &&
     !handoff.approval_status &&
     !handoff.trace_id &&
+    !handoff.run_id &&
+    !handoff.artifact_dir &&
     !handoff.latest_event &&
     !handoff.latest_ts &&
     !handoff.next_step

@@ -481,7 +481,16 @@ def _mission_interface_stage(
         surfaces.append("handoff")
     if any(
         _safe_str(current_task.get(key)).strip()
-        for key in ("operation_id", "gate", "approval_id", "trace_id", "handoff_action", "next_step")
+        for key in (
+            "operation_id",
+            "gate",
+            "approval_id",
+            "trace_id",
+            "run_id",
+            "artifact_dir",
+            "handoff_action",
+            "next_step",
+        )
     ):
         surfaces.append("current_task")
     if any(
@@ -493,6 +502,8 @@ def _mission_interface_stage(
             _safe_str(receipt_summary.get("current_operation_id")).strip(),
             _safe_str(receipt_summary.get("latest_run_event")).strip(),
             _safe_str(receipt_summary.get("latest_history_event")).strip(),
+            _safe_str(receipt_summary.get("current_run_id")).strip(),
+            _safe_str(receipt_summary.get("current_artifact_dir")).strip(),
         ]
     ):
         surfaces.append("receipt_summary")
@@ -519,6 +530,10 @@ def _mission_interface_stage(
         trace_id=_first_text(
             current_task.get("trace_id"), handoff.get("trace_id"), receipt_summary.get("current_trace_id")
         ),
+        run_id=_first_text(current_task.get("run_id"), handoff.get("run_id"), receipt_summary.get("current_run_id")),
+        artifact_dir=_first_text(
+            current_task.get("artifact_dir"), handoff.get("artifact_dir"), receipt_summary.get("current_artifact_dir")
+        ),
         latest_event=_first_text(receipt_summary.get("latest_run_event"), receipt_summary.get("latest_history_event")),
         latest_receipt_status=_first_text(
             receipt_summary.get("latest_run_status"), current_task.get("latest_receipt_status")
@@ -540,6 +555,8 @@ def _loop_stage(
     approval_status: str = "",
     operation_id: str = "",
     trace_id: str = "",
+    run_id: str = "",
+    artifact_dir: str = "",
     latest_event: str = "",
     latest_receipt_status: str = "",
     latest_ts: str = "",
@@ -561,6 +578,10 @@ def _loop_stage(
         payload["operation_id"] = operation_id
     if trace_id:
         payload["trace_id"] = trace_id
+    if run_id:
+        payload["run_id"] = run_id
+    if artifact_dir:
+        payload["artifact_dir"] = artifact_dir
     if latest_event:
         payload["latest_event"] = latest_event
     if latest_receipt_status:
@@ -582,6 +603,8 @@ def _loop_handoff(
     approval_status: str = "",
     operation_id: str = "",
     trace_id: str = "",
+    run_id: str = "",
+    artifact_dir: str = "",
     latest_event: str = "",
     latest_ts: str = "",
     next_step: str = "",
@@ -601,6 +624,10 @@ def _loop_handoff(
         payload["operation_id"] = operation_id
     if trace_id:
         payload["trace_id"] = trace_id
+    if run_id:
+        payload["run_id"] = run_id
+    if artifact_dir:
+        payload["artifact_dir"] = artifact_dir
     if latest_event:
         payload["latest_event"] = latest_event
     if latest_ts:
@@ -625,6 +652,8 @@ def _mission_loop_state(
     latest_gate = _operation_gate(latest_detail)
     latest_approval_id = _operation_approval_id(latest_detail)
     latest_trace_id = _operation_trace_id(latest_detail)
+    latest_run_id = _operation_run_id(latest_detail)
+    latest_artifact_dir = _operation_artifact_dir(latest_detail)
     latest_next_step = _operation_next_step(latest_detail)
     queue_payload = queue_item if isinstance(queue_item, dict) else {}
     queue_current_task = (
@@ -652,6 +681,8 @@ def _mission_loop_state(
     queue_operator_hint = _first_text(queue_payload.get("operator_hint"), queue_advance.get("reason"))
 
     latest_operation_id = _first_text(latest_operation_id, queue_operation_id)
+    latest_run_id = _first_text(latest_run_id, queue_current_task.get("run_id"))
+    latest_artifact_dir = _first_text(latest_artifact_dir, queue_current_task.get("artifact_dir"))
     latest_gate = _first_text(latest_gate, queue_gate)
     latest_approval_id = _first_text(latest_approval_id, queue_approval_id)
     latest_next_step = _first_text(latest_next_step, queue_next_step)
@@ -696,6 +727,8 @@ def _mission_loop_state(
             approval_id=latest_approval_id,
             approval_status=queue_approval_status,
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step,
         )
     elif latest_approval_id and queue_approval_status == "approved":
@@ -706,6 +739,8 @@ def _mission_loop_state(
             approval_id=latest_approval_id,
             approval_status=queue_approval_status,
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step,
         )
     elif has_declared_work:
@@ -713,6 +748,8 @@ def _mission_loop_state(
             "clear",
             "No active governance gate is recorded for the current linked operation.",
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
         )
     else:
         gate_stage = _loop_stage(
@@ -739,6 +776,8 @@ def _mission_loop_state(
             gate=latest_gate,
             approval_id=latest_approval_id,
             approval_status=queue_approval_status,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step,
         )
     else:
@@ -768,6 +807,8 @@ def _mission_loop_state(
             count=trace_count + ledger_count + audit_count,
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             latest_event=latest_trace_event,
             latest_receipt_status=latest_trace_status,
             latest_ts=latest_trace_ts,
@@ -778,6 +819,8 @@ def _mission_loop_state(
             "No trace receipts have been recorded for this mission yet.",
             count=0,
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
         )
 
     history_count = len(history)
@@ -802,6 +845,8 @@ def _mission_loop_state(
             count=history_count + memory_receipt_count,
             operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
             trace_id=_first_text(latest_memory_receipt.get("trace_id"), latest_trace_id),
+            run_id=_first_text(latest_memory_receipt.get("run_id"), latest_run_id),
+            artifact_dir=_first_text(latest_memory_receipt.get("artifact_dir"), latest_artifact_dir),
             latest_event=latest_history_event,
             latest_ts=latest_history_ts,
         )
@@ -823,6 +868,8 @@ def _mission_loop_state(
         "Trace and mission continuity receipts are recorded; review local history before declaring new work.",
         operation_id=latest_operation_id,
         trace_id=latest_trace_id,
+        run_id=latest_run_id,
+        artifact_dir=latest_artifact_dir,
         latest_event=latest_history_event,
         latest_ts=latest_history_ts,
         next_step=record.next_step,
@@ -837,6 +884,8 @@ def _mission_loop_state(
             record.deadletter_reason or "Review why this mission was deadlettered before declaring follow-up work.",
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             latest_event=latest_history_event,
             latest_ts=latest_history_ts,
             next_step=record.deadletter_reason or record.next_step,
@@ -850,6 +899,8 @@ def _mission_loop_state(
             "Review the failed mission evidence, then retry bounded work or deadletter it explicitly.",
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             latest_event=latest_history_event,
             latest_ts=latest_history_ts,
             next_step=record.next_step,
@@ -865,6 +916,8 @@ def _mission_loop_state(
             approval_id=latest_approval_id,
             approval_status=queue_approval_status,
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step,
         )
     elif approved_gate_can_execute:
@@ -879,6 +932,8 @@ def _mission_loop_state(
             approval_id=latest_approval_id,
             approval_status=queue_approval_status,
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step,
         )
     elif not has_declared_work:
@@ -899,6 +954,8 @@ def _mission_loop_state(
             action,
             "Advance or monitor the bounded linked operation before expecting trace and memory closure.",
             operation_id=latest_operation_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=latest_next_step or record.next_step,
         )
     elif not (trace_count or audit_count or ledger_count):
@@ -910,6 +967,8 @@ def _mission_loop_state(
             "Linked work exists, but no run-ledger or trace receipt is available yet.",
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
+            run_id=latest_run_id,
+            artifact_dir=latest_artifact_dir,
             next_step=record.next_step,
         )
 
