@@ -79,6 +79,15 @@ events, delegation projections, and revocation metadata. This is receipt
 identity only; it does not mint credentials, bypass approvals, or change
 approval decision behavior.
 
+As of `2026-04-26`, the API permission gate module has a default-deny
+identity/scope decision contract. `ApiPermissionGate.check` denies missing actor
+identity, invalid or empty required scopes, missing actor scopes, and missing
+resolved scopes with bounded count-only evidence, while allowing only when
+resolved actor scopes satisfy the requested gate scopes. `ScopeChecker` now
+returns the same count-only decision evidence for direct scope checks. This is a
+reusable gate contract; privileged routes still need explicit integration before
+claiming API-wide permission enforcement.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
@@ -2553,6 +2562,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` API permission gate decision contract slice:
+
+- `python -m ruff check src\francis\credentials\scope_checker.py src\francis\governance\api_permission_gate.py tests\unit\test_scope_checker.py tests\unit\test_api_permission_gate.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\credentials\scope_checker.py src\francis\governance\api_permission_gate.py tests\unit\test_scope_checker.py tests\unit\test_api_permission_gate.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\unit\test_scope_checker.py tests\unit\test_api_permission_gate.py -q`
+  Result: `6 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py tests\unit\test_scope_checker.py tests\unit\test_api_permission_gate.py -q`
+  Result: `22 passed`
 
 Latest targeted validation for the `2026-04-26` delegation creation audit context slice:
 
