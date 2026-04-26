@@ -1290,6 +1290,14 @@ and shared briefing memory receipt projections now keep `handoff_gate` and
 show the real approval gate context already recorded by memory without
 inventing approval posture or changing execution authority.
 
+As of `2026-04-26`, the mission operation memory receipt helper contract is
+covered for plan readback metadata. `mission_operation_receipts()` and
+`operation_memory_receipts()` preserve receipt-backed `plan_status`, current
+plan step id/title, and plan step/checkpoint counts from continuity receipt
+metadata alongside operation/current-task identity. This is read-model contract
+coverage for existing receipt data; it does not add new memory writes,
+execution authority, or UI-synthesized plan state.
+
 As of `2026-04-26`, existing chat UI mission receipt surfaces render those
 receipt-backed completed-loop handoff fields when the backend provides them.
 Shift Briefing memory evidence, recently-completed mission cards, selected
@@ -3986,6 +3994,19 @@ Latest targeted validation for the `2026-04-26` world-state receipt-summary iden
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` mission memory receipt plan-readback contract slice:
+
+- `python -m pytest tests\test_mission_receipts.py -q`
+  Result: `2 passed`
+- `python -m ruff check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`; Ruff emitted a cache write warning for `.ruff_cache` access denied.
+- `python -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` chat mission ingress first-operation slice:

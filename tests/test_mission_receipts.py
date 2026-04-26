@@ -51,7 +51,12 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "current_task_run_id": "run_receipt_refs",
             "current_task_artifact_dir": "D:/francis/data/artifacts/receipt-refs",
             "current_task_next_step": "review_completed_mission",
+            "plan_status": "in_progress",
+            "plan_current_step_id": "understand",
+            "plan_current_step_title": "Understand goal + constraints",
             "memory_receipt_count": 1,
+            "plan_step_count": 4,
+            "plan_checkpoint_count": 2,
         },
     )
 
@@ -83,7 +88,12 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["current_task_trace_id"] == "trace_receipt_refs"
     assert receipts[0]["current_task_run_id"] == "run_receipt_refs"
     assert receipts[0]["current_task_next_step"] == "review_completed_mission"
+    assert receipts[0]["plan_status"] == "in_progress"
+    assert receipts[0]["plan_current_step_id"] == "understand"
+    assert receipts[0]["plan_current_step_title"] == "Understand goal + constraints"
     assert receipts[0]["memory_receipt_count"] == 1
+    assert receipts[0]["plan_step_count"] == 4
+    assert receipts[0]["plan_checkpoint_count"] == 2
     assert receipts[0]["references"] == {
         "mission_id": "msn_receipt_refs",
         "operation_id": "tsk_receipt_refs",
