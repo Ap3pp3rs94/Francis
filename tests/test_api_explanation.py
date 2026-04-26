@@ -160,6 +160,99 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert rows[0]["operation_id"] == "tsk-gamma"
 
 
+def test_explanations_promote_structured_receipt_references(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    written = client.post(
+        "/explanations/record",
+        json={
+            "id": "exp-references",
+            "ts": 1_700_000_010,
+            "kind": "audit",
+            "severity": "info",
+            "title": "Referenced receipt",
+            "summary": "Receipt handles arrived in the structured references block.",
+            "domain": "operations",
+            "references": {
+                "mission_id": "msn-ref",
+                "task_id": "tsk-ref",
+                "traceId": "trace-ref",
+                "approvalId": "appr-ref",
+                "run_id": "run-ref",
+                "artifact_path": "runs/ref/artifacts",
+            },
+        },
+    )
+    assert written.status_code == 200
+    written_body = written.json()
+    assert written_body["ok"] is True
+    assert written_body["item"]["mission_id"] == "msn-ref"
+    assert written_body["item"]["operation_id"] == "tsk-ref"
+    assert written_body["item"]["trace_id"] == "trace-ref"
+    assert written_body["item"]["approval_id"] == "appr-ref"
+    assert written_body["item"]["run_id"] == "run-ref"
+    assert written_body["item"]["artifact_dir"] == "runs/ref/artifacts"
+    assert written_body["item"]["references"] == {
+        "mission_id": "msn-ref",
+        "operation_id": "tsk-ref",
+        "trace_id": "trace-ref",
+        "approval_id": "appr-ref",
+        "run_id": "run-ref",
+        "artifact_dir": "runs/ref/artifacts",
+    }
+
+    listed = client.get(
+        "/explanations/list",
+        params={
+            "mission_id": "msn-ref",
+            "operation_id": "tsk-ref",
+            "trace_id": "trace-ref",
+            "approval_id": "appr-ref",
+            "run_id": "run-ref",
+            "artifact_dir": "runs/ref/artifacts",
+        },
+    )
+    assert listed.status_code == 200
+    listed_items = listed.json()["items"]
+    assert [item["id"] for item in listed_items] == ["exp-references"]
+    assert listed_items[0]["references"]["operation_id"] == "tsk-ref"
+
+    fetched = client.get("/explanations/get?id=exp-references")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["mission_id"] == "msn-ref"
+    assert fetched_item["references"]["trace_id"] == "trace-ref"
+
+    exported_json = client.get("/explanations/export", params={"format": "json", "approval_id": "appr-ref"})
+    assert exported_json.status_code == 200
+    exported_json_body = json.loads(exported_json.text)
+    assert [item["id"] for item in exported_json_body["items"]] == ["exp-references"]
+    assert exported_json_body["items"][0]["references"]["artifact_dir"] == "runs/ref/artifacts"
+
+    exported_csv = client.get("/explanations/export?format=csv&run_id=run-ref")
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert [row["id"] for row in rows] == ["exp-references"]
+    assert rows[0]["operation_id"] == "tsk-ref"
+    assert rows[0]["artifact_dir"] == "runs/ref/artifacts"
+
+    registry_path = data_root / "explanations" / "_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert registry["records"]["exp-references"]["references"]["approval_id"] == "appr-ref"
+
+    client2 = TestClient(create_app())
+    persisted = client2.get("/explanations/list?trace_id=trace-ref")
+    assert persisted.status_code == 200
+    assert [item["id"] for item in persisted.json()["items"]] == ["exp-references"]
+
+
 def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

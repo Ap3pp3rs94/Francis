@@ -251,6 +251,13 @@ list/export filtering by mission and operation id. This is evidence readback
 truth only; it does not create mission state, write memory, or add execution
 authority.
 
+As of `2026-04-26`, explanation records also accept the structured receipt
+`references` shape used by mission-loop memory receipts. `references` can carry
+bounded mission, operation/task, approval, trace, run, and artifact handles; the
+backend promotes those handles into the existing list/get/export query contract
+and persists a normalized `references` block. This is trace/evidence readback
+only; it does not synthesize explanation evidence or broaden execution authority.
+
 As of `2026-04-26`, the chat UI explanation evidence path can use those
 mission and operation explanation filters. The selected operation/mission audit
 evidence helper now sends bounded `mission_id` and `operation_id` queries before
@@ -3231,6 +3238,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 structured explanation
+reference readback slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_explanation.py -q`
+  Result: `3 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m mypy src`
+  Result: `Success: no issues found in 475 source files`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_explanation.py -q`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation mission-handle interface slice:
 

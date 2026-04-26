@@ -73,6 +73,23 @@ def _meta(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _reference_handles(value: Any) -> dict[str, str]:
+    raw = _meta(value)
+    out = {
+        "mission_id": _safe_str(raw.get("mission_id") or raw.get("missionId")).strip(),
+        "operation_id": _safe_str(
+            raw.get("operation_id") or raw.get("operationId") or raw.get("task_id") or raw.get("taskId")
+        ).strip(),
+        "trace_id": _safe_str(raw.get("trace_id") or raw.get("traceId")).strip(),
+        "approval_id": _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip(),
+        "run_id": _safe_str(raw.get("run_id") or raw.get("runId")).strip(),
+        "artifact_dir": _safe_str(
+            raw.get("artifact_dir") or raw.get("artifactDir") or raw.get("artifact_path") or raw.get("artifactPath")
+        ).strip(),
+    }
+    return {key: value for key, value in out.items() if value}
+
+
 def _validate_id(value: str, field: str = "id") -> str:
     text = value.strip()
     if not text:
@@ -103,30 +120,49 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     tools_raw = raw.get("tools") if isinstance(raw.get("tools"), list) else []
     tools = [tool for tool in tools_raw if isinstance(tool, dict)]
     meta = _meta(raw.get("meta"))
+    references = _reference_handles(raw.get("references"))
     trace_id = (
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
+        or references.get("trace_id", "")
         or _safe_str(meta.get("trace_id") or meta.get("traceId")).strip()
     )
     run_id = (
         _safe_str(raw.get("run_id") or raw.get("runId")).strip()
+        or references.get("run_id", "")
         or _safe_str(meta.get("run_id") or meta.get("runId")).strip()
     )
     artifact_dir = (
         _safe_str(raw.get("artifact_dir") or raw.get("artifactDir")).strip()
+        or references.get("artifact_dir", "")
         or _safe_str(meta.get("artifact_dir") or meta.get("artifactDir")).strip()
     )
     mission_id = (
         _safe_str(raw.get("mission_id") or raw.get("missionId")).strip()
+        or references.get("mission_id", "")
         or _safe_str(meta.get("mission_id") or meta.get("missionId")).strip()
     )
     operation_id = (
         _safe_str(raw.get("operation_id") or raw.get("operationId")).strip()
+        or references.get("operation_id", "")
         or _safe_str(meta.get("operation_id") or meta.get("operationId")).strip()
     )
     approval_id = (
         _safe_str(raw.get("approval_id") or raw.get("approvalId")).strip()
+        or references.get("approval_id", "")
         or _safe_str(meta.get("approval_id") or meta.get("approvalId")).strip()
     )
+    normalized_references = {
+        key: value
+        for key, value in {
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "trace_id": trace_id,
+            "approval_id": approval_id,
+            "run_id": run_id,
+            "artifact_dir": artifact_dir,
+        }.items()
+        if value
+    }
 
     content_raw = raw.get("content")
     content: dict[str, Any] | str | None
@@ -153,6 +189,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "conversation_id": _safe_str(raw.get("conversation_id") or raw.get("thread_id")).strip(),
         "approval_id": approval_id,
         "plugin_id": _safe_str(raw.get("plugin_id")).strip(),
+        "references": normalized_references,
         "tags": tags,
         "content": content,
         "inputs": _meta(raw.get("inputs")),
@@ -180,6 +217,7 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
         "conversation_id": record.get("conversation_id"),
         "approval_id": record.get("approval_id"),
         "plugin_id": record.get("plugin_id"),
+        "references": record.get("references") if isinstance(record.get("references"), dict) else {},
         "tags": record.get("tags") or [],
         "meta": record.get("meta") if isinstance(record.get("meta"), dict) else {},
     }
@@ -645,42 +683,68 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
         existing_obj = existing if isinstance(existing, dict) else {}
         payload_meta = _meta(payload.get("meta"))
         existing_meta = _meta(existing_obj.get("meta"))
+        payload_references = _reference_handles(payload.get("references"))
+        existing_references = _reference_handles(existing_obj.get("references"))
         trace_id = (
             _safe_str(payload.get("trace_id") or payload.get("traceId")).strip()
             or _safe_str(existing_obj.get("trace_id") or existing_obj.get("traceId")).strip()
+            or payload_references.get("trace_id", "")
+            or existing_references.get("trace_id", "")
             or _safe_str(payload_meta.get("trace_id") or payload_meta.get("traceId")).strip()
             or _safe_str(existing_meta.get("trace_id") or existing_meta.get("traceId")).strip()
         )
         run_id = (
             _safe_str(payload.get("run_id") or payload.get("runId")).strip()
             or _safe_str(existing_obj.get("run_id") or existing_obj.get("runId")).strip()
+            or payload_references.get("run_id", "")
+            or existing_references.get("run_id", "")
             or _safe_str(payload_meta.get("run_id") or payload_meta.get("runId")).strip()
             or _safe_str(existing_meta.get("run_id") or existing_meta.get("runId")).strip()
         )
         artifact_dir = (
             _safe_str(payload.get("artifact_dir") or payload.get("artifactDir")).strip()
             or _safe_str(existing_obj.get("artifact_dir") or existing_obj.get("artifactDir")).strip()
+            or payload_references.get("artifact_dir", "")
+            or existing_references.get("artifact_dir", "")
             or _safe_str(payload_meta.get("artifact_dir") or payload_meta.get("artifactDir")).strip()
             or _safe_str(existing_meta.get("artifact_dir") or existing_meta.get("artifactDir")).strip()
         )
         mission_id = (
             _safe_str(payload.get("mission_id") or payload.get("missionId")).strip()
             or _safe_str(existing_obj.get("mission_id") or existing_obj.get("missionId")).strip()
+            or payload_references.get("mission_id", "")
+            or existing_references.get("mission_id", "")
             or _safe_str(payload_meta.get("mission_id") or payload_meta.get("missionId")).strip()
             or _safe_str(existing_meta.get("mission_id") or existing_meta.get("missionId")).strip()
         )
         operation_id = (
             _safe_str(payload.get("operation_id") or payload.get("operationId")).strip()
             or _safe_str(existing_obj.get("operation_id") or existing_obj.get("operationId")).strip()
+            or payload_references.get("operation_id", "")
+            or existing_references.get("operation_id", "")
             or _safe_str(payload_meta.get("operation_id") or payload_meta.get("operationId")).strip()
             or _safe_str(existing_meta.get("operation_id") or existing_meta.get("operationId")).strip()
         )
         approval_id = (
             _safe_str(payload.get("approval_id") or payload.get("approvalId")).strip()
             or _safe_str(existing_obj.get("approval_id") or existing_obj.get("approvalId")).strip()
+            or payload_references.get("approval_id", "")
+            or existing_references.get("approval_id", "")
             or _safe_str(payload_meta.get("approval_id") or payload_meta.get("approvalId")).strip()
             or _safe_str(existing_meta.get("approval_id") or existing_meta.get("approvalId")).strip()
         )
+        references = {
+            key: value
+            for key, value in {
+                "mission_id": mission_id,
+                "operation_id": operation_id,
+                "trace_id": trace_id,
+                "approval_id": approval_id,
+                "run_id": run_id,
+                "artifact_dir": artifact_dir,
+            }.items()
+            if value
+        }
         ts = int(payload.get("ts") or existing_obj.get("ts") or _now_s())
 
         merged = {
@@ -702,6 +766,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "approval_id": approval_id,
             "plugin_id": _safe_str(payload.get("plugin_id")).strip()
             or _safe_str(existing_obj.get("plugin_id")).strip(),
+            "references": references,
             "tags": _parse_list(payload.get("tags") if "tags" in payload else existing_obj.get("tags")),
             "content": payload.get("content") if "content" in payload else existing_obj.get("content"),
             "inputs": _meta(payload.get("inputs") if "inputs" in payload else existing_obj.get("inputs")),
