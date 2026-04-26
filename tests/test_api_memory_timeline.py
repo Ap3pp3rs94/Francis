@@ -501,6 +501,14 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     body = operation_listed.json()
     assert body["total"] == 1
     item = body["items"][0]
+    assert item["references"] == {
+        "mission_id": "msn-loop-handle-memory",
+        "operation_id": "tsk-loop-handle-memory",
+        "trace_id": "trace-loop-handle-memory",
+        "approval_id": "apr-loop-handle-memory",
+        "run_id": "run-loop-handle-memory",
+        "artifact_dir": "D:/francis/data/artifacts/loop-handle-memory",
+    }
     assert item["loop"]["handoff_operation_id"] == "tsk-loop-handle-memory"
     assert item["loop"]["current_task_approval_id"] == "apr-loop-handle-memory"
 
@@ -521,6 +529,16 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     )
     assert artifact_listed.status_code == 200
     assert [event["id"] for event in artifact_listed.json()["items"]] == [item["id"]]
+
+    exported_csv = client.get("/memory/timeline/export?format=csv&operation_id=tsk-loop-handle-memory")
+    assert exported_csv.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert [row["id"] for row in rows] == [item["id"]]
+    assert rows[0]["operation_id"] == "tsk-loop-handle-memory"
+    assert rows[0]["trace_id"] == "trace-loop-handle-memory"
+    assert rows[0]["approval_id"] == "apr-loop-handle-memory"
+    assert rows[0]["run_id"] == "run-loop-handle-memory"
+    assert rows[0]["artifact_dir"] == "D:/francis/data/artifacts/loop-handle-memory"
 
 
 def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch, tmp_path: Path) -> None:

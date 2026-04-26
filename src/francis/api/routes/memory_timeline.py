@@ -66,6 +66,14 @@ _LOOP_CSV_FIELDS = (
     "plan_step_count",
     "plan_checkpoint_count",
 )
+_REFERENCE_FALLBACK_KEYS: dict[str, tuple[str, ...]] = {
+    "mission_id": ("mission_id",),
+    "operation_id": ("operation_id", "task_id", "current_task_operation_id", "handoff_operation_id"),
+    "trace_id": ("trace_id", "current_task_trace_id", "handoff_trace_id"),
+    "approval_id": ("approval_id", "current_task_approval_id", "handoff_approval_id"),
+    "run_id": ("run_id", "current_task_run_id", "handoff_run_id"),
+    "artifact_dir": ("artifact_dir", "artifact_path", "current_task_artifact_dir", "handoff_artifact_dir"),
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -170,6 +178,14 @@ def _redact_tags(value: Any) -> list[str]:
         if redacted and redacted not in tags:
             tags.append(redacted)
     return tags
+
+
+def _reference_value(item: dict[str, Any], meta: dict[str, Any], field: str) -> str:
+    for key in _REFERENCE_FALLBACK_KEYS.get(field, (field,)):
+        value = _first_text(item.get(key), meta.get(key))
+        if value:
+            return value
+    return ""
 
 
 def _path() -> Path:
@@ -371,8 +387,8 @@ def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, A
         out["provenance"] = provenance
 
     references: dict[str, Any] = {}
-    for key in ("mission_id", "operation_id", "trace_id", "approval_id", "run_id", "artifact_dir"):
-        value = _safe_str(item.get(key)).strip()
+    for key in _REFERENCE_CSV_FIELDS:
+        value = _reference_value(item, meta, key)
         if value:
             references[key] = value
     if references:

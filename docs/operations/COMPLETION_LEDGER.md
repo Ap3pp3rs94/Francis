@@ -988,6 +988,15 @@ not present. This keeps receipt-backed evidence lookup aligned with the visible
 `loop` projection without broad search, inferred linkage, execution, or
 approval authority.
 
+As of `2026-04-26`, memory timeline public events also promote those loop-only
+receipt handles into the bounded `references` block when top-level references
+are sparse. `/memory/timeline/list`, `/memory/timeline/get`, and exports now
+prefer existing normalized mission/operation/trace/approval/run/artifact
+references, then fall back to current-task or handoff handles already present in
+redacted loop metadata. This keeps evidence found through loop-handle filters
+self-describing in JSON and CSV readbacks without minting new traces, approvals,
+runs, artifacts, operations, or memory receipts.
+
 As of `2026-04-26`, the chat UI selected-operation memory evidence cards render
 those loop-only handles when memory timeline events do not include normalized
 top-level references. The reference line now falls back to event `loop`
@@ -5422,6 +5431,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop artifact in
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop handle projection slice:
+
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_loop_handle_fallbacks -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `10 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files already formatted`
+
+Earlier validation for this surface:
 
 - `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
   Result: `2 files left unchanged`
