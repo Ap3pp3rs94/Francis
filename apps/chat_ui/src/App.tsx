@@ -127,6 +127,9 @@ type MissionMemoryReceiptLike = {
   handoff_next_step?: string;
   current_task_source?: string;
   current_task_operation_id?: string;
+  current_task_operation_name?: string;
+  current_task_operation_plane?: string;
+  current_task_advance_action?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
@@ -475,6 +478,9 @@ function missionMemoryReceiptHandoffLine(receipt: MissionMemoryReceiptLike | nul
     safeString(receipt?.current_task_next_step).trim() || safeString(receipt?.handoff_next_step).trim();
   const operationId =
     safeString(receipt?.current_task_operation_id).trim() || safeString(receipt?.handoff_operation_id).trim();
+  const operationName = safeString(receipt?.current_task_operation_name).trim();
+  const operationPlane = safeString(receipt?.current_task_operation_plane).trim();
+  const advanceAction = safeString(receipt?.current_task_advance_action).trim();
   const traceId = safeString(receipt?.current_task_trace_id).trim() || safeString(receipt?.handoff_trace_id).trim();
   const runId = safeString(receipt?.current_task_run_id).trim() || safeString(receipt?.handoff_run_id).trim();
   const artifactDir =
@@ -492,6 +498,9 @@ function missionMemoryReceiptHandoffLine(receipt: MissionMemoryReceiptLike | nul
   if (handoffAction) parts.push(`handoff ${handoffAction}`);
   if (nextStep) parts.push(`next ${nextStep}`);
   if (operationId && operationId !== baseOperationId) parts.push(`handoff_task ${operationId}`);
+  if (operationName) parts.push(`task_name ${operationName}`);
+  if (operationPlane) parts.push(`task_plane ${operationPlane}`);
+  if (advanceAction && advanceAction !== handoffAction) parts.push(`advance ${advanceAction}`);
   if (traceId && traceId !== baseTraceId) parts.push(`handoff_trace ${traceId}`);
   if (runId && runId !== baseRunId) parts.push(`handoff_run ${runId}`);
   if (artifactDir && artifactDir !== baseArtifactDir) parts.push(`handoff_artifact ${artifactDir}`);
@@ -508,6 +517,14 @@ function operationMemoryReceiptReferenceLine(receipt: OperationMemoryReceipt | n
   if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
   if (refs?.run_id) parts.push(`run ${refs.run_id}`);
   if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
+  return parts.join(" / ");
+}
+
+function operationMemoryReceiptCurrentTaskLine(receipt: OperationMemoryReceipt | null | undefined): string {
+  const parts: string[] = [];
+  if (receipt?.current_task_operation_name) parts.push(`task_name ${receipt.current_task_operation_name}`);
+  if (receipt?.current_task_operation_plane) parts.push(`task_plane ${receipt.current_task_operation_plane}`);
+  if (receipt?.current_task_advance_action) parts.push(`advance ${receipt.current_task_advance_action}`);
   return parts.join(" / ");
 }
 
@@ -533,6 +550,9 @@ function operationMemoryReceiptFromMeta(value: unknown): OperationMemoryReceipt 
     approval_status: safeString(value.approval_status).trim() || undefined,
     capability: safeString(value.capability).trim() || undefined,
     subsystem: safeString(value.subsystem).trim() || undefined,
+    current_task_operation_name: safeString(value.current_task_operation_name).trim() || undefined,
+    current_task_operation_plane: safeString(value.current_task_operation_plane).trim() || undefined,
+    current_task_advance_action: safeString(value.current_task_advance_action).trim() || undefined,
   };
   if (Object.values(references).some(Boolean)) receipt.references = references;
   return Object.values(receipt).some((item) => item !== undefined) ? receipt : undefined;
@@ -10176,6 +10196,7 @@ function OperationsPanel(props: {
     operationMemoryReceiptFromMeta(selectedMeta.latest_memory_receipt) ??
     detail?.memory_receipts?.[0];
   const selectedOperationMemoryReceiptRefs = operationMemoryReceiptReferenceLine(selectedOperationMemoryReceipt);
+  const selectedOperationMemoryReceiptTaskLine = operationMemoryReceiptCurrentTaskLine(selectedOperationMemoryReceipt);
   const selectedOperationMemoryReceiptAt = mixedLocaleTime(selectedOperationMemoryReceipt?.ts);
   const selectedOperationMemoryReceiptCount =
     detail?.memory_receipt_count ??
@@ -10681,8 +10702,10 @@ function OperationsPanel(props: {
         return;
       }
       const memoryReceiptRefs = operationMemoryReceiptReferenceLine(response.memory_receipt);
-      const memoryReceiptText = memoryReceiptRefs
-        ? ` Memory receipt: ${memoryReceiptRefs}.`
+      const memoryReceiptTaskLine = operationMemoryReceiptCurrentTaskLine(response.memory_receipt);
+      const memoryReceiptLine = [memoryReceiptRefs, memoryReceiptTaskLine].filter(Boolean).join(" / ");
+      const memoryReceiptText = memoryReceiptLine
+        ? ` Memory receipt: ${memoryReceiptLine}.`
         : response.memory_receipt
           ? " Memory receipt recorded."
           : "";
@@ -11138,6 +11161,7 @@ function OperationsPanel(props: {
                     </>
                   ) : null}
                   {selectedOperationMemoryReceiptRefs ? <>{" / "}{selectedOperationMemoryReceiptRefs}</> : null}
+                  {selectedOperationMemoryReceiptTaskLine ? <>{" / "}{selectedOperationMemoryReceiptTaskLine}</> : null}
                 </div>
               ) : null}
               {selectedPlanSummary ? (

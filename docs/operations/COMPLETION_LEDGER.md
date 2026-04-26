@@ -941,6 +941,13 @@ advance action with the existing current-task operation id. This is
 receipt-contract alignment only; it does not add operation execution authority,
 infer missing operation records, or change mission advancement.
 
+As of `2026-04-26`, the chat UI selected-operation receipt surface renders that
+backend-backed operation identity when receipts provide it. The operation detail
+memory receipt line and post-run notice now show receipt-backed operation name,
+operation ORB plane, and advance action alongside existing mission/task/trace
+handles. This is read-only interface exposure only; it does not create new
+receipt fields, execute operations, or infer missing operation identity.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -4064,6 +4071,13 @@ Latest targeted validation for the `2026-04-26` Stage 3 terminal operation recei
 - `python -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py tests/test_api_operations.py tests/test_api_mission_loop_contract.py tests/test_mission_receipts.py -q`
   Result: `passed`
 - `python -m pytest -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 selected-operation receipt identity interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 world-state approval incident loop-handle evidence slice:
