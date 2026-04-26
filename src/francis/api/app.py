@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from francis.api.routes import (
     approvals,
+    artifacts,
     attachments,
     chat,
     continuity,
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/chat", tags=["chat"])
     app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
     app.include_router(continuity.router, prefix="/continuity", tags=["continuity"])
+    app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
     app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
     app.include_router(plugins.router, prefix="/plugins", tags=["plugins"])
     app.include_router(trust.router, prefix="/trust", tags=["trust"])

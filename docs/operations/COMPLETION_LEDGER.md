@@ -262,6 +262,13 @@ memory receipt counts, latest receipt handles, timestamps, statuses, and bounded
 mission/operation/trace/approval/run/artifact references when those fields are
 present, without inventing memory state when no receipt is returned.
 
+As of `2026-04-26`, artifact handles have a bounded backend inspection contract.
+`GET /artifacts/inspect` accepts absolute or artifact-root-relative handles under
+the local `data/artifacts` root and returns metadata-only directory/file
+projections, with path containment enforced and no artifact file contents
+returned. This makes mission and operation `artifact_dir` receipts inspectable as
+backend truth before any UI claims richer artifact browsing.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
@@ -2430,6 +2437,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 artifact inspection contract slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\artifacts.py src\francis\api\app.py tests\test_api_artifacts.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_artifacts.py -q`
+  Result: `4 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_artifacts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation run memory receipt notice slice:
 
