@@ -203,6 +203,16 @@ envelope with gate, reason, next step, and count-only evidence, and the chat UI
 chat client preserves that envelope in mission-ingress metadata instead of
 collapsing policy truth to a plain error string.
 
+As of `2026-04-26`, terminal mission-operation memory receipts are reachable
+from operation detail surfaces after the immediate run response is gone. The
+shared receipt reader can query continuity-ledger receipts by operation id with
+optional mission scoping, `/operations/{operation_id}` and
+`/operations/get_many` project `memory_receipt_count` plus
+`latest_memory_receipt` onto backed operation details, and the chat UI
+operations client preserves that receipt summary. This does not mint new memory
+or infer completion; it exposes existing continuity-ledger receipts for
+mission-linked operations that already reached a terminal status.
+
 As of `2026-04-26`, the chat UI mission client preserves those mission
 execution permission-gate denials instead of collapsing them to a bare error
 string. Mission advance and queue-run responses now retain the backend
@@ -3622,6 +3632,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 chat mission ingress per
   Result: `passed`
 - `cd apps\chat_ui; npm run test -- src/chat/index.test.ts`
   Result: `58 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` (Git emitted a line-ending warning only)
+
+Latest targeted validation for the `2026-04-26` Stage 3 operation detail memory receipt reachability slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_mission_receipts.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff check src\francis\memory\mission_receipts.py src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_mission_receipts.py tests\test_api_operations.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m ruff format --check src\francis\memory\mission_receipts.py src\francis\operations\runtime.py src\francis\api\routes\operations.py tests\test_mission_receipts.py tests\test_api_operations.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `6 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `59 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

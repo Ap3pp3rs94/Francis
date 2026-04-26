@@ -566,10 +566,27 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     if artifact_dir:
         expected_references["artifact_dir"] = artifact_dir
     assert receipt["references"] == expected_references
+    assert run_body["operation"]["meta"]["memory_receipt_count"] == 1
+    assert run_body["operation"]["meta"]["latest_memory_receipt"]["operation_id"] == operation_id
 
     listed = client.get("/memory/timeline/list", params={"run_id": run_id})
     assert listed.status_code == 200
     assert any(item.get("references", {}).get("operation_id") == operation_id for item in listed.json()["items"])
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["memory_receipt_count"] == 1
+    assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert fetched_body["latest_memory_receipt"]["references"] == expected_references
+    assert fetched_body["operation"]["meta"]["memory_receipt_count"] == 1
+    assert fetched_body["operation"]["meta"]["latest_memory_receipt"]["operation_id"] == operation_id
+
+    fetched_many = client.post("/operations/get_many", json={"ids": [operation_id]})
+    assert fetched_many.status_code == 200
+    many_item = fetched_many.json()["items"][0]
+    assert many_item["memory_receipt_count"] == 1
+    assert many_item["latest_memory_receipt"]["operation_id"] == operation_id
 
 
 def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_path: Path) -> None:

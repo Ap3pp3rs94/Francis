@@ -201,6 +201,71 @@ test("OperationsClient.run posts the bounded worker request to the operation run
   }
 });
 
+test("OperationsClient.get preserves operation memory receipt summaries", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      operation: {
+        id: "task_memory_alpha",
+        ts: 1_710_000_200,
+        status: "succeeded",
+        name: "plugin.run",
+        meta: {
+          mission_id: "mission_alpha",
+          memory_receipt_count: 1,
+          latest_memory_receipt: {
+            source: "continuity.ledger",
+            kind: "ledger_append",
+            operation_status: "succeeded",
+            references: {
+              mission_id: "mission_alpha",
+              operation_id: "task_memory_alpha",
+              run_id: "run_memory_alpha",
+            },
+          },
+        },
+      },
+      memory_receipt_count: 1,
+      latest_memory_receipt: {
+        source: "continuity.ledger",
+        kind: "ledger_append",
+        operation_status: "succeeded",
+        references: {
+          mission_id: "mission_alpha",
+          operation_id: "task_memory_alpha",
+          run_id: "run_memory_alpha",
+        },
+      },
+      memory_receipts: [
+        {
+          source: "continuity.ledger",
+          kind: "ledger_append",
+          operation_status: "succeeded",
+          references: {
+            mission_id: "mission_alpha",
+            operation_id: "task_memory_alpha",
+            run_id: "run_memory_alpha",
+          },
+        },
+      ],
+    }),
+  );
+
+  try {
+    const client = new OperationsClient("http://127.0.0.1:8000");
+    const detail = await client.get("task_memory_alpha", { timeoutMs: 50 });
+
+    assert.equal(detail?.operation.id, "task_memory_alpha");
+    assert.equal(detail?.memory_receipt_count, 1);
+    assert.equal(detail?.latest_memory_receipt?.source, "continuity.ledger");
+    assert.equal(detail?.latest_memory_receipt?.references?.mission_id, "mission_alpha");
+    assert.equal(detail?.latest_memory_receipt?.references?.operation_id, "task_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.references?.run_id, "run_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.references?.operation_id, "task_memory_alpha");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("OperationsClient.runOnce posts a single bounded worker cycle request", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {

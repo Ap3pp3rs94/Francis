@@ -113,6 +113,9 @@ export type OperationDetail = {
   // Optional related collections
   logs?: OperationRecord[];
   related?: OperationRecord[];
+  memory_receipts?: OperationMemoryReceipt[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: OperationMemoryReceipt;
 
   // Optional extra metadata
   meta?: Record<string, unknown>;
@@ -779,11 +782,23 @@ export function parseOperationDetail(json: unknown, idHint: string): OperationDe
       : undefined;
 
     const meta = isRecord(json.meta) ? json.meta : undefined;
+    const memoryReceipts = Array.isArray(json.memory_receipts)
+      ? json.memory_receipts
+          .map(parseOperationMemoryReceipt)
+          .filter((item): item is OperationMemoryReceipt => Boolean(item))
+      : [];
+    const latestMemoryReceipt = parseOperationMemoryReceipt(json.latest_memory_receipt);
+    const memoryReceiptCount =
+      safeNumber(json.memory_receipt_count, Number.NaN) ||
+      (memoryReceipts.length ? memoryReceipts.length : latestMemoryReceipt ? 1 : 0);
 
     return {
       operation,
       logs: logs && logs.length ? logs : undefined,
       related: related && related.length ? related : undefined,
+      memory_receipts: memoryReceipts.length ? memoryReceipts : undefined,
+      memory_receipt_count: memoryReceiptCount > 0 ? Math.floor(memoryReceiptCount) : undefined,
+      latest_memory_receipt: latestMemoryReceipt,
       meta,
     };
   }

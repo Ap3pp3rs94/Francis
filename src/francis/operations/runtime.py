@@ -20,6 +20,7 @@ from francis.governance.operation_redaction import (
     redact_operation_value,
 )
 from francis.kernel.paths import data_dir
+from francis.memory.mission_receipts import operation_memory_receipts
 from francis.missions import store as mission_store
 
 logger = logging.getLogger(__name__)
@@ -534,6 +535,43 @@ def _append_terminal_mission_operation_receipt(
     return _memory_receipt_projection(entry)
 
 
+def operation_memory_receipt_summary(
+    task: dict[str, Any],
+    operation: dict[str, Any] | None = None,
+    *,
+    per_operation_limit: int = 5,
+) -> dict[str, Any]:
+    operation_payload = operation if isinstance(operation, dict) else {}
+    operation_id = _safe_str(operation_payload.get("id")).strip() or _safe_str(task.get("task_id")).strip()
+    mission_id = _task_mission_id(task)
+    receipts = operation_memory_receipts(
+        operation_id,
+        mission_id=mission_id,
+        per_operation_limit=per_operation_limit,
+    )
+    return {
+        "memory_receipts": receipts,
+        "memory_receipt_count": len(receipts),
+        "latest_memory_receipt": dict(receipts[0]) if receipts else {},
+    }
+
+
+def attach_operation_memory_receipt_summary(
+    operation: dict[str, Any],
+    receipt_summary: dict[str, Any],
+) -> dict[str, Any]:
+    if int(receipt_summary.get("memory_receipt_count") or 0) <= 0:
+        return operation
+    updated = dict(operation)
+    meta = dict(updated.get("meta") or {}) if isinstance(updated.get("meta"), dict) else {}
+    meta["memory_receipt_count"] = int(receipt_summary.get("memory_receipt_count") or 0)
+    latest = receipt_summary.get("latest_memory_receipt")
+    if isinstance(latest, dict) and latest:
+        meta["latest_memory_receipt"] = dict(latest)
+    updated["meta"] = meta
+    return updated
+
+
 def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
     ts = _parse_iso_to_unix(event.get("ts")) or int(datetime.now(UTC).timestamp())
     event_name = _safe_str(event.get("event")).strip() or "event"
@@ -606,10 +644,14 @@ def get_operation_detail(
     if not isinstance(task, dict):
         return {"ok": False, "error": "not_found"}
 
+    operation = _task_to_operation(task)
+    receipt_summary = operation_memory_receipt_summary(task, operation)
+    operation = attach_operation_memory_receipt_summary(operation, receipt_summary)
     payload: dict[str, object] = {
         "ok": True,
-        "operation": _task_to_operation(task),
+        "operation": operation,
         "meta": {"task": redact_operation_task(task)},
+        **receipt_summary,
     }
     payload["logs"] = operation_logs(op_id, limit=log_limit) if include_logs else []
     return payload
@@ -783,5 +825,17 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
         "operation": operation,
     }
     if memory_receipt:
+        receipt_summary = operation_memory_receipt_summary(updated, operation, per_operation_limit=1)
+        if int(receipt_summary.get("memory_receipt_count") or 0) <= 0:
+            receipt_summary = {
+                "memory_receipts": [memory_receipt],
+                "memory_receipt_count": 1,
+                "latest_memory_receipt": memory_receipt,
+            }
+        operation = attach_operation_memory_receipt_summary(
+            operation,
+            receipt_summary,
+        )
+        response["operation"] = operation
         response["memory_receipt"] = memory_receipt
     return response

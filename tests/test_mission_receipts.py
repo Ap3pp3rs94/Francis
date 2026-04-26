@@ -8,7 +8,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
     from francis.chat.continuity.ledger import append
-    from francis.memory.mission_receipts import mission_operation_receipts
+    from francis.memory.mission_receipts import mission_operation_receipts, operation_memory_receipts
 
     append(
         "system",
@@ -44,3 +44,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
         "run_id": "run_receipt_refs",
         "artifact_dir": "D:/francis/data/artifacts/receipt-refs",
     }
+
+    operation_receipts = operation_memory_receipts("tsk_receipt_refs", mission_id="msn_receipt_refs")
+    assert operation_receipts == receipts
+    assert operation_memory_receipts("tsk_receipt_refs", mission_id="other_mission") == []

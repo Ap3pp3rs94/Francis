@@ -518,6 +518,18 @@ def _task_events(task_id: str, limit: int = 200) -> list[dict[str, Any]]:
     return out
 
 
+def _operation_detail_payload(task_id: str, task: dict[str, Any]) -> dict[str, Any]:
+    operation = _task_to_operation(task)
+    receipt_summary = operations_runtime.operation_memory_receipt_summary(task, operation)
+    operation = operations_runtime.attach_operation_memory_receipt_summary(operation, receipt_summary)
+    return {
+        "operation": operation,
+        "logs": _task_events(task_id),
+        "meta": {"task": redact_operation_task(task)},
+        **receipt_summary,
+    }
+
+
 def _validate_operation_id(operation_id: str) -> bool:
     if not operation_id:
         return False
@@ -738,13 +750,7 @@ def get_many_operations(payload: OperationGetManyIn) -> dict[str, object]:
                 )
                 continue
 
-            details.append(
-                {
-                    "operation": _task_to_operation(task),
-                    "logs": _task_events(op_id),
-                    "meta": {"task": redact_operation_task(task)},
-                }
-            )
+            details.append(_operation_detail_payload(op_id, task))
 
         return {"items": details}
     except Exception as exc:
@@ -884,11 +890,7 @@ def get_operation(operation_id: str) -> dict[str, object]:
         if not isinstance(task, dict):
             return {"ok": False, "error": "not_found"}
 
-        return {
-            "operation": _task_to_operation(task),
-            "logs": _task_events(op_id),
-            "meta": {"task": redact_operation_task(task)},
-        }
+        return _operation_detail_payload(op_id, task)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 

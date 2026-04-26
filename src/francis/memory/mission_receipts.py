@@ -57,17 +57,16 @@ def _safe_nonnegative_int(value: Any) -> int | None:
     return parsed if parsed >= 0 else None
 
 
-def mission_operation_receipt_index(
+def _operation_receipts_from_continuity(
     *,
     limit: int = 1000,
-    per_mission_limit: int = 5,
-) -> dict[str, list[dict[str, Any]]]:
+) -> list[dict[str, Any]]:
     try:
         entries = continuity_tail(limit=max(1, min(int(limit), 10_000)))
     except Exception:
-        return {}
+        return []
 
-    receipts: dict[str, list[dict[str, Any]]] = {}
+    receipts: list[dict[str, Any]] = []
     for item in entries:
         if not isinstance(item, dict):
             continue
@@ -127,13 +126,25 @@ def mission_operation_receipt_index(
             value = _safe_nonnegative_int(meta.get(key))
             if value is not None:
                 receipt[key] = value
-        receipts.setdefault(mission_id, []).append(
-            {key: value for key, value in receipt.items() if value != "" and value != {}}
-        )
+        receipts.append({key: value for key, value in receipt.items() if value != "" and value != {}})
+
+    receipts.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)
+    return receipts
+
+
+def mission_operation_receipt_index(
+    *,
+    limit: int = 1000,
+    per_mission_limit: int = 5,
+) -> dict[str, list[dict[str, Any]]]:
+    receipts: dict[str, list[dict[str, Any]]] = {}
+    for receipt in _operation_receipts_from_continuity(limit=limit):
+        mission_id = _safe_str(receipt.get("mission_id")).strip()
+        if mission_id:
+            receipts.setdefault(mission_id, []).append(receipt)
 
     safe_per_mission_limit = max(1, min(int(per_mission_limit), 100))
     for mission_id, items in list(receipts.items()):
-        items.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)
         receipts[mission_id] = items[:safe_per_mission_limit]
     return receipts
 
@@ -155,3 +166,27 @@ def mission_operation_receipts(
         ).get(cleaned, [])
         if isinstance(receipt, dict)
     ]
+
+
+def operation_memory_receipts(
+    operation_id: Any,
+    *,
+    mission_id: Any = "",
+    limit: int = 1000,
+    per_operation_limit: int = 5,
+) -> list[dict[str, Any]]:
+    cleaned_operation = _safe_str(operation_id).strip()
+    cleaned_mission = _safe_str(mission_id).strip()
+    if not cleaned_operation:
+        return []
+
+    receipts: list[dict[str, Any]] = []
+    for receipt in _operation_receipts_from_continuity(limit=limit):
+        if _safe_str(receipt.get("operation_id")).strip() != cleaned_operation:
+            continue
+        if cleaned_mission and _safe_str(receipt.get("mission_id")).strip() != cleaned_mission:
+            continue
+        receipts.append(dict(receipt))
+
+    safe_per_operation_limit = max(1, min(int(per_operation_limit), 100))
+    return receipts[:safe_per_operation_limit]
