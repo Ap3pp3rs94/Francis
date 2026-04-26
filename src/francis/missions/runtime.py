@@ -141,6 +141,15 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
     return handoff
 
 
+def _operation_receipt_identity(operation: Any) -> dict[str, str]:
+    operation_record = _as_dict(operation)
+    operation_meta = _as_dict(operation_record.get("meta"))
+    return {
+        "operation_name": _safe_str(operation_record.get("name")).strip(),
+        "operation_plane": _safe_str(operation_meta.get("orb_plane")).strip(),
+    }
+
+
 def advance_mission(
     mission_id: str,
     *,
@@ -184,6 +193,7 @@ def advance_mission(
         operation_id = _safe_str(created.get("operation_id")).strip()
         operation_status = _safe_str(created.get("status")).strip()
         message = _safe_str(created.get("message")).strip() or "operation_created"
+        operation_identity = _operation_receipt_identity(created.get("operation"))
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_create")
         updated_record, receipt_err = mission_store.record_advance_receipt(
             mission_id,
@@ -192,6 +202,7 @@ def advance_mission(
             actor=actor,
             note=note,
             operation_id=operation_id,
+            **operation_identity,
             operation_status=operation_status,
             message=message,
             applied=bool(created.get("ok")),
@@ -218,6 +229,7 @@ def advance_mission(
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_run")
         operation_status = _safe_str(run_result.get("status")).strip()
         message = _safe_str(run_result.get("message")).strip() or "operation_run"
+        operation_identity = _operation_receipt_identity(run_result.get("operation"))
         updated_record, receipt_err = mission_store.record_advance_receipt(
             mission_id,
             action=action,
@@ -225,6 +237,7 @@ def advance_mission(
             actor=actor,
             note=note,
             operation_id=action_target_id,
+            **operation_identity,
             operation_status=operation_status,
             message=message,
             applied=bool(run_result.get("ok")),

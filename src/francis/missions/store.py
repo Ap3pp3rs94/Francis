@@ -745,6 +745,7 @@ def _queue_current_task_projection(
         action_target if action_target.startswith("tsk_") else "",
         last_advance_operation_id,
     )
+    advance_operation_matches = bool(last_advance_operation_id and operation_id == last_advance_operation_id)
     source = "mission_meta" if has_meta_task else "queue_item" if operation_id else "mission"
     payload: dict[str, Any] = {
         "mission_id": record.mission_id,
@@ -752,6 +753,8 @@ def _queue_current_task_projection(
     }
     values = {
         "operation_id": operation_id,
+        "operation_name": meta.get("last_advance_operation_name") if advance_operation_matches else "",
+        "operation_plane": meta.get("last_advance_operation_plane") if advance_operation_matches else "",
         "task_status": meta.get("last_task_status"),
         "operation_status": meta.get("last_advance_operation_status"),
         "result_status": meta.get("last_task_result_status"),
@@ -761,6 +764,7 @@ def _queue_current_task_projection(
         "approval_id": meta.get("last_task_approval_id"),
         "approval_status": meta.get("last_task_approval_status"),
         "handoff_action": recommended_action,
+        "advance_action": meta.get("last_advance_action"),
         "last_advance_operation_id": last_advance_operation_id,
     }
     for key, value in values.items():
@@ -815,6 +819,8 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
         "last_advance_outcome": str(meta.get("last_advance_outcome") or "").strip(),
         "last_advance_operation_id": str(meta.get("last_advance_operation_id") or "").strip(),
+        "last_advance_operation_name": str(meta.get("last_advance_operation_name") or "").strip(),
+        "last_advance_operation_plane": str(meta.get("last_advance_operation_plane") or "").strip(),
         "last_advance_operation_status": str(meta.get("last_advance_operation_status") or "").strip(),
         "last_advance_message": str(meta.get("last_advance_message") or "").strip(),
         "last_advance_actor": str(meta.get("last_advance_actor") or "").strip(),
@@ -1642,6 +1648,8 @@ def record_advance_receipt(
     actor: str | None = None,
     note: str | None = None,
     operation_id: str = "",
+    operation_name: str = "",
+    operation_plane: str = "",
     operation_status: str = "",
     message: str = "",
     applied: bool = False,
@@ -1656,6 +1664,8 @@ def record_advance_receipt(
             "last_advance_action": str(action or "").strip() or None,
             "last_advance_outcome": str(outcome or "").strip() or None,
             "last_advance_operation_id": str(operation_id or "").strip() or None,
+            "last_advance_operation_name": str(operation_name or "").strip() or None,
+            "last_advance_operation_plane": str(operation_plane or "").strip() or None,
             "last_advance_operation_status": str(operation_status or "").strip() or None,
             "last_advance_message": _redact_optional_text(message),
             "last_advance_actor": str(actor or "").strip() or None,
@@ -1679,6 +1689,8 @@ def record_advance_receipt(
                 "actor": str(actor or "").strip() or None,
                 "note": _redact_optional_text(note),
                 "operation_id": str(operation_id or "").strip() or None,
+                "operation_name": str(operation_name or "").strip() or None,
+                "operation_plane": str(operation_plane or "").strip() or None,
                 "operation_status": str(operation_status or "").strip() or None,
                 "message": _redact_optional_text(message),
                 "applied": bool(applied),

@@ -1644,6 +1644,8 @@ def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_p
     assert advanced_body["action"] == "create_first_operation"
     operation_id = str(advanced_body["operation_id"])
     assert operation_id
+    assert advanced_body["operation"]["name"] == "plan.create"
+    assert advanced_body["operation"]["meta"]["orb_plane"] == "P7_EXECUTION"
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -1651,8 +1653,17 @@ def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_p
     assert fetched_body["mission"]["linked_task_ids"] == [operation_id]
     assert fetched_body["mission"]["meta"]["last_advance_action"] == "create_first_operation"
     assert fetched_body["mission"]["meta"]["last_advance_operation_id"] == operation_id
+    assert fetched_body["mission"]["meta"]["last_advance_operation_name"] == "plan.create"
+    assert fetched_body["mission"]["meta"]["last_advance_operation_plane"] == "P7_EXECUTION"
+    assert fetched_body["queue_item"]["last_advance_operation_name"] == "plan.create"
+    assert fetched_body["queue_item"]["last_advance_operation_plane"] == "P7_EXECUTION"
+    assert fetched_body["queue_item"]["current_task"]["operation_name"] == "plan.create"
+    assert fetched_body["queue_item"]["current_task"]["operation_plane"] == "P7_EXECUTION"
+    assert fetched_body["queue_item"]["current_task"]["advance_action"] == "create_first_operation"
     history_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
     assert history_events
+    assert history_events[-1]["details"]["operation_name"] == "plan.create"
+    assert history_events[-1]["details"]["operation_plane"] == "P7_EXECUTION"
     assert history_events[-1]["details"]["applied"] is True
 
 

@@ -241,6 +241,14 @@ current-task source/next step, and receipt counts when those values are already
 present in redacted ledger metadata. This is a read-model projection only; no
 execution, approval, policy, or memory-write behavior is changed.
 
+As of `2026-04-26`, mission advance receipts preserve the identity of the real
+operation they just created or ran. The mission record, queue item, current-task
+projection, and `advance_receipt` history entry now carry the existing
+operation name and ORB plane from the operation projection, scoped to the same
+operation id so stale advance metadata is not attached to an unrelated current
+task. No operation creation, execution, governance, approval, or memory-write
+behavior is changed.
+
 As of `2026-04-25`, continuity ledger entries imported into the memory timeline
 preserve bounded mission, operation, trace, approval, run, and artifact
 references from ledger metadata. This lets memory timeline filters find existing
@@ -2515,6 +2523,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission advance operation-identity slice:
+
+- `python -m ruff check src\francis\missions\store.py src\francis\missions\runtime.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\missions\store.py src\francis\missions\runtime.py tests\test_api_missions.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py::test_mission_advance_creates_first_operation_with_receipt -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop projection slice:
 
