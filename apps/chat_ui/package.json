@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test --experimental-strip-types src/index.test.ts src/chat/index.test.ts src/settings/index.test.ts src/operations/index.test.ts src/missions/index.test.ts src/memory_timeline/index.test.ts src/memory_evidence/index.test.ts src/artifacts/index.test.ts src/explanation_explorer/index.test.ts src/explanation_evidence/index.test.ts",
+    "test": "node --test --experimental-strip-types src/index.test.ts src/chat/index.test.ts src/settings/index.test.ts src/operations/index.test.ts src/missions/index.test.ts src/memory_timeline/index.test.ts src/memory_evidence/index.test.ts src/artifacts/index.test.ts src/explanation_explorer/index.test.ts src/explanation_evidence/index.test.ts src/trust_dashboard/index.test.ts",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -990,7 +990,9 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approval-bound test"})
+    trust = client.post(
+        "/trust/set", json={"level": 6, "reason": "allow approval-bound test", "actor": "test.trust.write"}
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 
@@ -1095,7 +1097,10 @@ def test_system_world_state_deadletter_preview_preserves_pending_approval_linkag
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow deadletter approval world-state test"})
+    trust = client.post(
+        "/trust/set",
+        json={"level": 6, "reason": "allow deadletter approval world-state test", "actor": "test.trust.write"},
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 

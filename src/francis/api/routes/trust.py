@@ -8,14 +8,16 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 from francis.trust.levels import get_state, set_global_level
 
 router = APIRouter()
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+_TRUST_WRITE_SCOPE = "trust.write"
 
 
 def _safe_str(value: Any) -> str:
@@ -29,6 +31,29 @@ def _safe_str(value: Any) -> str:
 
 def _redact_free_text(value: Any) -> str:
     return redact_secret_text(_safe_str(value).strip())
+
+
+def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_TRUST_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_mutating_trust",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _now_s() -> int:
@@ -287,13 +312,17 @@ def _state_body() -> dict[str, Any]:
     return body
 
 
-def _adjust(payload: dict[str, Any], *, default_op: str) -> dict[str, Any]:
+def _adjust(payload: dict[str, Any], *, default_op: str, route: str) -> dict[str, Any]:
     op = _safe_str(payload.get("op")).strip().lower() or default_op
     level_raw = payload.get("level")
     value_raw = payload.get("value")
     delta_raw = payload.get("delta")
     reason = _safe_str(payload.get("reason")).strip() or "requested"
-    actor = _safe_str(payload.get("actor")).strip() or "api"
+    actor = _safe_str(payload.get("actor")).strip()
+    permission = _write_permission(actor, route=route, method="POST")
+    if not permission.allowed:
+        return _permission_denied(permission)
+
     domain = _safe_str(payload.get("domain")).strip()
     correlation_id = _safe_str(payload.get("idempotency_key") or payload.get("correlation_id")).strip()
     meta = dict(payload.get("meta")) if isinstance(payload.get("meta"), dict) else {}
@@ -462,31 +491,35 @@ def events(
 
 @router.post("/adjust")
 @router.post("/mutate")
-def adjust(payload: dict[str, Any]) -> dict[str, Any]:
+def adjust(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        return _adjust(payload, default_op="set")
+        return _adjust(payload, default_op="set", route=request.url.path)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
 
 @router.post("/set")
-def set_level(payload: dict[str, Any]) -> dict[str, Any]:
+def set_level(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         level_value = payload.get("level")
         if isinstance(level_value, (int, float)):
             adapted = dict(payload)
             adapted["op"] = adapted.get("op") or "set"
             adapted["value"] = adapted.get("value", level_value)
-            return _adjust(adapted, default_op="set")
+            return _adjust(adapted, default_op="set", route=request.url.path)
 
         # Accept legacy shape from strict clients: {"level": <int>}
         if "value" in payload and isinstance(payload.get("value"), (int, float)):
             adapted = dict(payload)
             adapted["op"] = adapted.get("op") or "set"
-            return _adjust(adapted, default_op="set")
+            return _adjust(adapted, default_op="set", route=request.url.path)
 
         # Last-resort backward compatibility for existing callers expecting set_global_level response.
         if "global_level" in payload and isinstance(payload.get("global_level"), (int, float)):
+            permission = _write_permission(payload.get("actor"), route=request.url.path, method="POST")
+            if not permission.allowed:
+                return _permission_denied(permission)
+
             level = int(payload.get("global_level"))
             state = set_global_level(level)
             _append_history(
@@ -499,7 +532,7 @@ def set_level(payload: dict[str, Any]) -> dict[str, Any]:
                     "after_level": level,
                     "delta": level,
                     "reason": _safe_str(payload.get("reason")).strip() or "requested",
-                    "actor": _safe_str(payload.get("actor")).strip() or "api",
+                    "actor": _safe_str(payload.get("actor")).strip(),
                     "source": "api.trust.set",
                 }
             )
@@ -511,9 +544,17 @@ def set_level(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/policy")
-def set_policy(payload: dict[str, Any]) -> dict[str, Any]:
+def set_policy(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        policy_obj = payload.get("policy") if isinstance(payload.get("policy"), dict) else payload
+        permission = _write_permission(payload.get("actor"), route=request.url.path, method="POST")
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        policy_obj = (
+            payload.get("policy")
+            if isinstance(payload.get("policy"), dict)
+            else {key: value for key, value in payload.items() if key != "actor"}
+        )
         if not isinstance(policy_obj, dict):
             return {"ok": False, "error": "invalid_policy"}
 

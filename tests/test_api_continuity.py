@@ -1010,7 +1010,9 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approval-bound continuity test"})
+    trust = client.post(
+        "/trust/set", json={"level": 6, "reason": "allow approval-bound continuity test", "actor": "test.trust.write"}
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 
@@ -1109,7 +1111,9 @@ def test_continuity_briefing_refreshes_approved_gate_into_rerun_handoff(monkeypa
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approved gate continuity test"})
+    trust = client.post(
+        "/trust/set", json={"level": 6, "reason": "allow approved gate continuity test", "actor": "test.trust.write"}
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 
@@ -1212,7 +1216,10 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow deadletter approval continuity test"})
+    trust = client.post(
+        "/trust/set",
+        json={"level": 6, "reason": "allow deadletter approval continuity test", "actor": "test.trust.write"},
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 

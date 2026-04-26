@@ -254,7 +254,10 @@ def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch,
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approval-bound approvals-list test"})
+    trust = client.post(
+        "/trust/set",
+        json={"level": 6, "reason": "allow approval-bound approvals-list test", "actor": "test.trust.write"},
+    )
     assert trust.status_code == 200
     assert trust.json()["ok"] is True
 

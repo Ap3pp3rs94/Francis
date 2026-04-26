@@ -15,6 +15,14 @@ from francis.kernel.paths import repo_root
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 APPROVAL_DECISION_TEST_ACTOR = "test.approvals.decision"
 APPROVAL_DECISION_TEST_SCOPE = "approvals.decide"
+TRUST_WRITE_TEST_SCOPE = "trust.write"
+TRUST_WRITE_TEST_ACTORS = (
+    "test.trust.write",
+    "ops",
+    "sre",
+    "api-test",
+    "system-ui",
+)
 
 
 def _slug(value: str, *, default: str = "case") -> str:
@@ -69,8 +77,13 @@ def tmp_path(request: pytest.FixtureRequest, tmp_path_factory: RepoTmpPathFactor
 
 
 @pytest.fixture(autouse=True)
-def _approval_decision_actor_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "FRANCIS_API_ACTOR_SCOPES",
-        json.dumps({APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE]}),
+        json.dumps(
+            {
+                APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE],
+                **{actor: [TRUST_WRITE_TEST_SCOPE] for actor in TRUST_WRITE_TEST_ACTORS},
+            }
+        ),
     )

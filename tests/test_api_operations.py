@@ -739,7 +739,9 @@ def test_operations_governance_holds_are_visible_and_rerunnable(monkeypatch, tmp
     assert blocked_meta["governance"]["gate"] == "trust_gate"
     assert blocked_meta["governance"]["next_step"] == "raise_trust_or_reduce_risk"
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "operations-governance-test"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "operations-governance-test", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -828,7 +830,9 @@ def test_operations_approved_mission_run_receipt_preserves_approval_posture(monk
     assert installed.json()["ok"] is True
     plugin_id = str(installed.json()["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "operations-approved-mission-receipt"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "operations-approved-mission-receipt", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -921,7 +925,9 @@ def test_operations_plugin_run_refreshes_exact_action_approval(monkeypatch, tmp_
     assert installed_body["ok"] is True
     plugin_id = str(installed_body["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "operations-plugin-refresh-test"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "operations-plugin-refresh-test", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 

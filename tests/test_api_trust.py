@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+_TRUST_ACTOR = "test.trust.write"
+
 
 def test_trust_state_history_events_and_adjust_lifecycle(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -25,6 +27,19 @@ def test_trust_state_history_events_and_adjust_lifecycle(monkeypatch, tmp_path: 
     policy_body = policy.json()
     assert policy_body["ok"] is True
     assert isinstance(policy_body["policy"], dict)
+
+    denied = client.post(
+        "/trust/adjust",
+        json={"op": "set", "value": 1, "reason": "missing actor", "ts": 1_700_000_000},
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert denied_body["governance"]["reason"] == "missing_actor"
+    assert denied_body["governance"]["evidence"]["required_scope_count"] == 1
 
     first = client.post(
         "/trust/adjust",
@@ -103,7 +118,10 @@ def test_trust_state_history_events_and_adjust_lifecycle(monkeypatch, tmp_path: 
     assert all(str(item.get("actor")).lower() == "ops" for item in events_filtered_body["items"])
     assert all(str(item.get("domain")).lower() == "platform" for item in events_filtered_body["items"])
 
-    legacy_set = client.post("/trust/set", json={"level": 1, "reason": "legacy_api", "ts": 1_700_000_004})
+    legacy_set = client.post(
+        "/trust/set",
+        json={"level": 1, "reason": "legacy_api", "actor": _TRUST_ACTOR, "ts": 1_700_000_004},
+    )
     assert legacy_set.status_code == 200
     legacy_set_body = legacy_set.json()
     assert legacy_set_body["ok"] is True
@@ -216,6 +234,7 @@ def test_trust_aliases_policy_update_and_persistence(monkeypatch, tmp_path: Path
             "thresholds": {"max_level": 8},
             "gates": {"approvals_required": True},
             "meta": {"updated_by": "test"},
+            "actor": _TRUST_ACTOR,
         },
     )
     assert policy_update.status_code == 200
@@ -294,7 +313,10 @@ def test_system_trust_prefix_aliases(monkeypatch, tmp_path: Path) -> None:
     assert policy_get.status_code == 200
     assert policy_get.json()["ok"] is True
 
-    policy_post = client.post("/system/trust/policy", json={"mode": "learning", "meta": {"source": "system-prefix"}})
+    policy_post = client.post(
+        "/system/trust/policy",
+        json={"mode": "learning", "meta": {"source": "system-prefix"}, "actor": _TRUST_ACTOR},
+    )
     assert policy_post.status_code == 200
     policy_post_body = policy_post.json()
     assert policy_post_body["ok"] is True

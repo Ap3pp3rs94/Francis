@@ -231,6 +231,8 @@ export type TrustAdjustResponse = {
   meta?: Record<string, unknown>;
 };
 
+const DEFAULT_TRUST_MUTATION_ACTOR = "chat_ui.trust";
+
 export class TrustApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -986,13 +988,24 @@ export class TrustClient {
     if (!op) throw new Error("TrustClient.adjust requires req.op");
 
     const candidates = this.endpoints.adjust();
-    const { json } = await this.fetchFirstOk(candidates, {
+    const body = { ...req, actor: req.actor?.trim() || DEFAULT_TRUST_MUTATION_ACTOR };
+    const { json, res } = await this.fetchFirstOk(candidates, {
       ...this.init(opts),
       method: "POST",
-      body: JSON.stringify(req),
+      body: JSON.stringify(body),
     });
 
     if (!isRecord(json)) return { ok: true };
+    if (safeBool((json as Record<string, unknown>).ok, true) === false) {
+      throw new TrustApiError(
+        safeString((json as Record<string, unknown>).error, "") ||
+          safeString((json as Record<string, unknown>).message, "") ||
+          "Trust mutation failed.",
+        {
+          status: res.status,
+        },
+      );
+    }
 
     return {
       ok: safeBool((json as Record<string, unknown>).ok, true),

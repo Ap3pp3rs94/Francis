@@ -240,7 +240,7 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert blocked_body["governance"]["gate"] == "trust_gate"
     assert blocked_body["governance"]["next_step"] == "raise_trust_or_reduce_risk"
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-risk-test"})
+    raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-risk-test", "actor": "test.trust.write"})
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -344,7 +344,9 @@ def test_plugins_run_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: 
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "approval metadata redaction"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "approval metadata redaction", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -425,7 +427,9 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "approval input sealing"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "approval input sealing", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -569,7 +573,9 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     deploy_tool_id = by_action["deploy"]
     restart_tool_id = by_action["restart"]
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "tool-run-approval-binding-test"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "tool-run-approval-binding-test", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -667,7 +673,9 @@ def test_plugins_run_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> 
     assert installed_body["ok"] is True
     plugin_id = str(installed_body["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-missing-approval-test"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "plugin-missing-approval-test", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 

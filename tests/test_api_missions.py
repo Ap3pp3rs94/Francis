@@ -1941,7 +1941,9 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "mission-advance-approval-handoff"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "mission-advance-approval-handoff", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
@@ -2050,7 +2052,9 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
     assert installed.status_code == 200
     plugin_id = str(installed.json()["plugin_id"])
 
-    raised = client.post("/trust/set", json={"level": 6, "reason": "mission-run-once-approval-handoff"})
+    raised = client.post(
+        "/trust/set", json={"level": 6, "reason": "mission-run-once-approval-handoff", "actor": "test.trust.write"}
+    )
     assert raised.status_code == 200
     assert raised.json()["ok"] is True
 
