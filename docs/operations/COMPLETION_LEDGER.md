@@ -212,6 +212,14 @@ timeline events; the list/export routes and chat UI memory timeline client now
 carry the same run and artifact filters, and the memory-evidence helper can
 build bounded run/artifact receipt queries without including payloads.
 
+As of `2026-04-26`, memory timeline retrieval can also filter terminal
+operation receipts by `operation_status`. The API promotes the existing
+receipt-backed status from event metadata onto public timeline events,
+`/memory/timeline/list` and `/memory/timeline/export` accept an
+`operation_status` filter, CSV exports include the same field, and the chat UI
+memory timeline client can request and preserve it without inspecting raw
+payloads.
+
 As of `2026-04-25`, the operations detail surface can use that memory timeline
 contract from the mission loop bridge. When a selected operation exposes a real
 mission id, linked operation id, or trace id, the chat UI can issue bounded
@@ -2890,6 +2898,23 @@ Latest targeted validation for the `2026-04-25` Stage 3 memory timeline run/arti
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 memory timeline operation-status filter slice:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `6 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `44 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue operation projection slice:

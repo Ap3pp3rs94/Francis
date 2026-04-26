@@ -39,6 +39,7 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
     traceId: string | null;
     runId: string | null;
     artifactDir: string | null;
+    operationStatus: string | null;
   }> = [];
   const restoreFetch = installFetch(async (url) => {
     const parsed = new URL(url);
@@ -50,6 +51,7 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
       traceId: parsed.searchParams.get("trace_id"),
       runId: parsed.searchParams.get("run_id"),
       artifactDir: parsed.searchParams.get("artifact_dir"),
+      operationStatus: parsed.searchParams.get("operation_status"),
     });
 
     return jsonResponse({
@@ -59,6 +61,7 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
           ts: 1_777_100_000,
           kind: "memory_write",
           severity: "info",
+          operation_status: "succeeded",
           domain: "operations",
           actor: "francis",
           scope: "mission.loop",
@@ -107,6 +110,7 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
         trace_id: "trace_memory_context",
         run_id: "run_memory_context",
         artifact_dir: "D:/francis/data/artifacts/memory-context",
+        operation_status: "succeeded",
       },
       { timeoutMs: 50 },
     );
@@ -120,10 +124,12 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
         traceId: "trace_memory_context",
         runId: "run_memory_context",
         artifactDir: "D:/francis/data/artifacts/memory-context",
+        operationStatus: "succeeded",
       },
     ]);
     assert.equal(response.total, 1);
     assert.equal(response.items[0]?.id, "evt_memory_context");
+    assert.equal(response.items[0]?.operation_status, "succeeded");
     assert.equal(response.items[0]?.payload && typeof response.items[0].payload === "object", true);
     assert.deepEqual(response.items[0]?.provenance, {
       source: "unit_test",

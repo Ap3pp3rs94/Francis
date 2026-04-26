@@ -95,6 +95,7 @@ export type MemoryTimelineListFilters = Pagination &
     operation_id?: string;
     run_id?: string;
     artifact_dir?: string;
+    operation_status?: string;
 
     search?: string; // backend-dependent full text search
     tags?: string[];
@@ -159,6 +160,7 @@ export type MemoryTimelineEvent = {
 
   // Tags + hints for UI
   tags?: string[];
+  operation_status?: string;
 
   /**
    * Payload is deliberately untyped: the memory timeline may carry heterogeneous
@@ -482,6 +484,12 @@ function parseEvent(raw: unknown): MemoryTimelineEvent | null {
   const severity = safeString(raw.severity, safeString(raw.level, ""));
   if (severity) e.severity = severity;
 
+  const operationStatus = safeString(
+    raw.operation_status,
+    isRecord(raw.meta) ? safeString(raw.meta.operation_status, "") : "",
+  );
+  if (operationStatus) e.operation_status = operationStatus;
+
   const domain = safeString(raw.domain, "");
   if (domain) e.domain = domain;
 
@@ -559,6 +567,7 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         operation_id: q?.operation_id,
         run_id: q?.run_id,
         artifact_dir: q?.artifact_dir,
+        operation_status: q?.operation_status,
         search: q?.search,
         include_payload: q?.include_payload ? "1" : undefined,
         tags: q?.tags,
@@ -585,6 +594,7 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         operation_id: q?.operation_id,
         run_id: q?.run_id,
         artifact_dir: q?.artifact_dir,
+        operation_status: q?.operation_status,
         search: q?.search,
         tags: q?.tags,
         kinds: q?.kinds,

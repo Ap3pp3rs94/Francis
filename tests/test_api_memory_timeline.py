@@ -29,6 +29,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
             "ts": 1_700_000_001,
             "kind": "memory_write",
             "severity": "info",
+            "operation_status": "succeeded",
             "domain": "operations",
             "actor": "francis",
             "scope": "chat.session",
@@ -103,6 +104,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert "evt-b" not in ids
     first_item = next(item for item in listed_body["items"] if str(item.get("id")) == "evt-a")
     assert first_item["payload"]["token_count"] == 320
+    assert first_item["operation_status"] == "succeeded"
     assert first_item["provenance"] == {
         "source": "unit_test",
         "domain": "operations",
@@ -138,6 +140,10 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     run_listed = client.get("/memory/timeline/list?run_id=run-memory-a")
     assert run_listed.status_code == 200
     assert [item["id"] for item in run_listed.json()["items"]] == ["evt-a"]
+
+    status_listed = client.get("/memory/timeline/list?operation_status=succeeded")
+    assert status_listed.status_code == 200
+    assert [item["id"] for item in status_listed.json()["items"]] == ["evt-a"]
 
     artifact_listed = client.get("/memory/timeline/list", params={"artifact_dir": "D:/francis/data/artifacts/memory-a"})
     assert artifact_listed.status_code == 200
@@ -186,6 +192,14 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     csv_ids = {str(row.get("id")) for row in rows}
     assert "evt-c" in csv_ids
     assert "evt-a" not in csv_ids
+
+    export_status_csv = client.get("/memory/timeline/export?format=csv&operation_status=succeeded")
+    assert export_status_csv.status_code == 200
+    status_rows = list(csv.DictReader(io.StringIO(export_status_csv.text)))
+    status_csv_ids = {str(row.get("id")) for row in status_rows}
+    assert "evt-a" in status_csv_ids
+    assert status_rows[0]["operation_status"] == "succeeded"
+    assert "evt-b" not in status_csv_ids
 
     export_json = client.get(
         "/memory/timeline/export", params={"format": "json", "artifact_dir": "D:/francis/data/artifacts/memory-a"}
@@ -259,6 +273,7 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
             "approval_id": "apr-ledger-memory",
             "run_id": "run-ledger-memory",
             "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
+            "operation_status": "failed",
         },
     )
 
@@ -272,6 +287,7 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     assert body["total"] == 1
     item = body["items"][0]
     assert item["kind"] == "ledger_append"
+    assert item["operation_status"] == "failed"
     assert item["provenance"] == {
         "source": "continuity.ledger",
         "domain": "operations",
@@ -295,6 +311,10 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     run_listed = client.get("/memory/timeline/list?run_id=run-ledger-memory")
     assert run_listed.status_code == 200
     assert [event["id"] for event in run_listed.json()["items"]] == [item["id"]]
+
+    status_listed = client.get("/memory/timeline/list?operation_status=failed")
+    assert status_listed.status_code == 200
+    assert [event["id"] for event in status_listed.json()["items"]] == [item["id"]]
 
 
 def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch, tmp_path: Path) -> None:
@@ -404,6 +424,7 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
         if item.get("kind") == "ledger_append"
         and item.get("references", {}).get("mission_id") == mission_id
         and item.get("references", {}).get("operation_id") == operation_id
+        and item.get("operation_status") == "succeeded"
     ]
     assert receipts
     receipt = receipts[0]
@@ -415,6 +436,10 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert receipt["references"]["run_id"] == run_id
     assert receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
     assert receipt["payload"]["meta"]["operation_status"] == "succeeded"
+
+    status_listed = client.get("/memory/timeline/list", params={"operation_status": "succeeded"})
+    assert status_listed.status_code == 200
+    assert any(item.get("references", {}).get("operation_id") == operation_id for item in status_listed.json()["items"])
 
     run_listed = client.get(f"/memory/timeline/list?run_id={run_id}")
     assert run_listed.status_code == 200

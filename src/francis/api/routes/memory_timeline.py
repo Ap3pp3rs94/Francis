@@ -179,6 +179,7 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "ts": _normalize_ts(raw.get("ts") or raw.get("created_ts") or raw.get("time") or _now_s()),
         "kind": _redact_text(raw.get("kind") or raw.get("type")) or "memory_write",
         "severity": _redact_text(raw.get("severity") or raw.get("level")),
+        "operation_status": _redact_text(raw.get("operation_status") or _meta(raw.get("meta")).get("operation_status")),
         "domain": _redact_text(raw.get("domain")),
         "actor": _redact_text(raw.get("actor") or raw.get("role")),
         "scope": _redact_text(raw.get("scope") or raw.get("scope_id")),
@@ -261,6 +262,7 @@ def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, A
         "domain": item.get("domain"),
         "actor": item.get("actor"),
         "scope": item.get("scope"),
+        "operation_status": item.get("operation_status"),
         "correlation_id": item.get("correlation_id"),
         "parent_id": item.get("parent_id"),
         "title": item.get("title"),
@@ -451,6 +453,7 @@ def _filter_events(
     operation_id: str = "",
     run_id: str = "",
     artifact_dir: str = "",
+    operation_status: str = "",
     tags: list[str] | None = None,
     start_ts: int | None = None,
     end_ts: int | None = None,
@@ -467,6 +470,7 @@ def _filter_events(
     operation_filter = operation_id.strip().lower()
     run_filter = run_id.strip().lower()
     artifact_filter = artifact_dir.strip().lower()
+    operation_status_filter = operation_status.strip().lower()
     tag_filter = {entry.strip().lower() for entry in (tags or []) if entry.strip()}
     search_filter = search.strip().lower()
 
@@ -497,6 +501,11 @@ def _filter_events(
         if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
             continue
         if artifact_filter and _safe_str(item.get("artifact_dir")).strip().lower() != artifact_filter:
+            continue
+        if (
+            operation_status_filter
+            and _safe_str(item.get("operation_status")).strip().lower() != operation_status_filter
+        ):
             continue
 
         if tag_filter:
@@ -540,6 +549,7 @@ def _csv(items: list[dict[str, Any]]) -> str:
             "ts",
             "kind",
             "severity",
+            "operation_status",
             "domain",
             "actor",
             "scope",
@@ -561,6 +571,7 @@ def _csv(items: list[dict[str, Any]]) -> str:
                 "ts": item.get("ts"),
                 "kind": item.get("kind"),
                 "severity": item.get("severity"),
+                "operation_status": item.get("operation_status"),
                 "domain": item.get("domain"),
                 "actor": item.get("actor"),
                 "scope": item.get("scope"),
@@ -641,6 +652,7 @@ def list_timeline(
     operation_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
+    operation_status: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = False,
@@ -660,6 +672,7 @@ def list_timeline(
             operation_id=_safe_str(operation_id),
             run_id=_safe_str(run_id),
             artifact_dir=_safe_str(artifact_dir),
+            operation_status=_safe_str(operation_status),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,
@@ -725,6 +738,7 @@ def export_timeline(
     operation_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
+    operation_status: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = True,
@@ -752,6 +766,7 @@ def export_timeline(
             operation_id=_safe_str(operation_id),
             run_id=_safe_str(run_id),
             artifact_dir=_safe_str(artifact_dir),
+            operation_status=_safe_str(operation_status),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,
@@ -828,6 +843,11 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
                 payload.get("task_id"),
                 payload_meta.get("operation_id"),
                 existing.get("operation_id"),
+            ),
+            "operation_status": _first_text(
+                payload.get("operation_status"),
+                payload_meta.get("operation_status"),
+                existing.get("operation_status"),
             ),
             "approval_id": _first_text(
                 payload.get("approval_id"), payload_meta.get("approval_id"), existing.get("approval_id")
