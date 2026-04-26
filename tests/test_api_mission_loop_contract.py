@@ -136,3 +136,91 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
 
     timeline_text = json.dumps(timeline_body, sort_keys=True)
     assert secret_token not in timeline_text
+
+
+def test_mission_loop_gate_handoff_preserves_trace_handle(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Keep gated mission trace handles visible",
+            "summary": "The gate stage must not drop known trace handles.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/gated-trace",
+            "actor": "test.plugins.write",
+            "capabilities": [
+                {
+                    "id": "acme.gated_trace",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical gated deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    seed_trace_id = "trace_mission_gate_meta"
+    seed_run_id = "run_mission_gate_meta"
+    artifact_dir = str(data_root / "artifacts" / "mission_gate_meta")
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "gated operation with existing trace handle",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+            "meta": {"trace_id": seed_trace_id, "run_id": seed_run_id, "artifact_dir": artifact_dir},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.advance"})
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["status"] == "blocked"
+    operation = blocked_body["operation"]
+    trace_id = str(operation["trace_id"])
+    run_id = str(operation["run_id"])
+    artifact_dir = str(operation["artifact_dir"])
+    assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    body = fetched.json()
+
+    assert body["loop_state"]["active_stage"] == "gate"
+    assert body["current_task"]["trace_id"] == trace_id
+    assert body["current_task"]["run_id"] == run_id
+    assert body["current_task"]["artifact_dir"] == artifact_dir
+    assert body["loop_state"]["handoff"]["trace_id"] == trace_id
+    assert body["loop_state"]["handoff"]["run_id"] == run_id
+    assert body["loop_state"]["handoff"]["artifact_dir"] == artifact_dir
+    assert body["loop_state"]["gate"]["trace_id"] == trace_id
+    assert body["loop_state"]["gate"]["run_id"] == run_id
+    assert body["loop_state"]["gate"]["artifact_dir"] == artifact_dir
+    assert body["loop_state"]["execute"]["trace_id"] == trace_id
+    assert body["loop_state"]["execute"]["run_id"] == run_id
+    assert body["loop_state"]["execute"]["artifact_dir"] == artifact_dir

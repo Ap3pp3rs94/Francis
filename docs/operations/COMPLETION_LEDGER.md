@@ -703,6 +703,14 @@ evidence items carry `approval_id`, `mission_id`, `operation_id`, `gate`,
 exist in the pending approval projection. No approval decision behavior,
 execution path, policy rule, or memory-write path is changed.
 
+As of `2026-04-26`, mission loop gate and execute projections preserve trace
+handles when the linked operation already exposes one. `/missions/{mission_id}`
+now carries `trace_id` through the active gate handoff plus gate and execute
+stages alongside the existing run and artifact handles, so operator surfaces can
+move from gate review toward trace evidence without relying only on
+`current_task`. This does not mint traces, approve work, execute operations, or
+write memory.
+
 As of `2026-04-26`, chat mission ingress continuity entries preserve bounded ORB
 loop metadata for newly declared missions. The assistant ledger entry written by
 `POST /chat/send` or websocket mission ingress now carries the real mission id,
@@ -3419,6 +3427,17 @@ Latest targeted validation for the `2026-04-26` mission execution permission-gat
 - `cd apps\chat_ui; npm run test`
   Result: `57 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission loop gate trace-handoff slice:
+
+- `.\.venv\Scripts\python.exe -m ruff check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_mission_loop_contract.py -q`
+  Result: `2 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `.\scripts\check.ps1`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` mission execution permission-gate slice:
