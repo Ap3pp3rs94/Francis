@@ -4411,6 +4411,14 @@ function SystemPanel(props: {
   const missionReceiptSummary = missionDetail?.receipt_summary;
   const missionReceiptOperationId =
     safeString(missionReceiptSummary?.current_operation_id).trim() || selectedMissionCurrentTaskId;
+  const missionReceiptOperationName = safeString(missionReceiptSummary?.current_operation_name).trim();
+  const missionReceiptOperationPlane = safeString(missionReceiptSummary?.current_operation_plane).trim();
+  const missionReceiptAdvanceAction = safeString(missionReceiptSummary?.current_advance_action).trim();
+  const missionReceiptPlanStatus = safeString(missionReceiptSummary?.plan_status).trim();
+  const missionReceiptPlanStepId = safeString(missionReceiptSummary?.plan_current_step_id).trim();
+  const missionReceiptPlanStepTitle = safeString(missionReceiptSummary?.plan_current_step_title).trim();
+  const missionReceiptPlanStepCount = missionReceiptSummary?.plan_step_count;
+  const missionReceiptPlanCheckpointCount = missionReceiptSummary?.plan_checkpoint_count;
   const missionReceiptApprovalId =
     safeString(missionReceiptSummary?.current_approval_id).trim() || safeString(selectedMissionCurrentTask?.approval_id).trim();
   const missionReceiptTraceId =
@@ -6983,6 +6991,67 @@ function SystemPanel(props: {
                       </>
                     ) : null}
                   </div>
+                  {missionReceiptOperationName || missionReceiptOperationPlane || missionReceiptAdvanceAction ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      {missionReceiptOperationName ? (
+                        <>
+                          task_name=<code>{missionReceiptOperationName}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptOperationPlane ? (
+                        <>
+                          {missionReceiptOperationName ? " / " : ""}plane=<code>{missionReceiptOperationPlane}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptAdvanceAction ? (
+                        <>
+                          {(missionReceiptOperationName || missionReceiptOperationPlane) ? " / " : ""}advance=
+                          <code>{missionReceiptAdvanceAction}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {missionReceiptPlanStatus ||
+                  missionReceiptPlanStepId ||
+                  missionReceiptPlanStepTitle ||
+                  typeof missionReceiptPlanStepCount === "number" ||
+                  typeof missionReceiptPlanCheckpointCount === "number" ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      {missionReceiptPlanStatus ? (
+                        <>
+                          plan=<code>{missionReceiptPlanStatus}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptPlanStepId ? (
+                        <>
+                          {missionReceiptPlanStatus ? " / " : ""}step=<code>{missionReceiptPlanStepId}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptPlanStepTitle ? (
+                        <>
+                          {(missionReceiptPlanStatus || missionReceiptPlanStepId) ? " / " : ""}step_title=
+                          <code>{missionReceiptPlanStepTitle}</code>
+                        </>
+                      ) : null}
+                      {typeof missionReceiptPlanStepCount === "number" ? (
+                        <>
+                          {(missionReceiptPlanStatus || missionReceiptPlanStepId || missionReceiptPlanStepTitle) ? " / " : ""}
+                          steps=<code>{String(missionReceiptPlanStepCount)}</code>
+                        </>
+                      ) : null}
+                      {typeof missionReceiptPlanCheckpointCount === "number" ? (
+                        <>
+                          {(missionReceiptPlanStatus ||
+                          missionReceiptPlanStepId ||
+                          missionReceiptPlanStepTitle ||
+                          typeof missionReceiptPlanStepCount === "number")
+                            ? " / "
+                            : ""}
+                          checkpoints=<code>{String(missionReceiptPlanCheckpointCount)}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {(missionReceiptSummary.latest_run_event || missionReceiptLatestRunAt || missionReceiptSummary.latest_history_event || missionReceiptLatestHistoryAt) ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                       {missionReceiptSummary.latest_run_event ? (
@@ -8518,7 +8587,10 @@ function SystemPanel(props: {
                 const queueLoopHandoffNextStep = safeString(queueLoopHandoff?.next_step).trim();
                 const queueReceiptSummary = item.receipt_summary;
                 const queueReceiptOperationId = safeString(queueReceiptSummary?.current_operation_id).trim();
+                const queueReceiptOperationName = safeString(queueReceiptSummary?.current_operation_name).trim();
+                const queueReceiptOperationPlane = safeString(queueReceiptSummary?.current_operation_plane).trim();
                 const queueReceiptOperationStatus = safeString(queueReceiptSummary?.current_operation_status).trim();
+                const queueReceiptAdvanceAction = safeString(queueReceiptSummary?.current_advance_action).trim();
                 const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
                 const queueReceiptApprovalId = safeString(queueReceiptSummary?.current_approval_id).trim();
                 const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
@@ -8527,6 +8599,11 @@ function SystemPanel(props: {
                 const queueReceiptRunCount = queueReceiptSummary?.run_ledger_count;
                 const queueReceiptHistoryCount = queueReceiptSummary?.history_count;
                 const queueReceiptMemoryCount = queueReceiptSummary?.memory_receipt_count;
+                const queueReceiptPlanStatus = safeString(queueReceiptSummary?.plan_status).trim();
+                const queueReceiptPlanStepId = safeString(queueReceiptSummary?.plan_current_step_id).trim();
+                const queueReceiptPlanStepTitle = safeString(queueReceiptSummary?.plan_current_step_title).trim();
+                const queueReceiptPlanStepCount = queueReceiptSummary?.plan_step_count;
+                const queueReceiptPlanCheckpointCount = queueReceiptSummary?.plan_checkpoint_count;
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
@@ -8634,14 +8711,22 @@ function SystemPanel(props: {
                       </div>
                     ) : null}
                     {queueReceiptOperationId ||
+                    queueReceiptOperationName ||
+                    queueReceiptOperationPlane ||
                     queueReceiptOperationStatus ||
+                    queueReceiptAdvanceAction ||
                     queueReceiptGate ||
                     queueReceiptTraceId ||
                     queueReceiptRunId ||
                     queueReceiptArtifactDir ||
                     typeof queueReceiptRunCount === "number" ||
                     typeof queueReceiptHistoryCount === "number" ||
-                    typeof queueReceiptMemoryCount === "number" ? (
+                    typeof queueReceiptMemoryCount === "number" ||
+                    queueReceiptPlanStatus ||
+                    queueReceiptPlanStepId ||
+                    queueReceiptPlanStepTitle ||
+                    typeof queueReceiptPlanStepCount === "number" ||
+                    typeof queueReceiptPlanCheckpointCount === "number" ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         {queueReceiptOperationId ? (
                           <>
@@ -8654,9 +8739,39 @@ function SystemPanel(props: {
                             <code>{queueReceiptOperationStatus}</code>
                           </>
                         ) : null}
+                        {queueReceiptOperationName ? (
+                          <>
+                            {(queueReceiptOperationId || queueReceiptOperationStatus) ? " / " : ""}task_name=
+                            <code>{queueReceiptOperationName}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptOperationPlane ? (
+                          <>
+                            {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptOperationName) ? " / " : ""}
+                            plane=<code>{queueReceiptOperationPlane}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptAdvanceAction ? (
+                          <>
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptOperationName ||
+                            queueReceiptOperationPlane)
+                              ? " / "
+                              : ""}
+                            advance=<code>{queueReceiptAdvanceAction}</code>
+                          </>
+                        ) : null}
                         {queueReceiptGate ? (
                           <>
-                            {(queueReceiptOperationId || queueReceiptOperationStatus) ? " / " : ""}receipt_gate=
+                            {(queueReceiptOperationId ||
+                            queueReceiptOperationStatus ||
+                            queueReceiptOperationName ||
+                            queueReceiptOperationPlane ||
+                            queueReceiptAdvanceAction)
+                              ? " / "
+                              : ""}
+                            receipt_gate=
                             <code>{queueReceiptGate}</code>
                           </>
                         ) : null}
@@ -8724,6 +8839,31 @@ function SystemPanel(props: {
                         {typeof queueReceiptMemoryCount === "number" ? (
                           <>
                             {" / "}memory_receipts=<code>{String(queueReceiptMemoryCount)}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptPlanStatus ? (
+                          <>
+                            {" / "}plan=<code>{queueReceiptPlanStatus}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptPlanStepId ? (
+                          <>
+                            {" / "}step=<code>{queueReceiptPlanStepId}</code>
+                          </>
+                        ) : null}
+                        {queueReceiptPlanStepTitle ? (
+                          <>
+                            {" / "}step_title=<code>{queueReceiptPlanStepTitle}</code>
+                          </>
+                        ) : null}
+                        {typeof queueReceiptPlanStepCount === "number" ? (
+                          <>
+                            {" / "}steps=<code>{String(queueReceiptPlanStepCount)}</code>
+                          </>
+                        ) : null}
+                        {typeof queueReceiptPlanCheckpointCount === "number" ? (
+                          <>
+                            {" / "}checkpoints=<code>{String(queueReceiptPlanCheckpointCount)}</code>
                           </>
                         ) : null}
                       </div>

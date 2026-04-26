@@ -1027,6 +1027,14 @@ parsing now retains the current operation name, ORB plane, advance action, plan
 status, current plan step, and plan/checkpoint counts when the backend provides
 them, without adding new rendering claims or execution authority.
 
+As of `2026-04-26`, the chat UI mission inspector and queue cards render those
+receipt-summary operation identity and plan fields from existing backend/client
+truth. The selected mission Continuity Receipts panel and mission queue receipt
+line now show task name, ORB plane, advance action, plan status, current plan
+step, and plan/checkpoint counts when present. This is read-only interface
+exposure; it does not infer missing fields, create operations, or add execution
+authority.
+
 As of `2026-04-26`, continuity and world-state mission current-task read models
 also preserve that backend-backed operation identity. Mission queue, recent
 mission, and shift-briefing current-task projections can now carry operation name,
@@ -3958,6 +3966,13 @@ Latest targeted validation for the `2026-04-26` mission receipt-summary operatio
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` mission client receipt-summary identity slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `66 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` mission receipt-summary identity rendering slice:
 
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
