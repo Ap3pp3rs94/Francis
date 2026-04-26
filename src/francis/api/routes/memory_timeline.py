@@ -477,6 +477,7 @@ def _filter_events(
     trace_id: str = "",
     mission_id: str = "",
     operation_id: str = "",
+    approval_id: str = "",
     run_id: str = "",
     artifact_dir: str = "",
     operation_status: str = "",
@@ -494,6 +495,7 @@ def _filter_events(
     trace_filter = trace_id.strip().lower()
     mission_filter = mission_id.strip().lower()
     operation_filter = operation_id.strip().lower()
+    approval_filter = approval_id.strip().lower()
     run_filter = run_id.strip().lower()
     artifact_filter = artifact_dir.strip().lower()
     operation_status_filter = operation_status.strip().lower()
@@ -523,6 +525,8 @@ def _filter_events(
         if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
             continue
         if operation_filter and _safe_str(item.get("operation_id")).strip().lower() != operation_filter:
+            continue
+        if approval_filter and _safe_str(item.get("approval_id")).strip().lower() != approval_filter:
             continue
         if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
             continue
@@ -676,6 +680,7 @@ def list_timeline(
     trace_id: str | None = None,
     mission_id: str | None = None,
     operation_id: str | None = None,
+    approval_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
     operation_status: str | None = None,
@@ -696,6 +701,7 @@ def list_timeline(
             trace_id=_safe_str(trace_id),
             mission_id=_safe_str(mission_id),
             operation_id=_safe_str(operation_id),
+            approval_id=_safe_str(approval_id),
             run_id=_safe_str(run_id),
             artifact_dir=_safe_str(artifact_dir),
             operation_status=_safe_str(operation_status),
@@ -762,6 +768,7 @@ def export_timeline(
     trace_id: str | None = None,
     mission_id: str | None = None,
     operation_id: str | None = None,
+    approval_id: str | None = None,
     run_id: str | None = None,
     artifact_dir: str | None = None,
     operation_status: str | None = None,
@@ -790,6 +797,7 @@ def export_timeline(
             trace_id=_safe_str(trace_id),
             mission_id=_safe_str(mission_id),
             operation_id=_safe_str(operation_id),
+            approval_id=_safe_str(approval_id),
             run_id=_safe_str(run_id),
             artifact_dir=_safe_str(artifact_dir),
             operation_status=_safe_str(operation_status),

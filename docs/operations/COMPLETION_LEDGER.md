@@ -377,6 +377,14 @@ timeline events; the list/export routes and chat UI memory timeline client now
 carry the same run and artifact filters, and the memory-evidence helper can
 build bounded run/artifact receipt queries without including payloads.
 
+As of `2026-04-26`, memory timeline retrieval can also filter by receipt
+`approval_id`. The API already preserves approval handles on event references
+and mission-loop continuity receipts; `/memory/timeline/list` and
+`/memory/timeline/export` now accept an `approval_id` filter, and the chat UI
+memory timeline client can request the same bounded filter. This makes
+approval-gated mission memory evidence reachable by the real approval handle
+without broad timeline searches, payload inspection, or new memory writes.
+
 As of `2026-04-26`, memory timeline retrieval can also filter terminal
 operation receipts by `operation_status`. The API promotes the existing
 receipt-backed status from event metadata onto public timeline events,
@@ -3546,6 +3554,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` memory timeline approval-filter slice:
+
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py`
+  Result: `7 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `64 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` terminal mission receipt current-task trace slice:

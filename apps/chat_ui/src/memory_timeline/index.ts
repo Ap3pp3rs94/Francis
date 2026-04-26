@@ -93,6 +93,7 @@ export type MemoryTimelineListFilters = Pagination &
     trace_id?: string;
     mission_id?: string;
     operation_id?: string;
+    approval_id?: string;
     run_id?: string;
     artifact_dir?: string;
     operation_status?: string;
@@ -664,6 +665,7 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         trace_id: q?.trace_id,
         mission_id: q?.mission_id,
         operation_id: q?.operation_id,
+        approval_id: q?.approval_id,
         run_id: q?.run_id,
         artifact_dir: q?.artifact_dir,
         operation_status: q?.operation_status,
@@ -691,6 +693,7 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         trace_id: q?.trace_id,
         mission_id: q?.mission_id,
         operation_id: q?.operation_id,
+        approval_id: q?.approval_id,
         run_id: q?.run_id,
         artifact_dir: q?.artifact_dir,
         operation_status: q?.operation_status,

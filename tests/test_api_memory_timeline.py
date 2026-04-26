@@ -137,6 +137,10 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert operation_listed.status_code == 200
     assert [item["id"] for item in operation_listed.json()["items"]] == ["evt-a"]
 
+    approval_listed = client.get("/memory/timeline/list?approval_id=apr-memory-a")
+    assert approval_listed.status_code == 200
+    assert [item["id"] for item in approval_listed.json()["items"]] == ["evt-a"]
+
     run_listed = client.get("/memory/timeline/list?run_id=run-memory-a")
     assert run_listed.status_code == 200
     assert [item["id"] for item in run_listed.json()["items"]] == ["evt-a"]
@@ -200,6 +204,12 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert "evt-a" in status_csv_ids
     assert status_rows[0]["operation_status"] == "succeeded"
     assert "evt-b" not in status_csv_ids
+
+    export_approval_json = client.get("/memory/timeline/export?format=json&approval_id=apr-memory-a")
+    assert export_approval_json.status_code == 200
+    approval_json_ids = {str(item.get("id")) for item in export_approval_json.json()["items"]}
+    assert "evt-a" in approval_json_ids
+    assert "evt-b" not in approval_json_ids
 
     export_json = client.get(
         "/memory/timeline/export", params={"format": "json", "artifact_dir": "D:/francis/data/artifacts/memory-a"}
@@ -321,6 +331,10 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
     operation_listed = client.get("/memory/timeline/list?operation_id=tsk-ledger-memory")
     assert operation_listed.status_code == 200
     assert [event["id"] for event in operation_listed.json()["items"]] == [item["id"]]
+
+    approval_listed = client.get("/memory/timeline/list?approval_id=apr-ledger-memory")
+    assert approval_listed.status_code == 200
+    assert [event["id"] for event in approval_listed.json()["items"]] == [item["id"]]
 
     run_listed = client.get("/memory/timeline/list?run_id=run-ledger-memory")
     assert run_listed.status_code == 200
