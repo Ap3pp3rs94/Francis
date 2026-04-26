@@ -331,6 +331,15 @@ checkpoint count from `loop_state.plan`; stages without those fields render no
 plan receipt line. This is read-only interface exposure, not a new planning or
 execution behavior.
 
+As of `2026-04-26`, terminal mission operation memory receipts also preserve the
+bounded `plan.create` summary when the completed linked operation produced one.
+`operations.runtime` writes plan status, current step id/title, step count, and
+checkpoint count into the continuity-ledger receipt metadata; operation run
+responses, mission receipt projections, memory timeline loop projections, and
+the chat UI memory timeline client preserve those fields. This is a memory
+read/write contract only; it does not create plans, change execution, or alter
+approval behavior.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -2727,6 +2736,27 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory plan receipt slice:
+
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_mission_receipts.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `python -m ruff check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_memory_timeline.py tests\test_api_operations.py tests\test_api_missions.py -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission loop plan receipt rendering slice:
 

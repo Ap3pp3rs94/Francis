@@ -392,20 +392,13 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert mission.status_code == 200
     mission_id = str(mission.json()["mission_id"])
 
-    built = client.post(
-        "/plugins/build",
-        json={"name": "Memory Evidence Plugin", "description": "receipt-backed memory evidence"},
-    )
-    assert built.status_code == 200
-    plugin_id = str(built.json()["plugin_id"])
-
     created = client.post(
         "/operations/create",
         json={
-            "action": "plugin.run",
+            "action": "plan.create",
             "reason": "memory evidence completion receipt",
             "mission_id": mission_id,
-            "input": {"id": plugin_id, "action": "run", "input": "memory evidence"},
+            "input": {"goal": "Create receipt-backed memory evidence"},
         },
     )
     assert created.status_code == 200
@@ -424,6 +417,12 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     run_id = str(advanced_body.get("run_id") or "")
     assert trace_id.startswith("trace_")
     assert run_id.startswith("run_")
+    receipt_handoff = advanced_body["memory_receipt"]
+    assert receipt_handoff["plan_status"] == "in_progress"
+    assert receipt_handoff["plan_current_step_id"] == "understand"
+    assert receipt_handoff["plan_current_step_title"] == "Understand goal + constraints"
+    assert receipt_handoff["plan_step_count"] == 4
+    assert receipt_handoff["plan_checkpoint_count"] == 3
 
     listed = client.get(
         f"/memory/timeline/list?mission_id={mission_id}&operation_id={operation_id}&trace_id={trace_id}&include_payload=1"
@@ -447,8 +446,18 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert receipt["references"]["trace_id"] == trace_id
     assert receipt["references"]["run_id"] == run_id
     assert receipt["loop"]["run_id"] == run_id
+    assert receipt["loop"]["plan_status"] == "in_progress"
+    assert receipt["loop"]["plan_current_step_id"] == "understand"
+    assert receipt["loop"]["plan_current_step_title"] == "Understand goal + constraints"
+    assert receipt["loop"]["plan_step_count"] == 4
+    assert receipt["loop"]["plan_checkpoint_count"] == 3
     assert receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
     assert receipt["payload"]["meta"]["operation_status"] == "succeeded"
+    assert receipt["payload"]["meta"]["plan_status"] == "in_progress"
+    assert receipt["payload"]["meta"]["plan_current_step_id"] == "understand"
+    assert receipt["payload"]["meta"]["plan_current_step_title"] == "Understand goal + constraints"
+    assert receipt["payload"]["meta"]["plan_step_count"] == 4
+    assert receipt["payload"]["meta"]["plan_checkpoint_count"] == 3
 
     status_listed = client.get("/memory/timeline/list", params={"operation_status": "succeeded"})
     assert status_listed.status_code == 200

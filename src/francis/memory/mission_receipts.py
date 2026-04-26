@@ -47,6 +47,16 @@ def _parse_ts(value: Any) -> float:
     return 0.0
 
 
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def mission_operation_receipt_index(
     *,
     limit: int = 1000,
@@ -109,6 +119,14 @@ def mission_operation_receipt_index(
             "scope": "mission.loop",
             "references": references,
         }
+        for key in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+            value = _safe_str(meta.get(key)).strip()
+            if value:
+                receipt[key] = value
+        for key in ("plan_step_count", "plan_checkpoint_count"):
+            value = _safe_nonnegative_int(meta.get(key))
+            if value is not None:
+                receipt[key] = value
         receipts.setdefault(mission_id, []).append(
             {key: value for key, value in receipt.items() if value != "" and value != {}}
         )

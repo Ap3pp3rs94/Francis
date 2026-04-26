@@ -247,6 +247,9 @@ def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
         "current_task_run_id",
         "current_task_artifact_dir",
         "current_task_next_step",
+        "plan_status",
+        "plan_current_step_id",
+        "plan_current_step_title",
     ):
         value = _safe_str(meta.get(key)).strip()
         if value:
@@ -258,7 +261,13 @@ def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
             if value:
                 out[key] = value
 
-    for key in ("linked_operation_count", "run_ledger_count", "memory_receipt_count"):
+    for key in (
+        "linked_operation_count",
+        "run_ledger_count",
+        "memory_receipt_count",
+        "plan_step_count",
+        "plan_checkpoint_count",
+    ):
         value = _meta_int(meta, key)
         if value is not None:
             out[key] = value

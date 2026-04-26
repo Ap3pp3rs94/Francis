@@ -441,7 +441,53 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
         value = _safe_str(meta.get(key)).strip()
         if value:
             projection[key] = value
+    for key in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+        value = _safe_str(meta.get(key)).strip()
+        if value:
+            projection[key] = value
+    for key in ("plan_step_count", "plan_checkpoint_count"):
+        value = meta.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            projection[key] = value
     return projection
+
+
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _operation_plan_receipt_meta(operation: dict[str, Any]) -> dict[str, Any]:
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    if not output:
+        return {}
+
+    field_names = (
+        "plan_status",
+        "plan_current_step_id",
+        "plan_current_step_title",
+        "plan_step_count",
+        "plan_checkpoint_count",
+    )
+    kind = _safe_str(output.get("kind")).strip()
+    if kind != "plan.create.result" and not any(name in output for name in field_names):
+        return {}
+
+    summary: dict[str, Any] = {}
+    for key in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+        value = _safe_str(output.get(key)).strip()
+        if value:
+            summary[key] = value
+    for key in ("plan_step_count", "plan_checkpoint_count"):
+        value = _safe_nonnegative_int(output.get(key))
+        if value is not None:
+            summary[key] = value
+    return summary
 
 
 def _append_terminal_mission_operation_receipt(
@@ -478,6 +524,7 @@ def _append_terminal_mission_operation_receipt(
         "capability": capability or None,
         "subsystem": "operations.runtime",
     }
+    meta.update(_operation_plan_receipt_meta(operation))
     outcome = "completed" if operation_status == "succeeded" else "failed"
     entry = append_continuity_ledger(
         "system",

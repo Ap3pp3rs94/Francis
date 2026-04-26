@@ -160,6 +160,11 @@ export type MemoryTimelineLoop = {
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   current_task_next_step?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   run_id?: string;
   artifact_dir?: string;
   linked_operation_count?: number;
@@ -521,6 +526,9 @@ function parseLoop(raw: unknown, fallback: Record<string, unknown>): MemoryTimel
     "current_task_run_id",
     "current_task_artifact_dir",
     "current_task_next_step",
+    "plan_status",
+    "plan_current_step_id",
+    "plan_current_step_title",
     "run_id",
     "artifact_dir",
   ] as const;
@@ -530,7 +538,13 @@ function parseLoop(raw: unknown, fallback: Record<string, unknown>): MemoryTimel
     if (value) loop[key] = value;
   }
 
-  const numberKeys = ["linked_operation_count", "run_ledger_count", "memory_receipt_count"] as const;
+  const numberKeys = [
+    "linked_operation_count",
+    "run_ledger_count",
+    "memory_receipt_count",
+    "plan_step_count",
+    "plan_checkpoint_count",
+  ] as const;
   for (const key of numberKeys) {
     const value = safeOptionalNumber(sourceRecord[key] ?? fallback[key]);
     if (value !== undefined) loop[key] = value;
