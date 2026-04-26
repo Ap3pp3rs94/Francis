@@ -558,6 +558,14 @@ the chat UI memory timeline client preserve those fields. This is a memory
 read/write contract only; it does not create plans, change execution, or alter
 approval behavior.
 
+As of `2026-04-26`, terminal successful mission-operation memory receipts also
+preserve the current-task trace handle alongside the existing current-task run
+and artifact handles. `operations.runtime` writes `current_task_trace_id` into
+the continuity-ledger metadata, and both the immediate operation-run receipt
+projection and the mission receipt reader preserve it. This keeps the memory
+handoff aligned with the same operation trace already exposed by the mission loop
+without creating traces, changing execution, or expanding memory writes.
+
 As of `2026-04-26`, approval queue projections can expose the real held
 mission/operation loop handles for approval-gated work. Approval list items now
 derive `mission_id`, `operation_id`, `operation_status`,
@@ -3539,6 +3547,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` terminal mission receipt current-task trace slice:
+
+- `python -m ruff check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py tests\test_mission_receipts.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\operations\runtime.py src\francis\memory\mission_receipts.py tests\test_mission_receipts.py tests\test_api_operations.py`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_mission_receipts.py tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt -q`
+  Result: `passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_operations.py tests\test_mission_receipts.py`
+  Result: `25 passed`
+- `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py`
+  Result: `63 passed`
 
 Latest targeted validation for the `2026-04-26` supervised-exec CLI summary handle slice:
 

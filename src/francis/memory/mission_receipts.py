@@ -132,6 +132,7 @@ def _operation_receipts_from_continuity(
             "handoff_next_step",
             "current_task_source",
             "current_task_operation_id",
+            "current_task_trace_id",
             "current_task_run_id",
             "current_task_artifact_dir",
             "current_task_next_step",

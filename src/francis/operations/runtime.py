@@ -454,6 +454,7 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
     if references:
         projection["references"] = references
     for key in (
+        "active_stage",
         "scope",
         "operation_status",
         "approval_status",
@@ -462,6 +463,19 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
         "operation_error",
         "result_message",
         "recovery_next_step",
+        "handoff_stage",
+        "handoff_action",
+        "handoff_operation_id",
+        "handoff_trace_id",
+        "handoff_run_id",
+        "handoff_artifact_dir",
+        "handoff_next_step",
+        "current_task_source",
+        "current_task_operation_id",
+        "current_task_trace_id",
+        "current_task_run_id",
+        "current_task_artifact_dir",
+        "current_task_next_step",
     ):
         value = _safe_str(meta.get(key)).strip()
         if value:
@@ -470,7 +484,7 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
         value = _safe_str(meta.get(key)).strip()
         if value:
             projection[key] = value
-    for key in ("plan_step_count", "plan_checkpoint_count"):
+    for key in ("memory_receipt_count", "plan_step_count", "plan_checkpoint_count"):
         value = meta.get(key)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             projection[key] = value
@@ -568,6 +582,7 @@ def _append_terminal_mission_operation_receipt(
                 "handoff_next_step": "review_completed_mission",
                 "current_task_source": "terminal_operation_receipt",
                 "current_task_operation_id": operation_id,
+                "current_task_trace_id": trace_id or None,
                 "current_task_run_id": run_id or None,
                 "current_task_artifact_dir": artifact_dir or None,
                 "current_task_next_step": "review_completed_mission",

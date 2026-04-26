@@ -38,6 +38,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "handoff_next_step": "review_completed_mission",
             "current_task_source": "terminal_operation_receipt",
             "current_task_operation_id": "tsk_receipt_refs",
+            "current_task_trace_id": "trace_receipt_refs",
             "current_task_run_id": "run_receipt_refs",
             "current_task_artifact_dir": "D:/francis/data/artifacts/receipt-refs",
             "current_task_next_step": "review_completed_mission",
@@ -61,6 +62,7 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["handoff_next_step"] == "review_completed_mission"
     assert receipts[0]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["current_task_operation_id"] == "tsk_receipt_refs"
+    assert receipts[0]["current_task_trace_id"] == "trace_receipt_refs"
     assert receipts[0]["current_task_run_id"] == "run_receipt_refs"
     assert receipts[0]["current_task_next_step"] == "review_completed_mission"
     assert receipts[0]["memory_receipt_count"] == 1

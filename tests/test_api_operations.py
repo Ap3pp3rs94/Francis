@@ -655,6 +655,8 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     if artifact_dir:
         expected_references["artifact_dir"] = artifact_dir
     assert receipt["references"] == expected_references
+    assert receipt["handoff_trace_id"] == trace_id
+    assert receipt["current_task_trace_id"] == trace_id
     assert run_body["operation"]["meta"]["memory_receipt_count"] == 1
     assert run_body["operation"]["meta"]["latest_memory_receipt"]["operation_id"] == operation_id
 
@@ -667,6 +669,7 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     fetched_body = fetched.json()
     assert fetched_body["memory_receipt_count"] == 1
     assert fetched_body["latest_memory_receipt"]["operation_id"] == operation_id
+    assert fetched_body["latest_memory_receipt"]["current_task_trace_id"] == trace_id
     assert fetched_body["latest_memory_receipt"]["references"] == expected_references
     assert fetched_body["operation"]["meta"]["memory_receipt_count"] == 1
     assert fetched_body["operation"]["meta"]["latest_memory_receipt"]["operation_id"] == operation_id
