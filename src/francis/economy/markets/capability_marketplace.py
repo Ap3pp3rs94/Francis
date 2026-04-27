@@ -115,7 +115,8 @@ class CapabilityMarketplace:
             _increment(status_counts, entry["status"])
             _increment(risk_tier_counts, entry["risk_tier"])
             _increment(source_counts, entry["source"])
-            quality = entry.get("quality") if isinstance(entry.get("quality"), dict) else {}
+            raw_quality = entry.get("quality")
+            quality: dict[str, Any] = raw_quality if isinstance(raw_quality, dict) else {}
             if quality.get("tests"):
                 tested_count += 1
             if quality.get("docs"):

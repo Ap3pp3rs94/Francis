@@ -4108,6 +4108,8 @@ capability catalog economy model slice:
   Result: `1 passed`
 - `python -m pytest tests\unit\test_imports.py -q`
   Result: `17 passed, 1 skipped`
+- `python -m mypy src\francis\economy\markets\capability_marketplace.py`
+  Result: `passed`
 - `python -m ruff check src\francis\economy\markets\capability_marketplace.py tests\unit\test_capability_marketplace.py`
   Result: `passed`
 - `python -m ruff format --check src\francis\economy\markets\capability_marketplace.py tests\unit\test_capability_marketplace.py`
