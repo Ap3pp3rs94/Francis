@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from francis.forge import analyze_proposal_quality
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir, repo_root
@@ -134,7 +135,15 @@ def _read_json_record(path: Path, collection: str) -> dict[str, Any] | None:
         item["relative_path"] = redact_secret_text(path.relative_to(_artifact_root()).as_posix())
     except ValueError:
         item["relative_path"] = ""
+    if collection == "proposals":
+        item["quality_analysis"] = _proposal_quality_analysis(item)
     return item
+
+
+def _proposal_quality_analysis(item: dict[str, Any]) -> dict[str, Any]:
+    analysis = analyze_proposal_quality(item)
+    redacted = redact_governed_display_value(analysis)
+    return redacted if isinstance(redacted, dict) else {}
 
 
 def _read_raw_record(path: Path) -> dict[str, Any] | None:

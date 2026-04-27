@@ -70,6 +70,20 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert proposal_item["proposal_id"] == proposal_id
     assert proposal_item["plugin_id"] == plugin_id
     assert proposal_item["friction"]["evidence"] == ["mission.forge.readback"]
+    quality_analysis = proposal_item["quality_analysis"]
+    assert quality_analysis["kind"] == "plugin.proposal.quality_analysis"
+    assert quality_analysis["proposal_id"] == proposal_id
+    assert quality_analysis["plugin_id"] == plugin_id
+    assert quality_analysis["ready"] is False
+    assert quality_analysis["missing_requirements"] == ["validation_path", "known_limits"]
+    assert quality_analysis["requirements"]["proposal_evidence"] is True
+    assert quality_analysis["requirements"]["tests"] is True
+    assert quality_analysis["requirements"]["docs"] is True
+    assert quality_analysis["requirements"]["risk_tier"] is True
+    assert quality_analysis["governance"]["analysis_only"] is True
+    assert quality_analysis["governance"]["promotion_authority"] is False
+    assert quality_analysis["governance"]["execution_authority"] is False
+    assert quality_analysis["governance"]["approval_authority"] is False
     assert proposal_item["proposal_context"]["api_key"] == "[REDACTED:secret]"
     assert "raw_secret" not in str(proposals_body)
     assert raw_secret not in str(proposals_body)
@@ -80,6 +94,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert proposal_get_body["ok"] is True
     assert proposal_get_body["item"]["proposal_id"] == proposal_id
     assert proposal_get_body["item"]["relative_path"] == f"proposals/{proposal_id}.json"
+    assert proposal_get_body["item"]["quality_analysis"] == quality_analysis
     assert raw_secret not in str(proposal_get_body)
 
     blocked_readiness = client.get("/forge/promotion_readiness/list", params={"plugin_id": plugin_id})

@@ -254,6 +254,14 @@ metadata. This gives Forge a reusable proposal-quality inspection contract
 without changing proposal decisions, promotion gates, registry state, execution
 authority, approval authority, memory writes, routes, or UI claims.
 
+As of `2026-04-27`, that passive proposal-quality analysis is now surfaced in
+read-only Forge proposal API readbacks. `GET /forge/proposals/list` and
+`GET /forge/proposals/get` attach `quality_analysis` to existing proposal
+records, preserving deterministic requirements, missing-requirement lists,
+evidence, and analysis-only governance flags without adding proposal decisions,
+promotion authority, execution authority, approval authority, memory writes, or
+UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4127,6 +4135,28 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal
+quality-readback API slice:
+
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_forge_proposal_quality.py -q`
+  Result: `3 passed`
+- `python -m mypy src\francis\api\routes\forge.py src\francis\forge\proposal_quality.py`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\forge.py src\francis\forge tests\test_api_forge.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\forge.py src\francis\forge tests\test_api_forge.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge passive
 proposal quality-readiness analyzer slice:
