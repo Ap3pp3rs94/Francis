@@ -1393,6 +1393,15 @@ fields survive browser-side parsing. This is typed readback only; it does not
 add new rendering claims, plan mutation, execution authority, or approval
 authority.
 
+As of `2026-04-26`, the chat UI settings and continuity client also preserves
+plan summary context on mission memory receipts. `MissionMemoryReceipt` now
+keeps `plan_status`, current step id/title, step count, and checkpoint count
+from world-state and briefing payloads, and the settings client contract test
+proves those fields survive parsing on recent-mission and mission-briefing
+memory receipts. This is typed readback only; it does not add new rendering
+claims, memory writes, plan mutation, execution authority, or approval
+authority.
+
 As of `2026-04-26`, completed receipt-backed mission loops now return their
 active handoff to the `interface` stage after memory closes. A completed mission
 with a terminal operation memory receipt keeps the `memory` stage and receipt
@@ -4432,6 +4441,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission current-task pla
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
   Result: `15 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission memory receipt plan summary settings-client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `12 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `67 passed`
 - `cd apps\chat_ui; npm run build`

@@ -451,6 +451,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 current_task_advance_action: "create_first_operation",
                 domain: "operations",
                 scope: "mission.loop",
+                plan_status: "in_progress",
+                plan_current_step_id: "understand",
+                plan_current_step_title: "Understand goal + constraints",
+                plan_step_count: 4,
+                plan_checkpoint_count: 3,
                 references: {
                   mission_id: "mission_alpha",
                   operation_id: "tsk_alpha",
@@ -481,6 +486,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   current_task_advance_action: "create_first_operation",
                   domain: "operations",
                   scope: "mission.loop",
+                  plan_status: "in_progress",
+                  plan_current_step_id: "understand",
+                  plan_current_step_title: "Understand goal + constraints",
+                  plan_step_count: 4,
+                  plan_checkpoint_count: 3,
                   references: {
                     mission_id: "mission_alpha",
                     operation_id: "tsk_alpha",
@@ -751,6 +761,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 current_task_advance_action: "create_first_operation",
                 domain: "operations",
                 scope: "mission.loop",
+                plan_status: "in_progress",
+                plan_current_step_id: "understand",
+                plan_current_step_title: "Understand goal + constraints",
+                plan_step_count: 4,
+                plan_checkpoint_count: 3,
               },
             ],
             readiness: {
@@ -952,10 +967,19 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.current_task_advance_action,
       "create_first_operation",
     );
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.plan_status, "in_progress");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.plan_current_step_id, "understand");
+    assert.equal(
+      worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.plan_current_step_title,
+      "Understand goal + constraints",
+    );
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.plan_step_count, 4);
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.plan_checkpoint_count, 3);
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.trace_id, "trace_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.references?.approval_id, "apr_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.plan_step_count, 4);
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.mission_queue?.[0]?.loop_state?.active_stage, "gate");
@@ -1061,6 +1085,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.operation_id, "tsk_alpha");
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.approval_status, "approved");
     assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
+    assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.plan_current_step_id, "understand");
     assert.deepEqual(
       missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
       [

@@ -399,6 +399,11 @@ export type MissionMemoryReceipt = {
   capability?: string;
   domain?: string;
   scope?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -1536,6 +1541,11 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
     capability: safeString(raw["capability"], "").trim(),
     domain: safeString(raw["domain"], "").trim(),
     scope: safeString(raw["scope"], "").trim(),
+    plan_status: safeString(raw["plan_status"], "").trim(),
+    plan_current_step_id: safeString(raw["plan_current_step_id"], "").trim(),
+    plan_current_step_title: safeString(raw["plan_current_step_title"], "").trim(),
+    plan_step_count: safeOptionalNumber(raw["plan_step_count"]),
+    plan_checkpoint_count: safeOptionalNumber(raw["plan_checkpoint_count"]),
   };
   const cleanedReferences = Object.fromEntries(Object.entries(references).filter(([, value]) => value));
   if (Object.keys(cleanedReferences).length > 0) receipt.references = cleanedReferences;
@@ -1578,6 +1588,11 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
   if (!receipt.capability) delete receipt.capability;
   if (!receipt.domain) delete receipt.domain;
   if (!receipt.scope) delete receipt.scope;
+  if (!receipt.plan_status) delete receipt.plan_status;
+  if (!receipt.plan_current_step_id) delete receipt.plan_current_step_id;
+  if (!receipt.plan_current_step_title) delete receipt.plan_current_step_title;
+  if (receipt.plan_step_count === undefined) delete receipt.plan_step_count;
+  if (receipt.plan_checkpoint_count === undefined) delete receipt.plan_checkpoint_count;
 
   const hasReceiptIdentity = Boolean(
     receipt.id ||
