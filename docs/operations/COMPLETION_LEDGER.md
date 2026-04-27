@@ -243,6 +243,19 @@ change backend scopes, grant execution authority, grant approval authority,
 grant promotion authority, write memory, or bypass the existing permission gate
 and Forge readiness checks.
 
+As of `2026-04-27`, the chat UI plugin browser has a first bounded Forge
+promotion action surface. The Plugins panel renders `Promote staged candidate`
+only when the backend promotion-readiness record for the selected staged plugin
+reports ready, calls the existing `PluginBrowserClient.enable()` /
+`POST /plugins/enable` route with the `chat_ui.plugins` actor and an operator
+promotion reason, and displays the returned promotion receipt id/artifact/review
+evidence when the backend returns it. This is an operator control over the
+existing governed promotion route only: it does not change backend scopes, does
+not infer readiness client-side, does not bypass Forge readiness or permission
+gates, does not grant execution authority, does not grant approval authority,
+does not grant promotion authority outside `/plugins/enable`, and does not
+write memory.
+
 As of `2026-04-27`, Stage 4/Forge capability catalog readback has a first
 summary and lineage index at the plugin registry layer. The catalog emitted by
 `PluginRegistry.to_dict()` now includes deterministic plugin risk counts,
@@ -4245,6 +4258,16 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
+promotion action surface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `77 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
 promotion action receipt response contract slice:

@@ -43,6 +43,7 @@ import type {
   PluginPromotionReadinessItem,
   PluginRef,
   PluginRunResponse,
+  PluginToggleResponse,
   PluginToolRef,
   PluginToolRunRequest,
 } from "./plugin_browser";
@@ -10005,6 +10006,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
   const [forgePromotions, setForgePromotions] = useState<PluginForgePromotion[]>([]);
   const [proposalDecisionReason, setProposalDecisionReason] = useState("operator reviewed Forge proposal");
+  const [promotionReason, setPromotionReason] = useState("operator promoted Forge candidate");
   const [selectedPluginId, setSelectedPluginId] = useState("");
   const [selectedToolId, setSelectedToolId] = useState("");
   const [toolDetail, setToolDetail] = useState<PluginToolRef | null>(null);
@@ -10012,6 +10014,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [runReason, setRunReason] = useState("requested");
   const [approvalId, setApprovalId] = useState("");
   const [runResponse, setRunResponse] = useState<PluginRunResponse | null>(null);
+  const [promotionActionResponse, setPromotionActionResponse] = useState<PluginToggleResponse | null>(null);
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -10028,6 +10031,9 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const selectedPromotionReadiness = useMemo(
     () => promotionReadiness.find((item) => item.plugin_id === selectedPluginId) ?? null,
     [promotionReadiness, selectedPluginId],
+  );
+  const selectedPromotionReady = Boolean(
+    selectedPromotionReadiness && (selectedPromotionReadiness.ready || selectedPromotionReadiness.status === "ready"),
   );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
@@ -10197,6 +10203,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     setResult("");
   }, [selectedPluginId, selectedToolId]);
 
+  useEffect(() => {
+    setPromotionActionResponse(null);
+  }, [selectedPluginId]);
+
   const governanceTone = useMemo(() => {
     const status = safeString(runResponse?.status).trim().toLowerCase();
     if (["blocked", "denied", "error", "failed", "disabled"].includes(status)) return "error";
@@ -10351,6 +10361,46 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }
   }
 
+  async function promoteSelectedForgeCandidate() {
+    const readiness = selectedPromotionReadiness;
+    const pluginId = readiness?.plugin_id || selectedPluginId;
+    if (!pluginId) {
+      setError("Select a staged Forge candidate.");
+      return;
+    }
+    if (!readiness) {
+      setError("Selected plugin has no backend promotion-readiness record.");
+      return;
+    }
+    if (!(readiness.ready || readiness.status === "ready")) {
+      setError("Backend reports this Forge candidate is not promotion-ready.");
+      return;
+    }
+
+    const meta: Record<string, unknown> = {};
+    if (readiness.proposal_id) meta.proposal_id = readiness.proposal_id;
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setPromotionActionResponse(null);
+    try {
+      const res = await client.enable({
+        id: pluginId,
+        reason: promotionReason.trim() || "operator promoted Forge candidate",
+        meta,
+      });
+      setPromotionActionResponse(res);
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+      await refreshTools(pluginId);
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section style={panelStyle}>
       <div style={{ fontSize: 16, fontWeight: 600 }}>Plugins</div>
@@ -10474,6 +10524,44 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
             {selectedPromotionReadiness.governance?.next_step ? (
               <div style={{ marginTop: 4 }}>
                 next step <code>{selectedPromotionReadiness.governance.next_step}</code>
+              </div>
+            ) : null}
+            {selectedPromotionReady ? (
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                <input
+                  value={promotionReason}
+                  onChange={(e) => setPromotionReason(e.target.value)}
+                  placeholder="Promotion reason"
+                  style={inputStyle}
+                />
+                <button style={buttonStyle} disabled={busy} onClick={() => void promoteSelectedForgeCandidate()}>
+                  {busy ? "Promoting." : "Promote staged candidate"}
+                </button>
+              </div>
+            ) : null}
+            {promotionActionResponse ? (
+              <div style={{ marginTop: 8 }}>
+                promotion action <code>{promotionActionResponse.status || (promotionActionResponse.ok ? "ok" : "unknown")}</code>
+                {promotionActionResponse.promotion_receipt_id ? (
+                  <>
+                    {" "}
+                    / receipt <code>{promotionActionResponse.promotion_receipt_id}</code>
+                  </>
+                ) : null}
+                {promotionActionResponse.promotion_receipt?.path || promotionActionResponse.promotion_receipt_path ? (
+                  <>
+                    {" "}
+                    / artifact{" "}
+                    <code>{promotionActionResponse.promotion_receipt?.path || promotionActionResponse.promotion_receipt_path}</code>
+                  </>
+                ) : null}
+                {forgeRecordString(promotionActionResponse.promotion_receipt?.proposal_review, "receipt_id") ? (
+                  <>
+                    {" "}
+                    / review{" "}
+                    <code>{forgeRecordString(promotionActionResponse.promotion_receipt?.proposal_review, "receipt_id")}</code>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>
