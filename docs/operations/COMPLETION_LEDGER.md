@@ -1158,6 +1158,14 @@ do not have to fall back to the nested queue item to render the real current
 plan/execute stage identity. This is read-model alignment only; it does not
 create operations, advance missions, or add execution authority.
 
+As of `2026-04-27`, that top-level mission detail `current_task` projection also
+preserves previous approval lineage. `GET /missions/{mission_id}` and enriched
+mission queue readbacks carry `previous_approval_id` and
+`previous_approval_status` from existing mission/queue truth alongside the
+current approval id and status. This is read-model alignment only; it does not
+approve work, refresh approvals, execute operations, or change queue
+eligibility.
+
 As of `2026-04-26`, the chat UI mission client preserves that advance operation
 identity without adding new visual claims. `MissionQueueItem` and
 `MissionCurrentTask` parsing now retain the backend-provided operation name,
@@ -4934,6 +4942,23 @@ Latest targeted validation for the `2026-04-27` Stage 3 mission runtime nested-a
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m mypy src\francis\missions\runtime.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 mission current-task approval-lineage readback slice:
+
+- `python -m pytest tests\test_api_mission_current_task.py -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_mission_current_task.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_mission_current_task.py`
+  Result: `passed` (Ruff cache write warned on local `.ruff_cache` access)
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_mission_current_task.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\api\routes\missions.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

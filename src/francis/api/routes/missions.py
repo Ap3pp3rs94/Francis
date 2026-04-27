@@ -497,6 +497,14 @@ def _mission_current_task_projection(
             queue_item.get("last_task_approval_id"), _operation_approval_id(latest_detail), handoff.get("approval_id")
         ),
         "approval_status": queue_item.get("last_task_approval_status"),
+        "previous_approval_id": _first_text(
+            task_fields["last_task_previous_approval_id"],
+            queue_item.get("last_task_previous_approval_id"),
+        ),
+        "previous_approval_status": _first_text(
+            task_fields["last_task_previous_approval_status"],
+            queue_item.get("last_task_previous_approval_status"),
+        ),
         "handoff_stage": handoff.get("stage"),
         "handoff_action": handoff.get("action"),
         "advance_action": _first_text(queue_current_task.get("advance_action"), queue_item.get("last_advance_action")),
