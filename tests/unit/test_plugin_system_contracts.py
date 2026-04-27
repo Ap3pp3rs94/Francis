@@ -164,6 +164,93 @@ def test_plugin_registry_compiles_directory_deterministically(tmp_path: Path) ->
     assert [item["tool_name"] for item in catalog["tool_index"]] == ["alpha.tools.run", "zeta.tools.run"]
 
 
+def test_plugin_registry_catalog_summarizes_forge_lineage_and_risk() -> None:
+    registry = PluginRegistry()
+
+    staged = PluginSpec(
+        plugin_id="generated.deploy",
+        name="Generated Deploy",
+        version="0.1.0",
+        description="Stage generated deployment assistance.",
+        origin="generated",
+        entrypoint="plugin.py",
+        risk_class="critical",
+        tools=(
+            ToolSpec(
+                tool_name="generated.deploy.release",
+                action="deploy",
+                summary="Deploy release",
+                description="Deploy a generated release candidate.",
+                methods=("execute",),
+                policy_tags=("forge_generated", "deployment"),
+                requires_approvals=True,
+                requires_trust_level=4,
+                dry_run_supported=True,
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                risk_class="critical",
+            ),
+        ),
+        metadata={
+            "promotion_status": "staged",
+            "proposal_id": "proposal_generated_deploy",
+            "proposal_path": "data/artifacts/plugins/proposals/proposal_generated_deploy.json",
+        },
+    )
+    promoted = PluginSpec(
+        plugin_id="builtin.lookup",
+        name="Builtin Lookup",
+        version="1.0.0",
+        description="Read local catalog data.",
+        origin="builtin",
+        entrypoint="plugin.py",
+        risk_class="readonly",
+        tools=(
+            ToolSpec(
+                tool_name="builtin.lookup.read",
+                action="read",
+                summary="Read lookup",
+                description="Read local lookup data.",
+                methods=("read",),
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                risk_class="readonly",
+            ),
+        ),
+        metadata={
+            "promotion_status": "promoted",
+            "promotion_receipt_id": "receipt_builtin_lookup",
+            "promotion_receipt_path": "data/artifacts/plugins/promotions/receipt_builtin_lookup.json",
+        },
+    )
+
+    assert registry.register(staged).valid is True
+    assert registry.register(promoted).valid is True
+
+    catalog = registry.to_dict()
+
+    assert catalog["risk_class_counts"] == {"critical": 1, "readonly": 1}
+    assert catalog["tool_risk_class_counts"] == {"critical": 1, "readonly": 1}
+    assert catalog["approval_required_tool_count"] == 1
+    assert catalog["lifecycle_status_counts"] == {"promoted": 1, "staged": 1}
+    assert catalog["forge_lineage_index"] == [
+        {
+            "plugin_id": "builtin.lookup",
+            "plugin_name": "Builtin Lookup",
+            "promotion_status": "promoted",
+            "promotion_receipt_id": "receipt_builtin_lookup",
+            "promotion_receipt_path": "data/artifacts/plugins/promotions/receipt_builtin_lookup.json",
+        },
+        {
+            "plugin_id": "generated.deploy",
+            "plugin_name": "Generated Deploy",
+            "promotion_status": "staged",
+            "proposal_id": "proposal_generated_deploy",
+            "proposal_path": "data/artifacts/plugins/proposals/proposal_generated_deploy.json",
+        },
+    ]
+
+
 def test_sandbox_runner_emits_receipts_and_blocks_large_payload(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

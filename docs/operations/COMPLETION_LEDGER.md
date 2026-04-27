@@ -200,6 +200,15 @@ returns them. This remains read-only operator evidence: it does not decide
 proposals, promote staged capabilities, execute plugins, or infer readiness
 client-side.
 
+As of `2026-04-27`, Stage 4/Forge capability catalog readback has a first
+summary and lineage index at the plugin registry layer. The catalog emitted by
+`PluginRegistry.to_dict()` now includes deterministic plugin risk counts,
+tool-risk counts, approval-required tool count, lifecycle status counts, and
+Forge lineage references for proposal and promotion receipt metadata already
+stored on plugin specs. This is passive catalog projection only: it does not
+create proposal authority, promotion authority, execution authority, memory
+writes, or UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4073,6 +4082,20 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge capability catalog
+summary and lineage readback slice:
+
+- `python -m pytest tests\unit\test_plugin_system_contracts.py -q`
+  Result: `6 passed`
+- `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\test_api_plugins.py::test_plugins_tools_catalog_and_action_validation -q`
+  Result: `2 passed`
+- `python -m ruff check src\francis\plugin_system\registry.py tests\unit\test_plugin_system_contracts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\plugin_system\registry.py tests\unit\test_plugin_system_contracts.py`
+  Result: `2 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal and
 proposal-review chat UI readback slice:

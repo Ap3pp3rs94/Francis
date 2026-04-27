@@ -71,8 +71,52 @@ class PluginRegistry:
     def to_dict(self) -> dict[str, Any]:
         plugins = [plugin.to_dict() for plugin in self.items()]
         tool_index: list[dict[str, Any]] = []
+        risk_class_counts: dict[str, int] = {}
+        lifecycle_status_counts: dict[str, int] = {}
+        tool_risk_class_counts: dict[str, int] = {}
+        approval_required_tool_count = 0
+        forge_lineage_index: list[dict[str, Any]] = []
+
+        def _normalized_label(value: Any, *, fallback: str = "unknown") -> str:
+            text = str(value or "").strip().lower()
+            return text or fallback
+
+        def _metadata_text(metadata: dict[str, Any], key: str) -> str | None:
+            value = metadata.get(key)
+            if value is None:
+                return None
+            text = str(value).strip()
+            return text or None
+
+        def _increment(bucket: dict[str, int], value: Any) -> None:
+            label = _normalized_label(value)
+            bucket[label] = bucket.get(label, 0) + 1
+
         for plugin in self.items():
+            _increment(risk_class_counts, plugin.risk_class)
+            lifecycle_status = plugin.metadata.get("promotion_status") or plugin.metadata.get("status")
+            _increment(lifecycle_status_counts, lifecycle_status)
+
+            lineage = {
+                "promotion_status": _metadata_text(plugin.metadata, "promotion_status"),
+                "proposal_id": _metadata_text(plugin.metadata, "proposal_id"),
+                "proposal_path": _metadata_text(plugin.metadata, "proposal_path"),
+                "promotion_receipt_id": _metadata_text(plugin.metadata, "promotion_receipt_id"),
+                "promotion_receipt_path": _metadata_text(plugin.metadata, "promotion_receipt_path"),
+            }
+            if any(lineage.values()):
+                forge_lineage_index.append(
+                    {
+                        "plugin_id": plugin.plugin_id,
+                        "plugin_name": plugin.name,
+                        **{key: value for key, value in lineage.items() if value is not None},
+                    }
+                )
+
             for tool in sorted(plugin.tools, key=lambda item: item.tool_name):
+                _increment(tool_risk_class_counts, tool.risk_class)
+                if tool.requires_approvals:
+                    approval_required_tool_count += 1
                 tool_index.append(
                     {
                         "plugin_id": plugin.plugin_id,
@@ -91,6 +135,11 @@ class PluginRegistry:
             "tool_index": tool_index,
             "total_plugins": len(plugins),
             "total_tools": len(tool_index),
+            "risk_class_counts": dict(sorted(risk_class_counts.items())),
+            "lifecycle_status_counts": dict(sorted(lifecycle_status_counts.items())),
+            "tool_risk_class_counts": dict(sorted(tool_risk_class_counts.items())),
+            "approval_required_tool_count": approval_required_tool_count,
+            "forge_lineage_index": forge_lineage_index,
         }
 
     def write_catalog(self, path: Path) -> Path:
