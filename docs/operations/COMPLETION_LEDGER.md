@@ -553,6 +553,14 @@ count, while continuing to redact audit details through the operation redaction
 boundary. This improves traceability for the plan/delegation entry point without
 changing task routing, execution, approval, or memory behavior.
 
+As of `2026-04-27`, delegation creation audit receipts and executor mission
+transition sync also resolve mission identity from loop alias fields. When a
+task input carries `current_task_mission_id` or `handoff_mission_id` instead of
+top-level `mission_id`, the created audit receipt still records the bounded
+mission handle and executor status transitions still update the linked mission
+history. This is mission-link/readback normalization only; it does not change
+capability routing, execution eligibility, approval behavior, or memory writes.
+
 As of `2026-04-25`, lower-level telemetry audit, operation log, and error log
 writers apply the same governed redaction boundary. Telemetry fields and trace
 context are coerced into JSON-safe values and secret-like passwords, tokens,
@@ -4857,6 +4865,25 @@ Latest targeted validation for the `2026-04-27` Stage 3 memory timeline mission-
 - `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 executor mission-alias sync slice:
+
+- `python -m pytest tests\unit\test_executor_audit_references.py::test_executor_syncs_mission_transition_from_loop_mission_alias -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_executor_audit_references.py tests\unit\test_delegation_audit.py -q`
+  Result: `3 passed`
+- `python -m ruff check src\francis\agent\delegation.py src\francis\agent\executor.py tests\unit\test_executor_audit_references.py tests\unit\test_delegation_audit.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\agent\delegation.py src\francis\agent\executor.py tests\unit\test_executor_audit_references.py tests\unit\test_delegation_audit.py`
+  Result: `4 files already formatted` (Ruff cache write warned on local `.ruff_cache` access)
+- `python -m pytest tests\unit\test_daemon_runner.py tests\unit\test_workers_runner.py -q`
+  Result: `4 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m mypy src`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

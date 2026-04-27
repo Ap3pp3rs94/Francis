@@ -228,12 +228,16 @@ def _new_task_id() -> str:
 
 
 def _task_mission_id(inputs: dict[str, Any]) -> str:
-    mission_id = _safe_str(inputs.get("mission_id")).strip()
-    if mission_id:
-        return mission_id
+    for key in ("mission_id", "current_task_mission_id", "handoff_mission_id"):
+        mission_id = _safe_str(inputs.get(key)).strip()
+        if mission_id:
+            return mission_id
     meta = inputs.get("meta")
     if isinstance(meta, dict):
-        return _safe_str(meta.get("mission_id")).strip()
+        for key in ("mission_id", "current_task_mission_id", "handoff_mission_id"):
+            mission_id = _safe_str(meta.get(key)).strip()
+            if mission_id:
+                return mission_id
     return ""
 
 
