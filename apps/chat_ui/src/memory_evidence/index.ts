@@ -22,11 +22,13 @@ export type MemoryEvidenceReceiptReference = {
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
+  handoff_mission_id?: string;
   current_task_operation_id?: string;
   current_task_approval_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
+  current_task_mission_id?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
@@ -58,6 +60,14 @@ function receiptReferenceId(
   key: "mission_id" | "operation_id" | "approval_id" | "trace_id" | "run_id" | "artifact_dir",
 ): string {
   if (!receipt) return "";
+  if (key === "mission_id") {
+    return (
+      cleanId(receipt.current_task_mission_id) ||
+      cleanId(receipt.handoff_mission_id) ||
+      cleanId(receipt.mission_id) ||
+      cleanId(receipt.references?.mission_id)
+    );
+  }
   if (key === "operation_id") {
     return (
       cleanId(receipt.current_task_operation_id) ||

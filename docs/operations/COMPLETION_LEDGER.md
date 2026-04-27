@@ -1164,6 +1164,15 @@ and JSON/CSV readbacks promote that same handle into the bounded
 does not create memory, execute operations, infer mission state, or broaden
 authority beyond exact supplied receipt handles.
 
+As of `2026-04-27`, the chat UI memory evidence query builder follows those
+loop-only mission receipt handles. `buildMemoryEvidenceQueries` now recognizes
+`current_task_mission_id` and `handoff_mission_id` on terminal receipts before
+falling back to normalized mission references, so operator memory-evidence
+lookups can request bounded mission evidence for receipts whose mission id is
+only present in loop current-task or handoff metadata. This is interface query
+reachability only; it does not create memory, change backend filtering, execute
+operations, alter approvals, or infer mission state.
+
 As of `2026-04-26`, memory timeline public events also promote those loop-only
 receipt handles into the bounded `references` block when top-level references
 are sparse. `/memory/timeline/list`, `/memory/timeline/get`, and exports now
@@ -5103,6 +5112,17 @@ Latest targeted validation for the `2026-04-27` Stage 3 memory timeline mission-
 - `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 memory evidence mission-handle interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
+  Result: `8 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `69 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

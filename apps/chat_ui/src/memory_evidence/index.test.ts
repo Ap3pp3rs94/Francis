@@ -195,6 +195,33 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
   ]);
 });
 
+test("buildMemoryEvidenceQueries follows loop-only mission receipt handles", () => {
+  const queries = buildMemoryEvidenceQueries({
+    receipt: {
+      operation_status: "failed",
+      current_task_mission_id: "mission_loop_current",
+      handoff_mission_id: "mission_loop_handoff",
+      current_task_operation_id: "task_loop_current",
+      current_task_trace_id: "trace_loop_current",
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "mission=mission_loop_current",
+      filters: { mission_id: "mission_loop_current", operation_status: "failed", limit: 8, include_payload: false },
+    },
+    {
+      label: "task=task_loop_current",
+      filters: { operation_id: "task_loop_current", operation_status: "failed", limit: 8, include_payload: false },
+    },
+    {
+      label: "trace=trace_loop_current",
+      filters: { trace_id: "trace_loop_current", operation_status: "failed", limit: 8, include_payload: false },
+    },
+  ]);
+});
+
 test("buildMemoryEvidenceQueries prefers explicit approval id for bounded approval evidence", () => {
   const queries = buildMemoryEvidenceQueries({
     approvalId: " apr_selected ",
