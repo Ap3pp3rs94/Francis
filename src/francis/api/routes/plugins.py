@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 import importlib.util
 import io
 import json
@@ -15,6 +16,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from francis.economy.markets.capability_catalog_coherence import analyze_capability_catalog_coherence
+from francis.economy.markets.capability_catalog_projection import marketplace_from_plugin_catalog
 from francis.governance import approvals as approval_store
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
@@ -421,19 +424,19 @@ def _tool_spec_from_capability(plugin_id: str, capability: dict[str, Any]) -> To
 
 def _spec_from_plugin_record(plugin: dict[str, Any]) -> PluginSpec:
     plugin_id = _safe_str(plugin.get("id")).strip()
+    meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
     if generated_dir:
         plugin_dir = Path(generated_dir)
         if plugin_dir.exists():
             contract = _load_generated_contract(plugin_dir)
             if contract is not None:
-                return contract
+                return replace(contract, metadata={**dict(contract.metadata), **dict(meta)})
 
     capabilities = _capabilities_for_plugin(plugin_id, plugin.get("capabilities"))
     tools = tuple(
         _tool_spec_from_capability(plugin_id, capability) for capability in capabilities if isinstance(capability, dict)
     )
-    meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
     contract_summary = meta.get("contract") if isinstance(meta.get("contract"), dict) else {}
     permissions = meta.get("permissions") if isinstance(meta.get("permissions"), dict) else {}
     constraints = meta.get("constraints") if isinstance(meta.get("constraints"), dict) else {}
@@ -1206,6 +1209,20 @@ def _compile_runtime_catalog(registry: dict[str, Any]) -> dict[str, Any]:
         "total_tools": int(catalog.get("total_tools") or 0),
         "rejected": rejected,
     }
+
+
+def _read_runtime_catalog_payload(catalog: dict[str, Any]) -> dict[str, Any]:
+    path_text = _safe_str(catalog.get("path")).strip()
+    if not path_text:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _save_registry_and_catalog(registry: dict[str, Any]) -> dict[str, Any]:
@@ -2044,6 +2061,81 @@ def list_plugins(
         return {"items": page, "plugins": page, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
         return {"items": [], "plugins": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+
+
+@router.get("/capabilities/catalog")
+def list_plugin_capabilities(
+    limit: int = 200,
+    offset: int = 0,
+    status: str | None = None,
+    risk_tier: str | None = None,
+    source: str | None = None,
+) -> dict[str, object]:
+    try:
+        safe_limit = max(1, min(int(limit), 5000))
+        safe_offset = max(0, int(offset))
+        status_filter = _safe_str(status).strip().lower()
+        risk_filter = _safe_str(risk_tier).strip().lower()
+        source_filter = _safe_str(source).strip().lower()
+
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        all_items = marketplace.catalog()
+        filtered_items = marketplace.catalog(
+            status=status_filter or None,
+            risk_tier=risk_filter or None,
+            source=source_filter or None,
+        )
+        total = len(filtered_items)
+        page = filtered_items[safe_offset : safe_offset + safe_limit]
+
+        forge_lineage = runtime_catalog.get("forge_lineage_index")
+        if not isinstance(forge_lineage, list):
+            forge_lineage = []
+        risk_counts = runtime_catalog.get("risk_class_counts")
+        lifecycle_counts = runtime_catalog.get("lifecycle_status_counts")
+        tool_risk_counts = runtime_catalog.get("tool_risk_class_counts")
+
+        return {
+            "ok": True,
+            "items": page,
+            "capabilities": page,
+            "total": total,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "filters": {
+                "status": status_filter,
+                "risk_tier": risk_filter,
+                "source": source_filter,
+            },
+            "summary": marketplace.summary(),
+            "coherence": analyze_capability_catalog_coherence(all_items),
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "version": int(runtime_catalog.get("version") or 0),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+                "risk_class_counts": risk_counts if isinstance(risk_counts, dict) else {},
+                "lifecycle_status_counts": lifecycle_counts if isinstance(lifecycle_counts, dict) else {},
+                "tool_risk_class_counts": tool_risk_counts if isinstance(tool_risk_counts, dict) else {},
+                "approval_required_tool_count": int(runtime_catalog.get("approval_required_tool_count") or 0),
+                "forge_lineage_index": forge_lineage,
+                "rejected": catalog.get("rejected") if isinstance(catalog.get("rejected"), list) else [],
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "items": [],
+            "capabilities": [],
+            "total": 0,
+            "offset": 0,
+            "limit": 0,
+            "error": str(exc),
+        }
 
 
 @router.get("/get")

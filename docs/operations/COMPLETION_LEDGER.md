@@ -310,6 +310,17 @@ readback and analysis only: it does not add routes, mutate registry state,
 publish marketplace entries, change promotion readiness, grant approval or
 promotion authority, execute tools, write memory, or create UI claims.
 
+As of `2026-04-27`, Stage 4/Forge capability catalog readback is now exposed
+through a read-only backend API. `GET /plugins/capabilities/catalog` compiles
+the runtime plugin catalog, projects it through the existing Capability Economy
+catalog adapter, and returns filtered capability entries, summary counts,
+coherence analysis, and registry catalog metadata. Generated plugin contract
+compilation now preserves registry-held Forge metadata so proposal,
+validation, and promotion lineage survive into the runtime catalog readback.
+This is backend readback only: it does not add UI controls, mutate proposal
+decisions, change promotion readiness, grant approval or promotion authority,
+execute tools, write memory, or publish marketplace capabilities.
+
 As of `2026-04-27`, Stage 4/Forge proposal artifacts also have a passive
 quality-readiness analyzer. The analyzer accepts existing `plugin.proposal`
 records and normalizes the current friction, evidence, tests, docs, risk tier,
@@ -4258,6 +4269,18 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge capability
+catalog API readback slice:
+
+- `python -m pytest tests\test_api_plugins.py::test_plugins_capability_catalog_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py tests\unit\test_capability_marketplace.py -q`
+  Result: `4 passed`
+- `python -m pytest tests\test_api_plugins.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
 promotion action surface slice:

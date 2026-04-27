@@ -429,6 +429,63 @@ def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path
     assert plugin_id in exported.text
 
 
+def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Catalog Plugin",
+            "description": "Capability catalog readback coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_catalog"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert catalog.status_code == 200
+    body = catalog.json()
+    assert body["ok"] is True
+    assert body["total"] >= 1
+    assert body["summary"]["total"] >= 1
+    assert body["summary"]["tested_count"] >= 1
+    assert body["summary"]["documented_count"] >= 1
+    assert body["catalog"]["total_plugins"] >= 1
+    assert body["catalog"]["total_tools"] >= 1
+    assert Path(str(body["catalog"]["path"])).exists()
+    assert body["coherence"]["total"] >= 1
+    assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["lineage_gaps"])
+    assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["validation_lineage_gaps"])
+
+    entry = next(item for item in body["items"] if item["capability"] == plugin_id)
+    assert entry["status"] == "staged"
+    assert entry["risk_tier"] == "normal"
+    assert entry["proposal_id"] == built_body["proposal_id"]
+    assert entry["quality"]["tests"] == ["tests/test_api_plugins.py::capability_catalog"]
+    assert entry["quality"]["docs"] == ["README.md"]
+    assert entry["metadata"]["validation_receipt_id"] == built_body["validation_receipt_id"]
+    assert entry["metadata"]["proposal_evidence"] == ["mission.capability_catalog.repeat"]
+
+    filtered = client.get("/plugins/capabilities/catalog?status=staged&risk_tier=normal")
+    assert filtered.status_code == 200
+    filtered_body = filtered.json()
+    assert filtered_body["ok"] is True
+    filtered_ids = {str(item.get("capability")) for item in filtered_body["items"]}
+    assert plugin_id in filtered_ids
+    assert filtered_body["filters"] == {"status": "staged", "risk_tier": "normal", "source": ""}
+
+
 def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
