@@ -16,9 +16,24 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
 
     client = TestClient(create_app())
 
+    raw_secret = "sk-" + ("x" * 24)
     built = client.post(
         "/plugins/build",
-        json={"name": "Echo Plugin", "description": "Simple echo", "actor": _PLUGIN_ACTOR},
+        json={
+            "name": "Echo Plugin",
+            "description": "Simple echo",
+            "actor": _PLUGIN_ACTOR,
+            "meta": {
+                "friction_summary": "Repeated echo handoff review",
+                "proposal_evidence": ["mission.echo.repeat"],
+                "recurrence_count": 2,
+                "expected_benefit": "Reduce repeated echo plugin setup.",
+                "tests": ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"],
+                "docs": ["README.md"],
+                "risk_tier": "normal",
+                "api_key": raw_secret,
+            },
+        },
     )
     assert built.status_code == 200
     built_body = built.json()
@@ -29,6 +44,25 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert built_body["promotion_status"] == "staged"
     assert built_body["next_step"] == "review_validate_and_explicitly_enable_before_use"
     assert built_body["validation"]["valid"] is True
+    assert str(built_body["proposal_id"]).startswith("plugin_proposal_")
+    proposal = built_body["proposal"]
+    assert proposal["kind"] == "plugin.proposal"
+    assert proposal["plugin_id"] == plugin_id
+    assert proposal["status"] == "staged"
+    assert proposal["friction"]["summary"] == "Repeated echo handoff review"
+    assert proposal["friction"]["evidence"] == ["mission.echo.repeat"]
+    assert proposal["quality_requirements"]["risk_tier"] == "normal"
+    assert proposal["quality_requirements"]["tests"] == [
+        "tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"
+    ]
+    assert proposal["proposal_context"]["api_key"] == "[REDACTED:secret]"
+    assert proposal["governance"]["auto_promoted"] is False
+    proposal_path = Path(str(proposal["path"]))
+    assert proposal_path.exists()
+    proposal_text = proposal_path.read_text(encoding="utf-8")
+    assert raw_secret not in proposal_text
+    persisted_proposal = json.loads(proposal_text)
+    assert persisted_proposal["proposal_id"] == proposal["proposal_id"]
     assert Path(str(built_body["spec_path"])).exists()
     assert Path(str(built_body["registry_snapshot"])).exists()
     assert Path(str(built_body["catalog"]["path"])).exists()
@@ -52,6 +86,9 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert fetched_body["item"]["registry_snapshot"]["total_plugins"] >= 1
     assert fetched_body["item"]["runtime"]["spec_exists"] is True
     assert fetched_body["item"]["runtime"]["registry_snapshot_exists"] is True
+    assert fetched_body["item"]["meta"]["proposal_id"] == proposal["proposal_id"]
+    assert fetched_body["item"]["meta"]["proposal_path"] == str(proposal_path)
+    assert fetched_body["item"]["meta"]["proposal_evidence"] == ["mission.echo.repeat"]
 
     run_staged = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
     assert run_staged.status_code == 200
@@ -60,20 +97,12 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert run_staged_body["error"] == "plugin_staged"
     assert run_staged_body["status"] == "staged"
 
-    raw_secret = "sk-" + ("x" * 24)
     enabled = client.post(
         "/plugins/enable",
         json={
             "id": plugin_id,
             "reason": f"test_enable api_key={raw_secret}",
             "actor": _PLUGIN_ACTOR,
-            "meta": {
-                "proposal_id": "forge.echo.proposal",
-                "proposal_evidence": ["mission.echo.repeat"],
-                "tests": ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"],
-                "docs": ["README.md"],
-                "api_key": raw_secret,
-            },
         },
     )
     assert enabled.status_code == 200
@@ -86,11 +115,11 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert promotion_receipt["plugin_id"] == plugin_id
     assert promotion_receipt["previous_status"] == "staged"
     assert promotion_receipt["promoted_status"] == "enabled"
-    assert promotion_receipt["proposal_id"] == "forge.echo.proposal"
+    assert promotion_receipt["proposal_id"] == proposal["proposal_id"]
     assert promotion_receipt["proposal_evidence"] == ["mission.echo.repeat"]
     assert promotion_receipt["quality"]["risk_tier"] == "normal"
     assert promotion_receipt["quality"]["tests"] == ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"]
-    assert promotion_receipt["promotion_context"]["api_key"] == "[REDACTED:secret]"
+    assert promotion_receipt["promotion_context"]["proposal_id"] == proposal["proposal_id"]
     assert "api_key=[REDACTED:secret]" in promotion_receipt["reason"]
     receipt_path = Path(str(promotion_receipt["path"]))
     assert receipt_path.exists()

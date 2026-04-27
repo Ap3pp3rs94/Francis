@@ -614,6 +614,14 @@ def _plugin_approval_artifact_dir(approval_id: str) -> Path:
     return _art_dir() / "approvals" / _safe_str(approval_id).strip()
 
 
+def _plugin_proposal_id(plugin_id: str, staged_ts: int) -> str:
+    return f"plugin_proposal_{staged_ts}_{_slugify(plugin_id)}"
+
+
+def _plugin_proposal_path(proposal_id: str) -> Path:
+    return _art_dir() / "proposals" / f"{_safe_str(proposal_id).strip()}.json"
+
+
 def _plugin_promotion_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "promotions" / f"{_safe_str(receipt_id).strip()}.json"
 
@@ -667,6 +675,81 @@ def _plugin_promotion_quality(
     }
 
 
+def _write_plugin_proposal_record(
+    *,
+    plugin_id: str,
+    proposal_id: str,
+    proposal_path: Path,
+    staged: dict[str, Any],
+    payload: "PluginBuildIn",
+    staged_ts: int,
+    artifact_zip: str,
+    spec_path: str,
+    registry_snapshot: str,
+    validation: dict[str, Any],
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    payload_meta = redact_governed_metadata(payload.meta)
+    staged_meta = staged.get("meta") if isinstance(staged.get("meta"), dict) else {}
+    record = {
+        "kind": "plugin.proposal",
+        "proposal_id": proposal_id,
+        "plugin_id": plugin_id,
+        "status": "staged",
+        "created_ts": staged_ts,
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "friction": {
+            "summary": payload_meta.get("friction_summary")
+            or payload_meta.get("friction")
+            or _safe_str(payload.description).strip()
+            or _safe_str(payload.name).strip(),
+            "evidence": payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or [],
+            "recurrence_count": payload_meta.get("recurrence_count"),
+        },
+        "proposed_capability": {
+            "name": _safe_str(payload.name).strip() or plugin_id,
+            "description": _safe_str(payload.description).strip(),
+            "inputs": payload_meta.get("inputs") or payload_meta.get("input_requirements") or [],
+            "scope": payload_meta.get("scope") or payload_meta.get("expected_scope") or "local_generated_plugin",
+            "expected_benefit": payload_meta.get("expected_benefit") or payload_meta.get("benefit") or "",
+        },
+        "quality_requirements": {
+            "risk_tier": _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(staged),
+            "tests": payload_meta.get("tests") or payload_meta.get("test_refs") or [],
+            "docs": payload_meta.get("docs") or payload_meta.get("documentation") or [],
+            "validation_path": payload_meta.get("validation_path") or [],
+            "known_limits": payload_meta.get("known_limits") or payload_meta.get("limits") or [],
+        },
+        "staged_implementation": {
+            "status": "staged",
+            "enabled": False,
+            "artifact_zip": artifact_zip,
+            "spec_path": spec_path,
+            "registry_snapshot": registry_snapshot,
+            "contract_source_path": _safe_str(staged_meta.get("contract_source_path")).strip(),
+            "catalog_path": _safe_str(catalog.get("path")).strip(),
+        },
+        "validation": {
+            "build": validation,
+            "catalog_total_plugins": int(catalog.get("total_plugins") or 0),
+            "catalog_total_tools": int(catalog.get("total_tools") or 0),
+        },
+        "proposal_context": payload_meta,
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/build",
+            "explicit_staging": True,
+            "auto_promoted": False,
+        },
+        "path": str(proposal_path),
+    }
+    redacted_record = redact_governed_display_value(record)
+    out = redacted_record if isinstance(redacted_record, dict) else {}
+    _atomic_write_json(proposal_path, out)
+    return out
+
+
 def _write_plugin_promotion_receipt(
     *,
     plugin_id: str,
@@ -678,7 +761,8 @@ def _write_plugin_promotion_receipt(
     promoted_ts: int,
     catalog: dict[str, Any],
 ) -> dict[str, Any]:
-    payload_meta = redact_governed_metadata(payload.meta)
+    previous_meta = dict(previous.get("meta") or {}) if isinstance(previous.get("meta"), dict) else {}
+    payload_meta = {**previous_meta, **redact_governed_metadata(payload.meta)}
     receipt = {
         "kind": "plugin.promotion.receipt",
         "receipt_id": receipt_id,
@@ -693,10 +777,7 @@ def _write_plugin_promotion_receipt(
         "actor": redact_governed_value(_safe_str(payload.actor).strip()),
         "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
         "proposal_id": _safe_str(
-            payload_meta.get("proposal_id")
-            or payload_meta.get("forge_proposal_id")
-            or (previous.get("meta") if isinstance(previous.get("meta"), dict) else {}).get("proposal_id")
-            or ""
+            payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id") or ""
         ).strip(),
         "proposal_evidence": payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or [],
         "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
@@ -1536,6 +1617,7 @@ class PluginBuildIn(BaseModel):
     name: str
     description: str = ""
     actor: str = ""
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class PluginToggleIn(BaseModel):
@@ -1614,6 +1696,14 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
 
         res = build_plugin(payload.name, payload.description)
         plugin_id = _validate_plugin_id(_safe_str(res.get("plugin_id")).strip())
+        staged_ts = _now_s()
+        build_meta = redact_governed_metadata(payload.meta)
+        proposal_id = _plugin_proposal_id(plugin_id, staged_ts)
+        proposal_path = _plugin_proposal_path(proposal_id)
+        artifact_zip = _safe_str(res.get("artifact_zip")).strip()
+        spec_path = _safe_str(res.get("spec_path")).strip()
+        registry_snapshot = _safe_str(res.get("registry_snapshot")).strip()
+        validation = res.get("validation") if isinstance(res.get("validation"), dict) else {}
 
         registry = _load_registry()
         _write_plugin(
@@ -1629,6 +1719,14 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
                     "tags": ["generated", "staged"],
                     "meta": {
                         "promotion_status": "staged",
+                        "proposal_id": proposal_id,
+                        "proposal_path": str(proposal_path),
+                        "proposal_evidence": build_meta.get("proposal_evidence") or build_meta.get("evidence") or [],
+                        "proposal_status": "staged",
+                        "risk_tier": _safe_str(build_meta.get("risk_tier")).strip().lower() or "normal",
+                        "tests": build_meta.get("tests") or build_meta.get("test_refs") or [],
+                        "docs": build_meta.get("docs") or build_meta.get("documentation") or [],
+                        "known_limits": build_meta.get("known_limits") or build_meta.get("limits") or [],
                         "next_step": "review_validate_and_explicitly_enable_before_use",
                     },
                 },
@@ -1636,10 +1734,21 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
         )
         _ensure_plugin_from_generated(registry, plugin_id)
         catalog = _save_registry_and_catalog(registry)
+        staged = _read_plugin(registry, plugin_id) or {}
+        proposal_record = _write_plugin_proposal_record(
+            plugin_id=plugin_id,
+            proposal_id=proposal_id,
+            proposal_path=proposal_path,
+            staged=staged,
+            payload=payload,
+            staged_ts=staged_ts,
+            artifact_zip=artifact_zip,
+            spec_path=spec_path,
+            registry_snapshot=registry_snapshot,
+            validation=validation,
+            catalog=catalog,
+        )
 
-        artifact_zip = _safe_str(res.get("artifact_zip")).strip()
-        spec_path = _safe_str(res.get("spec_path")).strip()
-        registry_snapshot = _safe_str(res.get("registry_snapshot")).strip()
         return {
             "ok": True,
             "plugin_id": plugin_id,
@@ -1647,11 +1756,14 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
             "status": "staged",
             "enabled": False,
             "promotion_status": "staged",
+            "proposal_id": proposal_id,
+            "proposal_path": str(proposal_path),
+            "proposal": proposal_record,
             "next_step": "review_validate_and_explicitly_enable_before_use",
             "artifact_zip": artifact_zip,
             "spec_path": spec_path,
             "registry_snapshot": registry_snapshot,
-            "validation": res.get("validation") if isinstance(res.get("validation"), dict) else {},
+            "validation": validation,
             "catalog": catalog,
             "download_url": f"/plugins/download/{plugin_id}",
         }

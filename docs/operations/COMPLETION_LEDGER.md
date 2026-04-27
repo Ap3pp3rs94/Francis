@@ -113,6 +113,20 @@ and the permission gate used for activation. This does not create a full Forge
 proposal system, does not add new execution authority, does not auto-promote,
 and does not yet enforce promotion readiness from tests/docs/risk material.
 
+As of `2026-04-27`, Stage 4/Forge generated-plugin builds now create a first
+proposal artifact linked to the staged output. `POST /plugins/build` accepts
+bounded build metadata for friction summary, proposal evidence, expected
+benefit, risk tier, tests, docs, validation path, and known limits; writes a
+redacted `plugin.proposal` record under `data/artifacts/plugins/proposals/`;
+returns that proposal in the build response; and stores proposal id/path,
+proposal evidence, and quality references in the staged plugin registry
+metadata. The promotion receipt path can inherit proposal id, proposal evidence,
+tests, docs, and risk tier from that staged metadata when the explicit enable
+request does not repeat them. This is a proposal-artifact linkage boundary only:
+there is still no independent Forge proposal approval workflow, no automated
+readiness enforcement, and no claim that generated proposals are high quality
+without human/operator review.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -3988,7 +4002,7 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-staging and promotion-receipt boundary:
+proposal, staging, and promotion-receipt boundary:
 
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
