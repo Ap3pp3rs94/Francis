@@ -526,6 +526,16 @@ inspectors. This is interface/readback only: it does not add execution authority
 approval authority, memory-write behavior, retry scheduling, deadletter enqueue,
 or new Reactor backend behavior.
 
+As of `2026-04-27`, approval-required Reactor dispatch attempts can create a real
+pending approval request when the event has no approval id yet. The dispatch
+attempt remains blocked, records `reactor.approval_request.receipt`, links the
+new approval id back into the Reactor event trigger, blocker, dispatch state,
+decision journal, receipts, status counts, and review-queue readback, and
+preserves the pending approval through the existing approvals queue. This is
+approval request queueing only: it does not decide approvals, resume dispatch
+after approval, execute work, write memory, schedule retries, enqueue
+deadletters, or grant approval authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4399,6 +4409,29 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+approval-request queue handoff slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_approvals.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `failed once on an unrelated capability-catalog filtered assertion
+  that used the default page limit against a locally crowded plugin catalog;
+  passed after the assertion used the same bounded high limit as the preceding
+  catalog readback`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 review-queue operator UI readback slice:
@@ -8893,11 +8926,12 @@ These remain true and should block any "finished" claim:
 - Stage 5/Reactor currently has non-executing trigger intake, readback,
   dispatch-attempt receipts, blocked-dispatch blocker records, and
   deadletter-candidate, retry-candidate, retry-exhausted, and review-filter
-  readback plus a read-only review-queue projection with chat UI readback only;
-  bounded dispatch execution, real approval/deadletter queue integration,
-  verification, real retry scheduling/backoff execution, deadletter/escalation,
-  stable-return receipts, and broader operator visibility are still remaining
-  work
+  readback plus a read-only review-queue projection with chat UI readback only.
+  Reactor dispatch attempts can create a pending approval request when missing,
+  but approval-decision resume handling, bounded dispatch execution, real
+  deadletter queue integration, verification, real retry scheduling/backoff
+  execution, deadletter/escalation, stable-return receipts, and broader operator
+  visibility are still remaining work
 
 ## 6. Update rule
 

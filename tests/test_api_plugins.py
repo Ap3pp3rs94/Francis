@@ -479,7 +479,7 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     assert entry["metadata"]["validation_receipt_id"] == built_body["validation_receipt_id"]
     assert entry["metadata"]["proposal_evidence"] == ["mission.capability_catalog.repeat"]
 
-    filtered = client.get("/plugins/capabilities/catalog?status=staged&risk_tier=normal")
+    filtered = client.get("/plugins/capabilities/catalog?status=staged&risk_tier=normal&limit=5000")
     assert filtered.status_code == 200
     filtered_body = filtered.json()
     assert filtered_body["ok"] is True

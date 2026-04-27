@@ -438,6 +438,76 @@ def test_reactor_review_queue_projects_active_review_items(monkeypatch, tmp_path
     assert {item["event_id"] for item in deadletter_only["items"]} == {budget_id, exhausted_id}
 
 
+def test_reactor_dispatch_attempt_queues_missing_approval_request_once(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Critical mutation needs a real approval queue handoff",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "mission_id": "msn_reactor_approval",
+            "operation_id": "tsk_reactor_approval",
+        }
+    )
+    event_id = str(created["event_id"])
+
+    attempted = record_dispatch_attempt(event_id, {"actor": "reactor.test", "reason": "queue approval"})
+
+    assert attempted["ok"] is True
+    event = attempted["event"]
+    approval_id = event["trigger"]["approval_id"]
+    assert approval_id
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    approval_record = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert approval_record["action"] == "reactor.dispatch"
+    assert approval_record["status"] == "pending"
+    assert approval_record["payload"]["kind"] == "reactor.dispatch.approval_request"
+    assert approval_record["payload"]["event_id"] == event_id
+    assert approval_record["payload"]["mission_id"] == "msn_reactor_approval"
+    assert approval_record["payload"]["operation_id"] == "tsk_reactor_approval"
+    assert approval_record["payload"]["gate"] == "approval_required"
+    assert approval_record["payload"]["route"] == "approval_queue"
+    assert approval_record["payload"]["execution_started"] is False
+    assert approval_record["payload"]["dispatch_applied"] is False
+
+    approval_request = event["dispatch"]["approval_request"]
+    assert approval_request["kind"] == "reactor.approval_request.receipt"
+    assert approval_request["approval_id"] == approval_id
+    assert approval_request["status"] == "pending"
+    assert approval_request["approval_queued"] is True
+    assert approval_request["approval_decision_started"] is False
+    assert approval_request["execution_started"] is False
+    assert approval_request["applied"] is False
+    assert event["dispatch"]["blocker"]["approval_id"] == approval_id
+    assert event["dispatch"]["blocker"]["approval_request_queued"] is True
+    assert event["latest_approval_request"]["approval_id"] == approval_id
+    assert event["latest_receipt"]["kind"] == "reactor.approval_request.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-1]["kind"] == "reactor.approval_request.receipt"
+    assert event["decision_journal"][-1]["approval_id"] == approval_id
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["approval_request_queued"] is True
+
+    status = reactor_status()
+    assert status["blocker_route_counts"] == {"approval_queue": 1}
+    assert status["approval_request_counts"] == {"pending": 1}
+    review_queue = reactor_review_queue(route="approval_queue")
+    assert review_queue["items"][0]["trigger"]["approval_id"] == approval_id
+    assert review_queue["items"][0]["review"]["receipt_kind"] == "reactor.approval_request.receipt"
+    assert review_queue["items"][0]["review"]["receipt_ref"] == approval_id
+
+    second_attempt = record_dispatch_attempt(event_id, {"actor": "reactor.test", "reason": "queue approval again"})
+
+    assert second_attempt["ok"] is True
+    assert second_attempt["event"]["trigger"]["approval_id"] == approval_id
+    assert len(list((data_root / "approvals" / "pending").glob("*.json"))) == 1
+    assert len(second_attempt["event"]["approval_requests"]) == 1
+
+
 def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

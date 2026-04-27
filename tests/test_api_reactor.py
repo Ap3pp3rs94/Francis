@@ -250,6 +250,79 @@ def test_reactor_review_queue_route_projects_readonly_items(monkeypatch, tmp_pat
     assert retry_only.json()["items"][0]["event_id"] == retry_id
 
 
+def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Approval-required Reactor work needs a real queue item",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "mission_id": "msn_reactor_api_approval",
+            "operation_id": "tsk_reactor_api_approval",
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "queue missing approval for Reactor dispatch",
+        },
+    )
+
+    assert attempted.status_code == 200
+    body = attempted.json()
+    assert body["ok"] is True
+    event = body["event"]
+    approval_id = event["trigger"]["approval_id"]
+    assert approval_id
+    assert event["dispatch"]["approval_request"]["approval_id"] == approval_id
+    assert event["dispatch"]["approval_request"]["approval_queued"] is True
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["approval_request_queued"] is True
+
+    approvals = client.get("/approvals/list", params={"status": "pending", "limit": 20})
+    assert approvals.status_code == 200
+    pending = next(item for item in approvals.json()["items"] if item["id"] == approval_id)
+    assert pending["action"] == "reactor.dispatch"
+    assert pending["status"] == "pending"
+    assert pending["payload"]["event_id"] == event_id
+    assert pending["payload"]["route"] == "approval_queue"
+    assert pending["payload"]["gate"] == "approval_required"
+    assert pending["payload"]["execution_started"] is False
+    assert pending["payload"]["dispatch_applied"] is False
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["approval_request_counts"] == {"pending": 1}
+
+    review_queue = client.get("/reactor/review_queue", params={"route": "approval_queue"})
+    assert review_queue.status_code == 200
+    review_item = review_queue.json()["items"][0]
+    assert review_item["trigger"]["approval_id"] == approval_id
+    assert review_item["review"]["receipt_kind"] == "reactor.approval_request.receipt"
+    assert review_item["review"]["receipt_ref"] == approval_id
+
+
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
