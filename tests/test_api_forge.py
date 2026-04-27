@@ -147,6 +147,8 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert blocked_item["requirements"]["proposal_review"] is False
     assert blocked_item["evidence"]["proposal_review_status"] == "staged"
     assert blocked_item["evidence"]["proposal_review_receipt_id"] == ""
+    assert blocked_item["evidence"]["validation_receipt_id"] == validation_receipt_id
+    assert blocked_item["evidence"]["validation_receipt_path"] == str(built_body["validation_receipt_path"])
     assert blocked_item["governance"]["promotion_authority"] is False
     assert blocked_item["governance"]["execution_authority"] is False
     assert raw_secret not in str(blocked_readiness_body)
@@ -198,6 +200,8 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert ready_item["missing_requirements"] == []
     assert ready_item["evidence"]["proposal_review_status"] == "approved"
     assert ready_item["evidence"]["proposal_review_receipt_id"] == review_receipt_id
+    assert ready_item["evidence"]["validation_receipt_id"] == validation_receipt_id
+    assert ready_item["evidence"]["validation_receipt_path"] == str(built_body["validation_receipt_path"])
     assert raw_secret not in str(ready_readiness_body)
 
     enabled = client.post(
@@ -226,6 +230,10 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert promotion_item["proposal_review"]["receipt_id"] == review_receipt_id
     assert promotion_item["proposal_evidence"] == ["mission.forge.readback"]
     assert promotion_item["quality"]["tests"] == ["tests/test_api_forge.py::test_forge_proposal_and_promotion_readback"]
+    assert promotion_item["quality"]["validation"]["validation_receipt_id"] == validation_receipt_id
+    assert promotion_item["quality"]["validation"]["validation_receipt_path"] == str(
+        built_body["validation_receipt_path"]
+    )
     assert "api_key=[REDACTED:secret]" in promotion_item["reason"]
     assert raw_secret not in str(promotions_body)
 

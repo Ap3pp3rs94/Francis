@@ -220,6 +220,8 @@ def _promotion_readiness_for_plugin(plugin_id: str, plugin: dict[str, Any]) -> d
     friction: dict[str, Any] = friction_raw if isinstance(friction_raw, dict) else {}
     quality_raw = proposal.get("quality_requirements")
     quality: dict[str, Any] = quality_raw if isinstance(quality_raw, dict) else {}
+    validation_raw = proposal.get("validation")
+    validation: dict[str, Any] = validation_raw if isinstance(validation_raw, dict) else {}
     review = _proposal_review_state(proposal)
 
     evidence = meta.get("proposal_evidence") or meta.get("evidence") or friction.get("evidence") or []
@@ -262,6 +264,12 @@ def _promotion_readiness_for_plugin(plugin_id: str, plugin: dict[str, Any]) -> d
             "tests": tests,
             "docs": docs,
             "risk_tier": risk_tier,
+            "validation_receipt_id": _safe_str(
+                meta.get("validation_receipt_id") or validation.get("validation_receipt_id")
+            ).strip(),
+            "validation_receipt_path": _safe_str(
+                meta.get("validation_receipt_path") or validation.get("validation_receipt_path")
+            ).strip(),
         },
         "governance": {
             "gate": "forge_promotion_readiness",

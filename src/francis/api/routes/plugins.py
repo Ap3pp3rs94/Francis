@@ -709,6 +709,8 @@ def _plugin_promotion_quality(
         "docs": docs,
         "known_limits": payload_meta.get("known_limits") or payload_meta.get("limits") or [],
         "validation": {
+            "validation_receipt_id": _safe_str(payload_meta.get("validation_receipt_id")).strip(),
+            "validation_receipt_path": _safe_str(payload_meta.get("validation_receipt_path")).strip(),
             "contract_source_path": _safe_str(promoted_meta.get("contract_source_path")).strip(),
             "registry_snapshot_path": _safe_str(promoted_meta.get("registry_snapshot_path")).strip(),
             "catalog_path": _safe_str(catalog.get("path")).strip(),
@@ -769,6 +771,8 @@ def _plugin_promotion_readiness(
             "tests": tests,
             "docs": docs,
             "risk_tier": risk_tier,
+            "validation_receipt_id": _safe_str(payload_meta.get("validation_receipt_id")).strip(),
+            "validation_receipt_path": _safe_str(payload_meta.get("validation_receipt_path")).strip(),
         },
     }
 
