@@ -24,6 +24,10 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     built_body = built.json()
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
+    assert built_body["status"] == "staged"
+    assert built_body["enabled"] is False
+    assert built_body["promotion_status"] == "staged"
+    assert built_body["next_step"] == "review_validate_and_explicitly_enable_before_use"
     assert built_body["validation"]["valid"] is True
     assert Path(str(built_body["spec_path"])).exists()
     assert Path(str(built_body["registry_snapshot"])).exists()
@@ -40,12 +44,21 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     fetched_body = fetched.json()
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["id"] == plugin_id
+    assert fetched_body["item"]["status"] == "staged"
+    assert fetched_body["item"]["enabled"] is False
     assert fetched_body["item"]["source_kind"] in {"generated", "unknown"}
     assert fetched_body["item"]["contract"]["plugin_id"] == plugin_id
     assert fetched_body["item"]["contract"]["tool_count"] >= 1
     assert fetched_body["item"]["registry_snapshot"]["total_plugins"] >= 1
     assert fetched_body["item"]["runtime"]["spec_exists"] is True
     assert fetched_body["item"]["runtime"]["registry_snapshot_exists"] is True
+
+    run_staged = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_staged.status_code == 200
+    run_staged_body = run_staged.json()
+    assert run_staged_body["ok"] is False
+    assert run_staged_body["error"] == "plugin_staged"
+    assert run_staged_body["status"] == "staged"
 
     disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable", "actor": _PLUGIN_ACTOR})
     assert disabled.status_code == 200
@@ -193,6 +206,10 @@ def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path
     fetched_tool_body = fetched_tool.json()
     assert fetched_tool_body["ok"] is True
     assert fetched_tool_body["item"]["id"] == tool_id
+
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
+    assert enabled.status_code == 200
+    assert enabled.json()["ok"] is True
 
     bad_action = client.post("/plugins/run", json={"id": plugin_id, "action": "not-supported", "input": "hello"})
     assert bad_action.status_code == 200

@@ -62,7 +62,17 @@ def _runtime_catalog_path() -> Path:
 
 
 _PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
-_ALLOWED_STATUSES = {"enabled", "disabled", "error", "installing", "uninstalling", "updating", "unknown", "uninstalled"}
+_ALLOWED_STATUSES = {
+    "enabled",
+    "disabled",
+    "error",
+    "installing",
+    "staged",
+    "uninstalling",
+    "updating",
+    "unknown",
+    "uninstalled",
+}
 _RISK_APPROVAL_REQUIRED = {"critical", "safety_critical"}
 _RISK_DEFAULT_MIN_TRUST: dict[str, int] = {
     "readonly": 0,
@@ -838,12 +848,12 @@ def _normalize_plugin_record(plugin_id: str, raw: dict[str, Any]) -> dict[str, A
     if enabled_bool is None and status_raw:
         if status_raw in {"enabled"}:
             enabled_bool = True
-        elif status_raw in {"disabled", "uninstalled"}:
+        elif status_raw in {"disabled", "staged", "uninstalled"}:
             enabled_bool = False
 
     status = _normalize_status(raw.get("status"), enabled_bool)
     if enabled_bool is None:
-        enabled_bool = status != "disabled" and status != "uninstalled"
+        enabled_bool = status not in {"disabled", "staged", "uninstalled"}
 
     installed_ts = int(raw.get("installed_ts") or _now_s())
     updated_ts = int(raw.get("updated_ts") or installed_ts)
@@ -1506,6 +1516,24 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
         plugin_id = _validate_plugin_id(_safe_str(res.get("plugin_id")).strip())
 
         registry = _load_registry()
+        _write_plugin(
+            registry,
+            _normalize_plugin_record(
+                plugin_id,
+                {
+                    "id": plugin_id,
+                    "status": "staged",
+                    "enabled": False,
+                    "source_kind": "generated",
+                    "source_ref": _safe_str(res.get("spec_path")).strip() or plugin_id,
+                    "tags": ["generated", "staged"],
+                    "meta": {
+                        "promotion_status": "staged",
+                        "next_step": "review_validate_and_explicitly_enable_before_use",
+                    },
+                },
+            ),
+        )
         _ensure_plugin_from_generated(registry, plugin_id)
         catalog = _save_registry_and_catalog(registry)
 
@@ -1516,8 +1544,10 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
             "ok": True,
             "plugin_id": plugin_id,
             "id": plugin_id,
-            "status": "enabled",
-            "enabled": True,
+            "status": "staged",
+            "enabled": False,
+            "promotion_status": "staged",
+            "next_step": "review_validate_and_explicitly_enable_before_use",
             "artifact_zip": artifact_zip,
             "spec_path": spec_path,
             "registry_snapshot": registry_snapshot,
@@ -2042,7 +2072,9 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
         if current is None:
             return {"ok": False, "error": "not_found", "id": plugin_id, "status": "error"}
         if not bool(current.get("enabled", False)):
-            return {"ok": False, "error": "plugin_disabled", "id": plugin_id, "status": "disabled"}
+            current_status = _safe_str(current.get("status")).strip() or "disabled"
+            error = "plugin_staged" if current_status == "staged" else "plugin_disabled"
+            return {"ok": False, "error": error, "id": plugin_id, "status": current_status}
         action = _resolve_plugin_action(current, requested_action)
         if not action:
             return {

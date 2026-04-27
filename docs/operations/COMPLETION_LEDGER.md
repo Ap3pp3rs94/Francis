@@ -88,6 +88,19 @@ new mission authority, execution authority, approval bypasses, memory writes, or
 Stage 4 behavior. This made the remaining Stage 3 blocker reproducible before
 the live readiness proof closed it.
 
+As of `2026-04-27`, Stage 4/Forge has begun with a narrow no-auto-promotion
+boundary on generated capability builds. `POST /plugins/build` still requires
+the existing `plugins.write` API permission gate and still writes generated
+artifacts, contract specs, registry snapshots, and catalog projections, but a
+freshly built generated plugin is now recorded as `status: staged` with
+`enabled: false`, `promotion_status: staged`, and an explicit next step to
+review, validate, and enable before use. Direct execution of that staged plugin
+returns `plugin_staged` and does not run the capability. Existing generated-dir
+sync behavior and explicit `/plugins/enable` lifecycle behavior remain
+unchanged. This is a Forge staging/isolation contract only; it is not a full
+proposal system, validation flow, promotion receipt flow, or capability economy
+closure claim.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -3961,6 +3974,16 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
+staging boundary:
+
+- `python -m pytest tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  Result: `2 files already formatted`
 
 Latest targeted validation for the `2026-04-27` Stage 3/Missions closure proof:
 
