@@ -656,6 +656,9 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
+    assert enabled.status_code == 200
+    assert enabled.json()["ok"] is True
 
     status = client.get("/operations/status")
     assert status.status_code == 200
@@ -924,6 +927,9 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
+    assert enabled.status_code == 200
+    assert enabled.json()["ok"] is True
 
     created = client.post(
         "/operations/create",
@@ -1151,6 +1157,9 @@ def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> Non
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
+    assert enabled.status_code == 200
+    assert enabled.json()["ok"] is True
 
     tools = client.get(f"/plugins/tools/list?plugin_id={plugin_id}")
     assert tools.status_code == 200

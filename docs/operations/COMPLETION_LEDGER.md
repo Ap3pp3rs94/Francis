@@ -3978,12 +3978,18 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
 staging boundary:
 
+- `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
+  Result: `4 passed`
 - `python -m pytest tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
 - `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
   Result: `passed`
-- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
-  Result: `2 files already formatted`
+- `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `4 files already formatted`
 
 Latest targeted validation for the `2026-04-27` Stage 3/Missions closure proof:
 

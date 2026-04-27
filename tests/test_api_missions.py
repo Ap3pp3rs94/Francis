@@ -850,6 +850,9 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
+    assert enabled.status_code == 200
+    assert enabled.json()["ok"] is True
 
     created = client.post(
         "/operations/create",
