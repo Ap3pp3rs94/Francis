@@ -223,9 +223,9 @@ def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[
             if value:
                 projection[field] = value
         for field in _ORIGIN_RECEIPT_PLAN_NUMBER_FIELDS:
-            value = _safe_nonnegative_int(meta.get(field))
-            if value is not None:
-                projection[field] = value
+            count_value = _safe_nonnegative_int(meta.get(field))
+            if count_value is not None:
+                projection[field] = count_value
 
         operation_id = _safe_str(projection.get("operation_id") or projection.get("task_id")).strip()
         if operation_id:

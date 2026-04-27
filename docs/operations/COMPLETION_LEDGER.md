@@ -5189,6 +5189,8 @@ Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin plan-sum
 
 - `python -m pytest tests\test_api_artifacts.py::test_artifact_inspect_projects_originating_receipt -q`
   Result: `1 passed`
+- `python -m mypy src`
+  Result: `passed`
 - `python -m pytest tests\test_api_artifacts.py -q`
   Result: `5 passed`
 - `python -m ruff check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
