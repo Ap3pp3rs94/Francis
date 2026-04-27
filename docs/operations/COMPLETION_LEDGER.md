@@ -1376,6 +1376,15 @@ that stage and the existing mission loop grids render it alongside the other
 loop stages, so operators can see when backend interface context is available
 without inventing UI-only state.
 
+As of `2026-04-26`, mission detail interface readback preserves bounded plan
+summary context on the same current-task and interface-stage surfaces used for
+operator handoff. When the linked operation output already carries
+`plan_status`, current step id/title, step count, and checkpoint count,
+`GET /missions/{id}` now returns those fields on `current_task` and
+`loop_state.interface` in addition to the existing plan, receipt, and operation
+surfaces. This is read-only plan context for the Stage 3 loop; it does not
+revise plans, execute work, approve actions, or synthesize missing plan output.
+
 As of `2026-04-26`, completed receipt-backed mission loops now return their
 active handoff to the `interface` stage after memory closes. A completed mission
 with a terminal operation memory receipt keeps the `memory` stage and receipt
@@ -4390,6 +4399,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations plan summary 
 - `python -m ruff format --check src\francis\api\routes\operations.py tests\test_api_plan_revision.py`
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission interface plan summary readback slice:
+
+- `python -m pytest tests\test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_mission_loop_contract.py -q`
+  Result: `2 passed`
+- `python -m ruff check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\missions.py tests\test_api_mission_loop_contract.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\api\routes\missions.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

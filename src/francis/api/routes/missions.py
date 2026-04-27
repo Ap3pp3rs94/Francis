@@ -423,6 +423,7 @@ def _mission_current_task_projection(
     latest_detail = _current_operation_detail(record, linked_operations)
     latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
     latest_operation_meta = latest_operation.get("meta") if isinstance(latest_operation.get("meta"), dict) else {}
+    latest_plan_summary = _operation_plan_summary(latest_detail)
     linked_operation_id = _operation_id(latest_detail)
     handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
     queue_advance = queue_item.get("advance") if isinstance(queue_item.get("advance"), dict) else {}
@@ -508,11 +509,18 @@ def _mission_current_task_projection(
         "last_advance_operation_id": _first_text(
             task_fields["last_advance_operation_id"], queue_item.get("last_advance_operation_id")
         ),
+        "plan_status": latest_plan_summary.get("plan_status"),
+        "plan_current_step_id": latest_plan_summary.get("plan_current_step_id"),
+        "plan_current_step_title": latest_plan_summary.get("plan_current_step_title"),
     }
     for key, value in values.items():
         text = _safe_str(value).strip()
         if text:
             payload[key] = text
+    for key in ("plan_step_count", "plan_checkpoint_count"):
+        value = _safe_nonnegative_int(latest_plan_summary.get(key))
+        if value is not None:
+            payload[key] = value
     return payload
 
 
@@ -569,6 +577,12 @@ def _mission_interface_stage(
     receipt_summary: dict[str, Any],
 ) -> dict[str, Any]:
     handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    plan_step_count = _safe_nonnegative_int(current_task.get("plan_step_count"))
+    if plan_step_count is None:
+        plan_step_count = _safe_nonnegative_int(receipt_summary.get("plan_step_count"))
+    plan_checkpoint_count = _safe_nonnegative_int(current_task.get("plan_checkpoint_count"))
+    if plan_checkpoint_count is None:
+        plan_checkpoint_count = _safe_nonnegative_int(receipt_summary.get("plan_checkpoint_count"))
     surfaces: list[str] = []
     if handoff.get("stage") or handoff.get("action"):
         surfaces.append("handoff")
@@ -635,6 +649,17 @@ def _mission_interface_stage(
             receipt_summary.get("latest_run_ts"), receipt_summary.get("latest_history_ts"), handoff.get("latest_ts")
         ),
         next_step=_first_text(current_task.get("next_step"), handoff.get("next_step")),
+        plan_status=_first_text(current_task.get("plan_status"), receipt_summary.get("plan_status")),
+        plan_current_step_id=_first_text(
+            current_task.get("plan_current_step_id"),
+            receipt_summary.get("plan_current_step_id"),
+        ),
+        plan_current_step_title=_first_text(
+            current_task.get("plan_current_step_title"),
+            receipt_summary.get("plan_current_step_title"),
+        ),
+        plan_step_count=plan_step_count,
+        plan_checkpoint_count=plan_checkpoint_count,
     )
 
 

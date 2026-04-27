@@ -88,6 +88,8 @@ def test_chat_ingress_advances_to_terminal_memory_receipt(monkeypatch, tmp_path:
     assert fetched_body["latest_memory_receipt"]["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert fetched_body["latest_memory_receipt"]["current_task_advance_action"] == "run_linked_operation"
     for key, value in expected_plan_receipt.items():
+        assert fetched_body["current_task"][key] == value
+        assert fetched_body["loop_state"]["interface"][key] == value
         assert fetched_body["latest_memory_receipt"][key] == value
 
     operation_detail = client.get(f"/operations/{operation_id}")
