@@ -209,6 +209,15 @@ stored on plugin specs. This is passive catalog projection only: it does not
 create proposal authority, promotion authority, execution authority, memory
 writes, or UI claims.
 
+As of `2026-04-27`, Stage 4/Forge generated plugin artifacts now carry staged
+lifecycle truth in their embedded contract spec and registry snapshot. The
+plugin factory writes `promotion_status: staged`, `status: staged`, an explicit
+no-auto-promotion flag, and the review/validate/enable next step into
+`plugin.spec.json`; the generated `plugin.registry.json` then reflects that
+staged status through the registry catalog summary and lineage index. This keeps
+artifact-level readback aligned with the route-level staged isolation contract;
+it does not enable, promote, execute, or approve generated capabilities.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4082,6 +4091,20 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge generated
+artifact staged-lifecycle contract slice:
+
+- `python -m pytest tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\unit\test_plugin_system_contracts.py -q`
+  Result: `7 passed`
+- `python -m ruff check src\francis\plugin_factory\spec_builder.py tests\unit\test_plugin_factory_spec_builder.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\plugin_factory\spec_builder.py tests\unit\test_plugin_factory_spec_builder.py`
+  Result: `2 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge capability catalog
 summary and lineage readback slice:

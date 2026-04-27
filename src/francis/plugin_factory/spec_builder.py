@@ -42,6 +42,12 @@ def _write_contract_spec(plugin_id: str, name: str, description: str, root: Path
         "sandbox_profile": "default",
         "telemetry": {"audit_level": "standard", "redaction_rules": ["default"]},
         "compatibility": {"min_core_version": "0.3.0"},
+        "metadata": {
+            "status": "staged",
+            "promotion_status": "staged",
+            "auto_promoted": False,
+            "next_step": "review_validate_and_explicitly_enable_before_use",
+        },
         "tools": [
             {
                 "tool_name": f"generated.{plugin_id}.run",

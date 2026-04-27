@@ -31,11 +31,25 @@ def test_build_plugin_writes_contract_spec_and_registry(monkeypatch, tmp_path: P
     spec_payload = json.loads(spec_path.read_text(encoding="utf-8"))
     assert spec_payload["plugin_id"] == plugin_id
     assert spec_payload["origin"] == "generated"
+    assert spec_payload["metadata"] == {
+        "auto_promoted": False,
+        "next_step": "review_validate_and_explicitly_enable_before_use",
+        "promotion_status": "staged",
+        "status": "staged",
+    }
     assert spec_payload["tools"][0]["tool_name"] == f"generated.{plugin_id}.run"
 
     registry_payload = json.loads(registry_snapshot.read_text(encoding="utf-8"))
     assert registry_payload["total_plugins"] == 1
     assert registry_payload["tool_index"][0]["plugin_id"] == plugin_id
+    assert registry_payload["lifecycle_status_counts"] == {"staged": 1}
+    assert registry_payload["forge_lineage_index"] == [
+        {
+            "plugin_id": plugin_id,
+            "plugin_name": "Echo Plugin",
+            "promotion_status": "staged",
+        }
+    ]
 
     validation = built["validation"]
     assert validation["valid"] is True
