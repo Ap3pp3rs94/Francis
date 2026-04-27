@@ -36,6 +36,8 @@ _ORIGIN_RECEIPT_FIELDS = (
     "current_task_gate",
     "current_task_approval_id",
     "current_task_approval_status",
+    "current_task_previous_approval_id",
+    "current_task_previous_approval_status",
     "current_task_operation_id",
     "current_task_operation_name",
     "current_task_operation_plane",

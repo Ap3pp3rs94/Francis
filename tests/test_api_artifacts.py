@@ -102,6 +102,8 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
             "current_task_gate": "operator_review",
             "current_task_approval_id": "apr_artifact_origin",
             "current_task_approval_status": "approved",
+            "current_task_previous_approval_id": "apr_artifact_previous",
+            "current_task_previous_approval_status": "approved",
             "current_task_operation_id": "tsk_artifact_origin",
             "current_task_operation_name": "plugin.run",
             "current_task_operation_plane": "P7_EXECUTION",
@@ -151,6 +153,8 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
     assert receipt["current_task_gate"] == "operator_review"
     assert receipt["current_task_approval_id"] == "apr_artifact_origin"
     assert receipt["current_task_approval_status"] == "approved"
+    assert receipt["current_task_previous_approval_id"] == "apr_artifact_previous"
+    assert receipt["current_task_previous_approval_status"] == "approved"
     assert receipt["current_task_operation_id"] == "tsk_artifact_origin"
     assert receipt["current_task_operation_name"] == "plugin.run"
     assert receipt["current_task_operation_plane"] == "P7_EXECUTION"

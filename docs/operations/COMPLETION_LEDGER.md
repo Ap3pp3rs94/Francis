@@ -1448,6 +1448,14 @@ The shared artifact inspection panel renders those backend-projected handles as
 origin context. This is read-only artifact receipt context; it does not approve
 actions, inspect file contents, retry work, or synthesize missing receipt state.
 
+As of `2026-04-27`, backend artifact-origin readback also preserves current-task
+previous approval lineage from the same originating mission-loop receipt.
+`GET /artifacts/inspect` now carries `current_task_previous_approval_id` and
+`current_task_previous_approval_status` when the matched continuity receipt
+already provides them. This is read-only artifact receipt context; it does not
+approve actions, refresh approvals, inspect file contents, retry work, or infer
+missing lineage.
+
 As of `2026-04-26`, artifact-origin readback also preserves bounded plan receipt
 summaries from the same originating mission-loop receipt. `GET /artifacts/inspect`
 now projects `plan_status`, current step id/title, step count, and checkpoint
@@ -5454,6 +5462,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin receipt 
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 artifact-origin current-task approval-lineage slice:
+
+- `python -m pytest tests\test_api_artifacts.py::test_artifact_inspect_projects_originating_receipt -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_api_artifacts.py -q`
+  Result: `5 passed`
+- `python -m pytest tests\test_api_artifacts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `passed` (Ruff cache write warned on local `.ruff_cache` access)
+- `python -m ruff format --check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\api\routes\artifacts.py`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 artifact-origin trace rendering slice:
