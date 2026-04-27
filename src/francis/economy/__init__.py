@@ -8,6 +8,10 @@ from .cost_modeling.action_cost_estimator import ActionCostEstimate, ActionCostE
 from .cost_modeling.opportunity_cost import OpportunityCost, OpportunityCostCalculator
 from .cost_modeling.resource_pricer import ResourcePrice, ResourcePricer
 from .cost_modeling.total_cost_of_ownership import TotalCostReport, TotalCostOfOwnership
+from .markets.capability_catalog_projection import (
+    capability_listings_from_plugin_catalog,
+    marketplace_from_plugin_catalog,
+)
 from .markets.capability_marketplace import CapabilityListing, CapabilityMarketplace
 from .markets.compute_futures import ComputeFuture, ComputeFuturesMarket
 from .markets.data_exchange import DataExchange, DataOffer
@@ -34,6 +38,8 @@ __all__ = [
     "ResourcePricer",
     "TotalCostReport",
     "TotalCostOfOwnership",
+    "capability_listings_from_plugin_catalog",
+    "marketplace_from_plugin_catalog",
     "CapabilityListing",
     "CapabilityMarketplace",
     "ComputeFuture",

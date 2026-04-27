@@ -227,6 +227,15 @@ an in-memory catalog model only; it does not connect Forge routes, create
 marketplace publication, grant execution authority, promote capabilities, or
 claim operator UI exposure.
 
+As of `2026-04-27`, that passive Capability Economy model can now be populated
+from existing plugin registry catalog data. The new projection adapter derives
+`CapabilityListing` entries from plugin catalog records, preserving staged or
+promoted status, risk tier, source, proposal id, promotion receipt id,
+tests/docs, proposal evidence, validation path, known limits, and plugin
+metadata into the in-memory catalog summary. This remains read-only adaptation:
+it does not add a route, mutate registries, publish a marketplace, execute
+capabilities, promote staged plugins, or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4100,6 +4109,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-catalog to
+Capability Economy projection slice:
+
+- `python -m pytest tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_marketplace.py -q`
+  Result: `2 passed`
+- `python -m pytest tests\unit\test_imports.py -q`
+  Result: `17 passed, 1 skipped`
+- `python -m mypy src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\capability_marketplace.py`
+  Result: `passed`
+- `python -m ruff check src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\__init__.py src\francis\economy\__init__.py tests\unit\test_capability_catalog_projection.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\__init__.py src\francis\economy\__init__.py tests\unit\test_capability_catalog_projection.py`
+  Result: `4 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge passive
 capability catalog economy model slice:
