@@ -127,6 +127,17 @@ there is still no independent Forge proposal approval workflow, no automated
 readiness enforcement, and no claim that generated proposals are high quality
 without human/operator review.
 
+As of `2026-04-27`, Stage 4/Forge proposal and promotion artifacts have a
+read-only API readback surface. `GET /forge/status`, `/forge/proposals/list`,
+`/forge/proposals/get`, `/forge/promotions/list`, and `/forge/promotions/get`
+inspect the existing `data/artifacts/plugins/proposals/` and
+`data/artifacts/plugins/promotions/` records without creating new write
+authority, promotion authority, execution authority, or UI claims. Readbacks are
+bounded to the Forge artifact directories, support plugin/status/id filtering,
+and re-apply governed display redaction before returning records. This makes
+Forge artifacts inspectable through the backend API, but it is still not a
+proposal approval workflow or promotion-readiness enforcement.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4002,11 +4013,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-proposal, staging, and promotion-receipt boundary:
+proposal, staging, promotion-receipt, and readback boundary:
 
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
 - `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
 - `python -m pytest tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
@@ -4014,6 +4029,10 @@ proposal, staging, and promotion-receipt boundary:
   Result: `passed`
 - `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
   Result: `passed`
+- `python -m ruff check src\francis\api\routes\forge.py src\francis\api\app.py tests\test_api_forge.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\forge.py src\francis\api\app.py tests\test_api_forge.py`
+  Result: `3 files already formatted`
 - `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
   Result: `passed`
 - `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
