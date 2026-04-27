@@ -181,6 +181,15 @@ UI surfaces promotion-readiness truth before attempting `/plugins/enable`, but
 does not promote plugins, grant write authority, execute capabilities, or claim
 that the chat UI exposes Forge review yet.
 
+As of `2026-04-27`, the chat UI plugin browser has a first read-only Forge
+promotion-readiness readback. `PluginBrowserClient` now consumes
+`GET /forge/promotion_readiness/list`, the chat UI route contract asserts that
+the endpoint is mounted, and the Plugins panel renders backend-returned staged
+candidate, ready, blocked, proposal-review, missing-requirement, and next-step
+fields. This is operator readback only: it does not add promotion controls,
+write authority, approval authority, execution authority, or client-side
+readiness decisions.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4054,6 +4063,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge promotion-readiness
+chat UI readback slice:
+
+- `cd apps\chat_ui && npm run test`
+  Result: `73 passed`
+- `cd apps\chat_ui && npm run build`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_contract_chat_ui.py`
+  Result: `1 file already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
 proposal, staging, proposal review, review-gated promotion-readiness,

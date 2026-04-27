@@ -404,6 +404,61 @@ export type PluginToolRunRequest = {
 
 export type PluginToolsExportFormat = "json" | "jsonl" | "csv";
 
+export type PluginPromotionReadinessListParams = {
+  limit?: number;
+  offset?: number;
+  plugin_id?: string;
+  proposal_id?: string;
+  status?: string;
+};
+
+export type PluginPromotionReadinessPlugin = {
+  id?: string;
+  name?: string;
+  status?: string;
+  enabled?: boolean;
+  source_kind?: string;
+};
+
+export type PluginPromotionReadinessEvidence = {
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  proposal_evidence?: unknown[];
+  tests?: unknown[];
+  docs?: unknown[];
+  risk_tier?: string;
+};
+
+export type PluginPromotionReadinessGovernance = {
+  gate?: string;
+  scope?: string;
+  inspection_route?: string;
+  promotion_route?: string;
+  promotion_authority?: boolean;
+  execution_authority?: boolean;
+  next_step?: string;
+};
+
+export type PluginPromotionReadinessItem = {
+  kind?: string;
+  plugin_id: string;
+  proposal_id?: string;
+  ready: boolean;
+  status: string;
+  missing_requirements: string[];
+  requirements: Record<string, boolean>;
+  plugin?: PluginPromotionReadinessPlugin;
+  evidence?: PluginPromotionReadinessEvidence;
+  governance?: PluginPromotionReadinessGovernance;
+};
+
+export type PluginPromotionReadinessListResponse = {
+  items: PluginPromotionReadinessItem[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+};
+
 /* -------------------------------------------------------------------------------------------------
  * Errors
  * ------------------------------------------------------------------------------------------------- */
@@ -468,6 +523,10 @@ function safeStringArray(v: unknown): string[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out = v.map((x) => (typeof x === "string" ? x : "")).filter((s) => s.length > 0);
   return out.length ? out : undefined;
+}
+
+function safeUnknownArray(v: unknown): unknown[] | undefined {
+  return Array.isArray(v) ? v : undefined;
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -814,6 +873,87 @@ function parsePluginTool(raw: unknown): PluginToolRef | null {
   return out;
 }
 
+function parsePromotionReadinessItem(raw: unknown): PluginPromotionReadinessItem | null {
+  if (!isRecord(raw)) return null;
+
+  const pluginRaw = isRecord(raw.plugin) ? raw.plugin : {};
+  const pluginId = safeString(raw.plugin_id, safeString(pluginRaw.id, "")).trim();
+  if (!pluginId) return null;
+
+  const ready = safeBool(raw.ready, false);
+  const status = safeString(raw.status, ready ? "ready" : "blocked") || (ready ? "ready" : "blocked");
+
+  const requirements: Record<string, boolean> = {};
+  if (isRecord(raw.requirements)) {
+    for (const [key, value] of Object.entries(raw.requirements)) {
+      if (typeof value === "boolean") requirements[key] = value;
+    }
+  }
+
+  const item: PluginPromotionReadinessItem = {
+    plugin_id: pluginId,
+    ready,
+    status,
+    missing_requirements: safeStringArray(raw.missing_requirements) ?? [],
+    requirements,
+  };
+
+  const kind = safeString(raw.kind, "");
+  if (kind) item.kind = kind;
+
+  const proposalId = safeString(raw.proposal_id, "");
+  if (proposalId) item.proposal_id = proposalId;
+
+  const plugin: PluginPromotionReadinessPlugin = {};
+  const pluginName = safeString(pluginRaw.name, "");
+  const pluginStatus = safeString(pluginRaw.status, "");
+  const sourceKind = safeString(pluginRaw.source_kind, safeString(pluginRaw.sourceKind, ""));
+  if (safeString(pluginRaw.id, "")) plugin.id = safeString(pluginRaw.id, "");
+  if (pluginName) plugin.name = pluginName;
+  if (pluginStatus) plugin.status = pluginStatus;
+  if (typeof pluginRaw.enabled === "boolean") plugin.enabled = pluginRaw.enabled;
+  if (sourceKind) plugin.source_kind = sourceKind;
+  if (Object.keys(plugin).length > 0) item.plugin = plugin;
+
+  const evidenceRaw = isRecord(raw.evidence) ? raw.evidence : {};
+  const evidence: PluginPromotionReadinessEvidence = {};
+  const reviewStatus = safeString(evidenceRaw.proposal_review_status, "");
+  const reviewReceiptId = safeString(evidenceRaw.proposal_review_receipt_id, "");
+  const riskTier = safeString(evidenceRaw.risk_tier, "");
+  const proposalEvidence = safeUnknownArray(evidenceRaw.proposal_evidence);
+  const tests = safeUnknownArray(evidenceRaw.tests);
+  const docs = safeUnknownArray(evidenceRaw.docs);
+  if (reviewStatus) evidence.proposal_review_status = reviewStatus;
+  if (reviewReceiptId) evidence.proposal_review_receipt_id = reviewReceiptId;
+  if (proposalEvidence) evidence.proposal_evidence = proposalEvidence;
+  if (tests) evidence.tests = tests;
+  if (docs) evidence.docs = docs;
+  if (riskTier) evidence.risk_tier = riskTier;
+  if (Object.keys(evidence).length > 0) item.evidence = evidence;
+
+  const governanceRaw = isRecord(raw.governance) ? raw.governance : {};
+  const governance: PluginPromotionReadinessGovernance = {};
+  const gate = safeString(governanceRaw.gate, "");
+  const scope = safeString(governanceRaw.scope, "");
+  const inspectionRoute = safeString(governanceRaw.inspection_route, "");
+  const promotionRoute = safeString(governanceRaw.promotion_route, "");
+  const nextStep = safeString(governanceRaw.next_step, "");
+  if (gate) governance.gate = gate;
+  if (scope) governance.scope = scope;
+  if (inspectionRoute) governance.inspection_route = inspectionRoute;
+  if (promotionRoute) governance.promotion_route = promotionRoute;
+  if (typeof governanceRaw.promotion_authority === "boolean") {
+    governance.promotion_authority = governanceRaw.promotion_authority;
+  }
+  if (typeof governanceRaw.execution_authority === "boolean") {
+    governance.execution_authority = governanceRaw.execution_authority;
+  }
+  if (nextStep) governance.next_step = nextStep;
+  if (Object.keys(governance).length > 0) item.governance = governance;
+
+  return item;
+}
+
 /* -------------------------------------------------------------------------------------------------
  * Endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -821,6 +961,7 @@ function parsePluginTool(raw: unknown): PluginToolRef | null {
 export type PluginBrowserEndpoints = {
   list: (q?: PluginListParams) => string;
   get: (id: string) => string;
+  promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
   toolsList: (q?: PluginToolListParams) => string;
   toolsGet: (id: string) => string;
   toolsExport: (format: PluginToolsExportFormat, q?: PluginToolListParams) => string;
@@ -858,6 +999,14 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
       })}`,
 
     get: (id: string) => `/plugins/get${encodeQuery({ id })}`,
+    promotionReadinessList: (q) =>
+      `/forge/promotion_readiness/list${encodeQuery({
+        limit: q?.limit,
+        offset: q?.offset,
+        plugin_id: q?.plugin_id,
+        proposal_id: q?.proposal_id,
+        status: q?.status,
+      })}`,
     toolsList: (q) =>
       `/plugins/tools/list${encodeQuery({
         limit: q?.limit,
@@ -1161,6 +1310,39 @@ export class PluginBrowserClient {
       items,
       total: total > 0 ? total : undefined,
       next_cursor: nextCursor || undefined,
+    };
+  }
+
+  /**
+   * List read-only Forge promotion readiness for staged generated plugins.
+   */
+  async listPromotionReadiness(
+    params?: PluginPromotionReadinessListParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginPromotionReadinessListResponse> {
+    const url = this.url(this.endpoints.promotionReadinessList(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { items: [] };
+
+    const raw =
+      Array.isArray((json as Record<string, unknown>).items)
+        ? ((json as Record<string, unknown>).items as unknown[])
+        : Array.isArray((json as Record<string, unknown>).readiness)
+          ? ((json as Record<string, unknown>).readiness as unknown[])
+          : Array.isArray((json as Record<string, unknown>).candidates)
+            ? ((json as Record<string, unknown>).candidates as unknown[])
+            : [];
+
+    const items = raw.map(parsePromotionReadinessItem).filter((x): x is PluginPromotionReadinessItem => x !== null);
+    const total = safeNumber((json as Record<string, unknown>).total, 0);
+    const offset = safeNumber((json as Record<string, unknown>).offset, 0);
+    const limit = safeNumber((json as Record<string, unknown>).limit, 0);
+
+    return {
+      items,
+      total: total > 0 ? total : undefined,
+      offset: offset >= 0 ? offset : undefined,
+      limit: limit > 0 ? limit : undefined,
     };
   }
 

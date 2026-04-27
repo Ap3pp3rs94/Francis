@@ -35,7 +35,13 @@ import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline"
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
-import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
+import type {
+  PluginPromotionReadinessItem,
+  PluginRef,
+  PluginRunResponse,
+  PluginToolRef,
+  PluginToolRunRequest,
+} from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import {
   SettingsApiError,
@@ -9990,6 +9996,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [description, setDescription] = useState("");
   const [plugins, setPlugins] = useState<PluginRef[]>([]);
   const [tools, setTools] = useState<PluginToolRef[]>([]);
+  const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
   const [selectedPluginId, setSelectedPluginId] = useState("");
   const [selectedToolId, setSelectedToolId] = useState("");
   const [toolDetail, setToolDetail] = useState<PluginToolRef | null>(null);
@@ -10010,6 +10017,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => tools.find((item) => item.id === selectedToolId) ?? null,
     [tools, selectedToolId],
   );
+  const selectedPromotionReadiness = useMemo(
+    () => promotionReadiness.find((item) => item.plugin_id === selectedPluginId) ?? null,
+    [promotionReadiness, selectedPluginId],
+  );
+  const promotionReadinessCounts = useMemo(() => {
+    const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
+    const blocked = promotionReadiness.filter((item) => !item.ready && item.status !== "ready").length;
+    return { total: promotionReadiness.length, ready, blocked };
+  }, [promotionReadiness]);
 
   function pluginErrorMessage(err: unknown): string {
     if (err instanceof PluginBrowserApiError) {
@@ -10023,9 +10039,13 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await client.list({ limit: 200 });
+      const [res, readiness] = await Promise.all([
+        client.list({ limit: 200 }),
+        client.listPromotionReadiness({ limit: 200 }),
+      ]);
       const items = res.items ?? [];
       setPlugins(items);
+      setPromotionReadiness(readiness.items ?? []);
       setSelectedPluginId((prev) => {
         if (prev && items.some((item) => item.id === prev)) return prev;
         return items[0]?.id ?? "";
@@ -10303,6 +10323,76 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
           {String(selectedPlugin.enabled ?? false)}
         </div>
       ) : null}
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#111819",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Forge Promotion Readiness</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("candidate")}>candidates {promotionReadinessCounts.total}</span>
+            <span style={badgeStyle(promotionReadinessCounts.ready > 0 ? "ready" : "none")}>
+              ready {promotionReadinessCounts.ready}
+            </span>
+            <span style={badgeStyle(promotionReadinessCounts.blocked > 0 ? "blocked" : "clear")}>
+              blocked {promotionReadinessCounts.blocked}
+            </span>
+          </div>
+        </div>
+
+        {promotionReadinessCounts.total === 0 ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            No staged Forge promotion candidates returned by the backend.
+          </div>
+        ) : selectedPromotionReadiness ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(selectedPromotionReadiness.status)}>{selectedPromotionReadiness.status}</span>
+              {selectedPromotionReadiness.proposal_id ? (
+                <span style={badgeStyle("proposal")}>proposal {selectedPromotionReadiness.proposal_id}</span>
+              ) : null}
+              {selectedPromotionReadiness.evidence?.proposal_review_status ? (
+                <span style={badgeStyle(selectedPromotionReadiness.evidence.proposal_review_status)}>
+                  review {selectedPromotionReadiness.evidence.proposal_review_status}
+                </span>
+              ) : null}
+            </div>
+            {selectedPromotionReadiness.missing_requirements.length ? (
+              <div style={{ marginTop: 6 }}>
+                Missing: <code>{selectedPromotionReadiness.missing_requirements.join(", ")}</code>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No missing readiness requirements reported.</div>
+            )}
+            {selectedPromotionReadiness.evidence?.proposal_review_receipt_id ? (
+              <div style={{ marginTop: 4 }}>
+                review receipt <code>{selectedPromotionReadiness.evidence.proposal_review_receipt_id}</code>
+              </div>
+            ) : null}
+            {selectedPromotionReadiness.governance?.next_step ? (
+              <div style={{ marginTop: 4 }}>
+                next step <code>{selectedPromotionReadiness.governance.next_step}</code>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            Selected plugin has no staged Forge promotion-readiness record. Candidates:{" "}
+            {promotionReadiness.slice(0, 5).map((item, index) => (
+              <span key={item.plugin_id} style={badgeStyle(item.status)}>
+                {index > 0 ? " " : ""}
+                {item.plugin?.name || item.plugin_id}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       {toolDetail ? (
         <div style={{ marginTop: 8, fontSize: 12, color: THEME.muted }}>

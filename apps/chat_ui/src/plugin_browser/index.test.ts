@@ -85,3 +85,79 @@ test("PluginBrowserClient treats backend permission denials as mutation errors",
     restoreFetch();
   }
 });
+
+test("PluginBrowserClient lists Forge promotion readiness with filters", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    return jsonResponse({
+      ok: true,
+      total: 1,
+      items: [
+        {
+          kind: "plugin.promotion.readiness",
+          plugin_id: "pl_stage",
+          proposal_id: "proposal_pl_stage_1",
+          ready: false,
+          status: "blocked",
+          missing_requirements: ["proposal_review"],
+          requirements: {
+            proposal_id: true,
+            proposal_review: false,
+            proposal_evidence: true,
+            tests: true,
+            docs: true,
+            risk_tier: true,
+          },
+          plugin: {
+            id: "pl_stage",
+            name: "Stage Helper",
+            status: "staged",
+            enabled: false,
+            source_kind: "generated",
+          },
+          evidence: {
+            proposal_review_status: "staged",
+            proposal_review_receipt_id: "",
+            proposal_evidence: [{ source: "operator" }],
+            tests: ["tests/test_api_plugins.py"],
+            docs: ["README.md"],
+            risk_tier: "medium",
+          },
+          governance: {
+            gate: "forge_promotion_readiness",
+            scope: "plugins.write",
+            inspection_route: "/forge/promotion_readiness/list",
+            promotion_route: "/plugins/enable",
+            promotion_authority: false,
+            execution_authority: false,
+            next_step: "satisfy_missing_requirements_before_promotion",
+          },
+        },
+      ],
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const res = await client.listPromotionReadiness({
+      limit: 10,
+      plugin_id: "pl_stage",
+      status: "blocked",
+    });
+
+    assert.deepEqual(requests, ["/forge/promotion_readiness/list?limit=10&plugin_id=pl_stage&status=blocked"]);
+    assert.equal(res.total, 1);
+    assert.equal(res.items[0]?.plugin_id, "pl_stage");
+    assert.equal(res.items[0]?.ready, false);
+    assert.deepEqual(res.items[0]?.missing_requirements, ["proposal_review"]);
+    assert.equal(res.items[0]?.plugin?.status, "staged");
+    assert.equal(res.items[0]?.evidence?.proposal_review_status, "staged");
+    assert.equal(res.items[0]?.governance?.promotion_authority, false);
+    assert.equal(res.items[0]?.governance?.execution_authority, false);
+  } finally {
+    restoreFetch();
+  }
+});
