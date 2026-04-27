@@ -31,6 +31,7 @@ def summarize_proposal_quality(proposals: Iterable[Mapping[str, Any]]) -> dict[s
         "status_counts": _counts(_text(analysis.get("status")) for analysis in analyses),
         "risk_tier_counts": _counts(_text(_evidence(analysis).get("risk_tier")) for analysis in analyses),
         "review_status_counts": _counts(_text(_evidence(analysis).get("review_status")) for analysis in analyses),
+        "validation_receipt_counts": _validation_receipt_counts(analyses),
         "missing_requirement_counts": _missing_requirement_counts(blocked),
         "blocked_proposals": _blocked_proposals(blocked),
         "governance": {
@@ -39,6 +40,14 @@ def summarize_proposal_quality(proposals: Iterable[Mapping[str, Any]]) -> dict[s
             "execution_authority": False,
             "approval_authority": False,
         },
+    }
+
+
+def _validation_receipt_counts(analyses: list[dict[str, Any]]) -> dict[str, int]:
+    present = sum(1 for analysis in analyses if bool(_evidence(analysis).get("validation_receipt_present")))
+    return {
+        "present": present,
+        "missing": len(analyses) - present,
     }
 
 

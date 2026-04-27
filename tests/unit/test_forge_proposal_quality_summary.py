@@ -19,6 +19,10 @@ def test_proposal_quality_summary_counts_readiness_and_missing_requirements() ->
                     "known_limits": ["local only"],
                 },
                 "review": {"status": "approved", "receipt_id": "review_ready"},
+                "validation": {
+                    "validation_receipt_id": "plugin_validation_ready",
+                    "validation_receipt_path": "data/artifacts/plugins/validations/plugin_validation_ready.json",
+                },
             },
             {
                 "proposal_id": "proposal_partial",
@@ -54,6 +58,7 @@ def test_proposal_quality_summary_counts_readiness_and_missing_requirements() ->
     assert summary["status_counts"] == {"approved": 1, "staged": 2}
     assert summary["risk_tier_counts"] == {"experimental": 1, "normal": 1, "readonly": 1}
     assert summary["review_status_counts"] == {"approved": 1, "staged": 2}
+    assert summary["validation_receipt_counts"] == {"present": 1, "missing": 2}
     assert summary["missing_requirement_counts"] == {
         "friction_summary": 1,
         "proposal_evidence": 1,
@@ -99,6 +104,7 @@ def test_proposal_quality_summary_ignores_non_mapping_inputs() -> None:
     assert summary["total"] == 1
     assert summary["ready_count"] == 0
     assert summary["blocked_count"] == 1
+    assert summary["validation_receipt_counts"] == {"present": 0, "missing": 1}
     assert summary["blocked_proposals"] == [
         {
             "proposal_id": "",

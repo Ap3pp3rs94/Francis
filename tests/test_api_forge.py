@@ -37,6 +37,10 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert empty_status.status_code == 200
     assert empty_status.json()["proposal_count"] == 0
     assert empty_status.json()["proposal_quality_summary"]["total"] == 0
+    assert empty_status.json()["proposal_quality_summary"]["validation_receipt_counts"] == {
+        "present": 0,
+        "missing": 0,
+    }
     assert empty_status.json()["proposal_quality_summary"]["governance"]["analysis_only"] is True
     assert empty_status.json()["validation_count"] == 0
     assert empty_status.json()["proposal_review_count"] == 0
@@ -174,6 +178,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert quality_summary["status_counts"] == {"approved": 1}
     assert quality_summary["risk_tier_counts"] == {"normal": 1}
     assert quality_summary["review_status_counts"] == {"approved": 1}
+    assert quality_summary["validation_receipt_counts"] == {"present": 1, "missing": 0}
     assert quality_summary["missing_requirement_counts"] == {
         "validation_path": 1,
         "known_limits": 1,
