@@ -465,6 +465,17 @@ persisted event state. This is blocker readback and receipt context only: it
 does not create approvals, decide approvals, enqueue deadletters, retry,
 dispatch, execute, write memory, or create UI claims.
 
+As of `2026-04-27`, budget-exhausted Reactor dispatch blockers also preserve a
+deadletter-candidate receipt. `max_actions: 0` is now a valid zero-budget event
+bound that classifies the event as `blocked_by_budget` instead of being clamped
+up to one action. When a dispatch attempt hits that terminal budget blocker,
+the event records a `reactor.deadletter_candidate.receipt`, links it from the
+dispatch blocker and decision journal, keeps the dispatch attempt receipt, and
+surfaces `deadletter_candidate_counts` through `/reactor/status`. This is
+candidate readback only: it does not enqueue a real deadletter item, start a
+retry, execute work, consume operation budgets, decide approvals, write memory,
+or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4338,6 +4349,21 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+deadletter-candidate receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting test updates; passed after formatting
+  tests\unit\test_reactor_event_queue.py`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 blocked-dispatch blocker readback slice:
@@ -8719,10 +8745,11 @@ These remain true and should block any "finished" claim:
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
 - Stage 5/Reactor currently has non-executing trigger intake, readback,
-  dispatch-attempt receipts, and blocked-dispatch blocker records only;
-  bounded dispatch execution, real approval/deadletter queue integration,
-  verification, retry/backoff, deadletter/escalation, stable-return receipts,
-  and operator visibility are still remaining work
+  dispatch-attempt receipts, blocked-dispatch blocker records, and
+  deadletter-candidate receipts only; bounded dispatch execution, real
+  approval/deadletter queue integration, verification, retry/backoff,
+  deadletter/escalation, stable-return receipts, and operator visibility are
+  still remaining work
 
 ## 6. Update rule
 

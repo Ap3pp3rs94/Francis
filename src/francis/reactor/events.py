@@ -97,7 +97,7 @@ def _event_id(payload: dict[str, Any], created_ts: int) -> str:
 def _bounds(payload: dict[str, Any]) -> dict[str, Any]:
     stop_conditions = _as_list(payload.get("stop_conditions")) or list(_DEFAULT_STOP_CONDITIONS)
     return {
-        "max_actions": _safe_int(payload.get("max_actions"), default=1, minimum=1, maximum=50),
+        "max_actions": _safe_int(payload.get("max_actions"), default=1, minimum=0, maximum=50),
         "max_runtime_seconds": _safe_int(payload.get("max_runtime_seconds"), default=60, minimum=1, maximum=86_400),
         "max_retries": _safe_int(payload.get("max_retries"), default=0, minimum=0, maximum=10),
         "backoff_seconds": _safe_int(payload.get("backoff_seconds"), default=0, minimum=0, maximum=3_600),
@@ -359,6 +359,38 @@ def _dispatch_blocker_record(
     )
 
 
+def _deadletter_candidate_receipt(
+    *,
+    event_id: str,
+    blocker: dict[str, Any],
+    bounds: dict[str, Any],
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any]:
+    return _filtered_receipt(
+        {
+            "kind": "reactor.deadletter_candidate.receipt",
+            "candidate_id": f"{event_id}_deadletter_candidate_{attempt_count}",
+            "event_id": event_id,
+            "status": "candidate",
+            "route": "deadletter_candidate",
+            "gate": blocker.get("gate"),
+            "stable_state": blocker.get("stable_state"),
+            "next_step": blocker.get("next_step"),
+            "attempt_count": attempt_count,
+            "max_actions": bounds.get("max_actions"),
+            "max_retries": bounds.get("max_retries"),
+            "backoff_seconds": bounds.get("backoff_seconds"),
+            "stop_conditions": bounds.get("stop_conditions"),
+            "ts": ts,
+            "execution_started": False,
+            "applied": False,
+            "deadletter_enqueued": False,
+            "retry_started": False,
+        }
+    )
+
+
 def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     path = _event_path(event_id)
     if path is None or not path.exists() or not path.is_file():
@@ -408,6 +440,16 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             attempt_count=attempt_count,
             ts=ts,
         )
+    deadletter_candidate = None
+    if blocker is not None and blocker.get("route") == "deadletter_candidate":
+        deadletter_candidate = _deadletter_candidate_receipt(
+            event_id=event_key,
+            blocker=blocker,
+            bounds=bounds,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
+        blocker["deadletter_candidate_receipt_id"] = deadletter_candidate.get("candidate_id")
 
     receipt = _dispatch_attempt_receipt(
         event_id=event_key,
@@ -439,6 +481,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     else:
         updated_dispatch.pop("blocker", None)
         updated_dispatch.pop("blocked_route", None)
+    if deadletter_candidate is not None:
+        updated_dispatch["deadletter_candidate"] = deadletter_candidate
 
     raw_journal = record.get("decision_journal")
     decision_journal = raw_journal if isinstance(raw_journal, list) else []
@@ -455,6 +499,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if blocker is not None:
         journal_entry["blocker_id"] = blocker.get("blocker_id")
         journal_entry["blocked_route"] = blocker.get("route")
+    if deadletter_candidate is not None:
+        journal_entry["deadletter_candidate_id"] = deadletter_candidate.get("candidate_id")
     decision_journal.append(journal_entry)
 
     raw_receipts = record.get("receipts")
@@ -462,6 +508,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if not receipts and isinstance(record.get("receipt"), dict):
         receipts.append(record["receipt"])
     receipts.append(receipt)
+    if deadletter_candidate is not None:
+        receipts.append(deadletter_candidate)
     raw_blockers = record.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
     if blocker is not None:
@@ -473,12 +521,19 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["dispatch"] = updated_dispatch
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
-    record["latest_receipt"] = receipt
+    record["latest_dispatch_attempt_receipt"] = receipt
+    record["latest_receipt"] = deadletter_candidate or receipt
     if blocker is not None:
         record["blockers"] = blockers
         record["latest_blocker"] = blocker
     else:
         record.pop("latest_blocker", None)
+    if deadletter_candidate is not None:
+        raw_deadletter_candidates = record.get("deadletter_candidates")
+        deadletter_candidates = raw_deadletter_candidates if isinstance(raw_deadletter_candidates, list) else []
+        deadletter_candidates.append(deadletter_candidate)
+        record["deadletter_candidates"] = deadletter_candidates
+        record["latest_deadletter_candidate"] = deadletter_candidate
     raw_governance = record.get("governance")
     governance = raw_governance if isinstance(raw_governance, dict) else {}
     governance.update(
@@ -555,6 +610,7 @@ def reactor_status() -> dict[str, Any]:
     source_counts: dict[str, int] = {}
     stable_state_counts: dict[str, int] = {}
     blocker_route_counts: dict[str, int] = {}
+    deadletter_candidate_counts: dict[str, int] = {}
     for item in items:
         status = _safe_str(item.get("status")).strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -571,6 +627,11 @@ def reactor_status() -> dict[str, Any]:
         route = _safe_str(blocker.get("route")).strip()
         if route:
             blocker_route_counts[route] = blocker_route_counts.get(route, 0) + 1
+        raw_deadletter_candidate = dispatch.get("deadletter_candidate") or item.get("latest_deadletter_candidate")
+        deadletter_candidate = raw_deadletter_candidate if isinstance(raw_deadletter_candidate, dict) else {}
+        deadletter_status = _safe_str(deadletter_candidate.get("status")).strip()
+        if deadletter_status:
+            deadletter_candidate_counts[deadletter_status] = deadletter_candidate_counts.get(deadletter_status, 0) + 1
     return {
         "ok": True,
         "status": "ready",
@@ -579,6 +640,7 @@ def reactor_status() -> dict[str, Any]:
         "trigger_source_counts": source_counts,
         "stable_state_counts": stable_state_counts,
         "blocker_route_counts": blocker_route_counts,
+        "deadletter_candidate_counts": deadletter_candidate_counts,
         "dispatch_engine": "not_implemented",
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {

@@ -201,6 +201,62 @@ def test_reactor_dispatch_attempt_routes_mode_blocker_to_operator_review(monkeyp
     assert reactor_status()["blocker_route_counts"] == {"operator_review": 1}
 
 
+def test_reactor_dispatch_attempt_records_deadletter_candidate_for_exhausted_budget(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Mission queue item has no action budget",
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        }
+    )
+    created_event = created["event"]
+    assert created_event["bounds"]["max_actions"] == 0
+    assert created_event["classification"]["stable_state"] == "blocked_by_budget"
+
+    attempted = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+
+    assert attempted["ok"] is True
+    event = attempted["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "blocked_by_budget"
+    assert event["dispatch"]["blocker"]["route"] == "deadletter_candidate"
+    assert event["dispatch"]["blocker"]["deadletter_candidate"] is True
+    assert event["dispatch"]["deadletter_candidate"]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["dispatch"]["deadletter_candidate"]["status"] == "candidate"
+    assert event["dispatch"]["deadletter_candidate"]["deadletter_enqueued"] is False
+    assert event["dispatch"]["deadletter_candidate"]["retry_started"] is False
+    assert event["dispatch"]["deadletter_candidate"]["max_actions"] == 0
+    assert event["dispatch"]["deadletter_candidate"]["max_retries"] == 1
+    assert (
+        event["latest_deadletter_candidate"]["candidate_id"]
+        == event["dispatch"]["deadletter_candidate"]["candidate_id"]
+    )
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert (
+        event["latest_dispatch_attempt_receipt"]["blocker"]["deadletter_candidate_receipt_id"]
+        == event["latest_deadletter_candidate"]["candidate_id"]
+    )
+    assert event["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-1]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert (
+        event["decision_journal"][-1]["deadletter_candidate_id"] == event["latest_deadletter_candidate"]["candidate_id"]
+    )
+
+    status = reactor_status()
+    assert status["blocker_route_counts"] == {"deadletter_candidate": 1}
+    assert status["deadletter_candidate_counts"] == {"candidate": 1}
+
+
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
