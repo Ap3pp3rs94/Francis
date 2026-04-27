@@ -1166,6 +1166,14 @@ instead of reducing gate evidence to adjacent receipt ids. This is still a
 read-model/client contract change only; it does not create approvals, alter
 policy decisions, or advance mission execution.
 
+As of `2026-04-27`, memory timeline loop projections also preserve
+current-task previous approval lineage. When mission-loop continuity metadata
+already includes `current_task_previous_approval_id` and
+`current_task_previous_approval_status`, `/memory/timeline/list` and CSV export
+keep those fields in the structured loop readback alongside the current-task
+approval id/status. This is readback/export preservation only; it does not
+create approvals, retry operations, write memory, or expand execution authority.
+
 As of `2026-04-26`, memory timeline filters can also resolve exact loop-only
 mission receipt handles. `/memory/timeline/list` now treats handoff and
 current-task operation, trace, approval, run, and artifact handles in event
@@ -5158,6 +5166,21 @@ Latest targeted validation for the `2026-04-27` Stage 3 memory timeline mission-
 
 - `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_loop_handle_fallbacks -q`
   Result: `passed`
+- `python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `10 passed`
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 memory timeline previous-approval lineage slice:
+
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_loop_handle_fallbacks -q`
+  Result: `failed before implementation with KeyError: current_task_previous_approval_id; passed after the readback/export fix`
 - `python -m pytest tests\test_api_memory_timeline.py -q`
   Result: `10 passed`
 - `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`

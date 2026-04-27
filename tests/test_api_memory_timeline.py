@@ -489,6 +489,8 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
             "current_task_operation_id": "tsk-loop-handle-memory",
             "current_task_trace_id": "trace-loop-handle-memory",
             "current_task_approval_id": "apr-loop-handle-memory",
+            "current_task_previous_approval_id": "apr-loop-handle-memory-previous",
+            "current_task_previous_approval_status": "approved",
             "current_task_run_id": "run-loop-handle-memory",
             "current_task_artifact_dir": "D:/francis/data/artifacts/loop-handle-memory",
             "operation_status": "failed",
@@ -512,6 +514,8 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     }
     assert item["loop"]["handoff_operation_id"] == "tsk-loop-handle-memory"
     assert item["loop"]["current_task_approval_id"] == "apr-loop-handle-memory"
+    assert item["loop"]["current_task_previous_approval_id"] == "apr-loop-handle-memory-previous"
+    assert item["loop"]["current_task_previous_approval_status"] == "approved"
 
     mission_listed = client.get("/memory/timeline/list?mission_id=msn-loop-handle-memory")
     assert mission_listed.status_code == 200
@@ -545,6 +549,8 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     assert rows[0]["approval_id"] == "apr-loop-handle-memory"
     assert rows[0]["run_id"] == "run-loop-handle-memory"
     assert rows[0]["artifact_dir"] == "D:/francis/data/artifacts/loop-handle-memory"
+    assert rows[0]["current_task_previous_approval_id"] == "apr-loop-handle-memory-previous"
+    assert rows[0]["current_task_previous_approval_status"] == "approved"
 
 
 def test_memory_timeline_projects_chat_mission_ingress_loop_metadata(monkeypatch, tmp_path: Path) -> None:
