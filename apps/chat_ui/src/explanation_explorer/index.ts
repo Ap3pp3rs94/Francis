@@ -197,30 +197,71 @@ function firstNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-function parseReceiptReferences(raw: unknown): ExplanationReceiptReferences | undefined {
-  if (!isRecord(raw)) return undefined;
+function firstReferenceString(sources: unknown[], aliases: string[]): string {
+  for (const source of sources) {
+    if (!isRecord(source)) continue;
+    const value = firstString(...aliases.map((alias) => source[alias]));
+    if (value) return value;
+  }
+  return "";
+}
+
+function parseReceiptReferences(...sources: unknown[]): ExplanationReceiptReferences | undefined {
+  if (!sources.some(isRecord)) return undefined;
 
   const references: ExplanationReceiptReferences = {};
-  const missionId = firstString(raw.mission_id, raw.missionId);
-  const operationId = firstString(
-    raw.operation_id,
-    raw.operationId,
-    raw.task_id,
-    raw.taskId,
-    raw.current_task_operation_id,
-    raw.currentTaskOperationId,
-  );
-  const approvalId = firstString(raw.approval_id, raw.approvalId, raw.current_task_approval_id, raw.currentTaskApprovalId);
-  const traceId = firstString(raw.trace_id, raw.traceId, raw.current_task_trace_id, raw.currentTaskTraceId);
-  const runId = firstString(raw.run_id, raw.runId, raw.current_task_run_id, raw.currentTaskRunId);
-  const artifactDir = firstString(
-    raw.artifact_dir,
-    raw.artifactDir,
-    raw.artifact_path,
-    raw.artifactPath,
-    raw.current_task_artifact_dir,
-    raw.currentTaskArtifactDir,
-  );
+  const missionId = firstReferenceString(sources, [
+    "mission_id",
+    "missionId",
+    "current_task_mission_id",
+    "currentTaskMissionId",
+    "handoff_mission_id",
+    "handoffMissionId",
+  ]);
+  const operationId = firstReferenceString(sources, [
+    "operation_id",
+    "operationId",
+    "task_id",
+    "taskId",
+    "current_task_operation_id",
+    "currentTaskOperationId",
+    "handoff_operation_id",
+    "handoffOperationId",
+  ]);
+  const approvalId = firstReferenceString(sources, [
+    "approval_id",
+    "approvalId",
+    "current_task_approval_id",
+    "currentTaskApprovalId",
+    "handoff_approval_id",
+    "handoffApprovalId",
+  ]);
+  const traceId = firstReferenceString(sources, [
+    "trace_id",
+    "traceId",
+    "current_task_trace_id",
+    "currentTaskTraceId",
+    "handoff_trace_id",
+    "handoffTraceId",
+  ]);
+  const runId = firstReferenceString(sources, [
+    "run_id",
+    "runId",
+    "current_task_run_id",
+    "currentTaskRunId",
+    "handoff_run_id",
+    "handoffRunId",
+  ]);
+  const artifactDir = firstReferenceString(sources, [
+    "artifact_dir",
+    "artifactDir",
+    "artifact_path",
+    "artifactPath",
+    "current_task_artifact_dir",
+    "currentTaskArtifactDir",
+    "handoff_artifact_dir",
+    "handoffArtifactDir",
+  ]);
 
   if (missionId) references.mission_id = missionId;
   if (operationId) references.operation_id = operationId;
@@ -465,7 +506,7 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
 
   const meta = isRecord(raw.meta) ? raw.meta : {};
   const loop = isRecord(raw.loop) ? raw.loop : {};
-  const references = parseReceiptReferences(raw.references);
+  const references = parseReceiptReferences(raw.references, loop, meta, raw);
 
   const runId = firstString(raw.run_id, raw.runId, references?.run_id, meta.run_id, meta.runId);
   if (runId) rec.run_id = runId;

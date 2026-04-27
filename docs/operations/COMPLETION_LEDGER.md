@@ -435,6 +435,16 @@ promoted by the backend explanation registry. This is interface query
 reachability only; it does not create explanation records, change backend
 filtering, execute operations, alter approvals, or infer mission state.
 
+As of `2026-04-27`, the chat UI explanation explorer client also preserves
+loop-only receipt aliases when explanation records are sparse. The read-only
+parser now builds normalized receipt references from backend `references`,
+`loop`, `meta`, and raw fields using the same current-task and handoff alias
+families as the explanation route, so mission, operation, approval, trace, run,
+and artifact handles remain visible even if the response omits a pre-normalized
+`references` block. This is client readback normalization only; it does not
+create explanation records, change backend filtering, execute operations, alter
+approvals, or infer mission state.
+
 As of `2026-04-26`, the repeated main-branch CI failure was traced to the
 workflow Mypy gate, not pytest runtime failures. The static typing gap in
 mission receipt readback and chat mission-ingress metadata compaction is now
@@ -4010,6 +4020,17 @@ Latest targeted validation for the `2026-04-27` Stage 3 explanation evidence mis
   Result: `5 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `70 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 explanation explorer loop-alias parser slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `71 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

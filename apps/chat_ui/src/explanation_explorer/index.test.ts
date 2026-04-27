@@ -163,6 +163,57 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
   }
 });
 
+test("ExplanationClient.list preserves loop-only receipt aliases as references", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      items: [
+        {
+          id: "exp-loop-only",
+          ts: 1_700_000_003,
+          kind: "audit",
+          loop: {
+            current_task_mission_id: "msn_loop_current",
+            handoff_mission_id: "msn_loop_handoff",
+            current_task_operation_id: "tsk_loop_current",
+            handoff_operation_id: "tsk_loop_handoff",
+            current_task_approval_id: "apr_loop_current",
+            handoff_approval_id: "apr_loop_handoff",
+            current_task_trace_id: "trace_loop_current",
+            handoff_trace_id: "trace_loop_handoff",
+            current_task_run_id: "run_loop_current",
+            handoff_run_id: "run_loop_handoff",
+            current_task_artifact_dir: "runs/loop/current",
+            handoff_artifact_dir: "runs/loop/handoff",
+          },
+        },
+      ],
+    }),
+  );
+
+  try {
+    const client = new ExplanationClient("http://127.0.0.1:8000");
+    const response = await client.list({ timeoutMs: 50 });
+    const item = response.items[0];
+
+    assert.equal(item?.mission_id, "msn_loop_current");
+    assert.equal(item?.operation_id, "tsk_loop_current");
+    assert.equal(item?.approval_id, "apr_loop_current");
+    assert.equal(item?.trace_id, "trace_loop_current");
+    assert.equal(item?.run_id, "run_loop_current");
+    assert.equal(item?.artifact_dir, "runs/loop/current");
+    assert.deepEqual(item?.references, {
+      mission_id: "msn_loop_current",
+      operation_id: "tsk_loop_current",
+      approval_id: "apr_loop_current",
+      trace_id: "trace_loop_current",
+      run_id: "run_loop_current",
+      artifact_dir: "runs/loop/current",
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("ExplanationClient.get and export preserve receipt linkage", async () => {
   const requests: Array<{
     path: string;
