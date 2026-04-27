@@ -287,6 +287,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
                 "result_message": "Plugin id is required. password=loopsecret123",
                 "recovery_next_step": "review_operation_detail token=looprecovery123",
                 "current_task_source": "terminal_operation_receipt",
+                "current_task_previous_approval_id": "appr-previous-loop",
+                "current_task_previous_approval_status": "approved",
                 "current_task_operation_name": "plan.create",
                 "current_task_operation_plane": "P9_OBSERVABILITY",
                 "current_task_advance_action": "run_linked_operation",
@@ -313,6 +315,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert written_item["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert written_item["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
     assert written_item["current_task_operation_id"] == "tsk-loop"
+    assert written_item["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert written_item["current_task_previous_approval_status"] == "approved"
     assert written_item["current_task_operation_name"] == "plan.create"
     assert written_item["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert written_item["current_task_advance_action"] == "run_linked_operation"
@@ -346,6 +350,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     listed_items = listed.json()["items"]
     assert [item["id"] for item in listed_items] == ["exp-current-task"]
     assert listed_items[0]["current_task_source"] == "terminal_operation_receipt"
+    assert listed_items[0]["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert listed_items[0]["current_task_previous_approval_status"] == "approved"
     assert listed_items[0]["operation_error"] == "plugin_id_required"
     assert listed_items[0]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert listed_items[0]["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
@@ -358,6 +364,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     fetched = client.get("/explanations/get?id=exp-current-task")
     assert fetched.status_code == 200
     fetched_item = fetched.json()["item"]
+    assert fetched_item["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert fetched_item["current_task_previous_approval_status"] == "approved"
     assert fetched_item["current_task_operation_name"] == "plan.create"
     assert fetched_item["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert fetched_item["operation_error"] == "plugin_id_required"
@@ -368,6 +376,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     exported_json = client.get("/explanations/export", params={"format": "json", "operation_id": "tsk-loop"})
     assert exported_json.status_code == 200
     exported_json_body = json.loads(exported_json.text)
+    assert exported_json_body["items"][0]["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert exported_json_body["items"][0]["current_task_previous_approval_status"] == "approved"
     assert exported_json_body["items"][0]["current_task_advance_action"] == "run_linked_operation"
     assert exported_json_body["items"][0]["operation_error"] == "plugin_id_required"
     assert exported_json_body["items"][0]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
@@ -377,6 +387,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     exported_csv = client.get("/explanations/export?format=csv&operation_id=tsk-loop")
     assert exported_csv.status_code == 200
     rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
+    assert rows[0]["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert rows[0]["current_task_previous_approval_status"] == "approved"
     assert rows[0]["current_task_operation_name"] == "plan.create"
     assert rows[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert rows[0]["operation_error"] == "plugin_id_required"
@@ -390,6 +402,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
 
     registry_path = data_root / "explanations" / "_registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert registry["records"]["exp-current-task"]["current_task_previous_approval_id"] == "appr-previous-loop"
+    assert registry["records"]["exp-current-task"]["current_task_previous_approval_status"] == "approved"
     assert registry["records"]["exp-current-task"]["current_task_advance_action"] == "run_linked_operation"
     assert registry["records"]["exp-current-task"]["operation_error"] == "plugin_id_required"
     assert (

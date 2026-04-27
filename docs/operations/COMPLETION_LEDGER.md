@@ -350,6 +350,14 @@ read-only evidence display. This is trace/evidence readback only; it does not
 write memory, create explanation records, execute work, or synthesize missing
 task identity.
 
+As of `2026-04-27`, explanation evidence also preserves current-task previous
+approval lineage. Explanation records can promote
+`current_task_previous_approval_id` and
+`current_task_previous_approval_status` from loop evidence into list/get/export
+summaries and CSV exports alongside the current approval id/status. This is
+trace/evidence readback only; it does not approve work, refresh approvals,
+execute operations, write memory, or infer missing lineage.
+
 As of `2026-04-26`, explanation evidence also promotes handoff-only receipt
 handles into the same normalized reference contract. When a mission loop
 handoff provides operation, approval, trace, run, artifact, or mission handles
@@ -4805,6 +4813,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation current-task
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 explanation current-task previous-approval evidence slice:
+
+- `python -m pytest tests\test_api_explanation.py::test_explanations_preserve_current_task_receipt_identity -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_api_explanation.py -q`
+  Result: `5 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_explanation.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\api\routes\explanation.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
