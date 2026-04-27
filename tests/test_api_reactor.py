@@ -180,6 +180,76 @@ def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Pat
     assert {item["event_id"] for item in exhausted_receipt.json()["items"]} == {retry_id}
 
 
+def test_reactor_review_queue_route_projects_readonly_items(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    approval = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Approval-gated mutation needs review",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "approval_id": "appr_reactor_review_queue",
+        },
+    ).json()
+    approval_id = str(approval["event_id"])
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": approval_id, "actor": _REACTOR_ACTOR},
+    )
+
+    retry = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Retry candidate needs scheduler review",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 2,
+        },
+    ).json()
+    retry_id = str(retry["event_id"])
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": retry_id, "actor": _REACTOR_ACTOR},
+    )
+
+    queue = client.get("/reactor/review_queue")
+
+    assert queue.status_code == 200
+    body = queue.json()
+    assert body["ok"] is True
+    assert body["available_total"] == 2
+    assert body["route_counts"] == {"approval_queue": 1, "retry_backoff": 1}
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["approval_authority"] is False
+    assert body["governance"]["dispatch_authority"] is False
+
+    by_id = {item["event_id"]: item for item in body["items"]}
+    assert by_id[approval_id]["review"]["route"] == "approval_queue"
+    assert by_id[approval_id]["review"]["gate"] == "approval_required"
+    assert by_id[approval_id]["trigger"]["approval_id"] == "appr_reactor_review_queue"
+    assert by_id[retry_id]["review"]["route"] == "retry_backoff"
+    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry_candidate.receipt"
+
+    retry_only = client.get("/reactor/review_queue", params={"route": "retry_backoff"})
+    assert retry_only.status_code == 200
+    assert retry_only.json()["available_total"] == 1
+    assert retry_only.json()["items"][0]["event_id"] == retry_id
+
+
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

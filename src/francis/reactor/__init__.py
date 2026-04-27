@@ -5,6 +5,7 @@ from francis.reactor.events import (
     enqueue_event,
     get_event,
     list_events,
+    reactor_review_queue,
     record_dispatch_attempt,
     reactor_status,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "enqueue_event",
     "get_event",
     "list_events",
+    "reactor_review_queue",
     "record_dispatch_attempt",
     "reactor_status",
 ]

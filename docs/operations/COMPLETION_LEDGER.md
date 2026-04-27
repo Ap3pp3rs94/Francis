@@ -508,6 +508,15 @@ These filters are readback-only and reuse persisted Reactor records; they do not
 enqueue approvals or deadletters, schedule or start retries, dispatch work,
 execute anything, write memory, or create UI claims.
 
+As of `2026-04-27`, Reactor review evidence also has a compact read-only queue
+projection. `GET /reactor/review_queue` summarizes active approval-queue,
+operator-review, deadletter-candidate, retry-backoff, and retry-exhausted review
+items from the existing persisted Reactor event receipts, with route counts,
+stable-state counts, trigger context, receipt references, next steps, and
+explicit no-authority governance flags. This is review projection only: it does
+not enqueue approvals or deadletters, schedule or start retries, dispatch work,
+execute anything, write memory, or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4381,6 +4390,25 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+review-queue projection slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `failed once during collection because of an indentation error in
+  src\francis\reactor\events.py; passed after correction`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 event review-filter readback slice:
@@ -8836,8 +8864,9 @@ These remain true and should block any "finished" claim:
 - Stage 5/Reactor currently has non-executing trigger intake, readback,
   dispatch-attempt receipts, blocked-dispatch blocker records, and
   deadletter-candidate, retry-candidate, retry-exhausted, and review-filter
-  readback only; bounded dispatch execution, real approval/deadletter queue
-  integration, verification, real retry scheduling/backoff execution,
+  readback plus a read-only review-queue projection only; bounded dispatch
+  execution, real approval/deadletter queue integration, verification, real
+  retry scheduling/backoff execution,
   deadletter/escalation, stable-return receipts, and operator visibility are
   still remaining work
 

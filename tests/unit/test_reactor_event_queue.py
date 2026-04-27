@@ -7,6 +7,7 @@ from francis.reactor.events import (
     enqueue_event,
     get_event,
     list_events,
+    reactor_review_queue,
     reactor_status,
     record_dispatch_attempt,
 )
@@ -337,6 +338,104 @@ def test_reactor_event_list_filters_review_routes_and_receipt_kinds(monkeypatch,
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter_candidate.receipt")} == {
         budget_id
     }
+
+
+def test_reactor_review_queue_projects_active_review_items(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    approval_event = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Approval-gated mutation needs review",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "approval_id": "appr_reactor_review_queue",
+        }
+    )
+    approval_id = str(approval_event["event_id"])
+    record_dispatch_attempt(approval_id, {"actor": "reactor.test"})
+
+    mode_event = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Observe mode mutation needs operator review",
+            "mode": "observe",
+            "action_class": "mutate",
+        }
+    )
+    mode_id = str(mode_event["event_id"])
+    record_dispatch_attempt(mode_id, {"actor": "reactor.test"})
+
+    budget_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted event needs deadletter review",
+            "action_class": "mission_tick",
+            "max_actions": 0,
+        }
+    )
+    budget_id = str(budget_event["event_id"])
+    record_dispatch_attempt(budget_id, {"actor": "reactor.test"})
+
+    retry_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Retry candidate needs scheduler review",
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 2,
+        }
+    )
+    retry_id = str(retry_event["event_id"])
+    record_dispatch_attempt(retry_id, {"actor": "reactor.test"})
+
+    exhausted_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Retry-exhausted event needs deadletter review",
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 1,
+        }
+    )
+    exhausted_id = str(exhausted_event["event_id"])
+    record_dispatch_attempt(exhausted_id, {"actor": "reactor.test"})
+    record_dispatch_attempt(exhausted_id, {"actor": "reactor.test"})
+
+    queue = reactor_review_queue()
+
+    assert queue["ok"] is True
+    assert queue["available_total"] == 5
+    assert queue["route_counts"] == {
+        "approval_queue": 1,
+        "deadletter_candidate": 2,
+        "operator_review": 1,
+        "retry_backoff": 1,
+    }
+    assert queue["governance"]["execution_authority"] is False
+    assert queue["governance"]["approval_authority"] is False
+    assert queue["governance"]["deadletter_authority"] is False
+    assert queue["governance"]["retry_authority"] is False
+
+    by_id = {item["event_id"]: item for item in queue["items"]}
+    assert by_id[approval_id]["review"]["route"] == "approval_queue"
+    assert by_id[approval_id]["review"]["gate"] == "approval_required"
+    assert by_id[approval_id]["trigger"]["approval_id"] == "appr_reactor_review_queue"
+    assert by_id[mode_id]["review"]["route"] == "operator_review"
+    assert by_id[mode_id]["review"]["action"] == "review_mode_boundary_before_dispatch"
+    assert by_id[budget_id]["review"]["receipt_kind"] == "reactor.deadletter_candidate.receipt"
+    assert by_id[retry_id]["review"]["route"] == "retry_backoff"
+    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry_candidate.receipt"
+    assert by_id[exhausted_id]["review"]["route"] == "deadletter_candidate"
+    assert by_id[exhausted_id]["review"]["gate"] == "retry_budget_exhausted"
+    assert by_id[exhausted_id]["review"]["receipt_kind"] == "reactor.retry_exhausted.receipt"
+
+    deadletter_only = reactor_review_queue(route="deadletter_candidate")
+
+    assert deadletter_only["available_total"] == 2
+    assert {item["event_id"] for item in deadletter_only["items"]} == {budget_id, exhausted_id}
 
 
 def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatch, tmp_path: Path) -> None:

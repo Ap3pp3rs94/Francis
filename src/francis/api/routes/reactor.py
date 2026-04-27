@@ -6,7 +6,14 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
-from francis.reactor import enqueue_event, get_event, list_events, reactor_status, record_dispatch_attempt
+from francis.reactor import (
+    enqueue_event,
+    get_event,
+    list_events,
+    reactor_review_queue,
+    reactor_status,
+    record_dispatch_attempt,
+)
 
 router = APIRouter()
 _REACTOR_WRITE_SCOPE = "reactor.write"
@@ -105,6 +112,14 @@ def events_list(
         receipt_kind=receipt_kind,
     )
     return {"ok": True, "items": items, "total": len(items), "limit": limit}
+
+
+@router.get("/review_queue")
+def review_queue(
+    limit: int = Query(200, ge=1, le=5000),
+    route: str | None = None,
+) -> dict[str, Any]:
+    return reactor_review_queue(limit=limit, route=route)
 
 
 @router.get("/events/get")

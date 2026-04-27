@@ -795,6 +795,181 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
     return {kind for kind in kinds if kind}
 
 
+def _receipt_reference(receipt: dict[str, Any]) -> str:
+    for key in ("candidate_id", "exhaustion_id", "blocker_id", "receipt_id", "event_id"):
+        value = _safe_str(receipt.get(key)).strip()
+        if value:
+            return value
+    return ""
+
+
+def _review_action(route: str, status: str, gate: str) -> str:
+    if route == "approval_queue":
+        return "review_or_resolve_approval_before_dispatch"
+    if route == "operator_review":
+        return "review_mode_boundary_before_dispatch"
+    if route == "deadletter_candidate" and gate == "retry_budget_exhausted":
+        return "review_retry_exhaustion_before_deadletter_or_dispatch_engine"
+    if route == "deadletter_candidate":
+        return "review_deadletter_candidate_before_escalation"
+    if route == "retry_backoff":
+        return "review_retry_candidate_before_scheduler_exists"
+    return f"review_{status or 'pending'}"
+
+
+def _review_projection(
+    *,
+    item: dict[str, Any],
+    route: str,
+    status: str,
+    gate: str,
+    receipt: dict[str, Any],
+    blocker: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    trigger = _as_dict(item.get("trigger"))
+    classification = _as_dict(item.get("classification"))
+    receipt_kind = _safe_str(receipt.get("kind")).strip()
+    receipt_ref = _receipt_reference(receipt)
+    blocker_ref = _receipt_reference(blocker or {})
+    next_step = (
+        _safe_str(receipt.get("next_step")).strip()
+        or _safe_str((blocker or {}).get("next_step")).strip()
+        or _safe_str(classification.get("next_step")).strip()
+    )
+    return _filtered_receipt(
+        {
+            "event_id": item.get("event_id") or item.get("id"),
+            "status": item.get("status"),
+            "stable_state": item.get("stable_state"),
+            "created_ts": item.get("created_ts"),
+            "updated_ts": item.get("updated_ts"),
+            "trigger": {
+                "source": trigger.get("source"),
+                "type": trigger.get("type"),
+                "summary": trigger.get("summary"),
+                "mission_id": trigger.get("mission_id"),
+                "operation_id": trigger.get("operation_id"),
+                "approval_id": trigger.get("approval_id"),
+            },
+            "classification": {
+                "mode": classification.get("mode"),
+                "risk_tier": classification.get("risk_tier"),
+                "action_class": classification.get("action_class"),
+                "approval_required": classification.get("approval_required"),
+            },
+            "review": {
+                "route": route,
+                "status": status,
+                "gate": gate,
+                "action": _review_action(route, status, gate),
+                "next_step": next_step,
+                "receipt_kind": receipt_kind,
+                "receipt_ref": receipt_ref,
+                "blocker_ref": blocker_ref,
+                "execution_started": False,
+                "applied": False,
+            },
+            "governance": {
+                "execution_authority": False,
+                "approval_authority": False,
+                "dispatch_authority": False,
+                "deadletter_authority": False,
+                "retry_authority": False,
+                "memory_write": False,
+            },
+        }
+    )
+
+
+def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
+    dispatch = _as_dict(item.get("dispatch"))
+    stable_state = _safe_str(item.get("stable_state")).strip().lower()
+    blocker = _as_dict(dispatch.get("blocker")) or _as_dict(item.get("latest_blocker"))
+    deadletter_candidate = _as_dict(dispatch.get("deadletter_candidate")) or _as_dict(
+        item.get("latest_deadletter_candidate")
+    )
+    retry_candidate = _as_dict(dispatch.get("retry_candidate"))
+    retry_exhausted = _as_dict(dispatch.get("retry_exhausted")) or _as_dict(item.get("latest_retry_exhausted"))
+
+    if stable_state == "retry_budget_exhausted" and retry_exhausted:
+        return _review_projection(
+            item=item,
+            route="deadletter_candidate",
+            status=_safe_str(retry_exhausted.get("status")).strip() or "exhausted",
+            gate=_safe_str(retry_exhausted.get("gate")).strip() or "retry_budget_exhausted",
+            receipt=retry_exhausted,
+            blocker=blocker,
+        )
+    if stable_state == "blocked_by_budget" and deadletter_candidate:
+        return _review_projection(
+            item=item,
+            route="deadletter_candidate",
+            status=_safe_str(deadletter_candidate.get("status")).strip() or "candidate",
+            gate=_safe_str(deadletter_candidate.get("gate")).strip() or "budget_exhausted",
+            receipt=deadletter_candidate,
+            blocker=blocker,
+        )
+    if stable_state == "awaiting_dispatch_engine" and retry_candidate:
+        return _review_projection(
+            item=item,
+            route="retry_backoff",
+            status=_safe_str(retry_candidate.get("status")).strip() or "candidate",
+            gate=_safe_str(retry_candidate.get("gate")).strip() or "dispatch_engine_not_implemented",
+            receipt=retry_candidate,
+            blocker=blocker,
+        )
+    route = _safe_str(blocker.get("route")).strip()
+    if route in {"approval_queue", "operator_review", "deadletter_candidate"}:
+        return _review_projection(
+            item=item,
+            route=route,
+            status=_safe_str(blocker.get("status")).strip() or "waiting_for_review",
+            gate=_safe_str(blocker.get("gate")).strip() or stable_state,
+            receipt=blocker,
+            blocker=blocker,
+        )
+    return None
+
+
+def reactor_review_queue(*, limit: int = 200, route: str | None = None) -> dict[str, Any]:
+    route_filter = _safe_str(route).strip().lower()
+    items: list[dict[str, Any]] = []
+    route_counts: dict[str, int] = {}
+    stable_state_counts: dict[str, int] = {}
+    for event in list_events(limit=5000):
+        projection = _active_review_projection(event)
+        if projection is None:
+            continue
+        review = _as_dict(projection.get("review"))
+        review_route = _safe_str(review.get("route")).strip().lower()
+        if route_filter and review_route != route_filter:
+            continue
+        items.append(projection)
+        route_counts[review_route] = route_counts.get(review_route, 0) + 1
+        stable_state = _safe_str(projection.get("stable_state")).strip() or "unknown"
+        stable_state_counts[stable_state] = stable_state_counts.get(stable_state, 0) + 1
+    limited = items[: max(1, min(int(limit), 5000))]
+    return {
+        "ok": True,
+        "items": limited,
+        "total": len(limited),
+        "available_total": len(items),
+        "limit": limit,
+        "route": route_filter,
+        "route_counts": route_counts,
+        "stable_state_counts": stable_state_counts,
+        "governance": {
+            "gate": "reactor_review_queue_readback",
+            "execution_authority": False,
+            "approval_authority": False,
+            "dispatch_authority": False,
+            "deadletter_authority": False,
+            "retry_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
 def get_event(event_id: str) -> dict[str, Any] | None:
     path = _event_path(event_id)
     if path is None:
