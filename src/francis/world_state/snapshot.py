@@ -106,6 +106,16 @@ def _safe_nonnegative_int(value: Any) -> int:
         return 0
 
 
+def _safe_optional_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _stage_timestamp(value: Any) -> str:
     if isinstance(value, (int, float)):
         try:
@@ -2322,6 +2332,11 @@ def _incident_evidence_item(
     run_id: str = "",
     artifact_dir: str = "",
     advance_action: str = "",
+    plan_status: str = "",
+    plan_current_step_id: str = "",
+    plan_current_step_title: str = "",
+    plan_step_count: Any = None,
+    plan_checkpoint_count: Any = None,
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "kind": str(kind or "").strip(),
@@ -2341,7 +2356,16 @@ def _incident_evidence_item(
         "run_id": str(run_id or "").strip(),
         "artifact_dir": str(artifact_dir or "").strip(),
         "advance_action": str(advance_action or "").strip(),
+        "plan_status": str(plan_status or "").strip(),
+        "plan_current_step_id": str(plan_current_step_id or "").strip(),
+        "plan_current_step_title": str(plan_current_step_title or "").strip(),
     }
+    parsed_plan_step_count = _safe_optional_nonnegative_int(plan_step_count)
+    if parsed_plan_step_count is not None:
+        item["plan_step_count"] = parsed_plan_step_count
+    parsed_plan_checkpoint_count = _safe_optional_nonnegative_int(plan_checkpoint_count)
+    if parsed_plan_checkpoint_count is not None:
+        item["plan_checkpoint_count"] = parsed_plan_checkpoint_count
     if ts > 0:
         item["ts"] = ts
     return {key: value for key, value in item.items() if value not in {"", None}}
@@ -2367,6 +2391,11 @@ def _pending_approval_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
         run_id=str(item.get("run_id") or "").strip(),
         artifact_dir=str(item.get("artifact_dir") or "").strip(),
         advance_action=str(item.get("advance_action") or "").strip(),
+        plan_status=str(item.get("plan_status") or "").strip(),
+        plan_current_step_id=str(item.get("plan_current_step_id") or "").strip(),
+        plan_current_step_title=str(item.get("plan_current_step_title") or "").strip(),
+        plan_step_count=item.get("plan_step_count"),
+        plan_checkpoint_count=item.get("plan_checkpoint_count"),
     )
 
 

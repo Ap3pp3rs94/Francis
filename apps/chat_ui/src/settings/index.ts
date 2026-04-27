@@ -148,6 +148,11 @@ export type WorldStateApprovalSummary = {
   run_id?: string;
   artifact_dir?: string;
   advance_action?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   payload_summary?: WorldStateApprovalPayloadSummary;
 };
 
@@ -221,6 +226,11 @@ export type WorldStateIncidentSummary = {
     run_id?: string;
     artifact_dir?: string;
     advance_action?: string;
+    plan_status?: string;
+    plan_current_step_id?: string;
+    plan_current_step_title?: string;
+    plan_step_count?: number;
+    plan_checkpoint_count?: number;
   }>;
 };
 
@@ -1240,7 +1250,14 @@ function safeNumber(v: unknown, fallback = 0): number {
 }
 
 function safeOptionalNumber(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v !== "string") return undefined;
+
+  const text = v.trim();
+  if (!text) return undefined;
+
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
 }
 
 function safeStringArray(v: unknown): string[] {
@@ -2523,6 +2540,11 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         run_id: safeString(item.run_id, ""),
         artifact_dir: safeString(item.artifact_dir, ""),
         advance_action: safeString(item.advance_action, ""),
+        plan_status: safeString(item.plan_status, ""),
+        plan_current_step_id: safeString(item.plan_current_step_id, ""),
+        plan_current_step_title: safeString(item.plan_current_step_title, ""),
+        plan_step_count: safeOptionalNumber(item.plan_step_count),
+        plan_checkpoint_count: safeOptionalNumber(item.plan_checkpoint_count),
         payload_summary: isRecord(item.payload_summary)
           ? parseWorldStateApprovalPayloadSummary(item.payload_summary)
           : undefined,
@@ -3191,6 +3213,11 @@ function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary
       run_id: safeString(item["run_id"], ""),
       artifact_dir: safeString(item["artifact_dir"], ""),
       advance_action: safeString(item["advance_action"], ""),
+      plan_status: safeString(item["plan_status"], ""),
+      plan_current_step_id: safeString(item["plan_current_step_id"], ""),
+      plan_current_step_title: safeString(item["plan_current_step_title"], ""),
+      plan_step_count: safeOptionalNumber(item["plan_step_count"]),
+      plan_checkpoint_count: safeOptionalNumber(item["plan_checkpoint_count"]),
     }))
     .filter((item) =>
       Boolean(
@@ -3211,7 +3238,12 @@ function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary
           item.trace_id ||
           item.run_id ||
           item.artifact_dir ||
-          item.advance_action,
+          item.advance_action ||
+          item.plan_status ||
+          item.plan_current_step_id ||
+          item.plan_current_step_title ||
+          item.plan_step_count !== undefined ||
+          item.plan_checkpoint_count !== undefined,
       ),
     );
 

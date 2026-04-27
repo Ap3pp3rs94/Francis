@@ -386,6 +386,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               run_id: "run_plugin_refresh",
               artifact_dir: "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
               advance_action: "run_linked_operation",
+              plan_status: "in_progress",
+              plan_current_step_id: "understand",
+              plan_current_step_title: "Understand goal + constraints",
+              plan_step_count: "4",
+              plan_checkpoint_count: 3,
               payload_summary: {
                 requested_action: "deploy",
                 plugin_id: "plugin.deploy",
@@ -822,6 +827,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   run_id: "run_plugin_refresh",
                   artifact_dir: "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
                   advance_action: "run_linked_operation",
+                  plan_status: "in_progress",
+                  plan_current_step_id: "understand",
+                  plan_current_step_title: "Understand goal + constraints",
+                  plan_step_count: "4",
+                  plan_checkpoint_count: 3,
                 },
               ],
             },
@@ -1125,11 +1135,24 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       "D:/francis/data/artifacts/plugins/approvals/apr_plugin_refresh",
     );
     assert.equal(worldState.overview?.pending_approvals?.[0]?.advance_action, "run_linked_operation");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.plan_status, "in_progress");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.plan_current_step_id, "understand");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.plan_step_count, 4);
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.plan_checkpoint_count, 3);
     assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.approval_id, "apr_plugin_refresh");
     assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_id, "tsk_plugin_refresh");
     assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_name, "plugin.run");
     assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.operation_plane, "P3_GOVERNANCE");
     assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.advance_action, "run_linked_operation");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.plan_status, "in_progress");
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.plan_current_step_id, "understand");
+    assert.equal(
+      worldState.overview?.incidents?.[0]?.evidence?.[0]?.plan_current_step_title,
+      "Understand goal + constraints",
+    );
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.plan_step_count, 4);
+    assert.equal(worldState.overview?.incidents?.[0]?.evidence?.[0]?.plan_checkpoint_count, 3);
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.plugin_id, "plugin.deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.required_trust, 5);

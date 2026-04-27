@@ -1033,7 +1033,14 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
             "reason": "world state approval projection",
             "mission_id": blocked_id,
             "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
-            "meta": {"advance_action": "run_linked_operation"},
+            "meta": {
+                "advance_action": "run_linked_operation",
+                "plan_status": "in_progress",
+                "plan_current_step_id": "understand",
+                "plan_current_step_title": "Understand goal + constraints",
+                "plan_step_count": "4",
+                "plan_checkpoint_count": 3,
+            },
         },
     )
     assert operation.status_code == 200
@@ -1072,6 +1079,11 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert pending_approval["payload_summary"]["required_trust"] == 5
     assert pending_approval["payload_summary"]["input_keys"] == ["target"]
     assert "plugin_id" in pending_approval["payload_summary"]["payload_keys"]
+    assert pending_approval["plan_status"] == "in_progress"
+    assert pending_approval["plan_current_step_id"] == "understand"
+    assert pending_approval["plan_current_step_title"] == "Understand goal + constraints"
+    assert pending_approval["plan_step_count"] == 4
+    assert pending_approval["plan_checkpoint_count"] == 3
 
     pending_incident = next(
         item for item in body["overview"]["incidents"] if item["id"] == "governance.pending_approvals"
@@ -1085,6 +1097,11 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert approval_evidence["advance_action"] == "run_linked_operation"
     assert approval_evidence["gate"] == "approvals_gate"
     assert approval_evidence["next_step"] == pending_approval["next_step"]
+    assert approval_evidence["plan_status"] == "in_progress"
+    assert approval_evidence["plan_current_step_id"] == "understand"
+    assert approval_evidence["plan_current_step_title"] == "Understand goal + constraints"
+    assert approval_evidence["plan_step_count"] == 4
+    assert approval_evidence["plan_checkpoint_count"] == 3
 
     focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == blocked_id)
     assert focus_item["recommended_action"] == "review_pending_approval"
