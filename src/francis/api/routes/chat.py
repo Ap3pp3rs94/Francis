@@ -133,6 +133,8 @@ def _compact_mission_ingress_meta(
         "current_task_source": str(current_task.get("source") or "").strip(),
         "current_task_approval_id": str(current_task.get("approval_id") or "").strip(),
         "current_task_approval_status": str(current_task.get("approval_status") or "").strip(),
+        "current_task_previous_approval_id": str(current_task.get("previous_approval_id") or "").strip(),
+        "current_task_previous_approval_status": str(current_task.get("previous_approval_status") or "").strip(),
         "current_task_operation_id": str(current_task.get("operation_id") or "").strip(),
         "current_task_operation_name": str(current_task.get("operation_name") or "").strip(),
         "current_task_operation_plane": str(current_task.get("operation_plane") or "").strip(),

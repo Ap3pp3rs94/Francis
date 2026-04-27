@@ -138,6 +138,8 @@ def test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles() -> 
             "source": "terminal_operation_receipt",
             "approval_id": "apr_trace_handles",
             "approval_status": "approved",
+            "previous_approval_id": "apr_previous_trace_handles",
+            "previous_approval_status": "approved",
             "operation_id": "tsk_trace_handles",
             "operation_name": "plan.create",
             "operation_plane": "P9_OBSERVABILITY",
@@ -162,6 +164,8 @@ def test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles() -> 
     assert meta["handoff_artifact_dir"] == "D:/francis/data/artifacts/trace-handles"
     assert meta["current_task_approval_id"] == "apr_trace_handles"
     assert meta["current_task_approval_status"] == "approved"
+    assert meta["current_task_previous_approval_id"] == "apr_previous_trace_handles"
+    assert meta["current_task_previous_approval_status"] == "approved"
     assert meta["current_task_operation_id"] == "tsk_trace_handles"
     assert meta["current_task_operation_name"] == "plan.create"
     assert meta["current_task_operation_plane"] == "P9_OBSERVABILITY"

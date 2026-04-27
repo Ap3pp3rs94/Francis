@@ -1054,6 +1054,15 @@ mission memory receipt summaries, and the chat UI protocol parser keeps those
 receipt summaries on `/chat/send` messages. This is pass-through only; it does
 not execute operations, mint receipts, inspect artifacts, or infer completion.
 
+As of `2026-04-27`, chat mission ingress compact metadata also preserves
+current-task previous approval lineage when the mission detail projection already
+contains it. Assistant continuity entries now carry
+`current_task_previous_approval_id` and
+`current_task_previous_approval_status` alongside the current-task approval
+id/status, trace, run, and artifact handles. This is pass-through interface
+metadata only; it does not create approvals, retry operations, execute work, or
+write new memory receipts.
+
 As of `2026-04-26`, explicit chat mission ingress also creates the first bounded
 mission-linked `plan.create` operation. `POST /chat/send` and websocket mission
 ingress still require an explicit `/mission` or `mission:` declaration and still
@@ -4732,6 +4741,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 chat ingress current-tas
 - `.\.venv\Scripts\python.exe -m pytest tests\test_api_chat.py tests\test_api_memory_timeline.py tests\test_api_mission_loop_contract.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 chat mission-ingress previous-approval metadata slice:
+
+- `python -m pytest tests\test_api_chat.py::test_chat_mission_ingress_compact_meta_preserves_handoff_trace_handles -q`
+  Result: `failed before implementation with KeyError: current_task_previous_approval_id; passed after the compact metadata fix`
+- `python -m pytest tests\test_api_chat.py -q`
+  Result: `5 passed`
+- `python -m ruff check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\chat.py tests\test_api_chat.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\api\routes\chat.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
