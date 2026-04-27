@@ -207,7 +207,7 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert plugin_id in registry["plugins"]
 
 
-def test_staged_plugin_promotion_requires_forge_readiness(monkeypatch, tmp_path: Path) -> None:
+def test_plugins_build_requires_forge_staging_quality(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
@@ -223,31 +223,33 @@ def test_staged_plugin_promotion_requires_forge_readiness(monkeypatch, tmp_path:
     )
     assert built.status_code == 200
     built_body = built.json()
-    assert built_body["ok"] is True
-    plugin_id = str(built_body["plugin_id"])
+    assert built_body["ok"] is False
+    assert built_body["applied"] is False
+    assert built_body["status"] == "blocked"
+    assert built_body["error"] == "forge_staging_requirements_missing"
+    assert built_body["missing_requirements"] == [
+        "friction_summary",
+        "proposal_evidence",
+        "tests",
+        "docs",
+        "risk_tier",
+    ]
+    assert built_body["readiness"]["requirements"] == {
+        "friction_summary": False,
+        "proposal_evidence": False,
+        "tests": False,
+        "docs": False,
+        "risk_tier": False,
+    }
+    assert built_body["governance"]["gate"] == "forge_staging_quality"
+    assert built_body["governance"]["promotion_authority"] is False
+    assert built_body["governance"]["execution_authority"] is False
+    assert built_body["governance"]["approval_authority"] is False
+    assert built_body["governance"]["memory_write"] is False
 
-    blocked = client.post(
-        "/plugins/enable",
-        json={"id": plugin_id, "reason": "operator asked too early", "actor": _PLUGIN_ACTOR},
-    )
-    assert blocked.status_code == 200
-    blocked_body = blocked.json()
-    assert blocked_body["ok"] is False
-    assert blocked_body["applied"] is False
-    assert blocked_body["error"] == "promotion_readiness_blocked"
-    assert blocked_body["status"] == "staged"
-    assert blocked_body["enabled"] is False
-    assert blocked_body["promotion_status"] == "staged"
-    assert blocked_body["governance"]["gate"] == "forge_promotion_readiness"
-    assert "proposal_evidence" in blocked_body["readiness"]["missing_requirements"]
-    assert "tests" in blocked_body["readiness"]["missing_requirements"]
-
-    fetched = client.get(f"/plugins/get?id={plugin_id}")
-    assert fetched.status_code == 200
-    fetched_item = fetched.json()["item"]
-    assert fetched_item["status"] == "staged"
-    assert fetched_item["enabled"] is False
-
+    assert not (data_root / "plugins" / "_registry.json").exists()
+    proposal_dir = data_root / "artifacts" / "plugins" / "proposals"
+    assert not proposal_dir.exists() or list(proposal_dir.glob("*.json")) == []
     promotion_dir = data_root / "artifacts" / "plugins" / "promotions"
     assert not promotion_dir.exists() or list(promotion_dir.glob("*.json")) == []
 

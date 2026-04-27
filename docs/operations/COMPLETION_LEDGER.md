@@ -406,6 +406,29 @@ not change proposal decisions or promotion readiness, does not grant approval
 or promotion authority, does not execute tools, does not write memory, and does
 not create UI claims.
 
+As of `2026-04-27`, Stage 4/Forge staging now enforces the missing upfront
+quality gate found during the completion audit. `POST /plugins/build` still
+requires the existing `plugins.write` permission gate, but it now blocks before
+artifact, proposal, validation-receipt, registry, or catalog mutation unless
+the request carries explicit friction summary, proposal evidence, tests, docs,
+and a valid risk tier. The plugin build UI now collects and sends those same
+Forge proposal metadata fields instead of issuing a metadata-free build. This
+removes the blocker where incomplete generated capabilities could be staged and
+only fail later at promotion-readiness time. The change restricts staging; it
+does not create execution authority, approval authority, promotion authority,
+memory writes, policy bypasses, or hidden auto-promotion.
+
+As of `2026-04-27`, the Stage 4/Forge completion audit supports a truthful
+closure claim for the current repo posture. The implemented and validated chain
+covers recurring-friction proposal metadata, generated staged implementation
+isolation, tests/docs/risk staging requirements, build validation receipts,
+proposal review decision receipts, read-only promotion-readiness inspection,
+explicit user promotion, promotion receipts linked back to proposal evidence,
+capability catalog projection/coherence/readback, and operator UI surfaces for
+staging metadata, review, promotion, and catalog readback. Nothing auto-promotes
+and staged candidates remain non-operative until explicit promotion succeeds.
+Stage 5/Reactor has not begun in this entry.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -8576,6 +8599,30 @@ Those validations specifically cover:
 - chat UI endpoint fallback order and defensive parsing
 - sparse continuity briefing retention when handoff payloads omit headline/focus
 - chat UI production build integrity after surfacing embedded continuity operator/orb state and raw continuity ledger receipts
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge completion audit
+and staging-quality gate slice:
+
+- `python -m pytest tests\test_api_plugins.py::test_plugins_build_requires_forge_staging_quality tests\test_api_plugins.py::test_staged_plugin_promotion_requires_approved_proposal_review tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_plugins_permission_gate.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py tests\unit\test_capability_marketplace.py tests\unit\test_forge_proposal_quality.py tests\unit\test_forge_proposal_quality_summary.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_tool_run_action_executes tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  Result: `passed`
+- `cd apps\chat_ui && npm run test`
+  Result: `78 passed`
+- `cd apps\chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 ## 5. Known truthful gaps
 

@@ -10002,6 +10002,11 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [buildFrictionSummary, setBuildFrictionSummary] = useState("");
+  const [buildProposalEvidence, setBuildProposalEvidence] = useState("");
+  const [buildTests, setBuildTests] = useState("");
+  const [buildDocs, setBuildDocs] = useState("README.md");
+  const [buildRiskTier, setBuildRiskTier] = useState("");
   const [plugins, setPlugins] = useState<PluginRef[]>([]);
   const [tools, setTools] = useState<PluginToolRef[]>([]);
   const [capabilityCatalog, setCapabilityCatalog] = useState<PluginCapabilityCatalogEntry[]>([]);
@@ -10263,6 +10268,22 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setError("Name is required.");
       return;
     }
+    const frictionSummary = buildFrictionSummary.trim();
+    const proposalEvidence = parseDelimitedIds(buildProposalEvidence);
+    const tests = parseDelimitedIds(buildTests);
+    const docs = parseDelimitedIds(buildDocs);
+    const riskTier = buildRiskTier.trim();
+    const missing = [
+      !frictionSummary ? "friction summary" : "",
+      proposalEvidence.length === 0 ? "proposal evidence" : "",
+      tests.length === 0 ? "tests" : "",
+      docs.length === 0 ? "docs" : "",
+      !riskTier ? "risk tier" : "",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      setError(`Missing Forge staging quality: ${missing.join(", ")}.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     setRunResponse(null);
@@ -10272,7 +10293,18 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       const res = await fetch(`${resolvedBaseUrl}/plugins/build`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, description: description.trim(), actor: "chat_ui.plugins" }),
+        body: JSON.stringify({
+          name: trimmed,
+          description: description.trim(),
+          actor: "chat_ui.plugins",
+          meta: {
+            friction_summary: frictionSummary,
+            proposal_evidence: proposalEvidence,
+            tests,
+            docs,
+            risk_tier: riskTier,
+          },
+        }),
       });
       if (!res.ok) {
         setError(`HTTP ${res.status}`);
@@ -10462,6 +10494,45 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
           rows={3}
           style={inputStyle}
         />
+        <textarea
+          value={buildFrictionSummary}
+          onChange={(e) => setBuildFrictionSummary(e.target.value)}
+          placeholder="Friction summary"
+          rows={2}
+          style={inputStyle}
+        />
+        <textarea
+          value={buildProposalEvidence}
+          onChange={(e) => setBuildProposalEvidence(e.target.value)}
+          placeholder="Proposal evidence refs"
+          rows={2}
+          style={inputStyle}
+        />
+        <textarea
+          value={buildTests}
+          onChange={(e) => setBuildTests(e.target.value)}
+          placeholder="Test refs"
+          rows={2}
+          style={inputStyle}
+        />
+        <textarea
+          value={buildDocs}
+          onChange={(e) => setBuildDocs(e.target.value)}
+          placeholder="Doc refs"
+          rows={2}
+          style={inputStyle}
+        />
+        <select
+          value={buildRiskTier}
+          onChange={(e) => setBuildRiskTier(e.target.value)}
+          style={{ ...inputStyle, padding: "8px 10px" }}
+        >
+          <option value="">Risk tier</option>
+          <option value="readonly">readonly</option>
+          <option value="normal">normal</option>
+          <option value="critical">critical</option>
+          <option value="safety_critical">safety_critical</option>
+        </select>
         <button onClick={() => void build()} disabled={busy} style={buttonStyle}>
           {busy ? "Building." : "Build plugin"}
         </button>

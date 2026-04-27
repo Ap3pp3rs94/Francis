@@ -1829,6 +1829,54 @@ class PluginBuildIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+def _forge_staging_requirements(payload: PluginBuildIn, meta: dict[str, Any]) -> dict[str, Any]:
+    risk_tier = _safe_str(meta.get("risk_tier")).strip().lower()
+    requirements = {
+        "friction_summary": _has_readiness_value(meta.get("friction_summary") or meta.get("friction")),
+        "proposal_evidence": _has_readiness_value(meta.get("proposal_evidence") or meta.get("evidence")),
+        "tests": _has_readiness_value(meta.get("tests") or meta.get("test_refs")),
+        "docs": _has_readiness_value(meta.get("docs") or meta.get("documentation")),
+        "risk_tier": risk_tier in _RISK_ORDER,
+    }
+    missing = [key for key, present in requirements.items() if not present]
+    return {
+        "ready": not missing,
+        "missing_requirements": missing,
+        "requirements": requirements,
+        "evidence": {
+            "name": _safe_str(payload.name).strip(),
+            "description_present": bool(_safe_str(payload.description).strip()),
+            "risk_tier": risk_tier,
+        },
+    }
+
+
+def _forge_staging_requirements_blocked(readiness: dict[str, Any]) -> dict[str, object]:
+    return {
+        "ok": False,
+        "applied": False,
+        "status": "blocked",
+        "error": "forge_staging_requirements_missing",
+        "missing_requirements": list(readiness.get("missing_requirements") or []),
+        "readiness": redact_governed_display_value(readiness),
+        "governance": {
+            "plane": "P3_GOVERNANCE",
+            "gate": "forge_staging_quality",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/build",
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+            "next_step": "attach_friction_summary_proposal_evidence_tests_docs_and_risk_before_staging",
+            "operator_hint": (
+                "Forge staging requires explicit friction summary, proposal evidence, tests, docs, "
+                "and a valid risk tier before artifacts are created."
+            ),
+        },
+    }
+
+
 class PluginToggleIn(BaseModel):
     id: str
     reason: str = "requested"
@@ -1903,10 +1951,14 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
         if not permission.allowed:
             return _permission_denied(permission)
 
+        build_meta = redact_governed_metadata(payload.meta)
+        staging_readiness = _forge_staging_requirements(payload, build_meta)
+        if not staging_readiness["ready"]:
+            return _forge_staging_requirements_blocked(staging_readiness)
+
         res = build_plugin(payload.name, payload.description)
         plugin_id = _validate_plugin_id(_safe_str(res.get("plugin_id")).strip())
         staged_ts = _now_s()
-        build_meta = redact_governed_metadata(payload.meta)
         proposal_id = _plugin_proposal_id(plugin_id, staged_ts)
         proposal_path = _plugin_proposal_path(proposal_id)
         validation_receipt_id = _plugin_validation_receipt_id(plugin_id, staged_ts)
