@@ -459,6 +459,75 @@ export type PluginPromotionReadinessListResponse = {
   limit?: number;
 };
 
+export type PluginForgeArtifactListParams = {
+  limit?: number;
+  offset?: number;
+  id?: string;
+  plugin_id?: string;
+  proposal_id?: string;
+  status?: string;
+};
+
+export type PluginForgeProposalReviewSummary = {
+  status?: string;
+  decision?: string;
+  reason?: string;
+  notes?: string;
+  actor?: string;
+  decided_ts?: number;
+  receipt_id?: string;
+};
+
+export type PluginForgeProposal = {
+  id: string;
+  proposal_id: string;
+  plugin_id?: string;
+  status?: string;
+  kind?: string;
+  created_ts?: number;
+  updated_ts?: number;
+  actor?: string;
+  friction?: Record<string, unknown>;
+  proposed_capability?: Record<string, unknown>;
+  quality_requirements?: Record<string, unknown>;
+  staged_implementation?: Record<string, unknown>;
+  validation?: Record<string, unknown>;
+  review?: PluginForgeProposalReviewSummary;
+  review_receipt_id?: string;
+  relative_path?: string;
+  governance?: Record<string, unknown>;
+};
+
+export type PluginForgeProposalReview = {
+  id: string;
+  receipt_id: string;
+  proposal_id?: string;
+  plugin_id?: string;
+  previous_status?: string;
+  status?: string;
+  decision?: string;
+  decided_ts?: number;
+  actor?: string;
+  reason?: string;
+  notes?: string;
+  relative_path?: string;
+  governance?: Record<string, unknown>;
+};
+
+export type PluginForgeProposalListResponse = {
+  items: PluginForgeProposal[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+};
+
+export type PluginForgeProposalReviewListResponse = {
+  items: PluginForgeProposalReview[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+};
+
 /* -------------------------------------------------------------------------------------------------
  * Errors
  * ------------------------------------------------------------------------------------------------- */
@@ -954,6 +1023,105 @@ function parsePromotionReadinessItem(raw: unknown): PluginPromotionReadinessItem
   return item;
 }
 
+function parseProposalReviewSummary(raw: unknown): PluginForgeProposalReviewSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const summary: PluginForgeProposalReviewSummary = {};
+  const status = safeString(raw.status, "");
+  const decision = safeString(raw.decision, "");
+  const reason = safeString(raw.reason, "");
+  const notes = safeString(raw.notes, "");
+  const actor = safeString(raw.actor, "");
+  const receiptId = safeString(raw.receipt_id, safeString(raw.receiptId, ""));
+  const decidedTs = normalizeUnixSeconds(raw.decided_ts) ?? normalizeUnixSeconds(raw.decidedAt);
+  if (status) summary.status = status;
+  if (decision) summary.decision = decision;
+  if (reason) summary.reason = reason;
+  if (notes) summary.notes = notes;
+  if (actor) summary.actor = actor;
+  if (decidedTs !== undefined) summary.decided_ts = decidedTs;
+  if (receiptId) summary.receipt_id = receiptId;
+  return Object.keys(summary).length > 0 ? summary : undefined;
+}
+
+function parseForgeProposal(raw: unknown): PluginForgeProposal | null {
+  if (!isRecord(raw)) return null;
+
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, safeString(raw.id, ""))).trim();
+  if (!proposalId) return null;
+
+  const item: PluginForgeProposal = {
+    id: safeString(raw.id, proposalId) || proposalId,
+    proposal_id: proposalId,
+  };
+
+  const pluginId = safeString(raw.plugin_id, safeString(raw.pluginId, ""));
+  const status = safeString(raw.status, "");
+  const kind = safeString(raw.kind, "");
+  const actor = safeString(raw.actor, "");
+  const reviewReceiptId = safeString(raw.review_receipt_id, safeString(raw.reviewReceiptId, ""));
+  const relativePath = safeString(raw.relative_path, safeString(raw.relativePath, ""));
+  const createdTs = normalizeUnixSeconds(raw.created_ts) ?? normalizeUnixSeconds(raw.createdAt);
+  const updatedTs = normalizeUnixSeconds(raw.updated_ts) ?? normalizeUnixSeconds(raw.updatedAt);
+  if (pluginId) item.plugin_id = pluginId;
+  if (status) item.status = status;
+  if (kind) item.kind = kind;
+  if (actor) item.actor = actor;
+  if (createdTs !== undefined) item.created_ts = createdTs;
+  if (updatedTs !== undefined) item.updated_ts = updatedTs;
+  if (isRecord(raw.friction)) item.friction = raw.friction;
+  if (isRecord(raw.proposed_capability)) item.proposed_capability = raw.proposed_capability;
+  else if (isRecord(raw.proposedCapability)) item.proposed_capability = raw.proposedCapability;
+  if (isRecord(raw.quality_requirements)) item.quality_requirements = raw.quality_requirements;
+  else if (isRecord(raw.qualityRequirements)) item.quality_requirements = raw.qualityRequirements;
+  if (isRecord(raw.staged_implementation)) item.staged_implementation = raw.staged_implementation;
+  else if (isRecord(raw.stagedImplementation)) item.staged_implementation = raw.stagedImplementation;
+  if (isRecord(raw.validation)) item.validation = raw.validation;
+  const review = parseProposalReviewSummary(raw.review);
+  if (review) item.review = review;
+  if (reviewReceiptId) item.review_receipt_id = reviewReceiptId;
+  if (relativePath) item.relative_path = relativePath;
+  if (isRecord(raw.governance)) item.governance = raw.governance;
+
+  return item;
+}
+
+function parseForgeProposalReview(raw: unknown): PluginForgeProposalReview | null {
+  if (!isRecord(raw)) return null;
+
+  const receiptId = safeString(raw.receipt_id, safeString(raw.receiptId, safeString(raw.id, ""))).trim();
+  if (!receiptId) return null;
+
+  const item: PluginForgeProposalReview = {
+    id: safeString(raw.id, receiptId) || receiptId,
+    receipt_id: receiptId,
+  };
+
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const pluginId = safeString(raw.plugin_id, safeString(raw.pluginId, ""));
+  const previousStatus = safeString(raw.previous_status, safeString(raw.previousStatus, ""));
+  const status = safeString(raw.status, "");
+  const decision = safeString(raw.decision, "");
+  const actor = safeString(raw.actor, "");
+  const reason = safeString(raw.reason, "");
+  const notes = safeString(raw.notes, "");
+  const relativePath = safeString(raw.relative_path, safeString(raw.relativePath, ""));
+  const decidedTs = normalizeUnixSeconds(raw.decided_ts) ?? normalizeUnixSeconds(raw.decidedAt);
+  if (proposalId) item.proposal_id = proposalId;
+  if (pluginId) item.plugin_id = pluginId;
+  if (previousStatus) item.previous_status = previousStatus;
+  if (status) item.status = status;
+  if (decision) item.decision = decision;
+  if (decidedTs !== undefined) item.decided_ts = decidedTs;
+  if (actor) item.actor = actor;
+  if (reason) item.reason = reason;
+  if (notes) item.notes = notes;
+  if (relativePath) item.relative_path = relativePath;
+  if (isRecord(raw.governance)) item.governance = raw.governance;
+
+  return item;
+}
+
 /* -------------------------------------------------------------------------------------------------
  * Endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -962,6 +1130,8 @@ export type PluginBrowserEndpoints = {
   list: (q?: PluginListParams) => string;
   get: (id: string) => string;
   promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
+  proposalsList: (q?: PluginForgeArtifactListParams) => string;
+  proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
   toolsList: (q?: PluginToolListParams) => string;
   toolsGet: (id: string) => string;
   toolsExport: (format: PluginToolsExportFormat, q?: PluginToolListParams) => string;
@@ -1003,6 +1173,24 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
       `/forge/promotion_readiness/list${encodeQuery({
         limit: q?.limit,
         offset: q?.offset,
+        plugin_id: q?.plugin_id,
+        proposal_id: q?.proposal_id,
+        status: q?.status,
+      })}`,
+    proposalsList: (q) =>
+      `/forge/proposals/list${encodeQuery({
+        limit: q?.limit,
+        offset: q?.offset,
+        id: q?.id,
+        plugin_id: q?.plugin_id,
+        proposal_id: q?.proposal_id,
+        status: q?.status,
+      })}`,
+    proposalReviewsList: (q) =>
+      `/forge/proposal_reviews/list${encodeQuery({
+        limit: q?.limit,
+        offset: q?.offset,
+        id: q?.id,
         plugin_id: q?.plugin_id,
         proposal_id: q?.proposal_id,
         status: q?.status,
@@ -1334,6 +1522,68 @@ export class PluginBrowserClient {
             : [];
 
     const items = raw.map(parsePromotionReadinessItem).filter((x): x is PluginPromotionReadinessItem => x !== null);
+    const total = safeNumber((json as Record<string, unknown>).total, 0);
+    const offset = safeNumber((json as Record<string, unknown>).offset, 0);
+    const limit = safeNumber((json as Record<string, unknown>).limit, 0);
+
+    return {
+      items,
+      total: total > 0 ? total : undefined,
+      offset: offset >= 0 ? offset : undefined,
+      limit: limit > 0 ? limit : undefined,
+    };
+  }
+
+  /**
+   * List read-only Forge proposal records.
+   */
+  async listForgeProposals(
+    params?: PluginForgeArtifactListParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginForgeProposalListResponse> {
+    const url = this.url(this.endpoints.proposalsList(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { items: [] };
+
+    const raw =
+      Array.isArray((json as Record<string, unknown>).items)
+        ? ((json as Record<string, unknown>).items as unknown[])
+        : Array.isArray((json as Record<string, unknown>).proposals)
+          ? ((json as Record<string, unknown>).proposals as unknown[])
+          : [];
+
+    const items = raw.map(parseForgeProposal).filter((x): x is PluginForgeProposal => x !== null);
+    const total = safeNumber((json as Record<string, unknown>).total, 0);
+    const offset = safeNumber((json as Record<string, unknown>).offset, 0);
+    const limit = safeNumber((json as Record<string, unknown>).limit, 0);
+
+    return {
+      items,
+      total: total > 0 ? total : undefined,
+      offset: offset >= 0 ? offset : undefined,
+      limit: limit > 0 ? limit : undefined,
+    };
+  }
+
+  /**
+   * List read-only Forge proposal review receipts.
+   */
+  async listForgeProposalReviews(
+    params?: PluginForgeArtifactListParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginForgeProposalReviewListResponse> {
+    const url = this.url(this.endpoints.proposalReviewsList(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { items: [] };
+
+    const raw =
+      Array.isArray((json as Record<string, unknown>).items)
+        ? ((json as Record<string, unknown>).items as unknown[])
+        : Array.isArray((json as Record<string, unknown>).reviews)
+          ? ((json as Record<string, unknown>).reviews as unknown[])
+          : [];
+
+    const items = raw.map(parseForgeProposalReview).filter((x): x is PluginForgeProposalReview => x !== null);
     const total = safeNumber((json as Record<string, unknown>).total, 0);
     const offset = safeNumber((json as Record<string, unknown>).offset, 0);
     const limit = safeNumber((json as Record<string, unknown>).limit, 0);

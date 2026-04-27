@@ -36,6 +36,8 @@ import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type {
+  PluginForgeProposal,
+  PluginForgeProposalReview,
   PluginPromotionReadinessItem,
   PluginRef,
   PluginRunResponse,
@@ -9997,6 +9999,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [plugins, setPlugins] = useState<PluginRef[]>([]);
   const [tools, setTools] = useState<PluginToolRef[]>([]);
   const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
+  const [forgeProposals, setForgeProposals] = useState<PluginForgeProposal[]>([]);
+  const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
   const [selectedPluginId, setSelectedPluginId] = useState("");
   const [selectedToolId, setSelectedToolId] = useState("");
   const [toolDetail, setToolDetail] = useState<PluginToolRef | null>(null);
@@ -10026,6 +10030,24 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     const blocked = promotionReadiness.filter((item) => !item.ready && item.status !== "ready").length;
     return { total: promotionReadiness.length, ready, blocked };
   }, [promotionReadiness]);
+  const selectedForgeProposal = useMemo(() => {
+    const readinessProposalId = selectedPromotionReadiness?.proposal_id ?? "";
+    if (readinessProposalId) {
+      const linked = forgeProposals.find(
+        (proposal) => proposal.proposal_id === readinessProposalId || proposal.id === readinessProposalId,
+      );
+      if (linked) return linked;
+    }
+    return forgeProposals.find((proposal) => proposal.plugin_id === selectedPluginId) ?? null;
+  }, [forgeProposals, selectedPluginId, selectedPromotionReadiness?.proposal_id]);
+  const selectedForgeProposalReviews = useMemo(() => {
+    const proposalId = selectedForgeProposal?.proposal_id ?? selectedPromotionReadiness?.proposal_id ?? "";
+    if (!proposalId) return [];
+    return forgeProposalReviews
+      .filter((review) => review.proposal_id === proposalId)
+      .sort((a, b) => (b.decided_ts ?? 0) - (a.decided_ts ?? 0));
+  }, [forgeProposalReviews, selectedForgeProposal?.proposal_id, selectedPromotionReadiness?.proposal_id]);
+  const latestForgeProposalReview = selectedForgeProposalReviews[0] ?? null;
 
   function pluginErrorMessage(err: unknown): string {
     if (err instanceof PluginBrowserApiError) {
@@ -10036,16 +10058,31 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     return "Plugin request failed.";
   }
 
+  function forgeRecordString(record: Record<string, unknown> | undefined, key: string): string {
+    return safeString(record?.[key]).trim();
+  }
+
+  function forgeRecordCount(record: Record<string, unknown> | undefined, key: string): number {
+    const value = record?.[key];
+    if (Array.isArray(value)) return value.length;
+    if (isRecord(value)) return Object.keys(value).length;
+    return safeString(value).trim() ? 1 : 0;
+  }
+
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, readiness] = await Promise.all([
+      const [res, readiness, proposals, proposalReviews] = await Promise.all([
         client.list({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
+        client.listForgeProposals({ limit: 200 }),
+        client.listForgeProposalReviews({ limit: 200 }),
       ]);
       const items = res.items ?? [];
       setPlugins(items);
       setPromotionReadiness(readiness.items ?? []);
+      setForgeProposals(proposals.items ?? []);
+      setForgeProposalReviews(proposalReviews.items ?? []);
       setSelectedPluginId((prev) => {
         if (prev && items.some((item) => item.id === prev)) return prev;
         return items[0]?.id ?? "";
@@ -10390,6 +10427,75 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 {item.plugin?.name || item.plugin_id}
               </span>
             ))}
+          </div>
+        )}
+
+        {selectedForgeProposal ? (
+          <div
+            style={{
+              marginTop: 10,
+              borderTop: `1px solid ${THEME.panelBorder}`,
+              paddingTop: 10,
+              fontSize: 11,
+              color: THEME.muted,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: THEME.text }}>Proposal Evidence</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(selectedForgeProposal.status || "proposal")}>
+                  {selectedForgeProposal.status || "proposal"}
+                </span>
+                {forgeRecordString(selectedForgeProposal.quality_requirements, "risk_tier") ? (
+                  <span style={badgeStyle(forgeRecordString(selectedForgeProposal.quality_requirements, "risk_tier"))}>
+                    risk {forgeRecordString(selectedForgeProposal.quality_requirements, "risk_tier")}
+                  </span>
+                ) : null}
+                {latestForgeProposalReview?.status ? (
+                  <span style={badgeStyle(latestForgeProposalReview.status)}>review {latestForgeProposalReview.status}</span>
+                ) : null}
+              </div>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              proposal <code>{selectedForgeProposal.proposal_id}</code>
+              {selectedForgeProposal.relative_path ? (
+                <>
+                  {" "}
+                  / artifact <code>{selectedForgeProposal.relative_path}</code>
+                </>
+              ) : null}
+            </div>
+            {forgeRecordString(selectedForgeProposal.friction, "summary") ? (
+              <div style={{ marginTop: 4 }}>
+                friction <code>{forgeRecordString(selectedForgeProposal.friction, "summary")}</code>
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle("evidence")}>
+                evidence {forgeRecordCount(selectedForgeProposal.friction, "evidence")}
+              </span>
+              <span style={badgeStyle("tests")}>
+                tests {forgeRecordCount(selectedForgeProposal.quality_requirements, "tests")}
+              </span>
+              <span style={badgeStyle("docs")}>
+                docs {forgeRecordCount(selectedForgeProposal.quality_requirements, "docs")}
+              </span>
+            </div>
+            {latestForgeProposalReview ? (
+              <div style={{ marginTop: 6 }}>
+                latest review <code>{latestForgeProposalReview.receipt_id}</code>
+                {latestForgeProposalReview.decision ? <> / decision <code>{latestForgeProposalReview.decision}</code></> : null}
+                {latestForgeProposalReview.previous_status ? (
+                  <> / from <code>{latestForgeProposalReview.previous_status}</code></>
+                ) : null}
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No proposal review receipt returned for this proposal.</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 10 }}>
+            No linked Forge proposal artifact returned for the selected plugin.
           </div>
         )}
       </div>

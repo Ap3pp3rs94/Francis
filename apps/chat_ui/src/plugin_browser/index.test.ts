@@ -161,3 +161,76 @@ test("PluginBrowserClient lists Forge promotion readiness with filters", async (
     restoreFetch();
   }
 });
+
+test("PluginBrowserClient lists Forge proposals and review receipts", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    if (parsed.pathname === "/forge/proposals/list") {
+      return jsonResponse({
+        total: 1,
+        items: [
+          {
+            id: "proposal_pl_stage_1",
+            proposal_id: "proposal_pl_stage_1",
+            plugin_id: "pl_stage",
+            status: "approved",
+            friction: {
+              summary: "Repeated review friction",
+              evidence: ["mission.forge.review"],
+            },
+            quality_requirements: {
+              risk_tier: "medium",
+              tests: ["tests/test_api_forge.py"],
+              docs: ["README.md"],
+            },
+            review_receipt_id: "review_1",
+            review: {
+              status: "approved",
+              decision: "approve",
+              receipt_id: "review_1",
+            },
+            relative_path: "proposals/proposal_pl_stage_1.json",
+          },
+        ],
+      });
+    }
+    return jsonResponse({
+      total: 1,
+      items: [
+        {
+          id: "review_1",
+          receipt_id: "review_1",
+          proposal_id: "proposal_pl_stage_1",
+          plugin_id: "pl_stage",
+          previous_status: "staged",
+          status: "approved",
+          decision: "approve",
+          reason: "approved after review",
+          relative_path: "proposal_reviews/review_1.json",
+        },
+      ],
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const proposals = await client.listForgeProposals({ plugin_id: "pl_stage", limit: 5 });
+    const reviews = await client.listForgeProposalReviews({ proposal_id: "proposal_pl_stage_1", limit: 5 });
+
+    assert.deepEqual(requests, [
+      "/forge/proposals/list?limit=5&plugin_id=pl_stage",
+      "/forge/proposal_reviews/list?limit=5&proposal_id=proposal_pl_stage_1",
+    ]);
+    assert.equal(proposals.items[0]?.proposal_id, "proposal_pl_stage_1");
+    assert.equal(proposals.items[0]?.review?.receipt_id, "review_1");
+    assert.equal(proposals.items[0]?.quality_requirements?.risk_tier, "medium");
+    assert.equal(reviews.items[0]?.receipt_id, "review_1");
+    assert.equal(reviews.items[0]?.decision, "approve");
+    assert.equal(reviews.items[0]?.previous_status, "staged");
+  } finally {
+    restoreFetch();
+  }
+});

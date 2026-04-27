@@ -190,6 +190,16 @@ fields. This is operator readback only: it does not add promotion controls,
 write authority, approval authority, execution authority, or client-side
 readiness decisions.
 
+As of `2026-04-27`, that plugin browser readback also includes Forge proposal
+and proposal-review receipt evidence. `PluginBrowserClient` now consumes
+`GET /forge/proposals/list` and `GET /forge/proposal_reviews/list`, the chat UI
+route contract asserts both endpoints are mounted, and the Plugins panel renders
+the selected plugin's linked proposal artifact, friction summary, evidence/test/doc
+counts, risk tier, review status, and latest review receipt when the backend
+returns them. This remains read-only operator evidence: it does not decide
+proposals, promote staged capabilities, execute plugins, or infer readiness
+client-side.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4063,6 +4073,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal and
+proposal-review chat UI readback slice:
+
+- `cd apps\chat_ui && npm run test`
+  Result: `74 passed`
+- `cd apps\chat_ui && npm run build`
+  Result: `passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_contract_chat_ui.py`
+  Result: `passed` (`.ruff_cache` write warning only)
+- `python -m ruff format --check tests\test_api_contract_chat_ui.py`
+  Result: `1 file already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge promotion-readiness
 chat UI readback slice:
