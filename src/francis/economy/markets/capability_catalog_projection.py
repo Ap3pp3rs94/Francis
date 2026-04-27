@@ -59,6 +59,8 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
         "promotion_receipt_path",
         "registry_snapshot_path",
         "validation_path",
+        "validation_receipt_id",
+        "validation_receipt_path",
         "known_limits",
         "proposal_evidence",
     ):

@@ -245,6 +245,15 @@ Economy anti-clutter requirement, but it remains analysis-only: it does not
 block proposals, mutate catalog records, publish routes, promote capabilities,
 execute tools, or create UI claims.
 
+As of `2026-04-27`, Stage 4/Forge capability catalog lineage also preserves
+validation receipt evidence. The passive plugin-catalog projection now carries
+validation receipt id/path into capability metadata, and the passive coherence
+analyzer reports Forge/generated staged or promoted catalog entries missing a
+validation receipt id under `validation_lineage_gaps`. This is catalog
+readback and analysis only: it does not add routes, mutate registry state,
+publish marketplace entries, change promotion readiness, grant approval or
+promotion authority, execute tools, write memory, or create UI claims.
+
 As of `2026-04-27`, Stage 4/Forge proposal artifacts also have a passive
 quality-readiness analyzer. The analyzer accepts existing `plugin.proposal`
 records and normalizes the current friction, evidence, tests, docs, risk tier,
@@ -4193,6 +4202,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge capability
+catalog validation-lineage slice:
+
+- `python -m pytest tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py -q`
+  Result: `3 passed`
+- `python -m pytest tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py tests\unit\test_capability_marketplace.py -q`
+  Result: `4 passed`
+- `python -m mypy src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\capability_catalog_coherence.py`
+  Result: `passed`
+- `python -m ruff check src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\capability_catalog_coherence.py tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\economy\markets\capability_catalog_projection.py src\francis\economy\markets\capability_catalog_coherence.py tests\unit\test_capability_catalog_projection.py tests\unit\test_capability_catalog_coherence.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal-quality
 validation-receipt summary readback slice:

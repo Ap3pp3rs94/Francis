@@ -14,6 +14,7 @@ def test_capability_catalog_coherence_flags_duplicates_lineage_and_quality_gaps(
                 "risk_tier": "critical",
                 "proposal_id": "proposal_shared",
                 "quality": {"tests": ["tests/test_deploy.py"], "docs": ["docs/deploy.md"]},
+                "metadata": {"validation_receipt_id": "plugin_validation_deploy_v1"},
             },
             {
                 "capability": "generated.deploy",
@@ -32,6 +33,7 @@ def test_capability_catalog_coherence_flags_duplicates_lineage_and_quality_gaps(
                 "risk_tier": "normal",
                 "proposal_id": "proposal_shared",
                 "quality": {"tests": ["tests/test_rollback.py"], "docs": ["docs/rollback.md"]},
+                "metadata": {"validation_receipt_id": "plugin_validation_rollback"},
             },
             {
                 "capability": "builtin.lookup",
@@ -98,6 +100,24 @@ def test_capability_catalog_coherence_flags_duplicates_lineage_and_quality_gaps(
             "missing": ["proposal_id"],
         },
     ]
+    assert analysis["validation_lineage_gaps"] == [
+        {
+            "capability": "generated.deploy",
+            "version": "0.2.0",
+            "source": "forge",
+            "status": "staged",
+            "risk_tier": "critical",
+            "missing": ["validation_receipt_id"],
+        },
+        {
+            "capability": "generated.no_lineage",
+            "version": "0.1.0",
+            "source": "forge",
+            "status": "staged",
+            "risk_tier": "normal",
+            "missing": ["validation_receipt_id"],
+        },
+    ]
     assert analysis["quality_gaps"] == [
         {
             "capability": "generated.deploy",
@@ -126,5 +146,6 @@ def test_capability_catalog_coherence_ignores_blank_capability_entries() -> None
         "duplicate_capabilities": [],
         "duplicate_proposals": [],
         "lineage_gaps": [],
+        "validation_lineage_gaps": [],
         "quality_gaps": [],
     }

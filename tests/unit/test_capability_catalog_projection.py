@@ -22,6 +22,8 @@ def test_plugin_registry_catalog_projects_to_capability_marketplace() -> None:
                     "tests": ["tests/test_deploy.py"],
                     "docs": ["docs/deploy.md"],
                     "validation_path": ["python -m pytest tests/test_deploy.py"],
+                    "validation_receipt_id": "plugin_validation_generated_deploy",
+                    "validation_receipt_path": "data/artifacts/plugins/validations/plugin_validation_generated_deploy.json",
                     "known_limits": ["local-only"],
                 },
             },
@@ -55,6 +57,11 @@ def test_plugin_registry_catalog_projects_to_capability_marketplace() -> None:
     assert listings[1].tests == ("tests/test_deploy.py",)
     assert listings[1].docs == ("docs/deploy.md",)
     assert listings[1].metadata["proposal_evidence"] == ["mission.deploy.repeat"]
+    assert listings[1].metadata["validation_receipt_id"] == "plugin_validation_generated_deploy"
+    assert (
+        listings[1].metadata["validation_receipt_path"]
+        == "data/artifacts/plugins/validations/plugin_validation_generated_deploy.json"
+    )
     assert listings[1].metadata["plugin_name"] == "Generated Deploy"
 
     marketplace = marketplace_from_plugin_catalog(catalog)

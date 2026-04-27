@@ -15,6 +15,7 @@ def analyze_capability_catalog_coherence(entries: Iterable[Mapping[str, Any]]) -
         "duplicate_capabilities": _duplicate_capabilities(normalized),
         "duplicate_proposals": _duplicate_proposals(normalized),
         "lineage_gaps": _lineage_gaps(normalized),
+        "validation_lineage_gaps": _validation_lineage_gaps(normalized),
         "quality_gaps": _quality_gaps(normalized),
     }
 
@@ -22,6 +23,8 @@ def analyze_capability_catalog_coherence(entries: Iterable[Mapping[str, Any]]) -
 def _normalize_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
     raw_quality = entry.get("quality")
     quality: Mapping[str, Any] = raw_quality if isinstance(raw_quality, Mapping) else {}
+    raw_metadata = entry.get("metadata")
+    metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     return {
         "capability": _text(entry.get("capability")),
         "version": _text(entry.get("version"), fallback="0.1.0"),
@@ -30,6 +33,7 @@ def _normalize_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
         "risk_tier": _label(entry.get("risk_tier"), fallback="normal"),
         "proposal_id": _text(entry.get("proposal_id")),
         "promotion_receipt_id": _text(entry.get("promotion_receipt_id")),
+        "validation_receipt_id": _text(entry.get("validation_receipt_id") or metadata.get("validation_receipt_id")),
         "tests": _str_list(quality.get("tests")),
         "docs": _str_list(quality.get("docs")),
     }
@@ -84,6 +88,18 @@ def _lineage_gaps(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             missing.append("promotion_receipt_id")
         if missing:
             gaps.append({**_entry_identity(entry), "missing": missing})
+    return gaps
+
+
+def _validation_lineage_gaps(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    gaps: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry["source"] not in {"forge", "generated"}:
+            continue
+        if entry["status"] not in {"staged", "promoted"}:
+            continue
+        if not entry["validation_receipt_id"]:
+            gaps.append({**_entry_identity(entry), "missing": ["validation_receipt_id"]})
     return gaps
 
 
