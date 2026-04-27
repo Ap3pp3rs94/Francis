@@ -202,6 +202,89 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
     assert status["retry_candidate_counts"] == {"candidate": 1}
 
 
+def test_reactor_dispatch_attempt_records_retry_exhaustion_without_deadlettering(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Mission queue retry budget can be exhausted",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "max_actions": 2,
+            "max_runtime_seconds": 90,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        }
+    )
+    event_id = str(created["event_id"])
+
+    first_attempt = record_dispatch_attempt(
+        event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record first retry candidate",
+        },
+    )
+    assert first_attempt["ok"] is True
+    assert first_attempt["event"]["dispatch"]["retry_candidate"]["status"] == "candidate"
+
+    exhausted_attempt = record_dispatch_attempt(
+        event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record retry exhaustion after budget is spent",
+        },
+    )
+
+    assert exhausted_attempt["ok"] is True
+    event = exhausted_attempt["event"]
+    assert event["status"] == "dispatch_deferred"
+    assert event["stable_state"] == "retry_budget_exhausted"
+    assert event["dispatch"]["attempt_count"] == 2
+    assert "retry_candidate" not in event["dispatch"]
+    retry_exhausted = event["dispatch"]["retry_exhausted"]
+    assert retry_exhausted["kind"] == "reactor.retry_exhausted.receipt"
+    assert retry_exhausted["status"] == "exhausted"
+    assert retry_exhausted["route"] == "deadletter_candidate"
+    assert retry_exhausted["gate"] == "retry_budget_exhausted"
+    assert retry_exhausted["attempt_count"] == 2
+    assert retry_exhausted["max_retries"] == 1
+    assert retry_exhausted["remaining_retries"] == 0
+    assert retry_exhausted["backoff_seconds"] == 15
+    assert retry_exhausted["deadletter_enqueued"] is False
+    assert retry_exhausted["retry_scheduled"] is False
+    assert retry_exhausted["retry_started"] is False
+    assert retry_exhausted["execution_started"] is False
+    assert retry_exhausted["applied"] is False
+    assert event["latest_retry_exhausted"]["exhaustion_id"] == retry_exhausted["exhaustion_id"]
+    assert event["latest_receipt"]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["latest_dispatch_attempt_receipt"]["stable_state"] == "retry_budget_exhausted"
+    assert (
+        event["latest_dispatch_attempt_receipt"]["next_step"]
+        == "review_retry_exhaustion_before_deadletter_or_dispatch_engine"
+    )
+    assert event["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-1]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["decision_journal"][-1]["retry_exhausted_id"] == retry_exhausted["exhaustion_id"]
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+
+    stored = get_event(event_id)
+    assert stored is not None
+    assert stored["latest_retry_exhausted"]["exhaustion_id"] == retry_exhausted["exhaustion_id"]
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_deferred": 1}
+    assert status["stable_state_counts"] == {"retry_budget_exhausted": 1}
+    assert status["retry_candidate_counts"] == {}
+    assert status["retry_exhausted_counts"] == {"exhausted": 1}
+
+
 def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
