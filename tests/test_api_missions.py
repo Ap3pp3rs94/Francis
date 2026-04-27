@@ -6,6 +6,16 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _forge_promotion_meta(label: str) -> dict[str, object]:
+    return {
+        "friction_summary": f"Repeated {label} mission plugin review",
+        "proposal_evidence": [f"mission.missions.{label}"],
+        "tests": [f"tests/test_api_missions.py::{label}"],
+        "docs": ["README.md"],
+        "risk_tier": "normal",
+    }
+
+
 def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -846,7 +856,12 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
 
     built = client.post(
         "/plugins/build",
-        json={"name": "Mission Trace Plugin", "description": "mission trace", "actor": _PLUGIN_ACTOR},
+        json={
+            "name": "Mission Trace Plugin",
+            "description": "mission trace",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("trace_plugin"),
+        },
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])

@@ -138,6 +138,17 @@ and re-apply governed display redaction before returning records. This makes
 Forge artifacts inspectable through the backend API, but it is still not a
 proposal approval workflow or promotion-readiness enforcement.
 
+As of `2026-04-27`, Stage 4/Forge staged generated-plugin promotion now has a
+first readiness enforcement gate. When explicit `POST /plugins/enable` targets a
+staged Forge candidate, Francis now blocks promotion before registry mutation or
+promotion-receipt creation unless the staged proposal metadata has a proposal id,
+friction evidence, tests, docs, and a bounded risk tier. The denial response
+keeps the plugin staged, exposes the missing readiness requirements, and points
+the operator back to attaching proposal evidence, tests, docs, and risk before
+promotion. Non-staged plugin enable remains governed by the existing
+`plugins.write` permission gate. This is readiness enforcement only; it is still
+not an independent proposal approval workflow or UI review surface.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4013,13 +4024,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-proposal, staging, promotion-receipt, and readback boundary:
+proposal, staging, promotion-receipt, readback, and promotion-readiness boundary:
 
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
 - `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
   Result: `passed`
+- `python -m pytest tests\test_api_plugins.py::test_staged_plugin_promotion_requires_forge_readiness tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\test_api_plugins.py::test_plugins_tools_catalog_and_action_validation -q`
+  Result: `passed`
 - `python -m pytest tests\test_api_forge.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\test_api_forge.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
 - `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
@@ -4027,6 +4044,10 @@ proposal, staging, promotion-receipt, and readback boundary:
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
+- `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `4 files already formatted`
 - `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py`
   Result: `passed`
 - `python -m ruff check src\francis\api\routes\forge.py src\francis\api\app.py tests\test_api_forge.py`

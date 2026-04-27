@@ -9,6 +9,16 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _forge_promotion_meta(label: str) -> dict[str, object]:
+    return {
+        "friction_summary": f"Repeated {label} operation plugin review",
+        "proposal_evidence": [f"mission.operations.{label}"],
+        "tests": [f"tests/test_api_operations.py::{label}"],
+        "docs": ["README.md"],
+        "risk_tier": "normal",
+    }
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -652,7 +662,12 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
 
     built = client.post(
         "/plugins/build",
-        json={"name": "Ops Plugin", "description": "operation plugin action", "actor": _PLUGIN_ACTOR},
+        json={
+            "name": "Ops Plugin",
+            "description": "operation plugin action",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("plugin_run_action"),
+        },
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])
@@ -923,6 +938,7 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
             "name": "Ops Memory Receipt Plugin",
             "description": "operation memory receipt",
             "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("memory_receipt"),
         },
     )
     assert built.status_code == 200
@@ -1153,7 +1169,12 @@ def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> Non
 
     built = client.post(
         "/plugins/build",
-        json={"name": "Ops Tool Plugin", "description": "operation tool action", "actor": _PLUGIN_ACTOR},
+        json={
+            "name": "Ops Tool Plugin",
+            "description": "operation tool action",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("tool_run_action"),
+        },
     )
     assert built.status_code == 200
     plugin_id = str(built.json()["plugin_id"])

@@ -675,6 +675,89 @@ def _plugin_promotion_quality(
     }
 
 
+def _has_readiness_value(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_has_readiness_value(item) for item in value)
+    if isinstance(value, tuple | set):
+        return any(_has_readiness_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_readiness_value(item) for item in value.values())
+    return value is not None
+
+
+def _plugin_promotion_readiness(
+    plugin_id: str,
+    staged: dict[str, Any],
+    payload: "PluginToggleIn",
+) -> dict[str, Any]:
+    staged_meta = dict(staged.get("meta") or {}) if isinstance(staged.get("meta"), dict) else {}
+    payload_meta = {**staged_meta, **redact_governed_metadata(payload.meta)}
+    generated_dir = _safe_str(staged.get("generated_dir")).strip()
+    readme_path = Path(generated_dir) / "README.md" if generated_dir else _gen_dir() / plugin_id / "README.md"
+    docs = payload_meta.get("docs") or payload_meta.get("documentation") or []
+    if not _has_readiness_value(docs) and readme_path.exists():
+        docs = [str(readme_path.resolve())]
+
+    risk_tier = _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(staged)
+    evidence = payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or []
+    tests = payload_meta.get("tests") or payload_meta.get("test_refs") or []
+    requirements = {
+        "proposal_id": bool(
+            _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip()
+        ),
+        "proposal_evidence": _has_readiness_value(evidence),
+        "tests": _has_readiness_value(tests),
+        "docs": _has_readiness_value(docs),
+        "risk_tier": risk_tier in _RISK_ORDER,
+    }
+    missing = [key for key, present in requirements.items() if not present]
+    return {
+        "ready": not missing,
+        "missing_requirements": missing,
+        "requirements": requirements,
+        "evidence": {
+            "proposal_id": _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip(),
+            "proposal_evidence": evidence,
+            "tests": tests,
+            "docs": docs,
+            "risk_tier": risk_tier,
+        },
+    }
+
+
+def _promotion_readiness_blocked(
+    *,
+    plugin_id: str,
+    staged: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, object]:
+    return {
+        "ok": False,
+        "applied": False,
+        "id": plugin_id,
+        "enabled": False,
+        "status": "staged",
+        "promotion_status": "staged",
+        "error": "promotion_readiness_blocked",
+        "readiness": redact_governed_display_value(readiness),
+        "plugin": {
+            "id": plugin_id,
+            "status": _safe_str(staged.get("status")).strip() or "staged",
+            "enabled": bool(staged.get("enabled", False)),
+        },
+        "governance": {
+            "plane": "P3_GOVERNANCE",
+            "gate": "forge_promotion_readiness",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/enable",
+            "next_step": "attach_friction_evidence_tests_docs_and_risk_before_promotion",
+            "operator_hint": "Promotion requires proposal evidence, tests, docs, and a bounded risk tier.",
+        },
+    }
+
+
 def _write_plugin_proposal_record(
     *,
     plugin_id: str,
@@ -2084,6 +2167,13 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
         promotion_receipt_id = ""
         promotion_receipt_path = Path()
         if was_staged:
+            readiness = _plugin_promotion_readiness(plugin_id, previous, payload)
+            if not readiness["ready"]:
+                return _promotion_readiness_blocked(
+                    plugin_id=plugin_id,
+                    staged=previous,
+                    readiness=readiness,
+                )
             promotion_receipt_id = _plugin_promotion_receipt_id(plugin_id, promoted_ts)
             promotion_receipt_path = _plugin_promotion_receipt_path(promotion_receipt_id)
             tags = [tag for tag in _parse_tags(current.get("tags")) if tag != "staged"]

@@ -6,6 +6,16 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _forge_promotion_meta(label: str) -> dict[str, object]:
+    return {
+        "friction_summary": f"Repeated {label} plugin review",
+        "proposal_evidence": [f"mission.{label}.repeat"],
+        "tests": [f"tests/test_api_plugins.py::{label}"],
+        "docs": ["README.md"],
+        "risk_tier": "normal",
+    }
+
+
 def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -175,6 +185,51 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert plugin_id in registry["plugins"]
 
 
+def test_staged_plugin_promotion_requires_forge_readiness(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Under Ready Plugin", "description": "missing readiness metadata", "actor": _PLUGIN_ACTOR},
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    blocked = client.post(
+        "/plugins/enable",
+        json={"id": plugin_id, "reason": "operator asked too early", "actor": _PLUGIN_ACTOR},
+    )
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["error"] == "promotion_readiness_blocked"
+    assert blocked_body["status"] == "staged"
+    assert blocked_body["enabled"] is False
+    assert blocked_body["promotion_status"] == "staged"
+    assert blocked_body["governance"]["gate"] == "forge_promotion_readiness"
+    assert "proposal_evidence" in blocked_body["readiness"]["missing_requirements"]
+    assert "tests" in blocked_body["readiness"]["missing_requirements"]
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "staged"
+    assert fetched_item["enabled"] is False
+
+    promotion_dir = data_root / "artifacts" / "plugins" / "promotions"
+    assert not promotion_dir.exists() or list(promotion_dir.glob("*.json")) == []
+
+
 def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -255,7 +310,12 @@ def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path
 
     built = client.post(
         "/plugins/build",
-        json={"name": "Catalog Plugin", "description": "Tool catalog coverage", "actor": _PLUGIN_ACTOR},
+        json={
+            "name": "Catalog Plugin",
+            "description": "Tool catalog coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("catalog_plugin"),
+        },
     )
     assert built.status_code == 200
     built_body = built.json()
