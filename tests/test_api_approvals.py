@@ -285,6 +285,11 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
                         "run_id": run_id,
                         "artifact_dir": artifact_dir,
                         "advance_action": "run_linked_operation",
+                        "plan_status": "in_progress",
+                        "plan_current_step_id": "understand",
+                        "plan_current_step_title": "Understand goal + constraints",
+                        "plan_step_count": "4",
+                        "plan_checkpoint_count": 3,
                     }
                 },
                 "meta": {
@@ -323,6 +328,11 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
     assert listed_item["trace_id"] == trace_id
     assert listed_item["run_id"] == run_id
     assert listed_item["artifact_dir"] == artifact_dir
+    assert listed_item["plan_status"] == "in_progress"
+    assert listed_item["plan_current_step_id"] == "understand"
+    assert listed_item["plan_current_step_title"] == "Understand goal + constraints"
+    assert listed_item["plan_step_count"] == 4
+    assert listed_item["plan_checkpoint_count"] == 3
 
 
 def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch, tmp_path: Path) -> None:

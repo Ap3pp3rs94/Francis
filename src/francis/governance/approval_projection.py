@@ -39,6 +39,16 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _task_payload(task: dict[str, Any]) -> dict[str, Any]:
     result = _as_dict(task.get("result"))
     return _as_dict(result.get("data"))
@@ -163,6 +173,29 @@ def _task_advance_action(task: dict[str, Any]) -> str:
     )
 
 
+def _task_plan_summary(task: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    task_meta = _as_dict(task.get("meta"))
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    payload_meta = _as_dict(payload.get("meta"))
+    sources = (payload, payload_meta, task_meta, input_meta)
+
+    out: dict[str, Any] = {}
+    for key in ("plan_status", "plan_current_step_id", "plan_current_step_title"):
+        value = _first_text(*(source.get(key) for source in sources))
+        if value:
+            out[key] = value
+
+    for key in ("plan_step_count", "plan_checkpoint_count"):
+        for source in sources:
+            value = _safe_nonnegative_int(source.get(key))
+            if value is not None:
+                out[key] = value
+                break
+
+    return out
+
+
 def approval_task_projection(approval_id: str, *, task_root: Path | None = None) -> dict[str, Any]:
     task = approval_task_record(approval_id, task_root=task_root)
     if not task:
@@ -252,6 +285,8 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
     )
     if artifact_dir:
         out["artifact_dir"] = artifact_dir
+
+    out.update(_task_plan_summary(task, payload))
 
     return out
 

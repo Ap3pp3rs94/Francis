@@ -62,6 +62,11 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
           trace_id: "trace_projection",
           run_id: "run_projection",
           artifact_dir: "D:/Francis/.data/artifacts/supervised_exec/run_projection",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: "4",
+          plan_checkpoint_count: 3,
           payload_summary: {
             requested_action: "deploy",
             plugin_id: "plugin.deploy",
@@ -100,6 +105,11 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
     assert.equal(result.items[0]?.trace_id, "trace_projection");
     assert.equal(result.items[0]?.run_id, "run_projection");
     assert.equal(result.items[0]?.artifact_dir, "D:/Francis/.data/artifacts/supervised_exec/run_projection");
+    assert.equal(result.items[0]?.plan_status, "in_progress");
+    assert.equal(result.items[0]?.plan_current_step_id, "understand");
+    assert.equal(result.items[0]?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(result.items[0]?.plan_step_count, 4);
+    assert.equal(result.items[0]?.plan_checkpoint_count, 3);
     assert.equal(result.items[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(result.items[0]?.payload_summary?.plugin_id, "plugin.deploy");
     assert.equal(result.items[0]?.payload_summary?.required_trust, 5);
@@ -134,6 +144,11 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
         trace_id: "trace_projection",
         run_id: "run_projection",
         artifact_dir: "D:/Francis/.data/artifacts/supervised_exec/run_projection",
+        plan_status: "in_progress",
+        plan_current_step_id: "understand",
+        plan_current_step_title: "Understand goal + constraints",
+        plan_step_count: "4",
+        plan_checkpoint_count: 3,
         payload_summary: {
           requested_action: "deploy",
           plugin_id: "plugin.deploy",
@@ -163,6 +178,11 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
     assert.equal(result.item?.trace_id, "trace_projection");
     assert.equal(result.item?.run_id, "run_projection");
     assert.equal(result.item?.artifact_dir, "D:/Francis/.data/artifacts/supervised_exec/run_projection");
+    assert.equal(result.item?.plan_status, "in_progress");
+    assert.equal(result.item?.plan_current_step_id, "understand");
+    assert.equal(result.item?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(result.item?.plan_step_count, 4);
+    assert.equal(result.item?.plan_checkpoint_count, 3);
     assert.equal(result.item?.payload_summary?.requested_action, "deploy");
     assert.equal(result.item?.payload_summary?.plugin_id, "plugin.deploy");
     assert.deepEqual(result.item?.payload_summary?.input_keys, ["target"]);

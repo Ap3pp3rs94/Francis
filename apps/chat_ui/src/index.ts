@@ -54,6 +54,11 @@ export type ApprovalItem = {
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   payload_summary?: ApprovalPayloadSummary;
 };
 
@@ -88,6 +93,14 @@ function safeString(value: unknown): string {
 
 function safeNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function safeOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.trunc(value));
+  if (typeof value !== "string") return undefined;
+
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -180,6 +193,11 @@ function parseApprovalItem(raw: unknown): ApprovalItem | null {
     trace_id: safeString(raw.trace_id) || undefined,
     run_id: safeString(raw.run_id) || undefined,
     artifact_dir: safeString(raw.artifact_dir) || undefined,
+    plan_status: safeString(raw.plan_status) || undefined,
+    plan_current_step_id: safeString(raw.plan_current_step_id) || undefined,
+    plan_current_step_title: safeString(raw.plan_current_step_title) || undefined,
+    plan_step_count: safeOptionalNumber(raw.plan_step_count),
+    plan_checkpoint_count: safeOptionalNumber(raw.plan_checkpoint_count),
   };
   if (isRecord(raw.payload_summary)) {
     item.payload_summary = parseApprovalPayloadSummary(raw.payload_summary);

@@ -930,6 +930,15 @@ for read-only review. This keeps gate review connected to the exact operation
 that is blocked without changing approval decisions, exact-action matching,
 execution behavior, or mission mutation.
 
+As of `2026-04-27`, approval queue and decision-item projections also preserve
+bounded plan receipt summaries from the linked held task. `/approvals/list` and
+approval decision item readbacks can now expose `plan_status`, current plan step
+id/title, step count, and checkpoint count when those fields already exist on
+the matched task result or metadata, and the chat UI approvals client preserves
+those fields with typed count parsing. This is read-only gate readback only; it
+does not change approval decisions, exact-action matching, execution, memory
+writes, or plan mutation.
+
 As of `2026-04-26`, approval decision responses are also covered for the same
 mission/operation loop-handle readback. When an approval decision returns the
 approved item, the API projection and chat UI approvals client preserve the
@@ -4722,6 +4731,27 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation current-task
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 approval gate plan-summary readback slice:
+
+- `python -m pytest tests\test_api_approvals.py::test_approval_list_preserves_metadata_only_loop_handles -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_approvals.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
+  Result: `passed` (Ruff cache write warned on local `.ruff_cache` access)
+- `python -m ruff format --check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
+  Result: `passed` (Ruff cache write warned on local `.ruff_cache` access)
+- `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m mypy src`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
