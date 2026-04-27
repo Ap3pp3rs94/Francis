@@ -975,6 +975,14 @@ references including `references.approval_id`. This is a parser contract only;
 it does not render new authority, create receipts, approve work, or infer
 missing approval posture.
 
+As of `2026-04-27`, the dedicated chat UI missions client also preserves
+current-task previous approval lineage on mission memory receipts. Mission detail
+receipt summaries, latest memory receipt projections, memory loop-stage receipt
+readbacks, and receipt arrays now keep `current_task_previous_approval_id` and
+`current_task_previous_approval_status` when the backend supplies them from
+receipt metadata. This is typed interface preservation only; it does not alter
+mission state, approval decisions, execution authority, or memory writes.
+
 As of `2026-04-26`, the chat UI operations client preserves operation memory
 receipt handoff and current-task handles from operation detail responses.
 `OperationsClient.get` now keeps receipt `active_stage`, handoff
@@ -6410,6 +6418,17 @@ Latest targeted validation for the `2026-04-27` Stage 3 mission memory receipt c
 - `python -m mypy src\francis\memory\mission_receipts.py`
   Result: `passed`
 - `python -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 missions-client memory receipt previous-approval interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `failed before implementation because mission memory receipt parsing omitted current_task_previous_approval_id; passed after parser fix with 15 tests`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

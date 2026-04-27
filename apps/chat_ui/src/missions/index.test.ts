@@ -1465,6 +1465,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           current_task_gate: "operator_review",
           current_task_approval_id: "apr_loop",
           current_task_approval_status: "approved",
+          current_task_previous_approval_id: "apr_previous_loop",
+          current_task_previous_approval_status: "approved",
           current_task_operation_id: "tsk_loop",
           current_task_operation_name: "plan.create",
           current_task_operation_plane: "P9_OBSERVABILITY",
@@ -1527,6 +1529,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         current_task_gate: "operator_review",
         current_task_approval_id: "apr_loop",
         current_task_approval_status: "approved",
+        current_task_previous_approval_id: "apr_previous_loop",
+        current_task_previous_approval_status: "approved",
         current_task_operation_id: "tsk_loop",
         current_task_operation_name: "plan.create",
         current_task_operation_plane: "P9_OBSERVABILITY",
@@ -1568,6 +1572,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           current_task_gate: "operator_review",
           current_task_approval_id: "apr_loop",
           current_task_approval_status: "approved",
+          current_task_previous_approval_id: "apr_previous_loop",
+          current_task_previous_approval_status: "approved",
           current_task_operation_id: "tsk_loop",
           current_task_operation_name: "plan.create",
           current_task_operation_plane: "P9_OBSERVABILITY",
@@ -1672,6 +1678,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
             current_task_gate: "operator_review",
             current_task_approval_id: "apr_loop",
             current_task_approval_status: "approved",
+            current_task_previous_approval_id: "apr_previous_loop",
+            current_task_previous_approval_status: "approved",
           },
         },
         interface: {
@@ -1746,6 +1754,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.current_task_gate, "operator_review");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.current_task_approval_id, "apr_loop");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.current_task_approval_status, "approved");
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.current_task_previous_approval_id, "apr_previous_loop");
+    assert.equal(response.loop_state?.memory?.latest_memory_receipt?.current_task_previous_approval_status, "approved");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.references?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.memory?.latest_memory_receipt?.references?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.interface?.status, "available");
@@ -1809,6 +1819,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_gate, "operator_review");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_approval_id, "apr_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_approval_status, "approved");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_previous_approval_id, "apr_previous_loop");
+    assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_previous_approval_status, "approved");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_operation_id, "tsk_loop");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_operation_name, "plan.create");
     assert.equal(response.receipt_summary?.latest_memory_receipt?.current_task_operation_plane, "P9_OBSERVABILITY");
@@ -1849,6 +1861,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.latest_memory_receipt?.current_task_gate, "operator_review");
     assert.equal(response.latest_memory_receipt?.current_task_approval_id, "apr_loop");
     assert.equal(response.latest_memory_receipt?.current_task_approval_status, "approved");
+    assert.equal(response.latest_memory_receipt?.current_task_previous_approval_id, "apr_previous_loop");
+    assert.equal(response.latest_memory_receipt?.current_task_previous_approval_status, "approved");
     assert.equal(response.latest_memory_receipt?.current_task_operation_id, "tsk_loop");
     assert.equal(response.latest_memory_receipt?.current_task_operation_name, "plan.create");
     assert.equal(response.latest_memory_receipt?.current_task_operation_plane, "P9_OBSERVABILITY");
@@ -1869,6 +1883,8 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.memory_receipts?.[0]?.handoff_approval_id, "apr_loop");
     assert.equal(response.memory_receipts?.[0]?.current_task_gate, "operator_review");
     assert.equal(response.memory_receipts?.[0]?.current_task_approval_id, "apr_loop");
+    assert.equal(response.memory_receipts?.[0]?.current_task_previous_approval_id, "apr_previous_loop");
+    assert.equal(response.memory_receipts?.[0]?.current_task_previous_approval_status, "approved");
     assert.equal(response.memory_receipts?.[0]?.current_task_operation_name, "plan.create");
     assert.equal(response.memory_receipts?.[0]?.current_task_next_step, "review_completed_mission");
     assert.equal(response.memory_receipts?.[0]?.references?.run_id, "run_loop");

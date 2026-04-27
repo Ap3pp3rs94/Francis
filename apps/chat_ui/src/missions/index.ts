@@ -250,6 +250,8 @@ export type MissionMemoryReceipt = {
   current_task_gate?: string;
   current_task_approval_id?: string;
   current_task_approval_status?: string;
+  current_task_previous_approval_id?: string;
+  current_task_previous_approval_status?: string;
   current_task_operation_id?: string;
   current_task_operation_name?: string;
   current_task_operation_plane?: string;
@@ -1154,6 +1156,8 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     current_task_gate: safeString(raw.current_task_gate, "") || undefined,
     current_task_approval_id: safeString(raw.current_task_approval_id, "") || undefined,
     current_task_approval_status: safeString(raw.current_task_approval_status, "") || undefined,
+    current_task_previous_approval_id: safeString(raw.current_task_previous_approval_id, "") || undefined,
+    current_task_previous_approval_status: safeString(raw.current_task_previous_approval_status, "") || undefined,
     current_task_operation_id: safeString(raw.current_task_operation_id, "") || undefined,
     current_task_operation_name: safeString(raw.current_task_operation_name, "") || undefined,
     current_task_operation_plane: safeString(raw.current_task_operation_plane, "") || undefined,
@@ -1192,6 +1196,8 @@ function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | undefin
     !receipt.current_task_gate &&
     !receipt.current_task_approval_id &&
     !receipt.current_task_approval_status &&
+    !receipt.current_task_previous_approval_id &&
+    !receipt.current_task_previous_approval_status &&
     !receipt.current_task_operation_id &&
     !receipt.current_task_operation_name &&
     !receipt.current_task_operation_plane &&
