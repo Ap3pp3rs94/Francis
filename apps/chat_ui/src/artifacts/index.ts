@@ -41,6 +41,7 @@ export type ArtifactOriginatingReceipt = {
   handoff_stage?: string;
   handoff_action?: string;
   handoff_gate?: string;
+  handoff_mission_id?: string;
   handoff_approval_id?: string;
   handoff_approval_status?: string;
   handoff_operation_id?: string;
@@ -49,8 +50,11 @@ export type ArtifactOriginatingReceipt = {
   handoff_artifact_dir?: string;
   current_task_source?: string;
   current_task_gate?: string;
+  current_task_mission_id?: string;
   current_task_approval_id?: string;
   current_task_approval_status?: string;
+  current_task_previous_approval_id?: string;
+  current_task_previous_approval_status?: string;
   current_task_operation_id?: string;
   current_task_operation_name?: string;
   current_task_operation_plane?: string;
@@ -326,6 +330,7 @@ function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | und
     "handoff_stage",
     "handoff_action",
     "handoff_gate",
+    "handoff_mission_id",
     "handoff_approval_id",
     "handoff_approval_status",
     "handoff_operation_id",
@@ -334,8 +339,11 @@ function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | und
     "handoff_artifact_dir",
     "current_task_source",
     "current_task_gate",
+    "current_task_mission_id",
     "current_task_approval_id",
     "current_task_approval_status",
+    "current_task_previous_approval_id",
+    "current_task_previous_approval_status",
     "current_task_operation_id",
     "current_task_operation_name",
     "current_task_operation_plane",

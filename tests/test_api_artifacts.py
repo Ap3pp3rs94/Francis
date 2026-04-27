@@ -168,6 +168,66 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
     assert "artifactrecovery123" not in str(body)
 
 
+def test_artifact_inspect_projects_loop_only_originating_receipt_handles(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    artifact_dir = data_root / "artifacts" / "loop_only" / "run_receipt"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "result.json").write_text("{}", encoding="utf-8")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Mission operation receipt with loop-only artifact origin handles.",
+        {
+            "subsystem": "operations.runtime",
+            "domain": "operations",
+            "scope": "mission.loop",
+            "current_task_mission_id": "msn_loop_artifact_current",
+            "handoff_mission_id": "msn_loop_artifact_handoff",
+            "current_task_operation_id": "tsk_loop_artifact_current",
+            "handoff_operation_id": "tsk_loop_artifact_handoff",
+            "current_task_approval_id": "apr_loop_artifact_current",
+            "handoff_approval_id": "apr_loop_artifact_handoff",
+            "current_task_trace_id": "trace_loop_artifact_current",
+            "handoff_trace_id": "trace_loop_artifact_handoff",
+            "current_task_run_id": "run_loop_artifact_current",
+            "handoff_run_id": "run_loop_artifact_handoff",
+            "current_task_artifact_dir": str(artifact_dir),
+            "operation_status": "succeeded",
+        },
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/artifacts/inspect", params={"artifact_dir": "loop_only/run_receipt"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    receipt = body["originating_receipt"]
+    assert receipt["matched_artifact_field"] == "current_task_artifact_dir"
+    assert receipt["mission_id"] == "msn_loop_artifact_current"
+    assert receipt["operation_id"] == "tsk_loop_artifact_current"
+    assert receipt["approval_id"] == "apr_loop_artifact_current"
+    assert receipt["trace_id"] == "trace_loop_artifact_current"
+    assert receipt["run_id"] == "run_loop_artifact_current"
+    assert receipt["artifact_dir"] == str(artifact_dir)
+    assert receipt["current_task_mission_id"] == "msn_loop_artifact_current"
+    assert receipt["handoff_mission_id"] == "msn_loop_artifact_handoff"
+    assert receipt["references"] == {
+        "mission_id": "msn_loop_artifact_current",
+        "operation_id": "tsk_loop_artifact_current",
+        "approval_id": "apr_loop_artifact_current",
+        "trace_id": "trace_loop_artifact_current",
+        "run_id": "run_loop_artifact_current",
+        "artifact_dir": str(artifact_dir),
+    }
+
+
 def test_artifact_inspect_rejects_paths_outside_artifact_root(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

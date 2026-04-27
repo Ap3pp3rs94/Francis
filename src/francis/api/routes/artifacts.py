@@ -15,6 +15,8 @@ router = APIRouter()
 _RECEIPT_ARTIFACT_FIELDS = ("artifact_dir", "handoff_artifact_dir", "current_task_artifact_dir", "artifact_path")
 _ORIGIN_RECEIPT_FIELDS = (
     "mission_id",
+    "current_task_mission_id",
+    "handoff_mission_id",
     "operation_id",
     "task_id",
     "approval_id",
@@ -183,6 +185,14 @@ def _receipt_artifact_field(meta: dict[str, object], handles: set[str]) -> str:
     return ""
 
 
+def _first_projection_text(projection: dict[str, object], *fields: str) -> str:
+    for field in fields:
+        value = _safe_str(projection.get(field)).strip()
+        if value:
+            return value
+    return ""
+
+
 def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[str, object]:
     handles = _artifact_match_handles(root, target, raw)
     if not handles:
@@ -229,15 +239,27 @@ def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[
             if count_value is not None:
                 projection[field] = count_value
 
-        operation_id = _safe_str(projection.get("operation_id") or projection.get("task_id")).strip()
-        if operation_id:
-            projection["operation_id"] = operation_id
-        projection.pop("task_id", None)
-        references = {
-            key: projection[key]
-            for key in ("mission_id", "operation_id", "approval_id", "trace_id", "run_id", "artifact_dir")
-            if _safe_str(projection.get(key)).strip()
+        reference_values = {
+            "mission_id": _first_projection_text(
+                projection, "mission_id", "current_task_mission_id", "handoff_mission_id"
+            ),
+            "operation_id": _first_projection_text(
+                projection, "operation_id", "task_id", "current_task_operation_id", "handoff_operation_id"
+            ),
+            "approval_id": _first_projection_text(
+                projection, "approval_id", "current_task_approval_id", "handoff_approval_id"
+            ),
+            "trace_id": _first_projection_text(projection, "trace_id", "current_task_trace_id", "handoff_trace_id"),
+            "run_id": _first_projection_text(projection, "run_id", "current_task_run_id", "handoff_run_id"),
+            "artifact_dir": _first_projection_text(
+                projection, "artifact_dir", "current_task_artifact_dir", "handoff_artifact_dir"
+            ),
         }
+        for key, value in reference_values.items():
+            if value:
+                projection[key] = value
+        projection.pop("task_id", None)
+        references = {key: value for key, value in reference_values.items() if value}
         if references:
             projection["references"] = references
         return projection

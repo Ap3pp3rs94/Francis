@@ -263,6 +263,73 @@ test("ArtifactsClient.inspect preserves missing artifact state without fabricati
   }
 });
 
+test("ArtifactsClient.inspect preserves loop-only originating receipt handles", async () => {
+  const restoreFetch = installFetch(async () =>
+    jsonResponse({
+      ok: true,
+      artifact_dir: "D:/Francis/data/artifacts/loop_only/run_receipt",
+      relative_path: "loop_only/run_receipt",
+      exists: true,
+      kind: "directory",
+      originating_receipt: {
+        source: "continuity.ledger",
+        matched_artifact_field: "current_task_artifact_dir",
+        mission_id: "msn_loop_current",
+        operation_id: "tsk_loop_current",
+        approval_id: "apr_loop_current",
+        trace_id: "trace_loop_current",
+        run_id: "run_loop_current",
+        artifact_dir: "D:/Francis/data/artifacts/loop_only/run_receipt",
+        current_task_mission_id: "msn_loop_current",
+        handoff_mission_id: "msn_loop_handoff",
+        current_task_previous_approval_id: "apr_loop_previous",
+        current_task_previous_approval_status: "approved",
+        references: {
+          mission_id: "msn_loop_current",
+          operation_id: "tsk_loop_current",
+          approval_id: "apr_loop_current",
+          trace_id: "trace_loop_current",
+          run_id: "run_loop_current",
+          artifact_dir: "D:/Francis/data/artifacts/loop_only/run_receipt",
+        },
+      },
+      entries: [],
+      entry_count: 0,
+      truncated: false,
+    }),
+  );
+
+  try {
+    const client = new ArtifactsClient("http://127.0.0.1:8000");
+    const response = await client.inspect("loop_only/run_receipt", { timeoutMs: 50 });
+
+    assert.deepEqual(response.originating_receipt, {
+      source: "continuity.ledger",
+      matched_artifact_field: "current_task_artifact_dir",
+      mission_id: "msn_loop_current",
+      operation_id: "tsk_loop_current",
+      approval_id: "apr_loop_current",
+      trace_id: "trace_loop_current",
+      run_id: "run_loop_current",
+      artifact_dir: "D:/Francis/data/artifacts/loop_only/run_receipt",
+      current_task_mission_id: "msn_loop_current",
+      handoff_mission_id: "msn_loop_handoff",
+      current_task_previous_approval_id: "apr_loop_previous",
+      current_task_previous_approval_status: "approved",
+      references: {
+        mission_id: "msn_loop_current",
+        operation_id: "tsk_loop_current",
+        approval_id: "apr_loop_current",
+        trace_id: "trace_loop_current",
+        run_id: "run_loop_current",
+        artifact_dir: "D:/Francis/data/artifacts/loop_only/run_receipt",
+      },
+    });
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("ArtifactsClient.inspect does not preserve artifact file contents from drifted responses", async () => {
   const restoreFetch = installFetch(async () =>
     jsonResponse({

@@ -1551,6 +1551,18 @@ already provides them. This is read-only artifact receipt context; it does not
 approve actions, refresh approvals, inspect file contents, retry work, or infer
 missing lineage.
 
+As of `2026-04-27`, artifact-origin readback also normalizes loop-only receipt
+handles into the same bounded origin reference contract. When the matched
+mission-loop receipt provides mission, operation, approval, trace, run, or
+artifact handles only through current-task or handoff metadata,
+`GET /artifacts/inspect` promotes those handles into `mission_id`,
+`operation_id`, `approval_id`, `trace_id`, `run_id`, `artifact_dir`, and the
+`references` block using current-task handles before handoff handles. The chat
+UI artifacts client now preserves returned current-task/handoff mission aliases
+and current-task previous approval lineage in the originating receipt. This is
+read-only artifact receipt normalization only; it does not inspect file contents,
+execute operations, alter approvals, retry work, or infer missing mission state.
+
 As of `2026-04-26`, artifact-origin readback also preserves bounded plan receipt
 summaries from the same originating mission-loop receipt. `GET /artifacts/inspect`
 now projects `plan_status`, current step id/title, step count, and checkpoint
@@ -5712,6 +5724,27 @@ Latest targeted validation for the `2026-04-27` Stage 3 artifact-origin current-
 - `python -m ruff format --check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
   Result: `2 files already formatted`
 - `python -m mypy src\francis\api\routes\artifacts.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 artifact-origin loop-handle normalization slice:
+
+- `python -m pytest tests\test_api_artifacts.py::test_artifact_inspect_projects_loop_only_originating_receipt_handles -q`
+  Result: `failed before implementation with KeyError: mission_id; passed after the readback fix`
+- `python -m pytest tests\test_api_artifacts.py -q`
+  Result: `6 passed`
+- `python -m pytest tests\test_api_artifacts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\artifacts.py tests\test_api_artifacts.py`
+  Result: `2 files already formatted`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\artifacts\index.test.ts`
+  Result: `6 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
