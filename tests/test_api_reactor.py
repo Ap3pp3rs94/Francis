@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+_REACTOR_ACTOR = "test.reactor.write"
+
+
+def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    empty_status = client.get("/reactor/status")
+    assert empty_status.status_code == 200
+    assert empty_status.json()["ok"] is True
+    assert empty_status.json()["total"] == 0
+    assert empty_status.json()["dispatch_engine"] == "not_implemented"
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "trigger_type": "mission_tick",
+            "summary": "Mission queue has a ready item",
+            "actor": _REACTOR_ACTOR,
+            "mode": "pilot",
+            "mission_id": "msn_reactor_ready",
+            "operation_id": "tsk_reactor_ready",
+            "risk_tier": "normal",
+            "action_class": "mission_tick",
+            "max_actions": 2,
+            "max_runtime_seconds": 90,
+            "stop_conditions": ["advanced_once", "approval_required", "budget_exhausted"],
+            "metadata": {"queue": "mission"},
+        },
+    )
+    assert queued.status_code == 200
+    queued_body = queued.json()
+    assert queued_body["ok"] is True
+    assert queued_body["applied"] is True
+    event = queued_body["event"]
+    event_id = str(queued_body["event_id"])
+    assert event["trigger"]["source"] == "mission_queue"
+    assert event["classification"]["mode"] == "pilot"
+    assert event["classification"]["stable_state"] == "awaiting_dispatch"
+    assert event["bounds"]["max_actions"] == 2
+    assert event["dispatch"]["applied"] is False
+    assert event["governance"]["dispatch_authority"] is False
+
+    listed = client.get("/reactor/events/list", params={"trigger_source": "mission_queue"})
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["total"] == 1
+    assert listed_body["items"][0]["event_id"] == event_id
+
+    fetched = client.get("/reactor/events/get", params={"id": event_id})
+    assert fetched.status_code == 200
+    assert fetched.json()["ok"] is True
+    assert fetched.json()["item"]["event_id"] == event_id
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["total"] == 1
+    assert status.json()["trigger_source_counts"] == {"mission_queue": 1}
+
+
+def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "operator asked to continue",
+            "actor": _REACTOR_ACTOR,
+        },
+    )
+    assert denied.status_code == 200
+    assert denied.json()["ok"] is False
+    assert denied.json()["error"] == "api_permission_denied"
+    assert denied.json()["governance"]["scope"] == "reactor.write"
+
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+    client = TestClient(create_app())
+    invalid = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "self_loop",
+            "summary": "keep doing things without a trigger",
+            "actor": _REACTOR_ACTOR,
+        },
+    )
+    assert invalid.status_code == 200
+    assert invalid.json()["ok"] is False
+    assert invalid.json()["error"] == "invalid_trigger_source"
+    assert not (data_root / "reactor" / "events").exists()

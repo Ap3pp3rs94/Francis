@@ -429,6 +429,18 @@ staging metadata, review, promotion, and catalog readback. Nothing auto-promotes
 and staged candidates remain non-operative until explicit promotion succeeds.
 Stage 5/Reactor has not begun in this entry.
 
+As of `2026-04-27`, Stage 5/Reactor has begun with a non-dispatching event
+intake queue and decision journal. `/reactor/status`, `/reactor/events/list`,
+and `/reactor/events/get` expose read-only Reactor queue state, while
+`POST /reactor/events/enqueue` requires a new explicit `reactor.write` actor
+scope before it writes any event record. Enqueued events must come from a known
+trigger source, carry a summary, and are stored under `data/reactor/events/`
+with redacted trigger metadata, classification, mode/risk/action class,
+execution budgets, stop conditions, dispatch status, stable state, decision
+journal, and an intake receipt. The current dispatch engine is explicitly
+`not_implemented`; the slice creates no autonomous execution, approval,
+promotion, memory-write, plugin, mission, or operation authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4302,6 +4314,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor trigger
+intake queue slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py src\francis\api\app.py`
+  Result: `failed before fixing optional trigger narrowing; passed after fix`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py src\francis\api\app.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py src\francis\api\app.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
 capability catalog readback slice:
@@ -8635,6 +8663,9 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
+- Stage 5/Reactor currently has non-dispatching trigger intake and readback
+  only; bounded dispatch, verification, retry/backoff, deadletter/escalation,
+  stable-return receipts, and operator visibility are still remaining work
 
 ## 6. Update rule
 
