@@ -118,6 +118,9 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert quality_analysis["requirements"]["tests"] is True
     assert quality_analysis["requirements"]["docs"] is True
     assert quality_analysis["requirements"]["risk_tier"] is True
+    assert quality_analysis["evidence"]["validation_receipt_id"] == validation_receipt_id
+    assert quality_analysis["evidence"]["validation_receipt_path"] == str(built_body["validation_receipt_path"])
+    assert quality_analysis["evidence"]["validation_receipt_present"] is True
     assert quality_analysis["governance"]["analysis_only"] is True
     assert quality_analysis["governance"]["promotion_authority"] is False
     assert quality_analysis["governance"]["execution_authority"] is False

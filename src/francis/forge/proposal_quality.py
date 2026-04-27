@@ -22,6 +22,7 @@ def analyze_proposal_quality(proposal: Mapping[str, Any]) -> dict[str, Any]:
     friction = _mapping(proposal.get("friction"))
     quality = _mapping(proposal.get("quality_requirements") or proposal.get("quality"))
     review = _mapping(proposal.get("review"))
+    validation = _mapping(proposal.get("validation"))
 
     proposal_id = _text(proposal.get("proposal_id") or proposal.get("id"))
     plugin_id = _text(proposal.get("plugin_id"))
@@ -29,6 +30,17 @@ def analyze_proposal_quality(proposal: Mapping[str, Any]) -> dict[str, Any]:
     risk_tier = _label(quality.get("risk_tier"), fallback="")
     review_status = _label(review.get("status") or proposal.get("review_status") or status)
     review_receipt_id = _text(proposal.get("review_receipt_id") or review.get("receipt_id"))
+    validation_receipt_id = _text(
+        proposal.get("validation_receipt_id")
+        or validation.get("validation_receipt_id")
+        or validation.get("receipt_id")
+        or validation.get("validation_id")
+    )
+    validation_receipt_path = _text(
+        proposal.get("validation_receipt_path")
+        or validation.get("validation_receipt_path")
+        or validation.get("receipt_path")
+    )
 
     requirements = {
         "proposal_id": bool(proposal_id),
@@ -56,6 +68,9 @@ def analyze_proposal_quality(proposal: Mapping[str, Any]) -> dict[str, Any]:
             "risk_tier": risk_tier,
             "review_status": review_status,
             "review_receipt_id": review_receipt_id,
+            "validation_receipt_id": validation_receipt_id,
+            "validation_receipt_path": validation_receipt_path,
+            "validation_receipt_present": bool(validation_receipt_id or validation_receipt_path),
             "proposal_evidence": _str_list(friction.get("evidence") or proposal.get("proposal_evidence")),
             "tests": _str_list(quality.get("tests") or proposal.get("tests")),
             "docs": _str_list(quality.get("docs") or proposal.get("docs")),

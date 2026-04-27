@@ -301,6 +301,16 @@ validation receipts a new promotion gate, changing proposal decisions, granting
 approval authority, granting promotion authority, executing tools, writing
 memory, or creating UI claims.
 
+As of `2026-04-27`, the passive Forge proposal-quality analyzer also preserves
+validation receipt evidence from proposal records. `quality_analysis.evidence`
+now includes the linked validation receipt id/path and a boolean presence flag,
+and the read-only proposal API readback carries those fields through
+`GET /forge/proposals/list` and `/forge/proposals/get`. This is readback-only
+analysis evidence: it does not make validation receipts a new proposal-quality
+requirement, does not change promotion readiness, does not change proposal
+decisions, does not grant approval or promotion authority, does not execute
+tools, does not write memory, and does not create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4174,6 +4184,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal-quality
+validation-receipt evidence readback slice:
+
+- `python -m pytest tests\unit\test_forge_proposal_quality.py -q`
+  Result: `3 passed`
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\unit\test_forge_proposal_quality.py tests\unit\test_forge_proposal_quality_summary.py -q`
+  Result: `7 passed`
+- `python -m mypy src\francis\forge\proposal_quality.py src\francis\api\routes\forge.py`
+  Result: `passed`
+- `python -m ruff check src\francis\forge\proposal_quality.py tests\unit\test_forge_proposal_quality.py tests\test_api_forge.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\forge\proposal_quality.py tests\unit\test_forge_proposal_quality.py tests\test_api_forge.py`
+  Result: `passed after formatting tests\unit\test_forge_proposal_quality.py`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge validation
 receipt promotion-evidence linkage slice:

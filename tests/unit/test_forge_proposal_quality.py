@@ -22,6 +22,10 @@ def test_proposal_quality_accepts_complete_forge_proposal_contract() -> None:
                 "known_limits": ["local generated plugin only"],
             },
             "review": {"status": "approved", "receipt_id": "plugin_proposal_review_1"},
+            "validation": {
+                "validation_receipt_id": "plugin_validation_1",
+                "validation_receipt_path": "data/artifacts/plugins/validations/plugin_validation_1.json",
+            },
         }
     )
 
@@ -44,6 +48,11 @@ def test_proposal_quality_accepts_complete_forge_proposal_contract() -> None:
     assert analysis["evidence"]["risk_tier"] == "normal"
     assert analysis["evidence"]["review_status"] == "approved"
     assert analysis["evidence"]["review_receipt_id"] == "plugin_proposal_review_1"
+    assert analysis["evidence"]["validation_receipt_id"] == "plugin_validation_1"
+    assert (
+        analysis["evidence"]["validation_receipt_path"] == "data/artifacts/plugins/validations/plugin_validation_1.json"
+    )
+    assert analysis["evidence"]["validation_receipt_present"] is True
     assert analysis["governance"] == {
         "analysis_only": True,
         "promotion_authority": False,
@@ -84,6 +93,9 @@ def test_proposal_quality_reports_deterministic_missing_requirements() -> None:
     assert analysis["requirements"]["risk_tier"] is False
     assert analysis["evidence"]["risk_tier"] == "experimental"
     assert analysis["evidence"]["review_status"] == "staged"
+    assert analysis["evidence"]["validation_receipt_id"] == ""
+    assert analysis["evidence"]["validation_receipt_path"] == ""
+    assert analysis["evidence"]["validation_receipt_present"] is False
     assert analysis["governance"]["next_step"] == "review_missing_proposal_quality_requirements"
 
 
