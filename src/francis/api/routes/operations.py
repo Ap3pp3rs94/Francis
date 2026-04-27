@@ -9,13 +9,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
 from francis.api.routes._operator_posture import posture_write_guard
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.operation_redaction import (
     redact_operation_metadata,
     redact_operation_optional_text,
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 _TASK_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 _TERMINAL_STATUSES = {"complete", "completed", "failed", "canceled", "cancelled"}
 _RETRYABLE_GOVERNANCE_STATUSES = {"pending", "needs_approval", "blocked", "denied"}
+_OPERATIONS_RUN_SCOPE = "operations.run"
+_DEFAULT_OPERATION_RUN_ACTOR = "api.operations"
 
 _ACTION_TO_CAPABILITY: dict[str, str] = {
     "chat.summarize": "chat.summarize",
@@ -103,6 +106,7 @@ class OperationGetManyIn(BaseModel):
 
 class OperationRunIn(BaseModel):
     worker_id: str = "api.operations"
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
 
 
 class WorkerRunOnceIn(BaseModel):
@@ -113,6 +117,7 @@ class WorkerRunOnceIn(BaseModel):
     profile: str = "dev"
     run_mode: str = "api"
     log_level: str = "INFO"
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
 
 
 def _safe_str(value: Any) -> str:
@@ -131,6 +136,29 @@ def _execution_posture_guard(action_label: str) -> str:
         observe_message="Observe mode keeps execution read-only.",
         writes_blocked_message="Current operator posture blocks writes.",
     )
+
+
+def _operation_run_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_OPERATIONS_RUN_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_running_operations",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _now_iso() -> str:
@@ -830,7 +858,10 @@ def create_operation(payload: OperationCreateIn) -> dict[str, object]:
 
 
 @router.post("/run-once")
-def run_workers_once(payload: WorkerRunOnceIn) -> dict[str, object]:
+def run_workers_once(request: Request, payload: WorkerRunOnceIn) -> dict[str, object]:
+    permission = _operation_run_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return {**_permission_denied(permission), "exit_code": 1}
     blocked_reason = _execution_posture_guard("running a worker cycle")
     if blocked_reason:
         return {"ok": False, "exit_code": 1, "error": blocked_reason, "status": "blocked"}
@@ -1061,7 +1092,10 @@ def cancel_operation(operation_id: str, payload: OperationCancelIn) -> dict[str,
 
 
 @router.post("/{operation_id}/run")
-def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, object]:
+def run_operation(operation_id: str, request: Request, payload: OperationRunIn) -> dict[str, object]:
+    permission = _operation_run_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
     blocked_reason = _execution_posture_guard("running queued work")
     if blocked_reason:
         detail = operations_runtime.get_operation_detail(operation_id, include_logs=False)

@@ -275,6 +275,51 @@ def test_operations_run_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) 
     assert fetched_body["operation"]["status"] == "queued"
 
 
+def test_operations_run_denies_unscoped_actor_before_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "permission_gate_run",
+            "input": {"goal": "do not execute without scoped actor"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    denied = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.operations.permission_gate", "actor": "test.operations.run"},
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["operation"]["status"] == "queued"
+    assert fetched_body["operation"].get("output") is None
+
+
 def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -403,6 +448,43 @@ def test_operations_run_once_worker_route_completes_cleanly(monkeypatch, tmp_pat
     body = run_once.json()
     assert body["ok"] is True
     assert body["exit_code"] == 0
+
+
+def test_operations_run_once_denies_unscoped_actor_before_worker_cycle(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/operations/run-once",
+        json={
+            "queue": "default",
+            "kind": "default",
+            "concurrency": 1,
+            "heartbeat_s": 0.1,
+            "profile": "dev",
+            "run_mode": "api",
+            "log_level": "INFO",
+            "actor": "test.operations.run",
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["exit_code"] == 1
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
 
 
 def test_operations_run_once_worker_route_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
