@@ -36,6 +36,9 @@ import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type {
+  PluginCapabilityCatalogCoherence,
+  PluginCapabilityCatalogEntry,
+  PluginCapabilityCatalogSummary,
   PluginForgePromotion,
   PluginForgeProposal,
   PluginForgeProposalDecisionAction,
@@ -10001,6 +10004,11 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [description, setDescription] = useState("");
   const [plugins, setPlugins] = useState<PluginRef[]>([]);
   const [tools, setTools] = useState<PluginToolRef[]>([]);
+  const [capabilityCatalog, setCapabilityCatalog] = useState<PluginCapabilityCatalogEntry[]>([]);
+  const [capabilityCatalogSummary, setCapabilityCatalogSummary] = useState<PluginCapabilityCatalogSummary | null>(null);
+  const [capabilityCatalogCoherence, setCapabilityCatalogCoherence] = useState<PluginCapabilityCatalogCoherence | null>(
+    null,
+  );
   const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
   const [forgeProposals, setForgeProposals] = useState<PluginForgeProposal[]>([]);
   const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
@@ -10035,6 +10043,27 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const selectedPromotionReady = Boolean(
     selectedPromotionReadiness && (selectedPromotionReadiness.ready || selectedPromotionReadiness.status === "ready"),
   );
+  const selectedCapabilityCatalogEntry = useMemo(
+    () => capabilityCatalog.find((item) => item.capability === selectedPluginId) ?? null,
+    [capabilityCatalog, selectedPluginId],
+  );
+  const capabilityCatalogCounts = useMemo(() => {
+    const statusCounts = capabilityCatalogSummary?.status_counts ?? {};
+    const coherenceGapCount =
+      (capabilityCatalogCoherence?.duplicate_capabilities?.length ?? 0) +
+      (capabilityCatalogCoherence?.duplicate_proposals?.length ?? 0) +
+      (capabilityCatalogCoherence?.lineage_gaps?.length ?? 0) +
+      (capabilityCatalogCoherence?.validation_lineage_gaps?.length ?? 0) +
+      (capabilityCatalogCoherence?.quality_gaps?.length ?? 0);
+    return {
+      total: capabilityCatalogSummary?.total ?? capabilityCatalog.length,
+      staged: statusCounts.staged ?? capabilityCatalog.filter((item) => item.status === "staged").length,
+      promoted: statusCounts.promoted ?? capabilityCatalog.filter((item) => item.status === "promoted").length,
+      tested: capabilityCatalogSummary?.tested_count ?? 0,
+      documented: capabilityCatalogSummary?.documented_count ?? 0,
+      coherenceGapCount,
+    };
+  }, [capabilityCatalog, capabilityCatalogCoherence, capabilityCatalogSummary]);
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
     const blocked = promotionReadiness.filter((item) => !item.ready && item.status !== "ready").length;
@@ -10110,8 +10139,9 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, readiness, proposals, proposalReviews, promotions] = await Promise.all([
+      const [res, capabilityCatalogRes, readiness, proposals, proposalReviews, promotions] = await Promise.all([
         client.list({ limit: 200 }),
+        client.listCapabilityCatalog({ limit: 5000 }),
         client.listPromotionReadiness({ limit: 200 }),
         client.listForgeProposals({ limit: 200 }),
         client.listForgeProposalReviews({ limit: 200 }),
@@ -10119,6 +10149,9 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       ]);
       const items = res.items ?? [];
       setPlugins(items);
+      setCapabilityCatalog(capabilityCatalogRes.items ?? []);
+      setCapabilityCatalogSummary(capabilityCatalogRes.summary ?? null);
+      setCapabilityCatalogCoherence(capabilityCatalogRes.coherence ?? null);
       setPromotionReadiness(readiness.items ?? []);
       setForgeProposals(proposals.items ?? []);
       setForgeProposalReviews(proposalReviews.items ?? []);
@@ -10469,6 +10502,84 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
           {String(selectedPlugin.enabled ?? false)}
         </div>
       ) : null}
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#101617",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Forge Capability Catalog</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("catalog")}>catalog {capabilityCatalogCounts.total}</span>
+            <span style={badgeStyle("staged")}>staged {capabilityCatalogCounts.staged}</span>
+            <span style={badgeStyle("promoted")}>promoted {capabilityCatalogCounts.promoted}</span>
+            <span style={badgeStyle(capabilityCatalogCounts.coherenceGapCount > 0 ? "blocked" : "clear")}>
+              coherence gaps {capabilityCatalogCounts.coherenceGapCount}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, fontSize: 11, color: THEME.muted }}>
+          <span style={badgeStyle("tests")}>tested {capabilityCatalogCounts.tested}</span>
+          <span style={badgeStyle("docs")}>documented {capabilityCatalogCounts.documented}</span>
+          <span style={badgeStyle("coherence")}>coherence total {capabilityCatalogCoherence?.total ?? 0}</span>
+        </div>
+
+        {selectedCapabilityCatalogEntry ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(selectedCapabilityCatalogEntry.status || "catalog")}>
+                {selectedCapabilityCatalogEntry.status || "catalog"}
+              </span>
+              {selectedCapabilityCatalogEntry.source ? (
+                <span style={badgeStyle(selectedCapabilityCatalogEntry.source)}>source {selectedCapabilityCatalogEntry.source}</span>
+              ) : null}
+              {selectedCapabilityCatalogEntry.risk_tier ? (
+                <span style={badgeStyle(selectedCapabilityCatalogEntry.risk_tier)}>
+                  risk {selectedCapabilityCatalogEntry.risk_tier}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              capability <code>{selectedCapabilityCatalogEntry.capability}</code>
+              {selectedCapabilityCatalogEntry.version ? (
+                <>
+                  {" "}
+                  / version <code>{selectedCapabilityCatalogEntry.version}</code>
+                </>
+              ) : null}
+            </div>
+            {selectedCapabilityCatalogEntry.proposal_id ? (
+              <div style={{ marginTop: 4 }}>
+                proposal <code>{selectedCapabilityCatalogEntry.proposal_id}</code>
+              </div>
+            ) : null}
+            {selectedCapabilityCatalogEntry.promotion_receipt_id ? (
+              <div style={{ marginTop: 4 }}>
+                promotion receipt <code>{selectedCapabilityCatalogEntry.promotion_receipt_id}</code>
+              </div>
+            ) : null}
+            {safeString(selectedCapabilityCatalogEntry.metadata?.validation_receipt_id).trim() ? (
+              <div style={{ marginTop: 4 }}>
+                validation receipt <code>{safeString(selectedCapabilityCatalogEntry.metadata?.validation_receipt_id).trim()}</code>
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle("tests")}>tests {selectedCapabilityCatalogEntry.quality?.tests?.length ?? 0}</span>
+              <span style={badgeStyle("docs")}>docs {selectedCapabilityCatalogEntry.quality?.docs?.length ?? 0}</span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            Selected plugin has no capability catalog entry returned by the backend.
+          </div>
+        )}
+      </div>
 
       <div
         style={{

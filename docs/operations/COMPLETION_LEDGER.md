@@ -321,6 +321,16 @@ This is backend readback only: it does not add UI controls, mutate proposal
 decisions, change promotion readiness, grant approval or promotion authority,
 execute tools, write memory, or publish marketplace capabilities.
 
+As of `2026-04-27`, the chat UI plugin browser has a first read-only Forge
+capability catalog surface. The plugin browser client now parses
+`/plugins/capabilities/catalog`, and the Plugins panel displays backend-returned
+catalog totals, staged/promoted counts, tested/documented counts, coherence gap
+counts, and selected-plugin capability lineage such as proposal, promotion
+receipt, validation receipt, risk tier, source, and tests/docs counts. This is
+operator readback only: it does not add proposal decisions, change promotion
+readiness, grant approval or promotion authority, execute tools, write memory,
+or infer catalog truth client-side.
+
 As of `2026-04-27`, Stage 4/Forge proposal artifacts also have a passive
 quality-readiness analyzer. The analyzer accepts existing `plugin.proposal`
 records and normalizes the current friction, evidence, tests, docs, risk tier,
@@ -4269,6 +4279,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
+capability catalog readback slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\plugin_browser\index.test.ts`
+  Result: `8 passed`
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `78 passed`
+- `python -m ruff check tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`; Git also reported the existing CRLF/LF working-copy warning
+  for `apps/chat_ui/src/plugin_browser/index.ts`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge capability
 catalog API readback slice:

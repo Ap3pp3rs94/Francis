@@ -588,6 +588,61 @@ export type PluginForgePromotionListResponse = {
   limit?: number;
 };
 
+export type PluginCapabilityCatalogParams = {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  risk_tier?: string;
+  source?: string;
+};
+
+export type PluginCapabilityCatalogQuality = {
+  tests?: string[];
+  docs?: string[];
+};
+
+export type PluginCapabilityCatalogEntry = {
+  capability: string;
+  version?: string;
+  status?: string;
+  risk_tier?: string;
+  source?: string;
+  price?: number;
+  proposal_id?: string;
+  promotion_receipt_id?: string;
+  quality?: PluginCapabilityCatalogQuality;
+  metadata?: Record<string, unknown>;
+};
+
+export type PluginCapabilityCatalogSummary = {
+  total?: number;
+  status_counts?: Record<string, number>;
+  risk_tier_counts?: Record<string, number>;
+  source_counts?: Record<string, number>;
+  tested_count?: number;
+  documented_count?: number;
+};
+
+export type PluginCapabilityCatalogCoherence = {
+  total?: number;
+  duplicate_capabilities?: unknown[];
+  duplicate_proposals?: unknown[];
+  lineage_gaps?: unknown[];
+  validation_lineage_gaps?: unknown[];
+  quality_gaps?: unknown[];
+};
+
+export type PluginCapabilityCatalogResponse = {
+  items: PluginCapabilityCatalogEntry[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+  summary?: PluginCapabilityCatalogSummary;
+  coherence?: PluginCapabilityCatalogCoherence;
+  catalog?: Record<string, unknown>;
+  filters?: Record<string, string>;
+};
+
 /* -------------------------------------------------------------------------------------------------
  * Errors
  * ------------------------------------------------------------------------------------------------- */
@@ -1233,6 +1288,80 @@ function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
   return item;
 }
 
+function parseCapabilityCatalogEntry(raw: unknown): PluginCapabilityCatalogEntry | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, safeString(raw.plugin_id, ""))).trim();
+  if (!capability) return null;
+
+  const entry: PluginCapabilityCatalogEntry = { capability };
+  const version = safeString(raw.version, "");
+  const status = safeString(raw.status, "");
+  const riskTier = safeString(raw.risk_tier, safeString(raw.riskTier, ""));
+  const source = safeString(raw.source, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const promotionReceiptId = safeString(raw.promotion_receipt_id, safeString(raw.promotionReceiptId, ""));
+  if (version) entry.version = version;
+  if (status) entry.status = status;
+  if (riskTier) entry.risk_tier = riskTier;
+  if (source) entry.source = source;
+  if (typeof raw.price === "number" && Number.isFinite(raw.price)) entry.price = raw.price;
+  if (proposalId) entry.proposal_id = proposalId;
+  if (promotionReceiptId) entry.promotion_receipt_id = promotionReceiptId;
+
+  const qualityRaw = isRecord(raw.quality) ? raw.quality : {};
+  const quality: PluginCapabilityCatalogQuality = {};
+  const tests = safeStringArray(qualityRaw.tests);
+  const docs = safeStringArray(qualityRaw.docs);
+  if (tests) quality.tests = tests;
+  if (docs) quality.docs = docs;
+  if (Object.keys(quality).length > 0) entry.quality = quality;
+
+  if (isRecord(raw.metadata)) entry.metadata = raw.metadata;
+
+  return entry;
+}
+
+function parseCapabilityCatalogSummary(raw: unknown): PluginCapabilityCatalogSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const summary: PluginCapabilityCatalogSummary = {};
+  const total = safeNumber(raw.total, NaN);
+  const testedCount = safeNumber(raw.tested_count, NaN);
+  const documentedCount = safeNumber(raw.documented_count, NaN);
+  if (Number.isFinite(total)) summary.total = total;
+  if (Number.isFinite(testedCount)) summary.tested_count = testedCount;
+  if (Number.isFinite(documentedCount)) summary.documented_count = documentedCount;
+  if (isRecord(raw.status_counts)) summary.status_counts = numericRecord(raw.status_counts);
+  if (isRecord(raw.risk_tier_counts)) summary.risk_tier_counts = numericRecord(raw.risk_tier_counts);
+  if (isRecord(raw.source_counts)) summary.source_counts = numericRecord(raw.source_counts);
+
+  return Object.keys(summary).length > 0 ? summary : undefined;
+}
+
+function parseCapabilityCatalogCoherence(raw: unknown): PluginCapabilityCatalogCoherence | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const coherence: PluginCapabilityCatalogCoherence = {};
+  const total = safeNumber(raw.total, NaN);
+  if (Number.isFinite(total)) coherence.total = total;
+  if (Array.isArray(raw.duplicate_capabilities)) coherence.duplicate_capabilities = raw.duplicate_capabilities;
+  if (Array.isArray(raw.duplicate_proposals)) coherence.duplicate_proposals = raw.duplicate_proposals;
+  if (Array.isArray(raw.lineage_gaps)) coherence.lineage_gaps = raw.lineage_gaps;
+  if (Array.isArray(raw.validation_lineage_gaps)) coherence.validation_lineage_gaps = raw.validation_lineage_gaps;
+  if (Array.isArray(raw.quality_gaps)) coherence.quality_gaps = raw.quality_gaps;
+
+  return Object.keys(coherence).length > 0 ? coherence : undefined;
+}
+
+function numericRecord(raw: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+  }
+  return out;
+}
+
 /* -------------------------------------------------------------------------------------------------
  * Endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -1240,6 +1369,7 @@ function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
 export type PluginBrowserEndpoints = {
   list: (q?: PluginListParams) => string;
   get: (id: string) => string;
+  capabilityCatalog: (q?: PluginCapabilityCatalogParams) => string;
   promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
   proposalsList: (q?: PluginForgeArtifactListParams) => string;
   proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
@@ -1282,6 +1412,14 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
       })}`,
 
     get: (id: string) => `/plugins/get${encodeQuery({ id })}`,
+    capabilityCatalog: (q) =>
+      `/plugins/capabilities/catalog${encodeQuery({
+        limit: q?.limit,
+        offset: q?.offset,
+        status: q?.status,
+        risk_tier: q?.risk_tier,
+        source: q?.source,
+      })}`,
     promotionReadinessList: (q) =>
       `/forge/promotion_readiness/list${encodeQuery({
         limit: q?.limit,
@@ -1794,6 +1932,51 @@ export class PluginBrowserClient {
       total: total > 0 ? total : undefined,
       offset: offset >= 0 ? offset : undefined,
       limit: limit > 0 ? limit : undefined,
+    };
+  }
+
+  /**
+   * List read-only Forge capability catalog entries and coherence evidence.
+   */
+  async listCapabilityCatalog(
+    params?: PluginCapabilityCatalogParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityCatalogResponse> {
+    const url = this.url(this.endpoints.capabilityCatalog(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { items: [] };
+
+    const raw =
+      Array.isArray((json as Record<string, unknown>).items)
+        ? ((json as Record<string, unknown>).items as unknown[])
+        : Array.isArray((json as Record<string, unknown>).capabilities)
+          ? ((json as Record<string, unknown>).capabilities as unknown[])
+          : [];
+
+    const items = raw.map(parseCapabilityCatalogEntry).filter((x): x is PluginCapabilityCatalogEntry => x !== null);
+    const total = safeNumber((json as Record<string, unknown>).total, 0);
+    const offset = safeNumber((json as Record<string, unknown>).offset, 0);
+    const limit = safeNumber((json as Record<string, unknown>).limit, 0);
+    const filters = isRecord((json as Record<string, unknown>).filters)
+      ? Object.fromEntries(
+          Object.entries((json as Record<string, unknown>).filters as Record<string, unknown>).map(([key, value]) => [
+            key,
+            safeString(value, ""),
+          ]),
+        )
+      : undefined;
+
+    return {
+      items,
+      total: total > 0 ? total : undefined,
+      offset: offset >= 0 ? offset : undefined,
+      limit: limit > 0 ? limit : undefined,
+      summary: parseCapabilityCatalogSummary((json as Record<string, unknown>).summary),
+      coherence: parseCapabilityCatalogCoherence((json as Record<string, unknown>).coherence),
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+      filters,
     };
   }
 

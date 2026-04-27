@@ -443,3 +443,92 @@ test("PluginBrowserClient lists Forge promotion receipts", async () => {
     restoreFetch();
   }
 });
+
+test("PluginBrowserClient lists Forge capability catalog readback", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    return jsonResponse({
+      ok: true,
+      total: 1,
+      offset: 0,
+      limit: 5,
+      filters: {
+        status: "staged",
+        risk_tier: "normal",
+        source: "",
+      },
+      items: [
+        {
+          capability: "pl_stage",
+          version: "0.1.0",
+          status: "staged",
+          risk_tier: "normal",
+          source: "generated",
+          proposal_id: "proposal_pl_stage_1",
+          quality: {
+            tests: ["tests/test_api_plugins.py::test_plugins_capability_catalog_readback"],
+            docs: ["README.md"],
+          },
+          metadata: {
+            plugin_name: "Stage Helper",
+            validation_receipt_id: "plugin_validation_pl_stage_1",
+            proposal_evidence: ["mission.forge.catalog"],
+          },
+        },
+      ],
+      summary: {
+        total: 1,
+        status_counts: {
+          staged: 1,
+        },
+        risk_tier_counts: {
+          normal: 1,
+        },
+        source_counts: {
+          generated: 1,
+        },
+        tested_count: 1,
+        documented_count: 1,
+      },
+      coherence: {
+        total: 1,
+        duplicate_capabilities: [],
+        duplicate_proposals: [],
+        lineage_gaps: [],
+        validation_lineage_gaps: [],
+        quality_gaps: [],
+      },
+      catalog: {
+        total_plugins: 1,
+        total_tools: 1,
+        path: "D:/Francis/data/plugins/catalog.json",
+      },
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const res = await client.listCapabilityCatalog({ status: "staged", risk_tier: "normal", limit: 5 });
+
+    assert.deepEqual(requests, ["/plugins/capabilities/catalog?limit=5&status=staged&risk_tier=normal"]);
+    assert.equal(res.total, 1);
+    assert.equal(res.limit, 5);
+    assert.equal(res.items[0]?.capability, "pl_stage");
+    assert.equal(res.items[0]?.status, "staged");
+    assert.equal(res.items[0]?.source, "generated");
+    assert.equal(res.items[0]?.proposal_id, "proposal_pl_stage_1");
+    assert.deepEqual(res.items[0]?.quality?.docs, ["README.md"]);
+    assert.equal(res.items[0]?.metadata?.plugin_name, "Stage Helper");
+    assert.equal(res.items[0]?.metadata?.validation_receipt_id, "plugin_validation_pl_stage_1");
+    assert.equal(res.summary?.tested_count, 1);
+    assert.equal(res.summary?.status_counts?.staged, 1);
+    assert.equal(res.coherence?.validation_lineage_gaps?.length, 0);
+    assert.equal(res.catalog?.total_plugins, 1);
+    assert.equal(res.filters?.status, "staged");
+  } finally {
+    restoreFetch();
+  }
+});
