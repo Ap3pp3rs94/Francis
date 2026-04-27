@@ -96,6 +96,8 @@ def _is_under(root: Path, target: Path) -> bool:
 def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:
     if collection == "proposals":
         return _safe_str(item.get("proposal_id")).strip() or path.stem
+    if collection == "validations":
+        return _safe_str(item.get("validation_id")).strip() or path.stem
     if collection == "promotions":
         return _safe_str(item.get("receipt_id")).strip() or path.stem
     if collection == "proposal_reviews":
@@ -106,6 +108,8 @@ def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:
 def _record_ts(item: dict[str, Any], collection: str, path: Path) -> int:
     if collection == "proposals":
         fields = ("created_ts", "staged_ts", "updated_ts")
+    elif collection == "validations":
+        fields = ("validated_ts", "created_ts", "updated_ts")
     elif collection == "proposal_reviews":
         fields = ("decided_ts", "created_ts", "updated_ts")
     else:
@@ -434,6 +438,7 @@ def status() -> dict[str, Any]:
         "status": "ready",
         "proposal_count": len(proposals),
         "proposal_quality_summary": summarize_proposal_quality(proposals),
+        "validation_count": len(_records("validations")),
         "proposal_review_count": len(_records("proposal_reviews")),
         "promotion_count": len(_records("promotions")),
         "promotion_candidate_count": len(readiness_items),
@@ -489,6 +494,31 @@ def list_proposals(
 @router.get("/proposals/get")
 def get_proposal(id: str) -> dict[str, Any]:
     return _get_collection("proposals", id)
+
+
+@router.get("/validations/list")
+def list_validations(
+    limit: int = Query(200, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    id: str | None = None,
+    plugin_id: str | None = None,
+    proposal_id: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    return _list_collection(
+        "validations",
+        limit=limit,
+        offset=offset,
+        id=id,
+        plugin_id=plugin_id,
+        proposal_id=proposal_id,
+        status=status,
+    )
+
+
+@router.get("/validations/get")
+def get_validation(id: str) -> dict[str, Any]:
+    return _get_collection("validations", id)
 
 
 @router.post("/proposals/decision")

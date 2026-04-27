@@ -38,6 +38,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert empty_status.json()["proposal_count"] == 0
     assert empty_status.json()["proposal_quality_summary"]["total"] == 0
     assert empty_status.json()["proposal_quality_summary"]["governance"]["analysis_only"] is True
+    assert empty_status.json()["validation_count"] == 0
     assert empty_status.json()["proposal_review_count"] == 0
     assert empty_status.json()["promotion_count"] == 0
 
@@ -62,6 +63,41 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
     proposal_id = str(built_body["proposal_id"])
+    validation_receipt_id = str(built_body["validation_receipt_id"])
+    validation_receipt = built_body["validation_receipt"]
+    assert validation_receipt["kind"] == "plugin.validation.receipt"
+    assert validation_receipt["validation_id"] == validation_receipt_id
+    assert validation_receipt["plugin_id"] == plugin_id
+    assert validation_receipt["proposal_id"] == proposal_id
+    assert validation_receipt["status"] == "passed"
+    assert validation_receipt["valid"] is True
+    assert validation_receipt["validation"]["valid"] is True
+    assert validation_receipt["governance"]["promotion_authority"] is False
+    assert validation_receipt["governance"]["execution_authority"] is False
+    assert validation_receipt["governance"]["approval_authority"] is False
+    assert raw_secret not in str(validation_receipt)
+
+    validations = client.get("/forge/validations/list", params={"plugin_id": plugin_id})
+    assert validations.status_code == 200
+    validations_body = validations.json()
+    assert validations_body["total"] == 1
+    validation_item = validations_body["items"][0]
+    assert validation_item["id"] == validation_receipt_id
+    assert validation_item["validation_id"] == validation_receipt_id
+    assert validation_item["plugin_id"] == plugin_id
+    assert validation_item["proposal_id"] == proposal_id
+    assert validation_item["status"] == "passed"
+    assert validation_item["valid"] is True
+    assert validation_item["relative_path"] == f"validations/{validation_receipt_id}.json"
+    assert raw_secret not in str(validations_body)
+
+    validation_get = client.get("/forge/validations/get", params={"id": validation_receipt_id})
+    assert validation_get.status_code == 200
+    validation_get_body = validation_get.json()
+    assert validation_get_body["ok"] is True
+    assert validation_get_body["item"]["validation_id"] == validation_receipt_id
+    assert validation_get_body["item"]["relative_path"] == f"validations/{validation_receipt_id}.json"
+    assert raw_secret not in str(validation_get_body)
 
     proposals = client.get("/forge/proposals/list", params={"plugin_id": plugin_id})
     assert proposals.status_code == 200
@@ -121,6 +157,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     ready_status = client.get("/forge/status")
     assert ready_status.status_code == 200
     ready_status_body = ready_status.json()
+    assert ready_status_body["validation_count"] == 1
     assert ready_status_body["promotion_candidate_count"] == 1
     assert ready_status_body["promotion_ready_count"] == 1
     assert ready_status_body["promotion_blocked_count"] == 0
@@ -203,6 +240,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     final_status = client.get("/forge/status")
     assert final_status.status_code == 200
     assert final_status.json()["proposal_count"] == 1
+    assert final_status.json()["validation_count"] == 1
     assert final_status.json()["promotion_count"] == 1
     assert final_status.json()["promotion_candidate_count"] == 0
     assert final_status.json()["promotion_ready_count"] == 0

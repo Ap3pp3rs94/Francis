@@ -279,6 +279,18 @@ only: it does not mutate proposal records, change proposal decisions, create
 approval authority, create promotion authority, execute tools, write memory, or
 create UI claims.
 
+As of `2026-04-27`, Stage 4/Forge generated-plugin build validation has a
+first receipt and readback boundary. `POST /plugins/build` now writes a
+redacted `plugin.validation.receipt` under
+`data/artifacts/plugins/validations/`, links the validation receipt from the
+staged plugin registry metadata and proposal record, and returns it in the build
+response. `GET /forge/validations/list`, `GET /forge/validations/get`, and
+`GET /forge/status` now expose those validation receipts read-only with
+plugin/proposal/status filtering. This persists validation evidence for staged
+Forge candidates without mutating proposal decisions, changing promotion
+readiness, granting approval authority, granting promotion authority, executing
+tools, writing memory, or creating UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4152,6 +4164,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge validation
+receipt and readback slice:
+
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `python -m mypy src\francis\api\routes\plugins.py src\francis\api\routes\forge.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py -q`
+  Result: `20 passed`
+- `python -m ruff check src\francis\api\routes\plugins.py src\francis\api\routes\forge.py tests\test_api_forge.py tests\test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py src\francis\api\routes\forge.py tests\test_api_forge.py tests\test_api_plugins.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal-quality
 status summary readback slice:

@@ -623,6 +623,14 @@ def _plugin_proposal_path(proposal_id: str) -> Path:
     return _art_dir() / "proposals" / f"{_safe_str(proposal_id).strip()}.json"
 
 
+def _plugin_validation_receipt_id(plugin_id: str, staged_ts: int) -> str:
+    return f"plugin_validation_{staged_ts}_{_slugify(plugin_id)}"
+
+
+def _plugin_validation_receipt_path(validation_id: str) -> Path:
+    return _art_dir() / "validations" / f"{_safe_str(validation_id).strip()}.json"
+
+
 def _plugin_proposal_review_state(proposal_id: str) -> dict[str, Any]:
     resolved_id = _safe_str(proposal_id).strip()
     if not resolved_id:
@@ -808,6 +816,7 @@ def _write_plugin_proposal_record(
     spec_path: str,
     registry_snapshot: str,
     validation: dict[str, Any],
+    validation_receipt: dict[str, Any],
     catalog: dict[str, Any],
 ) -> dict[str, Any]:
     payload_meta = redact_governed_metadata(payload.meta)
@@ -852,6 +861,8 @@ def _write_plugin_proposal_record(
         },
         "validation": {
             "build": validation,
+            "validation_receipt_id": _safe_str(validation_receipt.get("validation_id")).strip(),
+            "validation_receipt_path": _safe_str(validation_receipt.get("path")).strip(),
             "catalog_total_plugins": int(catalog.get("total_plugins") or 0),
             "catalog_total_tools": int(catalog.get("total_tools") or 0),
         },
@@ -868,6 +879,58 @@ def _write_plugin_proposal_record(
     redacted_record = redact_governed_display_value(record)
     out = redacted_record if isinstance(redacted_record, dict) else {}
     _atomic_write_json(proposal_path, out)
+    return out
+
+
+def _write_plugin_validation_receipt(
+    *,
+    plugin_id: str,
+    validation_id: str,
+    validation_path: Path,
+    proposal_id: str,
+    proposal_path: Path,
+    payload: "PluginBuildIn",
+    staged_ts: int,
+    artifact_zip: str,
+    spec_path: str,
+    registry_snapshot: str,
+    validation: dict[str, Any],
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    valid = bool(validation.get("valid"))
+    receipt = {
+        "kind": "plugin.validation.receipt",
+        "validation_id": validation_id,
+        "plugin_id": plugin_id,
+        "proposal_id": proposal_id,
+        "status": "passed" if valid else "failed",
+        "valid": valid,
+        "validated_ts": staged_ts,
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "proposal_path": str(proposal_path),
+        "artifact_zip": artifact_zip,
+        "spec_path": spec_path,
+        "registry_snapshot": registry_snapshot,
+        "validation": validation,
+        "catalog": {
+            "path": _safe_str(catalog.get("path")).strip(),
+            "total_plugins": int(catalog.get("total_plugins") or 0),
+            "total_tools": int(catalog.get("total_tools") or 0),
+        },
+        "governance": {
+            "gate": "plugin_build_validation",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/build",
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "path": str(validation_path),
+    }
+    redacted_receipt = redact_governed_display_value(receipt)
+    out = redacted_receipt if isinstance(redacted_receipt, dict) else {}
+    _atomic_write_json(validation_path, out)
     return out
 
 
@@ -1825,6 +1888,8 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
         build_meta = redact_governed_metadata(payload.meta)
         proposal_id = _plugin_proposal_id(plugin_id, staged_ts)
         proposal_path = _plugin_proposal_path(proposal_id)
+        validation_receipt_id = _plugin_validation_receipt_id(plugin_id, staged_ts)
+        validation_receipt_path = _plugin_validation_receipt_path(validation_receipt_id)
         artifact_zip = _safe_str(res.get("artifact_zip")).strip()
         spec_path = _safe_str(res.get("spec_path")).strip()
         registry_snapshot = _safe_str(res.get("registry_snapshot")).strip()
@@ -1846,6 +1911,8 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
                         "promotion_status": "staged",
                         "proposal_id": proposal_id,
                         "proposal_path": str(proposal_path),
+                        "validation_receipt_id": validation_receipt_id,
+                        "validation_receipt_path": str(validation_receipt_path),
                         "proposal_evidence": build_meta.get("proposal_evidence") or build_meta.get("evidence") or [],
                         "proposal_status": "staged",
                         "risk_tier": _safe_str(build_meta.get("risk_tier")).strip().lower() or "normal",
@@ -1860,6 +1927,20 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
         _ensure_plugin_from_generated(registry, plugin_id)
         catalog = _save_registry_and_catalog(registry)
         staged = _read_plugin(registry, plugin_id) or {}
+        validation_receipt = _write_plugin_validation_receipt(
+            plugin_id=plugin_id,
+            validation_id=validation_receipt_id,
+            validation_path=validation_receipt_path,
+            proposal_id=proposal_id,
+            proposal_path=proposal_path,
+            payload=payload,
+            staged_ts=staged_ts,
+            artifact_zip=artifact_zip,
+            spec_path=spec_path,
+            registry_snapshot=registry_snapshot,
+            validation=validation,
+            catalog=catalog,
+        )
         proposal_record = _write_plugin_proposal_record(
             plugin_id=plugin_id,
             proposal_id=proposal_id,
@@ -1871,6 +1952,7 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
             spec_path=spec_path,
             registry_snapshot=registry_snapshot,
             validation=validation,
+            validation_receipt=validation_receipt,
             catalog=catalog,
         )
 
@@ -1884,6 +1966,9 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
             "proposal_id": proposal_id,
             "proposal_path": str(proposal_path),
             "proposal": proposal_record,
+            "validation_receipt_id": validation_receipt_id,
+            "validation_receipt_path": str(validation_receipt_path),
+            "validation_receipt": validation_receipt,
             "next_step": "review_validate_and_explicitly_enable_before_use",
             "artifact_zip": artifact_zip,
             "spec_path": spec_path,
