@@ -218,6 +218,15 @@ staged status through the registry catalog summary and lineage index. This keeps
 artifact-level readback aligned with the route-level staged isolation contract;
 it does not enable, promote, execute, or approve generated capabilities.
 
+As of `2026-04-27`, the Capability Economy scaffold has a passive catalog
+projection for capability lifecycle and provenance readback. `CapabilityListing`
+can now carry version, staged/promoted status, risk tier, source, proposal id,
+promotion receipt id, tests, docs, and metadata, while `CapabilityMarketplace`
+can return filtered catalog entries and summary counts for those fields. This is
+an in-memory catalog model only; it does not connect Forge routes, create
+marketplace publication, grant execution authority, promote capabilities, or
+claim operator UI exposure.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4091,6 +4100,20 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge passive
+capability catalog economy model slice:
+
+- `python -m pytest tests\unit\test_capability_marketplace.py -q`
+  Result: `1 passed`
+- `python -m pytest tests\unit\test_imports.py -q`
+  Result: `17 passed, 1 skipped`
+- `python -m ruff check src\francis\economy\markets\capability_marketplace.py tests\unit\test_capability_marketplace.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\economy\markets\capability_marketplace.py tests\unit\test_capability_marketplace.py`
+  Result: `2 files already formatted` (`.ruff_cache` write warning only)
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated
 artifact staged-lifecycle contract slice:
