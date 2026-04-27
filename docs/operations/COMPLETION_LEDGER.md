@@ -973,6 +973,14 @@ fields with typed count parsing. This keeps the `plan -> gate` context visible
 in the world-state interface path only; it does not change approval decisions,
 execution, policy gates, memory writes, or plan mutation.
 
+As of `2026-04-27`, the chat UI approval review surfaces render those
+approval-gate plan summaries when backend truth provides them. The selected
+approval card, approval queue cards, and system pending-approval overview now
+show the read-only plan status, current step id/title, step count, and
+checkpoint count already parsed by the approvals and world-state clients. This
+is interface readback only; it does not change approval decisions, execution,
+policy gates, memory writes, or plan mutation.
+
 As of `2026-04-26`, mission loop gate and execute projections preserve trace
 handles when the linked operation already exposes one. `/missions/{mission_id}`
 now carries `trace_id` through the active gate handoff plus gate and execute
@@ -4786,6 +4794,15 @@ Latest targeted validation for the `2026-04-27` Stage 3 world-state approval gat
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m pytest tests\test_api_approvals.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 approval gate plan-summary interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

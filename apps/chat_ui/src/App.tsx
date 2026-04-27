@@ -1310,6 +1310,27 @@ function approvalProjectionLoopLine(item: ApprovalProjectionLike | null | undefi
   return parts.slice(0, 6).join(" · ");
 }
 
+function approvalProjectionPlanLine(item: ApprovalProjectionLike | null | undefined): string {
+  const planStatus = safeString(item?.plan_status).trim();
+  const currentStepId = safeString(item?.plan_current_step_id).trim();
+  const currentStepTitle = safeString(item?.plan_current_step_title).trim();
+  const stepCount =
+    typeof item?.plan_step_count === "number" && Number.isFinite(item.plan_step_count)
+      ? item.plan_step_count
+      : undefined;
+  const checkpointCount =
+    typeof item?.plan_checkpoint_count === "number" && Number.isFinite(item.plan_checkpoint_count)
+      ? item.plan_checkpoint_count
+      : undefined;
+  const parts: string[] = [];
+  if (planStatus) parts.push(`status ${planStatus}`);
+  if (currentStepId) parts.push(`step ${currentStepId}`);
+  if (currentStepTitle) parts.push(`title ${currentStepTitle}`);
+  if (stepCount !== undefined) parts.push(`steps ${stepCount}`);
+  if (checkpointCount !== undefined) parts.push(`checkpoints ${checkpointCount}`);
+  return parts.join(" · ");
+}
+
 function approvalProjectionDetail(item: ApprovalProjectionLike | null | undefined): string {
   const factLine = approvalProjectionFactLine(item);
   if (factLine) return factLine;
@@ -3439,6 +3460,7 @@ function ApprovalsPanel(props: {
 
   const selectedApproval = items.find((item) => item.id === selectedApprovalId) ?? items[0] ?? null;
   const selectedInspection = inspectApproval(selectedApproval);
+  const selectedApprovalPlanLine = approvalProjectionPlanLine(selectedApproval);
   const activeReturnContext =
     props.focusApprovalId && selectedApproval?.id === props.focusApprovalId ? props.returnContext : null;
   const returnSource = safeString(activeReturnContext?.source).trim();
@@ -3548,6 +3570,9 @@ function ApprovalsPanel(props: {
             ) : null}
             {approvalProjectionLoopLine(selectedApproval) ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>Loop: {approvalProjectionLoopLine(selectedApproval)}</div>
+            ) : null}
+            {selectedApprovalPlanLine ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>Plan: {selectedApprovalPlanLine}</div>
             ) : null}
             {approvalProjectionLineage(selectedApproval) ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>Lineage: {approvalProjectionLineage(selectedApproval)}</div>
@@ -3666,6 +3691,7 @@ function ApprovalsPanel(props: {
           const detail = approvalProjectionDetail(a);
           const exactAction = approvalProjectionExactActionLine(a);
           const loopLine = approvalProjectionLoopLine(a);
+          const planLine = approvalProjectionPlanLine(a);
           const lineage = approvalProjectionLineage(a);
           const replacement = approvalProjectionReplacementLine(a);
           const replacementScope = approvalProjectionReplacementScopeLine(a);
@@ -3692,6 +3718,7 @@ function ApprovalsPanel(props: {
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>{inspection.scopeLabel}</div>
               {exactAction ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div> : null}
               {loopLine ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>loop: {loopLine}</div> : null}
+              {planLine ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>plan: {planLine}</div> : null}
               {lineage ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div> : null}
               {replacement ? (
                 <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>replacement: {replacement}</div>
@@ -9851,6 +9878,7 @@ function SystemPanel(props: {
                 const detail = approvalProjectionDetail(item);
                 const exactAction = approvalProjectionExactActionLine(item);
                 const loopLine = approvalProjectionLoopLine(item);
+                const planLine = approvalProjectionPlanLine(item);
                 const lineage = approvalProjectionLineage(item);
                 const replacement = approvalProjectionReplacementLine(item);
                 const reason = safeString(item.reason).trim();
@@ -9872,6 +9900,9 @@ function SystemPanel(props: {
                     ) : null}
                     {loopLine ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>loop: {loopLine}</div>
+                    ) : null}
+                    {planLine ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>plan: {planLine}</div>
                     ) : null}
                     {lineage ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div>
