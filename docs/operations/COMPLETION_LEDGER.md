@@ -1190,6 +1190,14 @@ keep those fields in the structured loop readback alongside the current-task
 approval id/status. This is readback/export preservation only; it does not
 create approvals, retry operations, write memory, or expand execution authority.
 
+As of `2026-04-27`, the chat UI memory timeline client also preserves that
+current-task previous approval lineage. `MemoryTimelineClient.list` and `get`
+keep `current_task_previous_approval_id` and
+`current_task_previous_approval_status` from either explicit `loop` payloads or
+sparse event metadata. This is browser-side readback preservation only; it does
+not create approvals, retry operations, write memory, or expand execution
+authority.
+
 As of `2026-04-26`, memory timeline filters can also resolve exact loop-only
 mission receipt handles. `/memory/timeline/list` now treats handoff and
 current-task operation, trace, approval, run, and artifact handles in event
@@ -5236,6 +5244,15 @@ Latest targeted validation for the `2026-04-27` Stage 3 memory timeline previous
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 memory timeline previous-approval interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `failed before implementation because loop readbacks omitted current_task_previous_approval_id/current_task_previous_approval_status; passed after parser fix with 2 tests`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 3 memory evidence mission-handle interface slice:
