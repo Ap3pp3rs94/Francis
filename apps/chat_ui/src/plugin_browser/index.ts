@@ -206,6 +206,10 @@ export type PluginToggleResponse = {
 
   approval_id?: string; // if action is approval-gated
   message?: string;
+  promotion_status?: string;
+  promotion_receipt_id?: string;
+  promotion_receipt_path?: string;
+  promotion_receipt?: PluginForgePromotion;
 };
 
 export type PluginInstallRequest = {
@@ -553,6 +557,8 @@ export type PluginForgePromotion = {
   promoted_ts?: number;
   actor?: string;
   reason?: string;
+  path?: string;
+  artifact_path?: string;
   relative_path?: string;
   proposal_review?: Record<string, unknown>;
   proposal_evidence?: unknown[];
@@ -1200,6 +1206,8 @@ function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
   const status = safeString(raw.status, "");
   const actor = safeString(raw.actor, "");
   const reason = safeString(raw.reason, "");
+  const path = safeString(raw.path, "");
+  const artifactPath = safeString(raw.artifact_path, safeString(raw.artifactPath, ""));
   const relativePath = safeString(raw.relative_path, safeString(raw.relativePath, ""));
   const promotedTs = normalizeUnixSeconds(raw.promoted_ts) ?? normalizeUnixSeconds(raw.promotedAt);
   const proposalEvidence = safeUnknownArray(raw.proposal_evidence);
@@ -1211,6 +1219,8 @@ function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
   if (promotedTs !== undefined) item.promoted_ts = promotedTs;
   if (actor) item.actor = actor;
   if (reason) item.reason = reason;
+  if (path) item.path = path;
+  if (artifactPath) item.artifact_path = artifactPath;
   if (relativePath) item.relative_path = relativePath;
   if (isRecord(raw.proposal_review)) item.proposal_review = raw.proposal_review;
   else if (isRecord(raw.proposalReview)) item.proposal_review = raw.proposalReview;
@@ -1974,6 +1984,7 @@ export class PluginBrowserClient {
 
     const enabled = safeBool((json as Record<string, unknown>).enabled, true);
     const status = safeString((json as Record<string, unknown>).status, enabled ? "enabled" : "disabled");
+    const promotionReceipt = parseForgePromotion((json as Record<string, unknown>).promotion_receipt);
 
     return {
       ok: Boolean((json as Record<string, unknown>).ok ?? true),
@@ -1982,6 +1993,10 @@ export class PluginBrowserClient {
       status,
       approval_id: safeString((json as Record<string, unknown>).approval_id, "") || undefined,
       message: safeString((json as Record<string, unknown>).message, "") || undefined,
+      promotion_status: safeString((json as Record<string, unknown>).promotion_status, "") || undefined,
+      promotion_receipt_id: safeString((json as Record<string, unknown>).promotion_receipt_id, "") || undefined,
+      promotion_receipt_path: safeString((json as Record<string, unknown>).promotion_receipt_path, "") || undefined,
+      promotion_receipt: promotionReceipt ?? undefined,
     };
   }
 

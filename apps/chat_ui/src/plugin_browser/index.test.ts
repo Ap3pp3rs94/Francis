@@ -71,6 +71,65 @@ test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", as
   }
 });
 
+test("PluginBrowserClient preserves Forge promotion receipts from enable responses", async () => {
+  const captured: Record<string, unknown>[] = [];
+  const restoreFetch = installFetch(async (_url, init) => {
+    captured.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    return jsonResponse({
+      ok: true,
+      id: "pl_stage",
+      enabled: true,
+      status: "enabled",
+      promotion_status: "promoted",
+      promotion_receipt_id: "promotion_pl_stage_1710000000",
+      promotion_receipt: {
+        kind: "plugin.promotion.receipt",
+        receipt_id: "promotion_pl_stage_1710000000",
+        plugin_id: "pl_stage",
+        proposal_id: "proposal_pl_stage_1",
+        previous_status: "staged",
+        promoted_status: "enabled",
+        promoted_ts: 1710000000,
+        proposal_review: {
+          status: "approved",
+          receipt_id: "review_1",
+        },
+        quality: {
+          risk_tier: "normal",
+          tests: ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"],
+        },
+        governance: {
+          gate: "permission_gate",
+          explicit: true,
+        },
+        path: "D:/Francis/data/artifacts/plugins/promotions/promotion_pl_stage_1710000000.json",
+      },
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const res = await client.enable({ id: "pl_stage", reason: "operator promotion" });
+
+    assert.equal(captured[0]?.actor, "chat_ui.plugins");
+    assert.equal(res.promotion_status, "promoted");
+    assert.equal(res.promotion_receipt_id, "promotion_pl_stage_1710000000");
+    assert.equal(res.promotion_receipt?.receipt_id, "promotion_pl_stage_1710000000");
+    assert.equal(res.promotion_receipt?.plugin_id, "pl_stage");
+    assert.equal(res.promotion_receipt?.proposal_id, "proposal_pl_stage_1");
+    assert.equal(res.promotion_receipt?.proposal_review?.receipt_id, "review_1");
+    assert.equal(res.promotion_receipt?.quality?.risk_tier, "normal");
+    assert.equal(res.promotion_receipt?.governance?.explicit, true);
+    assert.equal(
+      res.promotion_receipt?.path,
+      "D:/Francis/data/artifacts/plugins/promotions/promotion_pl_stage_1710000000.json",
+    );
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("PluginBrowserClient treats backend permission denials as mutation errors", async () => {
   const restoreFetch = installFetch(async () =>
     jsonResponse({ ok: false, status: "denied", error: "api_permission_denied" }),
