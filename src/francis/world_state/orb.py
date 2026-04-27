@@ -314,6 +314,7 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
     recently_completed = [item for item in _as_list(continuity.get("recently_completed")) if isinstance(item, dict)]
     failed_preview = [item for item in _as_list(continuity.get("failed_preview")) if isinstance(item, dict)]
     deadletter_preview = [item for item in _as_list(continuity.get("deadletter_preview")) if isinstance(item, dict)]
+    memory_receipts = [item for item in _as_list(continuity.get("memory_receipts")) if isinstance(item, dict)]
 
     focus_item = dict(focus_items[0]) if focus_items else {}
     focus_source = "focus" if focus_item else ""
@@ -343,6 +344,8 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
         "recently_completed_count": len(recently_completed),
         "failed_count": len(failed_preview),
         "deadletter_count": len(deadletter_preview),
+        "memory_receipt_count": len(memory_receipts),
+        "latest_memory_receipt": dict(memory_receipts[0]) if memory_receipts else {},
     }
 
 

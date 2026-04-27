@@ -447,6 +447,49 @@ def test_orb_snapshot_handback_uses_failed_preview_as_receipt_focus() -> None:
     assert handback["focus"]["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
 
 
+def test_orb_snapshot_handback_preserves_memory_receipt_summary() -> None:
+    from francis.world_state.orb import _handback_state
+
+    handback = _handback_state(
+        {
+            "headline": "Completed mission receipt is ready for interface review",
+            "focus": [],
+            "recently_completed": [
+                {
+                    "id": "msn_terminal_receipt",
+                    "status": "completed",
+                    "recommended_action": "review_result",
+                }
+            ],
+            "failed_preview": [],
+            "deadletter_preview": [],
+            "memory_receipts": [
+                {
+                    "id": "mem_terminal_receipt",
+                    "mission_id": "msn_terminal_receipt",
+                    "operation_id": "tsk_terminal_receipt",
+                    "operation_status": "completed",
+                    "trace_id": "trace_terminal_receipt",
+                    "run_id": "run_terminal_receipt",
+                    "artifact_dir": "D:/Francis/.data/artifacts/run_terminal_receipt",
+                    "handoff_action": "review_result",
+                }
+            ],
+        }
+    )
+
+    assert handback["state"] == "completion_review"
+    assert handback["focus_source"] == "recently_completed"
+    assert handback["focus"]["id"] == "msn_terminal_receipt"
+    assert handback["memory_receipt_count"] == 1
+    assert handback["latest_memory_receipt"]["id"] == "mem_terminal_receipt"
+    assert handback["latest_memory_receipt"]["mission_id"] == "msn_terminal_receipt"
+    assert handback["latest_memory_receipt"]["operation_id"] == "tsk_terminal_receipt"
+    assert handback["latest_memory_receipt"]["trace_id"] == "trace_terminal_receipt"
+    assert handback["latest_memory_receipt"]["run_id"] == "run_terminal_receipt"
+    assert handback["latest_memory_receipt"]["handoff_action"] == "review_result"
+
+
 def test_stack_and_services_report_known_surfaces(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

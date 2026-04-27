@@ -477,6 +477,13 @@ separate continuity lookup. This is read-model pass-through only; it does not
 create memory receipts, inspect artifacts, execute operations, or change ORB
 handback focus selection.
 
+As of `2026-04-27`, ORB handback state also preserves a bounded summary of
+those continuity memory receipts. `handback_state.memory_receipt_count` and
+`handback_state.latest_memory_receipt` now carry the existing receipt-backed
+mission, operation, trace, run, artifact, and handoff evidence through the ORB
+state read model. This does not change ORB focus selection, render state,
+execution authority, retry/deadletter authority, or memory-write behavior.
+
 As of `2026-04-26`, mission advance and queue-run handoff results preserve that
 receipt-backed recovery context when linked operation execution fails. The
 mission runtime projects `operation_error`, `result_message` when present, and
@@ -4013,6 +4020,23 @@ Latest targeted validation for the `2026-04-27` Stage 3 operator-mode memory rec
 - `python -m ruff format --check src\francis\world_state\operator_mode.py tests\unit\test_operator_mode.py`
   Result: `2 files already formatted`
 - `python -m mypy src\francis\world_state\operator_mode.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 ORB memory receipt summary pass-through slice:
+
+- `python -m pytest tests\unit\test_kernel_contracts.py::test_orb_snapshot_handback_preserves_memory_receipt_summary -q`
+  Result: `failed before implementation with KeyError: memory_receipt_count; passed after the ORB handback readback fix`
+- `python -m pytest tests\unit\test_kernel_contracts.py -q`
+  Result: `10 passed`
+- `python -m ruff check src\francis\world_state\orb.py tests\unit\test_kernel_contracts.py`
+  Result: `passed; Ruff emitted a .ruff_cache access warning`
+- `python -m ruff format --check src\francis\world_state\orb.py tests\unit\test_kernel_contracts.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\world_state\orb.py`
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
