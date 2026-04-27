@@ -1256,6 +1256,15 @@ references when those handles exist, so callers can move from execution result
 or failure to receipt-backed memory retrieval without claiming memory for
 non-mission or non-terminal runs.
 
+As of `2026-04-27`, those direct operation-run `memory_receipt` projections
+also carry the same flat mission, operation, approval, trace, run, and artifact
+handles that the structured `references` object already carried. The operations
+runtime promotes direct, current-task, or handoff receipt handles into both
+shapes, and the chat UI operations client preserves both shapes for operation
+run and detail readbacks. This is receipt contract normalization only; it does
+not change execution, approval decisions, memory-write timing, or receipt
+creation conditions.
+
 As of `2026-04-25`, the chat UI operations client preserves that direct
 operation-run memory handoff. `OperationsClient.run` now keeps the returned
 `memory_receipt` projection with source/kind, receipt scope, operation status,
@@ -4800,6 +4809,27 @@ Latest targeted validation for the `2026-04-27` Stage 3 world-state approval gat
 
 Latest targeted validation for the `2026-04-27` Stage 3 approval gate plan-summary interface slice:
 
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 operation memory receipt handle normalization slice:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_run_surfaces_failed_mission_memory_receipt tests\test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt -q`
+  Result: `3 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\operations\runtime.py tests\test_api_operations.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\operations\runtime.py tests\test_api_operations.py`
+  Result: `2 files already formatted`
+- `python -m mypy src`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `8 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `67 passed`
 - `cd apps\chat_ui; npm run build`

@@ -197,6 +197,12 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         ts: 1770000300,
         role: "system",
         message: "Mission operation completed: mission=mission_alpha operation=task_alpha status=succeeded",
+        mission_id: "mission_alpha",
+        operation_id: "task_alpha",
+        trace_id: "trace_task_alpha",
+        approval_id: "apr_task_alpha",
+        run_id: "run_task_alpha",
+        artifact_dir: "D:/francis/data/artifacts/task_alpha",
         scope: "mission.loop",
         operation_status: "succeeded",
         approval_status: "approved",
@@ -250,6 +256,12 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.operation?.meta?.orb_plane, "P7_EXECUTION");
     assert.equal(response.memory_receipt?.source, "continuity.ledger");
     assert.equal(response.memory_receipt?.kind, "ledger_append");
+    assert.equal(response.memory_receipt?.mission_id, "mission_alpha");
+    assert.equal(response.memory_receipt?.operation_id, "task_alpha");
+    assert.equal(response.memory_receipt?.trace_id, "trace_task_alpha");
+    assert.equal(response.memory_receipt?.approval_id, "apr_task_alpha");
+    assert.equal(response.memory_receipt?.run_id, "run_task_alpha");
+    assert.equal(response.memory_receipt?.artifact_dir, "D:/francis/data/artifacts/task_alpha");
     assert.equal(response.memory_receipt?.scope, "mission.loop");
     assert.equal(response.memory_receipt?.operation_status, "succeeded");
     assert.equal(response.memory_receipt?.approval_status, "approved");

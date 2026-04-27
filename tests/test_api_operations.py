@@ -772,6 +772,12 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
     assert receipt["scope"] == "mission.loop"
     assert receipt["operation_status"] == "succeeded"
     assert receipt["subsystem"] == "operations.runtime"
+    assert receipt["mission_id"] == mission_id
+    assert receipt["operation_id"] == operation_id
+    assert receipt["trace_id"] == trace_id
+    assert receipt["run_id"] == run_id
+    if artifact_dir:
+        assert receipt["artifact_dir"] == artifact_dir
     assert receipt["handoff_gate"] == "operator_review"
     assert receipt["current_task_gate"] == "operator_review"
     assert receipt["current_task_operation_name"] == "plugin.run"
@@ -879,6 +885,8 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["operation_error"] == "plugin_id_required"
     assert receipt["recovery_next_step"] == "review_operation_detail"
     assert receipt["subsystem"] == "operations.runtime"
+    assert receipt["mission_id"] == mission_id
+    assert receipt["operation_id"] == operation_id
     assert receipt["active_stage"] == "deadletter"
     assert receipt["handoff_stage"] == "deadletter"
     assert receipt["handoff_action"] == "retry_or_deadletter"
@@ -898,6 +906,8 @@ def test_operations_run_surfaces_failed_mission_memory_receipt(monkeypatch, tmp_
     assert receipt["references"]["operation_id"] == operation_id
     assert str(receipt["references"]["trace_id"]).startswith("trace_")
     assert str(receipt["references"]["run_id"]).startswith("run_")
+    assert str(receipt["trace_id"]).startswith("trace_")
+    assert str(receipt["run_id"]).startswith("run_")
 
     listed = client.get(
         "/memory/timeline/list",

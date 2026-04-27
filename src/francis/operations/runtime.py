@@ -440,8 +440,18 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
         return None
     meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
     references: dict[str, str] = {}
-    for key in ("mission_id", "operation_id", "trace_id", "approval_id", "run_id", "artifact_dir"):
-        value = _safe_str(meta.get(key)).strip()
+    reference_sources = {
+        "mission_id": ("mission_id", "current_task_mission_id", "handoff_mission_id"),
+        "operation_id": ("operation_id", "task_id", "current_task_operation_id", "handoff_operation_id"),
+        "trace_id": ("trace_id", "current_task_trace_id", "handoff_trace_id"),
+        "approval_id": ("approval_id", "current_task_approval_id", "handoff_approval_id"),
+        "run_id": ("run_id", "current_task_run_id", "handoff_run_id"),
+        "artifact_dir": ("artifact_dir", "current_task_artifact_dir", "handoff_artifact_dir"),
+    }
+    for key, sources in reference_sources.items():
+        value = next(
+            (_safe_str(meta.get(source)).strip() for source in sources if _safe_str(meta.get(source)).strip()), ""
+        )
         if value:
             references[key] = value
     projection: dict[str, Any] = {
@@ -453,6 +463,7 @@ def _memory_receipt_projection(entry: dict[str, Any] | None) -> dict[str, Any] |
     }
     if references:
         projection["references"] = references
+        projection.update(references)
     for key in (
         "active_stage",
         "scope",

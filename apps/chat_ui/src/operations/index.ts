@@ -274,6 +274,12 @@ export type OperationMemoryReceipt = {
   ts?: number;
   role?: string;
   message?: string;
+  mission_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  approval_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   scope?: string;
   operation_status?: string;
   approval_status?: string;
@@ -881,12 +887,12 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
 
   const referencesRaw = isRecord(raw.references) ? raw.references : {};
   const references = {
-    mission_id: safeString(referencesRaw.mission_id) || undefined,
-    operation_id: safeString(referencesRaw.operation_id) || undefined,
-    trace_id: safeString(referencesRaw.trace_id) || undefined,
-    approval_id: safeString(referencesRaw.approval_id) || undefined,
-    run_id: safeString(referencesRaw.run_id) || undefined,
-    artifact_dir: safeString(referencesRaw.artifact_dir) || undefined,
+    mission_id: safeString(referencesRaw.mission_id) || safeString(raw.mission_id) || undefined,
+    operation_id: safeString(referencesRaw.operation_id) || safeString(raw.operation_id) || undefined,
+    trace_id: safeString(referencesRaw.trace_id) || safeString(raw.trace_id) || undefined,
+    approval_id: safeString(referencesRaw.approval_id) || safeString(raw.approval_id) || undefined,
+    run_id: safeString(referencesRaw.run_id) || safeString(raw.run_id) || undefined,
+    artifact_dir: safeString(referencesRaw.artifact_dir) || safeString(raw.artifact_dir) || undefined,
   };
 
   const rawPlanStepCount = safeNumber(raw.plan_step_count, Number.NaN);
@@ -899,6 +905,12 @@ function parseOperationMemoryReceipt(raw: unknown): OperationMemoryReceipt | und
     ts: safeNumber(raw.ts, 0) || undefined,
     role: safeString(raw.role) || undefined,
     message: safeString(raw.message) || undefined,
+    mission_id: safeString(raw.mission_id) || references.mission_id,
+    operation_id: safeString(raw.operation_id) || references.operation_id,
+    trace_id: safeString(raw.trace_id) || references.trace_id,
+    approval_id: safeString(raw.approval_id) || references.approval_id,
+    run_id: safeString(raw.run_id) || references.run_id,
+    artifact_dir: safeString(raw.artifact_dir) || references.artifact_dir,
     scope: safeString(raw.scope) || undefined,
     operation_status: safeString(raw.operation_status) || undefined,
     approval_status: safeString(raw.approval_status) || undefined,
