@@ -107,6 +107,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/forge/proposals/list"),
         ("POST", "/forge/proposals/decision"),
         ("GET", "/forge/proposal_reviews/list"),
+        ("GET", "/forge/promotions/list"),
         ("GET", "/forge/promotion_readiness/list"),
         ("GET", "/plugins/list"),
         ("GET", "/plugins/get"),

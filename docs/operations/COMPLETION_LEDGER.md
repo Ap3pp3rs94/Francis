@@ -222,6 +222,16 @@ review receipt path only: it does not change backend scopes, create promotion
 authority, promote staged capabilities, execute plugins, write memory, or bypass
 the explicit `/plugins/enable` promotion step.
 
+As of `2026-04-27`, the chat UI plugin browser also has read-only Forge
+promotion receipt readback. `PluginBrowserClient` now consumes
+`GET /forge/promotions/list`, the chat UI route contract asserts that the
+endpoint is mounted, and the Plugins panel renders the latest selected
+plugin/proposal promotion receipt id, status, artifact path, and linked review
+receipt when the backend returns them. This is receipt visibility only: it does
+not add promotion controls, change backend scopes, grant execution authority,
+grant approval authority, grant promotion authority, write memory, or bypass
+the explicit `/plugins/enable` promotion step.
+
 As of `2026-04-27`, Stage 4/Forge capability catalog readback has a first
 summary and lineage index at the plugin registry layer. The catalog emitted by
 `PluginRegistry.to_dict()` now includes deterministic plugin risk counts,
@@ -4224,6 +4234,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
+promotion-receipt readback slice:
+
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `76 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m ruff check tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
 proposal-decision workflow slice:

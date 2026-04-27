@@ -542,6 +542,25 @@ export type PluginForgeProposalDecisionResponse = {
   governance?: Record<string, unknown>;
 };
 
+export type PluginForgePromotion = {
+  id: string;
+  receipt_id: string;
+  plugin_id?: string;
+  proposal_id?: string;
+  previous_status?: string;
+  promoted_status?: string;
+  status?: string;
+  promoted_ts?: number;
+  actor?: string;
+  reason?: string;
+  relative_path?: string;
+  proposal_review?: Record<string, unknown>;
+  proposal_evidence?: unknown[];
+  quality?: Record<string, unknown>;
+  promotion_context?: Record<string, unknown>;
+  governance?: Record<string, unknown>;
+};
+
 export type PluginForgeProposalListResponse = {
   items: PluginForgeProposal[];
   total?: number;
@@ -551,6 +570,13 @@ export type PluginForgeProposalListResponse = {
 
 export type PluginForgeProposalReviewListResponse = {
   items: PluginForgeProposalReview[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+};
+
+export type PluginForgePromotionListResponse = {
+  items: PluginForgePromotion[];
   total?: number;
   offset?: number;
   limit?: number;
@@ -1156,6 +1182,47 @@ function parseForgeProposalReview(raw: unknown): PluginForgeProposalReview | nul
   return item;
 }
 
+function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
+  if (!isRecord(raw)) return null;
+
+  const receiptId = safeString(raw.receipt_id, safeString(raw.receiptId, safeString(raw.id, ""))).trim();
+  if (!receiptId) return null;
+
+  const item: PluginForgePromotion = {
+    id: safeString(raw.id, receiptId) || receiptId,
+    receipt_id: receiptId,
+  };
+
+  const pluginId = safeString(raw.plugin_id, safeString(raw.pluginId, ""));
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const previousStatus = safeString(raw.previous_status, safeString(raw.previousStatus, ""));
+  const promotedStatus = safeString(raw.promoted_status, safeString(raw.promotedStatus, ""));
+  const status = safeString(raw.status, "");
+  const actor = safeString(raw.actor, "");
+  const reason = safeString(raw.reason, "");
+  const relativePath = safeString(raw.relative_path, safeString(raw.relativePath, ""));
+  const promotedTs = normalizeUnixSeconds(raw.promoted_ts) ?? normalizeUnixSeconds(raw.promotedAt);
+  const proposalEvidence = safeUnknownArray(raw.proposal_evidence);
+  if (pluginId) item.plugin_id = pluginId;
+  if (proposalId) item.proposal_id = proposalId;
+  if (previousStatus) item.previous_status = previousStatus;
+  if (promotedStatus) item.promoted_status = promotedStatus;
+  if (status) item.status = status;
+  if (promotedTs !== undefined) item.promoted_ts = promotedTs;
+  if (actor) item.actor = actor;
+  if (reason) item.reason = reason;
+  if (relativePath) item.relative_path = relativePath;
+  if (isRecord(raw.proposal_review)) item.proposal_review = raw.proposal_review;
+  else if (isRecord(raw.proposalReview)) item.proposal_review = raw.proposalReview;
+  if (proposalEvidence) item.proposal_evidence = proposalEvidence;
+  if (isRecord(raw.quality)) item.quality = raw.quality;
+  if (isRecord(raw.promotion_context)) item.promotion_context = raw.promotion_context;
+  else if (isRecord(raw.promotionContext)) item.promotion_context = raw.promotionContext;
+  if (isRecord(raw.governance)) item.governance = raw.governance;
+
+  return item;
+}
+
 /* -------------------------------------------------------------------------------------------------
  * Endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -1167,6 +1234,7 @@ export type PluginBrowserEndpoints = {
   proposalsList: (q?: PluginForgeArtifactListParams) => string;
   proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
   proposalDecision: () => string;
+  promotionsList: (q?: PluginForgeArtifactListParams) => string;
   toolsList: (q?: PluginToolListParams) => string;
   toolsGet: (id: string) => string;
   toolsExport: (format: PluginToolsExportFormat, q?: PluginToolListParams) => string;
@@ -1231,6 +1299,15 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
         status: q?.status,
       })}`,
     proposalDecision: () => "/forge/proposals/decision",
+    promotionsList: (q) =>
+      `/forge/promotions/list${encodeQuery({
+        limit: q?.limit,
+        offset: q?.offset,
+        id: q?.id,
+        plugin_id: q?.plugin_id,
+        proposal_id: q?.proposal_id,
+        status: q?.status,
+      })}`,
     toolsList: (q) =>
       `/plugins/tools/list${encodeQuery({
         limit: q?.limit,
@@ -1676,6 +1753,37 @@ export class PluginBrowserClient {
       governance: isRecord((json as Record<string, unknown>).governance)
         ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
         : undefined,
+    };
+  }
+
+  /**
+   * List read-only Forge promotion receipts.
+   */
+  async listForgePromotions(
+    params?: PluginForgeArtifactListParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginForgePromotionListResponse> {
+    const url = this.url(this.endpoints.promotionsList(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { items: [] };
+
+    const raw =
+      Array.isArray((json as Record<string, unknown>).items)
+        ? ((json as Record<string, unknown>).items as unknown[])
+        : Array.isArray((json as Record<string, unknown>).promotions)
+          ? ((json as Record<string, unknown>).promotions as unknown[])
+          : [];
+
+    const items = raw.map(parseForgePromotion).filter((x): x is PluginForgePromotion => x !== null);
+    const total = safeNumber((json as Record<string, unknown>).total, 0);
+    const offset = safeNumber((json as Record<string, unknown>).offset, 0);
+    const limit = safeNumber((json as Record<string, unknown>).limit, 0);
+
+    return {
+      items,
+      total: total > 0 ? total : undefined,
+      offset: offset >= 0 ? offset : undefined,
+      limit: limit > 0 ? limit : undefined,
     };
   }
 

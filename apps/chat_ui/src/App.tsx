@@ -36,6 +36,7 @@ import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type {
+  PluginForgePromotion,
   PluginForgeProposal,
   PluginForgeProposalDecisionAction,
   PluginForgeProposalReview,
@@ -10002,6 +10003,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
   const [forgeProposals, setForgeProposals] = useState<PluginForgeProposal[]>([]);
   const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
+  const [forgePromotions, setForgePromotions] = useState<PluginForgePromotion[]>([]);
   const [proposalDecisionReason, setProposalDecisionReason] = useState("operator reviewed Forge proposal");
   const [selectedPluginId, setSelectedPluginId] = useState("");
   const [selectedToolId, setSelectedToolId] = useState("");
@@ -10050,6 +10052,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       .sort((a, b) => (b.decided_ts ?? 0) - (a.decided_ts ?? 0));
   }, [forgeProposalReviews, selectedForgeProposal?.proposal_id, selectedPromotionReadiness?.proposal_id]);
   const latestForgeProposalReview = selectedForgeProposalReviews[0] ?? null;
+  const selectedForgePromotions = useMemo(() => {
+    const proposalId = selectedForgeProposal?.proposal_id ?? selectedPromotionReadiness?.proposal_id ?? "";
+    return forgePromotions
+      .filter((promotion) =>
+        proposalId ? promotion.proposal_id === proposalId : promotion.plugin_id === selectedPluginId,
+      )
+      .sort((a, b) => (b.promoted_ts ?? 0) - (a.promoted_ts ?? 0));
+  }, [forgePromotions, selectedForgeProposal?.proposal_id, selectedPluginId, selectedPromotionReadiness?.proposal_id]);
+  const latestForgePromotion = selectedForgePromotions[0] ?? null;
   const selectedForgeProposalStatus = safeString(selectedForgeProposal?.status).trim().toLowerCase();
   const selectedForgeValidationEvidence = useMemo(() => {
     const qualityEvidence = forgeRecord(selectedForgeProposal?.quality_analysis, "evidence");
@@ -10093,17 +10104,19 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, readiness, proposals, proposalReviews] = await Promise.all([
+      const [res, readiness, proposals, proposalReviews, promotions] = await Promise.all([
         client.list({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
         client.listForgeProposals({ limit: 200 }),
         client.listForgeProposalReviews({ limit: 200 }),
+        client.listForgePromotions({ limit: 200 }),
       ]);
       const items = res.items ?? [];
       setPlugins(items);
       setPromotionReadiness(readiness.items ?? []);
       setForgeProposals(proposals.items ?? []);
       setForgeProposalReviews(proposalReviews.items ?? []);
+      setForgePromotions(promotions.items ?? []);
       setSelectedPluginId((prev) => {
         if (prev && items.some((item) => item.id === prev)) return prev;
         return items[0]?.id ?? "";
@@ -10503,6 +10516,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 {selectedForgeValidationEvidence.receiptId ? (
                   <span style={badgeStyle("validation")}>validation receipt</span>
                 ) : null}
+                {latestForgePromotion ? <span style={badgeStyle("promoted")}>promotion receipt</span> : null}
               </div>
             </div>
             <div style={{ marginTop: 6 }}>
@@ -10531,6 +10545,31 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
               </div>
             ) : (
               <div style={{ marginTop: 4 }}>No validation receipt returned for this proposal.</div>
+            )}
+            {latestForgePromotion ? (
+              <div style={{ marginTop: 4 }}>
+                promotion receipt <code>{latestForgePromotion.receipt_id}</code>
+                {latestForgePromotion.promoted_status || latestForgePromotion.status ? (
+                  <>
+                    {" "}
+                    / status <code>{latestForgePromotion.promoted_status || latestForgePromotion.status}</code>
+                  </>
+                ) : null}
+                {latestForgePromotion.relative_path ? (
+                  <>
+                    {" "}
+                    / artifact <code>{latestForgePromotion.relative_path}</code>
+                  </>
+                ) : null}
+                {forgeRecordString(latestForgePromotion.proposal_review, "receipt_id") ? (
+                  <>
+                    {" "}
+                    / review <code>{forgeRecordString(latestForgePromotion.proposal_review, "receipt_id")}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <div style={{ marginTop: 4 }}>No promotion receipt returned for this proposal.</div>
             )}
             {forgeRecordString(selectedForgeProposal.friction, "summary") ? (
               <div style={{ marginTop: 4 }}>

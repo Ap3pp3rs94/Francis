@@ -323,3 +323,64 @@ test("PluginBrowserClient decides Forge proposals through the governed review ro
     restoreFetch();
   }
 });
+
+test("PluginBrowserClient lists Forge promotion receipts", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    return jsonResponse({
+      total: 1,
+      items: [
+        {
+          id: "promotion_1",
+          receipt_id: "promotion_1",
+          plugin_id: "pl_stage",
+          proposal_id: "proposal_pl_stage_1",
+          previous_status: "staged",
+          promoted_status: "enabled",
+          promoted_ts: 1710000000,
+          reason: "explicit operator promotion",
+          proposal_review: {
+            status: "approved",
+            receipt_id: "review_1",
+          },
+          proposal_evidence: ["mission.forge.review"],
+          quality: {
+            risk_tier: "medium",
+            tests: ["tests/test_api_forge.py"],
+            validation: {
+              validation_receipt_id: "plugin_validation_pl_stage_1",
+            },
+          },
+          relative_path: "promotions/promotion_1.json",
+          governance: {
+            promotion_authority: false,
+            execution_authority: false,
+          },
+        },
+      ],
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const res = await client.listForgePromotions({ plugin_id: "pl_stage", limit: 5 });
+
+    assert.deepEqual(requests, ["/forge/promotions/list?limit=5&plugin_id=pl_stage"]);
+    assert.equal(res.total, 1);
+    assert.equal(res.items[0]?.receipt_id, "promotion_1");
+    assert.equal(res.items[0]?.plugin_id, "pl_stage");
+    assert.equal(res.items[0]?.proposal_id, "proposal_pl_stage_1");
+    assert.equal(res.items[0]?.promoted_status, "enabled");
+    assert.equal(res.items[0]?.proposal_review?.receipt_id, "review_1");
+    assert.deepEqual(res.items[0]?.proposal_evidence, ["mission.forge.review"]);
+    assert.equal(res.items[0]?.quality?.risk_tier, "medium");
+    assert.equal(res.items[0]?.relative_path, "promotions/promotion_1.json");
+    assert.equal(res.items[0]?.governance?.promotion_authority, false);
+    assert.equal(res.items[0]?.governance?.execution_authority, false);
+  } finally {
+    restoreFetch();
+  }
+});
