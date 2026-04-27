@@ -515,6 +515,78 @@ test("OperationsClient.runOnce posts a single bounded worker cycle request", asy
   }
 });
 
+test("OperationsClient mutation responses preserve permission-gate denial details", async () => {
+  const requests: Array<{ path: string; method: string; body: unknown }> = [];
+  const denial = {
+    ok: false,
+    status: "denied",
+    error: "api_permission_denied",
+    governance: {
+      gate: "permission_gate",
+      reason: "missing_scopes",
+      next_step: "configure_actor_scope_before_mutating_operations",
+      evidence: {
+        actor_present: true,
+        required_scope_count: 1,
+        actor_scope_count: 0,
+      },
+    },
+  };
+  const restoreFetch = installFetch(async (url, init) => {
+    const path = new URL(url).pathname;
+    requests.push({
+      path,
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: jsonRequestBody(init),
+    });
+
+    return jsonResponse(denial);
+  });
+
+  try {
+    const client = new OperationsClient("http://127.0.0.1:8000");
+    const create = await client.create({
+      action: "plan.create",
+      reason: "permission_gate_create",
+      actor: "chat_ui.operations",
+      input: { goal: "preserve denied operation create" },
+    });
+    const update = await client.update("tsk_denied", { note: "permission patch" });
+    const cancel = await client.cancel("tsk_denied", { reason: "permission_cancel" });
+    const run = await client.run("tsk_denied", { worker_id: "chat_ui.operations" });
+    const runOnce = await client.runOnce({ queue: "default", kind: "default" });
+    const deleted = await client.delete("tsk_denied", { reason: "permission_delete" });
+
+    assert.deepEqual(
+      requests.map((request) => ({ path: request.path, method: request.method })),
+      [
+        { path: "/operations/create", method: "POST" },
+        { path: "/operations/tsk_denied", method: "PATCH" },
+        { path: "/operations/tsk_denied/cancel", method: "POST" },
+        { path: "/operations/tsk_denied/run", method: "POST" },
+        { path: "/operations/run-once", method: "POST" },
+        { path: "/operations/tsk_denied", method: "DELETE" },
+      ],
+    );
+
+    for (const response of [create, update, cancel, run, runOnce, deleted]) {
+      assert.equal(response.ok, false);
+      assert.equal(response.status, "denied");
+      assert.equal(response.error, "api_permission_denied");
+      assert.equal(response.governance?.gate, "permission_gate");
+      assert.equal(response.governance?.reason, "missing_scopes");
+      assert.equal(response.governance?.next_step, "configure_actor_scope_before_mutating_operations");
+      assert.deepEqual(response.governance?.evidence, {
+        actor_present: true,
+        required_scope_count: 1,
+        actor_scope_count: 0,
+      });
+    }
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("OperationsClient.create posts the governed operation request envelope and preserves approval handoff fields", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {

@@ -49,6 +49,20 @@ export type OperationPlanSummary = {
   checkpoint_count?: number;
 };
 
+export type OperationGovernanceDecision = {
+  gate?: string;
+  reason?: string;
+  next_step?: string;
+  evidence?: Record<string, unknown>;
+  plane?: string;
+  operator_hint?: string;
+  action?: string;
+  risk_tier?: string;
+  approval_status?: string;
+  required_trust?: number;
+  current_trust?: number;
+};
+
 /**
  * A single operational record/event.
  *
@@ -228,6 +242,7 @@ export type OperationCreateResponse = {
   status?: OperationStatus;
   message?: string;
   error?: string;
+  governance?: OperationGovernanceDecision;
   mission_id?: string;
   mission_linked?: boolean;
   mission_link_error?: string;
@@ -252,6 +267,8 @@ export type OperationUpdateResponse = {
   operation?: OperationRecord;
   status?: OperationStatus;
   message?: string;
+  error?: string;
+  governance?: OperationGovernanceDecision;
 };
 
 export type OperationCancelRequest = {
@@ -262,6 +279,8 @@ export type OperationCancelResponse = {
   ok: boolean;
   status?: OperationStatus;
   message?: string;
+  error?: string;
+  governance?: OperationGovernanceDecision;
 };
 
 export type OperationRunRequest = {
@@ -330,6 +349,8 @@ export type OperationRunResponse = {
   memory_receipt?: OperationMemoryReceipt;
   status?: OperationStatus;
   message?: string;
+  error?: string;
+  governance?: OperationGovernanceDecision;
 };
 
 export type OperationRunOnceRequest = {
@@ -345,7 +366,10 @@ export type OperationRunOnceRequest = {
 export type OperationRunOnceResponse = {
   ok: boolean;
   exit_code?: number;
+  status?: OperationStatus;
+  message?: string;
   error?: string;
+  governance?: OperationGovernanceDecision;
 };
 
 export type OperationDeleteRequest = {
@@ -354,7 +378,10 @@ export type OperationDeleteRequest = {
 
 export type OperationDeleteResponse = {
   ok: boolean;
+  status?: OperationStatus;
   message?: string;
+  error?: string;
+  governance?: OperationGovernanceDecision;
 };
 
 export type OperationsExportFormat = "json" | "jsonl" | "csv";
@@ -437,6 +464,29 @@ function parseOperationPlanSummary(output: unknown): OperationPlanSummary | unde
   }
 
   return summary;
+}
+
+function parseOperationGovernance(raw: unknown): OperationGovernanceDecision | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const requiredTrust = safeNumber(raw.required_trust, Number.NaN);
+  const currentTrust = safeNumber(raw.current_trust, Number.NaN);
+  const governance: OperationGovernanceDecision = {
+    gate: safeString(raw.gate) || undefined,
+    reason: safeString(raw.reason) || undefined,
+    next_step: safeString(raw.next_step) || undefined,
+    evidence: isRecord(raw.evidence) ? raw.evidence : undefined,
+    plane: safeString(raw.plane) || undefined,
+    operator_hint: safeString(raw.operator_hint) || undefined,
+    action: safeString(raw.action) || undefined,
+    risk_tier: safeString(raw.risk_tier) || undefined,
+    approval_status: safeString(raw.approval_status) || undefined,
+    required_trust: Number.isFinite(requiredTrust) ? requiredTrust : undefined,
+    current_trust: Number.isFinite(currentTrust) ? currentTrust : undefined,
+  };
+
+  if (Object.values(governance).some((value) => value !== undefined)) return governance;
+  return undefined;
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -1177,6 +1227,7 @@ export class OperationsClient {
     const operation = parseOperationRecord(json.operation);
     const error = safeString(json.error) || undefined;
     const missionLinkError = safeString(json.mission_link_error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
 
     return {
       ok: Boolean(json.ok ?? true),
@@ -1184,8 +1235,9 @@ export class OperationsClient {
       operation: operation ?? undefined,
       approval_id: safeString(json.approval_id) || undefined,
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
-      message: safeString(json.message) || error || missionLinkError || undefined,
+      message: safeString(json.message) || error || missionLinkError || governance?.next_step || undefined,
       error,
+      governance,
       mission_id: safeString(json.mission_id) || undefined,
       mission_linked: typeof json.mission_linked === "boolean" ? json.mission_linked : undefined,
       mission_link_error: missionLinkError,
@@ -1219,12 +1271,16 @@ export class OperationsClient {
     if (!isRecord(json)) return { ok: true };
 
     const op = parseOperationRecord(isRecord(json.operation) ? json.operation : json.operation);
+    const error = safeString(json.error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
 
     return {
       ok: Boolean(json.ok ?? true),
       operation: op ?? undefined,
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
-      message: safeString(json.message) || undefined,
+      message: safeString(json.message) || error || governance?.next_step || undefined,
+      error,
+      governance,
     };
   }
 
@@ -1253,10 +1309,15 @@ export class OperationsClient {
 
     if (!isRecord(json)) return { ok: true };
 
+    const error = safeString(json.error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
+
     return {
       ok: Boolean(json.ok ?? true),
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
-      message: safeString(json.message) || undefined,
+      message: safeString(json.message) || error || governance?.next_step || undefined,
+      error,
+      governance,
     };
   }
 
@@ -1286,13 +1347,17 @@ export class OperationsClient {
     if (!isRecord(json)) return { ok: true };
 
     const op = parseOperationRecord(isRecord(json.operation) ? json.operation : json.operation);
+    const error = safeString(json.error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
 
     return {
       ok: Boolean(json.ok ?? true),
       operation: op ?? undefined,
       memory_receipt: parseOperationMemoryReceipt(json.memory_receipt),
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
-      message: safeString(json.message) || undefined,
+      message: safeString(json.message) || error || governance?.next_step || undefined,
+      error,
+      governance,
     };
   }
 
@@ -1317,10 +1382,16 @@ export class OperationsClient {
 
     if (!isRecord(json)) return { ok: true };
 
+    const error = safeString(json.error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
+
     return {
       ok: Boolean(json.ok ?? true),
       exit_code: typeof json.exit_code === "number" && Number.isFinite(json.exit_code) ? json.exit_code : undefined,
-      error: safeString(json.error) || undefined,
+      status: (safeString(json.status) || undefined) as OperationStatus | undefined,
+      message: safeString(json.message) || error || governance?.next_step || undefined,
+      error,
+      governance,
     };
   }
 
@@ -1349,9 +1420,15 @@ export class OperationsClient {
 
     if (!isRecord(json)) return { ok: true };
 
+    const error = safeString(json.error) || undefined;
+    const governance = parseOperationGovernance(json.governance);
+
     return {
       ok: Boolean(json.ok ?? true),
-      message: safeString(json.message) || undefined,
+      status: (safeString(json.status) || undefined) as OperationStatus | undefined,
+      message: safeString(json.message) || error || governance?.next_step || undefined,
+      error,
+      governance,
     };
   }
 

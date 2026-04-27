@@ -136,6 +136,14 @@ actor has `operations.write` in `FRANCIS_API_ACTOR_SCOPES`. Existing Observe
 mode posture blocks and read projections remain unchanged when the permission
 gate allows the request.
 
+As of `2026-04-27`, the chat UI operations client preserves those direct
+operation permission-gate denials across create, patch, cancel, run,
+worker-cycle, and delete response contracts. `OperationsClient` now keeps the
+backend `status`, `error`, and bounded `governance` denial body instead of
+collapsing mutation and execution denials to a bare failed operation response.
+This is interface truth only; it does not widen execution, approval, memory
+write, or mutation authority.
+
 As of `2026-04-26`, domain registry write routes are also wired to the API
 permission gate. `POST /domains/create`, `PATCH /domains/update`, and
 `POST /domains/delete` now deny before mutating local domain registry state unless
@@ -4096,6 +4104,17 @@ Latest targeted validation for the `2026-04-27` direct operation mutation permis
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` chat UI operations permission-denial contract slice:
+
+- `npm run test -- src/operations/index.test.ts`
+  Result: `failed before implementation because operation mutation responses dropped the backend governance body; the focused operations-client contract passed after the parser update`
+- `node --test --experimental-strip-types src/operations/index.test.ts`
+  Result: `9 passed`
+- `npm run test`
+  Result: `68 passed`
+- `npm run build`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 completed mission interface handoff slice:
