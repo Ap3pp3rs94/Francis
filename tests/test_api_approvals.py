@@ -285,6 +285,8 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
                         "run_id": run_id,
                         "artifact_dir": artifact_dir,
                         "advance_action": "run_linked_operation",
+                        "current_task_previous_approval_id": "apr_previous_metadata_handles",
+                        "current_task_previous_approval_status": "approved",
                         "plan_status": "in_progress",
                         "plan_current_step_id": "understand",
                         "plan_current_step_title": "Understand goal + constraints",
@@ -328,6 +330,8 @@ def test_approval_list_preserves_metadata_only_loop_handles(monkeypatch, tmp_pat
     assert listed_item["trace_id"] == trace_id
     assert listed_item["run_id"] == run_id
     assert listed_item["artifact_dir"] == artifact_dir
+    assert listed_item["current_task_previous_approval_id"] == "apr_previous_metadata_handles"
+    assert listed_item["current_task_previous_approval_status"] == "approved"
     assert listed_item["plan_status"] == "in_progress"
     assert listed_item["plan_current_step_id"] == "understand"
     assert listed_item["plan_current_step_title"] == "Understand goal + constraints"

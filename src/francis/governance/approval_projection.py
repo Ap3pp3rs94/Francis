@@ -196,6 +196,46 @@ def _task_plan_summary(task: dict[str, Any], payload: dict[str, Any]) -> dict[st
     return out
 
 
+def _first_source_text(sources: tuple[dict[str, Any], ...], *keys: str) -> str:
+    for source in sources:
+        for key in keys:
+            value = _safe_str(source.get(key)).strip()
+            if value:
+                return value
+    return ""
+
+
+def _task_previous_approval_lineage(
+    task: dict[str, Any],
+    payload: dict[str, Any],
+    receipt: dict[str, Any],
+    sandbox: dict[str, Any],
+    audit: dict[str, Any],
+    sandbox_audit: dict[str, Any],
+) -> dict[str, Any]:
+    task_meta = _as_dict(task.get("meta"))
+    inputs = _task_inputs(task)
+    input_meta = _as_dict(inputs.get("meta"))
+    payload_meta = _as_dict(payload.get("meta"))
+    sources = (payload, payload_meta, receipt, sandbox, audit, sandbox_audit, task_meta, input_meta)
+
+    out: dict[str, Any] = {}
+    previous_approval_id = _first_source_text(sources, "current_task_previous_approval_id", "previous_approval_id")
+    if previous_approval_id:
+        out["current_task_previous_approval_id"] = previous_approval_id
+
+    previous_approval_status = _first_source_text(
+        sources,
+        "current_task_previous_approval_status",
+        "previous_approval_status",
+        "previous_status",
+    )
+    if previous_approval_status:
+        out["current_task_previous_approval_status"] = previous_approval_status
+
+    return out
+
+
 def approval_task_projection(approval_id: str, *, task_root: Path | None = None) -> dict[str, Any]:
     task = approval_task_record(approval_id, task_root=task_root)
     if not task:
@@ -286,6 +326,7 @@ def approval_task_projection(approval_id: str, *, task_root: Path | None = None)
     if artifact_dir:
         out["artifact_dir"] = artifact_dir
 
+    out.update(_task_previous_approval_lineage(task, payload, receipt, sandbox, audit, sandbox_audit))
     out.update(_task_plan_summary(task, payload))
 
     return out
