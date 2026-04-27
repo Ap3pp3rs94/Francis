@@ -34,7 +34,7 @@ import { ExplanationApiError, ExplanationClient, type ExplanationRecord } from "
 import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
-import type { OperationDetail, OperationMemoryReceipt, OperationRecord } from "./operations";
+import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import {
@@ -232,6 +232,21 @@ function missionGovernanceNotice(governance: MissionGovernanceDecision | undefin
     gate ? `gate=${gate}` : "",
     reason ? `reason=${reason}` : "",
     nextStep ? `next=${nextStep}` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" / ") : fallback;
+}
+
+function operationGovernanceNotice(governance: OperationGovernanceDecision | undefined, fallback = ""): string {
+  if (!governance) return fallback;
+  const gate = safeString(governance.gate).trim();
+  const reason = safeString(governance.reason).trim();
+  const nextStep = safeString(governance.next_step).trim();
+  const operatorHint = safeString(governance.operator_hint).trim();
+  const parts = [
+    gate ? `gate=${gate}` : "",
+    reason ? `reason=${reason}` : "",
+    nextStep ? `next=${nextStep}` : "",
+    operatorHint ? `hint=${operatorHint}` : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" / ") : fallback;
 }
@@ -10925,6 +10940,8 @@ function OperationsPanel(props: {
         setWorkerCycleNotice({
           tone: "error",
           text:
+            operationGovernanceNotice(response.governance) ||
+            response.message?.trim() ||
             response.error?.trim() ||
             `Worker cycle exited with code ${String(response.exit_code ?? "unknown")}.`,
         });
@@ -11021,6 +11038,7 @@ function OperationsPanel(props: {
           setComposerNotice({
             tone: "error",
             text:
+              operationGovernanceNotice(createResponse.governance) ||
               createResponse.message ||
               "Governed operation creation failed. Any declared mission was preserved and should be inspected before retrying.",
           });
@@ -11062,7 +11080,9 @@ function OperationsPanel(props: {
             tone: runResponse.ok ? "info" : "error",
             text: runResponse.ok
               ? `Governed request queued and advanced. Inspect the created task for execution, governance, trace, and continuity outcomes.`
-              : runResponse.message || "The task was created, but the first execution step did not complete cleanly.",
+              : operationGovernanceNotice(runResponse.governance) ||
+                runResponse.message ||
+                "The task was created, but the first execution step did not complete cleanly.",
           });
           return;
         }
@@ -11134,7 +11154,11 @@ function OperationsPanel(props: {
       if (!response.ok) {
         setActionNotice({
           tone: "error",
-          text: response.message ? `Run failed: ${response.message}` : `Run failed with status ${nextStatus}.`,
+          text: `Run failed: ${
+            operationGovernanceNotice(response.governance) ||
+            response.message ||
+            `status ${nextStatus}`
+          }.`,
         });
         return;
       }
@@ -11186,7 +11210,11 @@ function OperationsPanel(props: {
       if (!response.ok) {
         setActionNotice({
           tone: "error",
-          text: response.message ? `Cancel failed: ${response.message}` : `Cancel failed with status ${nextStatus}.`,
+          text: `Cancel failed: ${
+            operationGovernanceNotice(response.governance) ||
+            response.message ||
+            `status ${nextStatus}`
+          }.`,
         });
         return;
       }

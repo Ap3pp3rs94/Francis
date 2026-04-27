@@ -144,6 +144,14 @@ collapsing mutation and execution denials to a bare failed operation response.
 This is interface truth only; it does not widen execution, approval, memory
 write, or mutation authority.
 
+As of `2026-04-27`, the chat UI Operations panel consumes that preserved
+operation denial governance in operator action notices. Direct operation create,
+immediate run, selected run, selected cancel, and worker-cycle failure notices
+now prefer the backend gate, reason, next-step, and operator hint fields before
+falling back to generic error/status text. This is a read-only display change;
+it does not alter route policy, execution, approval, memory write, or mutation
+behavior.
+
 As of `2026-04-26`, domain registry write routes are also wired to the API
 permission gate. `POST /domains/create`, `PATCH /domains/update`, and
 `POST /domains/delete` now deny before mutating local domain registry state unless
@@ -4112,6 +4120,13 @@ Latest targeted validation for the `2026-04-27` chat UI operations permission-de
   Result: `failed before implementation because operation mutation responses dropped the backend governance body; the focused operations-client contract passed after the parser update`
 - `node --test --experimental-strip-types src/operations/index.test.ts`
   Result: `9 passed`
+- `npm run test`
+  Result: `68 passed`
+- `npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` chat UI operations denial notice slice:
+
 - `npm run test`
   Result: `68 passed`
 - `npm run build`
