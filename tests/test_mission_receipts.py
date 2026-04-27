@@ -42,6 +42,8 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
             "current_task_source": "terminal_operation_receipt",
             "current_task_approval_id": "apr_receipt_refs",
             "current_task_approval_status": "approved",
+            "current_task_previous_approval_id": "apr_receipt_previous",
+            "current_task_previous_approval_status": "approved",
             "current_task_operation_id": "tsk_receipt_refs",
             "current_task_operation_name": "plugin.run",
             "current_task_operation_plane": "P9_OBSERVABILITY",
@@ -80,6 +82,8 @@ def test_mission_operation_receipts_preserve_structured_references(monkeypatch, 
     assert receipts[0]["current_task_source"] == "terminal_operation_receipt"
     assert receipts[0]["current_task_approval_id"] == "apr_receipt_refs"
     assert receipts[0]["current_task_approval_status"] == "approved"
+    assert receipts[0]["current_task_previous_approval_id"] == "apr_receipt_previous"
+    assert receipts[0]["current_task_previous_approval_status"] == "approved"
     assert receipts[0]["current_task_operation_id"] == "tsk_receipt_refs"
     assert receipts[0]["current_task_operation_name"] == "plugin.run"
     assert receipts[0]["current_task_operation_plane"] == "P9_OBSERVABILITY"

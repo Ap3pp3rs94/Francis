@@ -870,6 +870,15 @@ on the top-level receipt and `references` block so mission and operation memory
 lookups remain reachable. This is readback normalization only; it does not write
 new receipts, create memory, execute work, or change approval state.
 
+As of `2026-04-27`, mission operation memory receipt readback also preserves
+current-task previous approval lineage from continuity-ledger metadata. When a
+terminal operation receipt already carries `current_task_previous_approval_id`
+and `current_task_previous_approval_status`, the mission receipt reader now
+keeps those fields alongside the current-task approval id/status instead of
+dropping the retry lineage at the memory handoff. This is readback preservation
+only; it does not create approvals, retry operations, write memory, or expand
+execution authority.
+
 As of `2026-04-26`, mission detail loop state also uses terminal operation
 memory receipts to carry approved execution posture through the memory and
 interface handoff stages. When an approved supervised execution completes, the
@@ -6020,6 +6029,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 continuity memory receip
 - `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
   Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 mission memory receipt current-task approval-lineage slice:
+
+- `python -m pytest tests\test_mission_receipts.py::test_mission_operation_receipts_preserve_structured_references -q`
+  Result: `failed before implementation with KeyError: current_task_previous_approval_id; passed after the readback fix`
+- `python -m pytest tests\test_mission_receipts.py -q`
+  Result: `3 passed`
+- `python -m ruff check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\memory\mission_receipts.py tests\test_mission_receipts.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\memory\mission_receipts.py`
+  Result: `passed`
+- `python -m pytest tests\test_mission_receipts.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

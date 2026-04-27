@@ -159,6 +159,8 @@ def _operation_receipts_from_continuity(
             "current_task_source",
             "current_task_approval_id",
             "current_task_approval_status",
+            "current_task_previous_approval_id",
+            "current_task_previous_approval_status",
             "current_task_operation_id",
             "current_task_operation_name",
             "current_task_operation_plane",
