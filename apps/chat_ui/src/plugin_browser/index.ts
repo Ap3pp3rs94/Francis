@@ -427,6 +427,8 @@ export type PluginPromotionReadinessEvidence = {
   tests?: unknown[];
   docs?: unknown[];
   risk_tier?: string;
+  validation_receipt_id?: string;
+  validation_receipt_path?: string;
 };
 
 export type PluginPromotionReadinessGovernance = {
@@ -490,6 +492,7 @@ export type PluginForgeProposal = {
   friction?: Record<string, unknown>;
   proposed_capability?: Record<string, unknown>;
   quality_requirements?: Record<string, unknown>;
+  quality_analysis?: Record<string, unknown>;
   staged_implementation?: Record<string, unknown>;
   validation?: Record<string, unknown>;
   review?: PluginForgeProposalReviewSummary;
@@ -989,6 +992,8 @@ function parsePromotionReadinessItem(raw: unknown): PluginPromotionReadinessItem
   const reviewStatus = safeString(evidenceRaw.proposal_review_status, "");
   const reviewReceiptId = safeString(evidenceRaw.proposal_review_receipt_id, "");
   const riskTier = safeString(evidenceRaw.risk_tier, "");
+  const validationReceiptId = safeString(evidenceRaw.validation_receipt_id, "");
+  const validationReceiptPath = safeString(evidenceRaw.validation_receipt_path, "");
   const proposalEvidence = safeUnknownArray(evidenceRaw.proposal_evidence);
   const tests = safeUnknownArray(evidenceRaw.tests);
   const docs = safeUnknownArray(evidenceRaw.docs);
@@ -998,6 +1003,8 @@ function parsePromotionReadinessItem(raw: unknown): PluginPromotionReadinessItem
   if (tests) evidence.tests = tests;
   if (docs) evidence.docs = docs;
   if (riskTier) evidence.risk_tier = riskTier;
+  if (validationReceiptId) evidence.validation_receipt_id = validationReceiptId;
+  if (validationReceiptPath) evidence.validation_receipt_path = validationReceiptPath;
   if (Object.keys(evidence).length > 0) item.evidence = evidence;
 
   const governanceRaw = isRecord(raw.governance) ? raw.governance : {};
@@ -1074,6 +1081,8 @@ function parseForgeProposal(raw: unknown): PluginForgeProposal | null {
   else if (isRecord(raw.proposedCapability)) item.proposed_capability = raw.proposedCapability;
   if (isRecord(raw.quality_requirements)) item.quality_requirements = raw.quality_requirements;
   else if (isRecord(raw.qualityRequirements)) item.quality_requirements = raw.qualityRequirements;
+  if (isRecord(raw.quality_analysis)) item.quality_analysis = raw.quality_analysis;
+  else if (isRecord(raw.qualityAnalysis)) item.quality_analysis = raw.qualityAnalysis;
   if (isRecord(raw.staged_implementation)) item.staged_implementation = raw.staged_implementation;
   else if (isRecord(raw.stagedImplementation)) item.staged_implementation = raw.stagedImplementation;
   if (isRecord(raw.validation)) item.validation = raw.validation;

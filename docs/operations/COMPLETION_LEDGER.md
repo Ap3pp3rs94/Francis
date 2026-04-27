@@ -200,6 +200,15 @@ returns them. This remains read-only operator evidence: it does not decide
 proposals, promote staged capabilities, execute plugins, or infer readiness
 client-side.
 
+As of `2026-04-27`, the chat UI plugin browser also surfaces Forge validation
+receipt evidence already returned by the backend. `PluginBrowserClient` now
+preserves validation receipt id/path fields from promotion-readiness evidence and
+proposal quality analysis, and the Plugins panel renders the selected staged
+candidate's linked validation receipt/artifact path when present. This is
+readback-only UI evidence: it does not call new write routes, make validation
+receipts a new promotion gate, decide proposals, promote staged capabilities,
+execute plugins, write memory, or infer readiness client-side.
+
 As of `2026-04-27`, Stage 4/Forge capability catalog readback has a first
 summary and lineage index at the plugin registry layer. The catalog emitted by
 `PluginRegistry.to_dict()` now includes deterministic plugin risk counts,
@@ -4202,6 +4211,16 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
+validation-evidence readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `74 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge capability
 catalog validation-lineage slice:

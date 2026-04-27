@@ -10048,6 +10048,19 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       .sort((a, b) => (b.decided_ts ?? 0) - (a.decided_ts ?? 0));
   }, [forgeProposalReviews, selectedForgeProposal?.proposal_id, selectedPromotionReadiness?.proposal_id]);
   const latestForgeProposalReview = selectedForgeProposalReviews[0] ?? null;
+  const selectedForgeValidationEvidence = useMemo(() => {
+    const qualityEvidence = forgeRecord(selectedForgeProposal?.quality_analysis, "evidence");
+    const proposalValidation = selectedForgeProposal?.validation;
+    const receiptId =
+      safeString(selectedPromotionReadiness?.evidence?.validation_receipt_id).trim() ||
+      forgeRecordString(proposalValidation, "validation_receipt_id") ||
+      forgeRecordString(qualityEvidence, "validation_receipt_id");
+    const receiptPath =
+      safeString(selectedPromotionReadiness?.evidence?.validation_receipt_path).trim() ||
+      forgeRecordString(proposalValidation, "validation_receipt_path") ||
+      forgeRecordString(qualityEvidence, "validation_receipt_path");
+    return { receiptId, receiptPath };
+  }, [selectedForgeProposal?.quality_analysis, selectedForgeProposal?.validation, selectedPromotionReadiness?.evidence]);
 
   function pluginErrorMessage(err: unknown): string {
     if (err instanceof PluginBrowserApiError) {
@@ -10060,6 +10073,11 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
 
   function forgeRecordString(record: Record<string, unknown> | undefined, key: string): string {
     return safeString(record?.[key]).trim();
+  }
+
+  function forgeRecord(record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+    const value = record?.[key];
+    return isRecord(value) ? value : undefined;
   }
 
   function forgeRecordCount(record: Record<string, unknown> | undefined, key: string): number {
@@ -10454,6 +10472,9 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 {latestForgeProposalReview?.status ? (
                   <span style={badgeStyle(latestForgeProposalReview.status)}>review {latestForgeProposalReview.status}</span>
                 ) : null}
+                {selectedForgeValidationEvidence.receiptId ? (
+                  <span style={badgeStyle("validation")}>validation receipt</span>
+                ) : null}
               </div>
             </div>
             <div style={{ marginTop: 6 }}>
@@ -10465,6 +10486,24 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 </>
               ) : null}
             </div>
+            {selectedForgeValidationEvidence.receiptId || selectedForgeValidationEvidence.receiptPath ? (
+              <div style={{ marginTop: 4 }}>
+                validation receipt{" "}
+                {selectedForgeValidationEvidence.receiptId ? (
+                  <code>{selectedForgeValidationEvidence.receiptId}</code>
+                ) : (
+                  <code>unreported</code>
+                )}
+                {selectedForgeValidationEvidence.receiptPath ? (
+                  <>
+                    {" "}
+                    / artifact <code>{selectedForgeValidationEvidence.receiptPath}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <div style={{ marginTop: 4 }}>No validation receipt returned for this proposal.</div>
+            )}
             {forgeRecordString(selectedForgeProposal.friction, "summary") ? (
               <div style={{ marginTop: 4 }}>
                 friction <code>{forgeRecordString(selectedForgeProposal.friction, "summary")}</code>

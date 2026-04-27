@@ -124,6 +124,8 @@ test("PluginBrowserClient lists Forge promotion readiness with filters", async (
             tests: ["tests/test_api_plugins.py"],
             docs: ["README.md"],
             risk_tier: "medium",
+            validation_receipt_id: "plugin_validation_pl_stage_1",
+            validation_receipt_path: "data/artifacts/plugins/validations/plugin_validation_pl_stage_1.json",
           },
           governance: {
             gate: "forge_promotion_readiness",
@@ -155,6 +157,11 @@ test("PluginBrowserClient lists Forge promotion readiness with filters", async (
     assert.deepEqual(res.items[0]?.missing_requirements, ["proposal_review"]);
     assert.equal(res.items[0]?.plugin?.status, "staged");
     assert.equal(res.items[0]?.evidence?.proposal_review_status, "staged");
+    assert.equal(res.items[0]?.evidence?.validation_receipt_id, "plugin_validation_pl_stage_1");
+    assert.equal(
+      res.items[0]?.evidence?.validation_receipt_path,
+      "data/artifacts/plugins/validations/plugin_validation_pl_stage_1.json",
+    );
     assert.equal(res.items[0]?.governance?.promotion_authority, false);
     assert.equal(res.items[0]?.governance?.execution_authority, false);
   } finally {
@@ -184,6 +191,13 @@ test("PluginBrowserClient lists Forge proposals and review receipts", async () =
               risk_tier: "medium",
               tests: ["tests/test_api_forge.py"],
               docs: ["README.md"],
+            },
+            quality_analysis: {
+              evidence: {
+                validation_receipt_id: "plugin_validation_pl_stage_1",
+                validation_receipt_path: "data/artifacts/plugins/validations/plugin_validation_pl_stage_1.json",
+                validation_receipt_present: true,
+              },
             },
             review_receipt_id: "review_1",
             review: {
@@ -227,6 +241,11 @@ test("PluginBrowserClient lists Forge proposals and review receipts", async () =
     assert.equal(proposals.items[0]?.proposal_id, "proposal_pl_stage_1");
     assert.equal(proposals.items[0]?.review?.receipt_id, "review_1");
     assert.equal(proposals.items[0]?.quality_requirements?.risk_tier, "medium");
+    assert.deepEqual(proposals.items[0]?.quality_analysis?.evidence, {
+      validation_receipt_id: "plugin_validation_pl_stage_1",
+      validation_receipt_path: "data/artifacts/plugins/validations/plugin_validation_pl_stage_1.json",
+      validation_receipt_present: true,
+    });
     assert.equal(reviews.items[0]?.receipt_id, "review_1");
     assert.equal(reviews.items[0]?.decision, "approve");
     assert.equal(reviews.items[0]?.previous_status, "staged");
