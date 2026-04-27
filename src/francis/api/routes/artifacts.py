@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from fastapi import APIRouter, Query
@@ -45,6 +46,8 @@ _ORIGIN_RECEIPT_FIELDS = (
     "current_task_next_step",
 )
 _ORIGIN_RECEIPT_TEXT_FIELDS = ("operation_error", "result_message", "recovery_next_step")
+_ORIGIN_RECEIPT_PLAN_TEXT_FIELDS = ("plan_status", "plan_current_step_id", "plan_current_step_title")
+_ORIGIN_RECEIPT_PLAN_NUMBER_FIELDS = ("plan_step_count", "plan_checkpoint_count")
 
 
 def _artifact_root() -> Path:
@@ -62,6 +65,27 @@ def _safe_str(value: object) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _safe_nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return max(0, int(value))
+    text = _safe_str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return max(0, int(parsed))
 
 
 def _is_under(root: Path, target: Path) -> bool:
@@ -193,6 +217,14 @@ def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[
         for field in _ORIGIN_RECEIPT_TEXT_FIELDS:
             value = redact_operation_text(meta.get(field))
             if value:
+                projection[field] = value
+        for field in _ORIGIN_RECEIPT_PLAN_TEXT_FIELDS:
+            value = redact_secret_text(_safe_str(meta.get(field)).strip())
+            if value:
+                projection[field] = value
+        for field in _ORIGIN_RECEIPT_PLAN_NUMBER_FIELDS:
+            value = _safe_nonnegative_int(meta.get(field))
+            if value is not None:
                 projection[field] = value
 
         operation_id = _safe_str(projection.get("operation_id") or projection.get("task_id")).strip()

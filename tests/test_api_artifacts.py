@@ -83,6 +83,11 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
             "operation_error": "plugin_id_required",
             "result_message": "Plugin id is required. password=artifactsecret123",
             "recovery_next_step": "review_operation_detail token=artifactrecovery123",
+            "plan_status": "in_progress",
+            "plan_current_step_id": "understand",
+            "plan_current_step_title": "Understand goal + constraints",
+            "plan_step_count": "4",
+            "plan_checkpoint_count": 3,
             "active_stage": "deadletter",
             "handoff_stage": "deadletter",
             "handoff_action": "retry_or_deadletter",
@@ -127,6 +132,11 @@ def test_artifact_inspect_projects_originating_receipt(monkeypatch, tmp_path: Pa
     assert receipt["operation_error"] == "plugin_id_required"
     assert receipt["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert receipt["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert receipt["plan_status"] == "in_progress"
+    assert receipt["plan_current_step_id"] == "understand"
+    assert receipt["plan_current_step_title"] == "Understand goal + constraints"
+    assert receipt["plan_step_count"] == 4
+    assert receipt["plan_checkpoint_count"] == 3
     assert receipt["active_stage"] == "deadletter"
     assert receipt["handoff_stage"] == "deadletter"
     assert receipt["handoff_action"] == "retry_or_deadletter"

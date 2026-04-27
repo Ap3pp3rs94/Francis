@@ -32,6 +32,11 @@ export type ArtifactOriginatingReceipt = {
   operation_error?: string;
   result_message?: string;
   recovery_next_step?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
   active_stage?: string;
   handoff_stage?: string;
   handoff_action?: string;
@@ -150,6 +155,14 @@ function safeBoolean(value: unknown): boolean | undefined {
 
 function safeNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function safeOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value !== "string") return undefined;
+
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
 }
 
 function safeNullableNumber(value: unknown): number | null | undefined {
@@ -306,6 +319,9 @@ function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | und
     "operation_error",
     "result_message",
     "recovery_next_step",
+    "plan_status",
+    "plan_current_step_id",
+    "plan_current_step_title",
     "active_stage",
     "handoff_stage",
     "handoff_action",
@@ -331,6 +347,11 @@ function parseOriginatingReceipt(raw: unknown): ArtifactOriginatingReceipt | und
   ] as const) {
     const value = safeString(raw[key]).trim();
     if (value) receipt[key] = value;
+  }
+
+  for (const key of ["plan_step_count", "plan_checkpoint_count"] as const) {
+    const value = safeOptionalNumber(raw[key]);
+    if (value !== undefined) receipt[key] = Math.max(0, value);
   }
 
   if (isRecord(raw.references)) {
