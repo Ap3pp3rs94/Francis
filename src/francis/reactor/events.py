@@ -391,6 +391,47 @@ def _deadletter_candidate_receipt(
     )
 
 
+def _retry_candidate_receipt(
+    *,
+    event_id: str,
+    bounds: dict[str, Any],
+    attempt_count: int,
+    ts: int,
+    actor: str,
+    reason: str,
+) -> dict[str, Any] | None:
+    max_retries = _safe_int(bounds.get("max_retries"), default=0, minimum=0, maximum=10)
+    if max_retries <= 0 or attempt_count > max_retries:
+        return None
+    backoff_seconds = _safe_int(bounds.get("backoff_seconds"), default=0, minimum=0, maximum=3_600)
+    return _filtered_receipt(
+        {
+            "kind": "reactor.retry_candidate.receipt",
+            "candidate_id": f"{event_id}_retry_candidate_{attempt_count}",
+            "event_id": event_id,
+            "status": "candidate",
+            "route": "retry_backoff",
+            "gate": "dispatch_engine_not_implemented",
+            "outcome": "dispatch_engine_not_implemented",
+            "stable_state": "awaiting_dispatch_engine",
+            "next_step": "wait_for_dispatch_engine_before_retry",
+            "attempt_count": attempt_count,
+            "max_retries": max_retries,
+            "remaining_retries": max(max_retries - attempt_count, 0),
+            "backoff_seconds": backoff_seconds,
+            "next_retry_after_ts": ts + backoff_seconds if backoff_seconds > 0 else 0,
+            "stop_conditions": bounds.get("stop_conditions"),
+            "actor": actor,
+            "reason": reason,
+            "ts": ts,
+            "execution_started": False,
+            "retry_scheduled": False,
+            "retry_started": False,
+            "applied": False,
+        }
+    )
+
+
 def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     path = _event_path(event_id)
     if path is None or not path.exists() or not path.is_file():
@@ -450,6 +491,16 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             ts=ts,
         )
         blocker["deadletter_candidate_receipt_id"] = deadletter_candidate.get("candidate_id")
+    retry_candidate = None
+    if allowed:
+        retry_candidate = _retry_candidate_receipt(
+            event_id=event_key,
+            bounds=bounds,
+            attempt_count=attempt_count,
+            ts=ts,
+            actor=actor,
+            reason=reason,
+        )
 
     receipt = _dispatch_attempt_receipt(
         event_id=event_key,
@@ -483,6 +534,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         updated_dispatch.pop("blocked_route", None)
     if deadletter_candidate is not None:
         updated_dispatch["deadletter_candidate"] = deadletter_candidate
+    if retry_candidate is not None:
+        updated_dispatch["retry_candidate"] = retry_candidate
+    else:
+        updated_dispatch.pop("retry_candidate", None)
 
     raw_journal = record.get("decision_journal")
     decision_journal = raw_journal if isinstance(raw_journal, list) else []
@@ -501,6 +556,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         journal_entry["blocked_route"] = blocker.get("route")
     if deadletter_candidate is not None:
         journal_entry["deadletter_candidate_id"] = deadletter_candidate.get("candidate_id")
+    if retry_candidate is not None:
+        journal_entry["retry_candidate_id"] = retry_candidate.get("candidate_id")
     decision_journal.append(journal_entry)
 
     raw_receipts = record.get("receipts")
@@ -510,6 +567,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     receipts.append(receipt)
     if deadletter_candidate is not None:
         receipts.append(deadletter_candidate)
+    if retry_candidate is not None:
+        receipts.append(retry_candidate)
     raw_blockers = record.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
     if blocker is not None:
@@ -522,7 +581,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
     record["latest_dispatch_attempt_receipt"] = receipt
-    record["latest_receipt"] = deadletter_candidate or receipt
+    record["latest_receipt"] = deadletter_candidate or retry_candidate or receipt
     if blocker is not None:
         record["blockers"] = blockers
         record["latest_blocker"] = blocker
@@ -534,6 +593,12 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         deadletter_candidates.append(deadletter_candidate)
         record["deadletter_candidates"] = deadletter_candidates
         record["latest_deadletter_candidate"] = deadletter_candidate
+    if retry_candidate is not None:
+        raw_retry_candidates = record.get("retry_candidates")
+        retry_candidates = raw_retry_candidates if isinstance(raw_retry_candidates, list) else []
+        retry_candidates.append(retry_candidate)
+        record["retry_candidates"] = retry_candidates
+        record["latest_retry_candidate"] = retry_candidate
     raw_governance = record.get("governance")
     governance = raw_governance if isinstance(raw_governance, dict) else {}
     governance.update(
@@ -611,6 +676,7 @@ def reactor_status() -> dict[str, Any]:
     stable_state_counts: dict[str, int] = {}
     blocker_route_counts: dict[str, int] = {}
     deadletter_candidate_counts: dict[str, int] = {}
+    retry_candidate_counts: dict[str, int] = {}
     for item in items:
         status = _safe_str(item.get("status")).strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -632,6 +698,11 @@ def reactor_status() -> dict[str, Any]:
         deadletter_status = _safe_str(deadletter_candidate.get("status")).strip()
         if deadletter_status:
             deadletter_candidate_counts[deadletter_status] = deadletter_candidate_counts.get(deadletter_status, 0) + 1
+        raw_retry_candidate = dispatch.get("retry_candidate") or item.get("latest_retry_candidate")
+        retry_candidate = raw_retry_candidate if isinstance(raw_retry_candidate, dict) else {}
+        retry_status = _safe_str(retry_candidate.get("status")).strip()
+        if retry_status:
+            retry_candidate_counts[retry_status] = retry_candidate_counts.get(retry_status, 0) + 1
     return {
         "ok": True,
         "status": "ready",
@@ -641,6 +712,7 @@ def reactor_status() -> dict[str, Any]:
         "stable_state_counts": stable_state_counts,
         "blocker_route_counts": blocker_route_counts,
         "deadletter_candidate_counts": deadletter_candidate_counts,
+        "retry_candidate_counts": retry_candidate_counts,
         "dispatch_engine": "not_implemented",
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {

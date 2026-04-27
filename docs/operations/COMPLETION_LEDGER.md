@@ -476,6 +476,18 @@ candidate readback only: it does not enqueue a real deadletter item, start a
 retry, execute work, consume operation budgets, decide approvals, write memory,
 or create UI claims.
 
+As of `2026-04-27`, deferred Reactor dispatch attempts can also preserve a
+retry-candidate receipt when retry budget exists. When a dispatch-eligible event
+is attempted while the dispatch engine remains `not_implemented`, the event can
+record a `reactor.retry_candidate.receipt`, link it from dispatch state,
+decision journal, latest receipt, and receipt history, and surface
+`retry_candidate_counts` through `/reactor/status`. The receipt preserves
+attempt count, max retries, remaining retry budget, backoff seconds, stop
+conditions, and the next retry timestamp candidate. This is candidate readback
+only: it does not schedule a retry, start retry execution, consume budgets,
+decide approvals, enqueue deadletters, dispatch work, write memory, or create UI
+claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4349,6 +4361,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+retry-candidate receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`; Ruff reported non-blocking cache write warnings under
+  `.ruff_cache`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`; Ruff reported non-blocking cache write warnings under
+  `.ruff_cache`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 deadletter-candidate receipt slice:
@@ -8746,10 +8776,10 @@ These remain true and should block any "finished" claim:
   product-ready surfaces
 - Stage 5/Reactor currently has non-executing trigger intake, readback,
   dispatch-attempt receipts, blocked-dispatch blocker records, and
-  deadletter-candidate receipts only; bounded dispatch execution, real
-  approval/deadletter queue integration, verification, retry/backoff,
-  deadletter/escalation, stable-return receipts, and operator visibility are
-  still remaining work
+  deadletter-candidate and retry-candidate receipts only; bounded dispatch
+  execution, real approval/deadletter queue integration, verification, real
+  retry scheduling/backoff execution, deadletter/escalation, stable-return
+  receipts, and operator visibility are still remaining work
 
 ## 6. Update rule
 
