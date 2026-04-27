@@ -16,6 +16,22 @@ def _forge_promotion_meta(label: str) -> dict[str, object]:
     }
 
 
+def _approve_forge_proposal(client, proposal_id: str) -> None:
+    approved = client.post(
+        "/forge/proposals/decision",
+        json={
+            "id": proposal_id,
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "test proposal approval",
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["status"] == "approved"
+
+
 def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -864,7 +880,9 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
         },
     )
     assert built.status_code == 200
-    plugin_id = str(built.json()["plugin_id"])
+    built_body = built.json()
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
     enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
     assert enabled.status_code == 200
     assert enabled.json()["ok"] is True

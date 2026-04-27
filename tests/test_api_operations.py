@@ -19,6 +19,22 @@ def _forge_promotion_meta(label: str) -> dict[str, object]:
     }
 
 
+def _approve_forge_proposal(client, proposal_id: str) -> None:
+    approved = client.post(
+        "/forge/proposals/decision",
+        json={
+            "id": proposal_id,
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "test proposal approval",
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["status"] == "approved"
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -670,7 +686,9 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
         },
     )
     assert built.status_code == 200
-    plugin_id = str(built.json()["plugin_id"])
+    built_body = built.json()
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
     enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
     assert enabled.status_code == 200
     assert enabled.json()["ok"] is True
@@ -942,7 +960,9 @@ def test_operations_run_surfaces_completed_mission_memory_receipt(monkeypatch, t
         },
     )
     assert built.status_code == 200
-    plugin_id = str(built.json()["plugin_id"])
+    built_body = built.json()
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
     enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
     assert enabled.status_code == 200
     assert enabled.json()["ok"] is True
@@ -1177,7 +1197,9 @@ def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> Non
         },
     )
     assert built.status_code == 200
-    plugin_id = str(built.json()["plugin_id"])
+    built_body = built.json()
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
     enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
     assert enabled.status_code == 200
     assert enabled.json()["ok"] is True

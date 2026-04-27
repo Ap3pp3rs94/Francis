@@ -159,6 +159,17 @@ proposal-review counts plus list/get routes for those receipts. This creates an
 inspectable proposal review workflow without promoting plugins, enabling staged
 capabilities, granting execution authority, or adding UI claims.
 
+As of `2026-04-27`, Stage 4/Forge staged generated-plugin promotion readiness is
+now tied to that proposal review truth. When explicit `POST /plugins/enable`
+targets a staged Forge candidate, Francis reads the linked proposal artifact and
+blocks promotion unless the proposal has an approved review receipt, even when
+the candidate already has proposal evidence, tests, docs, and a bounded risk
+tier. Successful promotion receipts now preserve the approved proposal-review
+status and receipt id alongside the proposal id and evidence. This connects the
+review workflow to promotion readiness without auto-promoting plugins, granting
+execution authority, changing non-staged plugin enable behavior, or adding UI
+claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4034,9 +4045,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-proposal, staging, proposal review, promotion-receipt, readback, and
-promotion-readiness boundary:
+proposal, staging, proposal review, review-gated promotion-readiness,
+promotion-receipt, and readback boundary:
 
+- `python -m pytest tests\test_api_plugins.py::test_staged_plugin_promotion_requires_approved_proposal_review tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\test_api_plugins.py::test_plugins_tools_catalog_and_action_validation tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_plugins_permission_gate.py tests\test_api_operations.py tests\test_api_missions.py tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_operations.py tests\test_api_missions.py`
+  Result: `5 files already formatted`
+- `git diff --check`
+  Result: `passed`
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
 - `python -m pytest tests\test_api_forge.py -q`

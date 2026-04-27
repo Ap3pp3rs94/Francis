@@ -62,6 +62,7 @@ def _runtime_catalog_path() -> Path:
 
 
 _PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+_PLUGIN_ARTIFACT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _ALLOWED_STATUSES = {
     "enabled",
     "disabled",
@@ -622,6 +623,40 @@ def _plugin_proposal_path(proposal_id: str) -> Path:
     return _art_dir() / "proposals" / f"{_safe_str(proposal_id).strip()}.json"
 
 
+def _plugin_proposal_review_state(proposal_id: str) -> dict[str, Any]:
+    resolved_id = _safe_str(proposal_id).strip()
+    if not resolved_id:
+        return {"status": "missing", "review_status": "missing", "receipt_id": "", "approved": False}
+    if not _PLUGIN_ARTIFACT_ID_RE.match(resolved_id):
+        return {"status": "invalid", "review_status": "invalid", "receipt_id": "", "approved": False}
+
+    proposal_root = _art_dir() / "proposals"
+    proposal_path = _plugin_proposal_path(resolved_id)
+    if not _is_under(proposal_root, proposal_path):
+        return {"status": "invalid", "review_status": "invalid", "receipt_id": "", "approved": False}
+    if not proposal_path.exists() or not proposal_path.is_file():
+        return {"status": "missing", "review_status": "missing", "receipt_id": "", "approved": False}
+
+    try:
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {"status": "unreadable", "review_status": "unreadable", "receipt_id": "", "approved": False}
+    if not isinstance(proposal, dict):
+        return {"status": "unreadable", "review_status": "unreadable", "receipt_id": "", "approved": False}
+
+    review = proposal.get("review") if isinstance(proposal.get("review"), dict) else {}
+    status = _safe_str(proposal.get("status")).strip().lower() or "unknown"
+    review_status = _safe_str(review.get("status")).strip().lower() or status
+    receipt_id = _safe_str(proposal.get("review_receipt_id") or review.get("receipt_id")).strip()
+    approved = status == "approved" and review_status == "approved" and bool(receipt_id)
+    return {
+        "status": status,
+        "review_status": review_status,
+        "receipt_id": receipt_id,
+        "approved": approved,
+    }
+
+
 def _plugin_promotion_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "promotions" / f"{_safe_str(receipt_id).strip()}.json"
 
@@ -703,10 +738,11 @@ def _plugin_promotion_readiness(
     risk_tier = _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(staged)
     evidence = payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or []
     tests = payload_meta.get("tests") or payload_meta.get("test_refs") or []
+    proposal_id = _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip()
+    proposal_review = _plugin_proposal_review_state(proposal_id)
     requirements = {
-        "proposal_id": bool(
-            _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip()
-        ),
+        "proposal_id": bool(proposal_id),
+        "proposal_review": bool(proposal_review["approved"]),
         "proposal_evidence": _has_readiness_value(evidence),
         "tests": _has_readiness_value(tests),
         "docs": _has_readiness_value(docs),
@@ -718,7 +754,9 @@ def _plugin_promotion_readiness(
         "missing_requirements": missing,
         "requirements": requirements,
         "evidence": {
-            "proposal_id": _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip(),
+            "proposal_id": proposal_id,
+            "proposal_review_status": proposal_review["review_status"],
+            "proposal_review_receipt_id": proposal_review["receipt_id"],
             "proposal_evidence": evidence,
             "tests": tests,
             "docs": docs,
@@ -752,8 +790,8 @@ def _promotion_readiness_blocked(
             "gate": "forge_promotion_readiness",
             "scope": _PLUGIN_WRITE_SCOPE,
             "route": "/plugins/enable",
-            "next_step": "attach_friction_evidence_tests_docs_and_risk_before_promotion",
-            "operator_hint": "Promotion requires proposal evidence, tests, docs, and a bounded risk tier.",
+            "next_step": "approve_proposal_and_attach_friction_evidence_tests_docs_and_risk_before_promotion",
+            "operator_hint": "Promotion requires an approved proposal review, proposal evidence, tests, docs, and a bounded risk tier.",
         },
     }
 
@@ -846,6 +884,8 @@ def _write_plugin_promotion_receipt(
 ) -> dict[str, Any]:
     previous_meta = dict(previous.get("meta") or {}) if isinstance(previous.get("meta"), dict) else {}
     payload_meta = {**previous_meta, **redact_governed_metadata(payload.meta)}
+    proposal_id = _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id") or "").strip()
+    proposal_review = _plugin_proposal_review_state(proposal_id)
     receipt = {
         "kind": "plugin.promotion.receipt",
         "receipt_id": receipt_id,
@@ -859,9 +899,11 @@ def _write_plugin_promotion_receipt(
         "promoted_ts": promoted_ts,
         "actor": redact_governed_value(_safe_str(payload.actor).strip()),
         "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
-        "proposal_id": _safe_str(
-            payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id") or ""
-        ).strip(),
+        "proposal_id": proposal_id,
+        "proposal_review": {
+            "status": proposal_review["review_status"],
+            "receipt_id": proposal_review["receipt_id"],
+        },
         "proposal_evidence": payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or [],
         "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
         "promotion_context": payload_meta,

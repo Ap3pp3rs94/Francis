@@ -5,6 +5,23 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _approve_forge_proposal(client, proposal_id: str) -> dict[str, object]:
+    approved = client.post(
+        "/forge/proposals/decision",
+        json={
+            "id": proposal_id,
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "test proposal approval",
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["status"] == "approved"
+    return approved_body
+
+
 def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -65,6 +82,9 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert proposal_get_body["item"]["relative_path"] == f"proposals/{proposal_id}.json"
     assert raw_secret not in str(proposal_get_body)
 
+    approved = _approve_forge_proposal(client, proposal_id)
+    review_receipt_id = str(approved["review_receipt_id"])
+
     enabled = client.post(
         "/plugins/enable",
         json={
@@ -87,6 +107,8 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert promotion_item["receipt_id"] == receipt_id
     assert promotion_item["plugin_id"] == plugin_id
     assert promotion_item["proposal_id"] == proposal_id
+    assert promotion_item["proposal_review"]["status"] == "approved"
+    assert promotion_item["proposal_review"]["receipt_id"] == review_receipt_id
     assert promotion_item["proposal_evidence"] == ["mission.forge.readback"]
     assert promotion_item["quality"]["tests"] == ["tests/test_api_forge.py::test_forge_proposal_and_promotion_readback"]
     assert "api_key=[REDACTED:secret]" in promotion_item["reason"]
