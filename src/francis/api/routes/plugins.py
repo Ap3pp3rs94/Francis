@@ -614,6 +614,106 @@ def _plugin_approval_artifact_dir(approval_id: str) -> Path:
     return _art_dir() / "approvals" / _safe_str(approval_id).strip()
 
 
+def _plugin_promotion_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "promotions" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _plugin_promotion_receipt_id(plugin_id: str, promoted_ts: int) -> str:
+    return f"plugin_promotion_{promoted_ts}_{_slugify(plugin_id)}"
+
+
+def _plugin_risk_tier(plugin: dict[str, Any]) -> str:
+    highest = "normal"
+    highest_order = _RISK_ORDER.get(highest, 1)
+    for capability in _capabilities_for_plugin(_safe_str(plugin.get("id")).strip(), plugin.get("capabilities")):
+        meta = capability.get("meta") if isinstance(capability, dict) else {}
+        meta_obj = meta if isinstance(meta, dict) else {}
+        risk_tier = _safe_str(meta_obj.get("risk_tier")).strip().lower() or "normal"
+        risk_order = _RISK_ORDER.get(risk_tier, highest_order)
+        if risk_order > highest_order:
+            highest = risk_tier
+            highest_order = risk_order
+    return highest
+
+
+def _plugin_promotion_quality(
+    plugin_id: str,
+    promoted: dict[str, Any],
+    payload_meta: dict[str, Any],
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    promoted_meta = promoted.get("meta") if isinstance(promoted.get("meta"), dict) else {}
+    generated_dir = _safe_str(promoted.get("generated_dir")).strip()
+    readme_path = Path(generated_dir) / "README.md" if generated_dir else _gen_dir() / plugin_id / "README.md"
+    docs: Any = payload_meta.get("docs") or payload_meta.get("documentation") or []
+    if not docs and readme_path.exists():
+        docs = [str(readme_path.resolve())]
+    return {
+        "summary": payload_meta.get("summary")
+        or _safe_str(promoted.get("description")).strip()
+        or _safe_str(promoted.get("name")).strip()
+        or plugin_id,
+        "risk_tier": _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(promoted),
+        "tests": payload_meta.get("tests") or payload_meta.get("test_refs") or [],
+        "docs": docs,
+        "known_limits": payload_meta.get("known_limits") or payload_meta.get("limits") or [],
+        "validation": {
+            "contract_source_path": _safe_str(promoted_meta.get("contract_source_path")).strip(),
+            "registry_snapshot_path": _safe_str(promoted_meta.get("registry_snapshot_path")).strip(),
+            "catalog_path": _safe_str(catalog.get("path")).strip(),
+            "catalog_total_plugins": int(catalog.get("total_plugins") or 0),
+            "catalog_total_tools": int(catalog.get("total_tools") or 0),
+        },
+    }
+
+
+def _write_plugin_promotion_receipt(
+    *,
+    plugin_id: str,
+    receipt_id: str,
+    receipt_path: Path,
+    previous: dict[str, Any],
+    promoted: dict[str, Any],
+    payload: "PluginToggleIn",
+    promoted_ts: int,
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    payload_meta = redact_governed_metadata(payload.meta)
+    receipt = {
+        "kind": "plugin.promotion.receipt",
+        "receipt_id": receipt_id,
+        "plugin_id": plugin_id,
+        "status": "promoted",
+        "previous_status": _safe_str(previous.get("status")).strip() or "unknown",
+        "previous_enabled": bool(previous.get("enabled", False)),
+        "promoted_status": "enabled",
+        "promoted_enabled": True,
+        "staged_ts": previous.get("updated_ts") or previous.get("installed_ts"),
+        "promoted_ts": promoted_ts,
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
+        "proposal_id": _safe_str(
+            payload_meta.get("proposal_id")
+            or payload_meta.get("forge_proposal_id")
+            or (previous.get("meta") if isinstance(previous.get("meta"), dict) else {}).get("proposal_id")
+            or ""
+        ).strip(),
+        "proposal_evidence": payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or [],
+        "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
+        "promotion_context": payload_meta,
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/enable",
+            "explicit": True,
+        },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = _redact_plugin_receipt(receipt)
+    _atomic_write_display_json(receipt_path, redacted_receipt)
+    return redacted_receipt
+
+
 def _request_plugin_approval(
     *,
     plugin_id: str,
@@ -1866,13 +1966,38 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
         if current is None:
             return {"ok": False, "error": "not_found", "id": plugin_id}
 
+        previous = dict(current)
+        was_staged = _safe_str(previous.get("status")).strip().lower() == "staged"
+        promoted_ts = _now_s()
+        promotion_receipt_id = ""
+        promotion_receipt_path = Path()
+        if was_staged:
+            promotion_receipt_id = _plugin_promotion_receipt_id(plugin_id, promoted_ts)
+            promotion_receipt_path = _plugin_promotion_receipt_path(promotion_receipt_id)
+            tags = [tag for tag in _parse_tags(current.get("tags")) if tag != "staged"]
+            if "promoted" not in tags:
+                tags.append("promoted")
+            current["tags"] = tags
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            meta.update(
+                {
+                    "promotion_status": "promoted",
+                    "promotion_receipt_id": promotion_receipt_id,
+                    "promotion_receipt_path": str(promotion_receipt_path),
+                    "promoted_ts": promoted_ts,
+                    "promoted_by": redact_governed_value(_safe_str(payload.actor).strip()),
+                }
+            )
+            current["meta"] = meta
+
         current["enabled"] = True
         current["status"] = "enabled"
-        current["updated_ts"] = _now_s()
-        _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
+        current["updated_ts"] = promoted_ts
+        promoted = _normalize_plugin_record(plugin_id, current)
+        _write_plugin(registry, promoted)
         catalog = _save_registry_and_catalog(registry)
 
-        return {
+        out: dict[str, object] = {
             "ok": True,
             "id": plugin_id,
             "enabled": True,
@@ -1880,6 +2005,21 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
             "message": "enabled",
             "catalog": catalog,
         }
+        if was_staged:
+            promotion_receipt = _write_plugin_promotion_receipt(
+                plugin_id=plugin_id,
+                receipt_id=promotion_receipt_id,
+                receipt_path=promotion_receipt_path,
+                previous=previous,
+                promoted=promoted,
+                payload=payload,
+                promoted_ts=promoted_ts,
+                catalog=catalog,
+            )
+            out["promotion_status"] = "promoted"
+            out["promotion_receipt_id"] = promotion_receipt_id
+            out["promotion_receipt"] = promotion_receipt
+        return out
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 

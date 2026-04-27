@@ -60,6 +60,65 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert run_staged_body["error"] == "plugin_staged"
     assert run_staged_body["status"] == "staged"
 
+    raw_secret = "sk-" + ("x" * 24)
+    enabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "reason": f"test_enable api_key={raw_secret}",
+            "actor": _PLUGIN_ACTOR,
+            "meta": {
+                "proposal_id": "forge.echo.proposal",
+                "proposal_evidence": ["mission.echo.repeat"],
+                "tests": ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"],
+                "docs": ["README.md"],
+                "api_key": raw_secret,
+            },
+        },
+    )
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True
+    assert enabled_body["enabled"] is True
+    assert enabled_body["promotion_status"] == "promoted"
+    promotion_receipt = enabled_body["promotion_receipt"]
+    assert promotion_receipt["kind"] == "plugin.promotion.receipt"
+    assert promotion_receipt["plugin_id"] == plugin_id
+    assert promotion_receipt["previous_status"] == "staged"
+    assert promotion_receipt["promoted_status"] == "enabled"
+    assert promotion_receipt["proposal_id"] == "forge.echo.proposal"
+    assert promotion_receipt["proposal_evidence"] == ["mission.echo.repeat"]
+    assert promotion_receipt["quality"]["risk_tier"] == "normal"
+    assert promotion_receipt["quality"]["tests"] == ["tests/test_api_plugins.py::test_plugins_build_lifecycle_and_run"]
+    assert promotion_receipt["promotion_context"]["api_key"] == "[REDACTED:secret]"
+    assert "api_key=[REDACTED:secret]" in promotion_receipt["reason"]
+    receipt_path = Path(str(promotion_receipt["path"]))
+    assert receipt_path.exists()
+    receipt_text = receipt_path.read_text(encoding="utf-8")
+    assert raw_secret not in receipt_text
+    persisted_receipt = json.loads(receipt_text)
+    assert persisted_receipt["receipt_id"] == promotion_receipt["receipt_id"]
+    assert persisted_receipt["status"] == "promoted"
+
+    promoted = client.get(f"/plugins/get?id={plugin_id}")
+    assert promoted.status_code == 200
+    promoted_item = promoted.json()["item"]
+    assert promoted_item["status"] == "enabled"
+    assert promoted_item["enabled"] is True
+    assert "staged" not in promoted_item["tags"]
+    assert "promoted" in promoted_item["tags"]
+    assert promoted_item["meta"]["promotion_status"] == "promoted"
+    assert promoted_item["meta"]["promotion_receipt_id"] == promotion_receipt["receipt_id"]
+
+    run_enabled = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_enabled.status_code == 200
+    run_enabled_body = run_enabled.json()
+    assert run_enabled_body["ok"] is True
+    assert str(run_enabled_body["output"]) == "Plugin response: hello"
+    assert run_enabled_body["receipt"]["ok"] is True
+    assert run_enabled_body["receipt"]["run_id"]
+    assert run_enabled_body["receipt"]["trace_id"]
+
     disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable", "actor": _PLUGIN_ACTOR})
     assert disabled.status_code == 200
     disabled_body = disabled.json()
@@ -72,21 +131,6 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     run_disabled_body = run_disabled.json()
     assert run_disabled_body["ok"] is False
     assert run_disabled_body["status"] == "disabled"
-
-    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable", "actor": _PLUGIN_ACTOR})
-    assert enabled.status_code == 200
-    enabled_body = enabled.json()
-    assert enabled_body["ok"] is True
-    assert enabled_body["enabled"] is True
-
-    run_enabled = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
-    assert run_enabled.status_code == 200
-    run_enabled_body = run_enabled.json()
-    assert run_enabled_body["ok"] is True
-    assert str(run_enabled_body["output"]) == "Plugin response: hello"
-    assert run_enabled_body["receipt"]["ok"] is True
-    assert run_enabled_body["receipt"]["run_id"]
-    assert run_enabled_body["receipt"]["trace_id"]
 
     downloaded = client.get(f"/plugins/download/{plugin_id}")
     assert downloaded.status_code == 200

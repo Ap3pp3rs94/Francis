@@ -101,6 +101,18 @@ unchanged. This is a Forge staging/isolation contract only; it is not a full
 proposal system, validation flow, promotion receipt flow, or capability economy
 closure claim.
 
+As of `2026-04-27`, Stage 4/Forge generated-plugin promotion has a first
+receipt boundary. When a plugin moves directly from `status: staged` to
+`enabled` through explicit `POST /plugins/enable` with `plugins.write` scope,
+Francis now writes an inspectable `plugin.promotion.receipt` under
+`data/artifacts/plugins/promotions/`, returns the receipt in the enable response,
+and preserves promotion lineage in plugin registry metadata. The receipt records
+the previous staged state, promoted state, actor, redacted reason/context,
+proposal id/evidence when supplied, quality fields, validation/catalog pointers,
+and the permission gate used for activation. This does not create a full Forge
+proposal system, does not add new execution authority, does not auto-promote,
+and does not yet enforce promotion readiness from tests/docs/risk material.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -3976,10 +3988,12 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-staging boundary:
+staging and promotion-receipt boundary:
 
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
+- `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
+  Result: `passed`
 - `python -m pytest tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_operations.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
@@ -3990,6 +4004,8 @@ staging boundary:
   Result: `passed`
 - `python -m ruff format --check src\francis\api\routes\plugins.py tests\test_api_plugins.py tests\test_api_operations.py tests\test_api_missions.py`
   Result: `4 files already formatted`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 3/Missions closure proof:
 
