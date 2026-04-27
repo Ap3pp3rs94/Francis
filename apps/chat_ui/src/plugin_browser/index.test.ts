@@ -57,12 +57,14 @@ test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", as
     await client.disable({ id: "pl_echo" });
     await client.install({ source_kind: "registry", source_ref: "acme/echo" });
     await client.uninstall({ id: "pl_echo" });
+    await client.decideForgeProposal({ id: "proposal_pl_echo", action: "approve" });
     await client.reload();
 
     assert.equal(captured["/plugins/enable"]?.actor, "chat_ui.plugins");
     assert.equal(captured["/plugins/disable"]?.actor, "chat_ui.plugins");
     assert.equal(captured["/plugins/install"]?.actor, "chat_ui.plugins");
     assert.equal(captured["/plugins/uninstall"]?.actor, "chat_ui.plugins");
+    assert.equal(captured["/forge/proposals/decision"]?.actor, "chat_ui.plugins");
     assert.equal(captured["/plugins/reload"]?.actor, "chat_ui.plugins");
   } finally {
     restoreFetch();
@@ -79,6 +81,10 @@ test("PluginBrowserClient treats backend permission denials as mutation errors",
 
     await assert.rejects(
       () => client.install({ source_kind: "registry", source_ref: "acme/echo", actor: "chat_ui.plugins" }),
+      (err: unknown) => err instanceof PluginBrowserApiError && err.message === "api_permission_denied",
+    );
+    await assert.rejects(
+      () => client.decideForgeProposal({ id: "proposal_pl_stage_1", action: "approve", actor: "chat_ui.plugins" }),
       (err: unknown) => err instanceof PluginBrowserApiError && err.message === "api_permission_denied",
     );
   } finally {
@@ -249,6 +255,70 @@ test("PluginBrowserClient lists Forge proposals and review receipts", async () =
     assert.equal(reviews.items[0]?.receipt_id, "review_1");
     assert.equal(reviews.items[0]?.decision, "approve");
     assert.equal(reviews.items[0]?.previous_status, "staged");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("PluginBrowserClient decides Forge proposals through the governed review route", async () => {
+  let captured: Record<string, unknown> = {};
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    assert.equal(parsed.pathname, "/forge/proposals/decision");
+    captured = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return jsonResponse({
+      ok: true,
+      applied: true,
+      status: "approved",
+      proposal_id: "proposal_pl_stage_1",
+      plugin_id: "pl_stage",
+      review_receipt_id: "review_1",
+      review_receipt: {
+        id: "review_1",
+        receipt_id: "review_1",
+        proposal_id: "proposal_pl_stage_1",
+        plugin_id: "pl_stage",
+        previous_status: "staged",
+        status: "approved",
+        decision: "approve",
+        reason: "operator review",
+        relative_path: "proposal_reviews/review_1.json",
+      },
+      item: {
+        id: "proposal_pl_stage_1",
+        proposal_id: "proposal_pl_stage_1",
+        plugin_id: "pl_stage",
+        status: "approved",
+      },
+      governance: {
+        gate: "forge_proposal_review",
+        promotion_authority: false,
+        execution_authority: false,
+      },
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const res = await client.decideForgeProposal({
+      id: "proposal_pl_stage_1",
+      action: "approve",
+      reason: "operator review",
+    });
+
+    assert.equal(captured.id, "proposal_pl_stage_1");
+    assert.equal(captured.action, "approve");
+    assert.equal(captured.actor, "chat_ui.plugins");
+    assert.equal(captured.reason, "operator review");
+    assert.equal(res.ok, true);
+    assert.equal(res.applied, true);
+    assert.equal(res.status, "approved");
+    assert.equal(res.proposal_id, "proposal_pl_stage_1");
+    assert.equal(res.review_receipt?.receipt_id, "review_1");
+    assert.equal(res.item?.status, "approved");
+    assert.equal(res.governance?.promotion_authority, false);
+    assert.equal(res.governance?.execution_authority, false);
   } finally {
     restoreFetch();
   }

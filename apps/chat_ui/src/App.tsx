@@ -37,6 +37,7 @@ import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import type {
   PluginForgeProposal,
+  PluginForgeProposalDecisionAction,
   PluginForgeProposalReview,
   PluginPromotionReadinessItem,
   PluginRef,
@@ -10001,6 +10002,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
   const [forgeProposals, setForgeProposals] = useState<PluginForgeProposal[]>([]);
   const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
+  const [proposalDecisionReason, setProposalDecisionReason] = useState("operator reviewed Forge proposal");
   const [selectedPluginId, setSelectedPluginId] = useState("");
   const [selectedToolId, setSelectedToolId] = useState("");
   const [toolDetail, setToolDetail] = useState<PluginToolRef | null>(null);
@@ -10048,6 +10050,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       .sort((a, b) => (b.decided_ts ?? 0) - (a.decided_ts ?? 0));
   }, [forgeProposalReviews, selectedForgeProposal?.proposal_id, selectedPromotionReadiness?.proposal_id]);
   const latestForgeProposalReview = selectedForgeProposalReviews[0] ?? null;
+  const selectedForgeProposalStatus = safeString(selectedForgeProposal?.status).trim().toLowerCase();
   const selectedForgeValidationEvidence = useMemo(() => {
     const qualityEvidence = forgeRecord(selectedForgeProposal?.quality_analysis, "evidence");
     const proposalValidation = selectedForgeProposal?.validation;
@@ -10310,6 +10313,31 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }
   }
 
+  async function decideSelectedForgeProposal(action: PluginForgeProposalDecisionAction) {
+    const proposalId = selectedForgeProposal?.proposal_id ?? selectedPromotionReadiness?.proposal_id ?? "";
+    if (!proposalId) {
+      setError("Select a Forge proposal.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    try {
+      const res = await client.decideForgeProposal({
+        id: proposalId,
+        action,
+        reason: proposalDecisionReason.trim() || "operator reviewed Forge proposal",
+      });
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section style={panelStyle}>
       <div style={{ fontSize: 16, fontWeight: 600 }}>Plugins</div>
@@ -10531,6 +10559,37 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
             ) : (
               <div style={{ marginTop: 6 }}>No proposal review receipt returned for this proposal.</div>
             )}
+            <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+              <input
+                value={proposalDecisionReason}
+                onChange={(e) => setProposalDecisionReason(e.target.value)}
+                placeholder="Proposal decision reason"
+                style={inputStyle}
+              />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  style={buttonStyle}
+                  disabled={busy || selectedForgeProposalStatus === "approved"}
+                  onClick={() => void decideSelectedForgeProposal("approve")}
+                >
+                  Approve proposal
+                </button>
+                <button
+                  style={buttonStyle}
+                  disabled={busy || selectedForgeProposalStatus === "needs_revision"}
+                  onClick={() => void decideSelectedForgeProposal("request_changes")}
+                >
+                  Request changes
+                </button>
+                <button
+                  style={buttonStyle}
+                  disabled={busy || selectedForgeProposalStatus === "rejected"}
+                  onClick={() => void decideSelectedForgeProposal("reject")}
+                >
+                  Reject proposal
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 10 }}>

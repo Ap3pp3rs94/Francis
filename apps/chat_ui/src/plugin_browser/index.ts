@@ -517,6 +517,31 @@ export type PluginForgeProposalReview = {
   governance?: Record<string, unknown>;
 };
 
+export type PluginForgeProposalDecisionAction = "approve" | "reject" | "request_changes" | string;
+
+export type PluginForgeProposalDecisionRequest = {
+  id: string;
+  action: PluginForgeProposalDecisionAction;
+  actor?: string;
+  reason?: string;
+  notes?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type PluginForgeProposalDecisionResponse = {
+  ok: boolean;
+  applied?: boolean;
+  status?: string;
+  error?: string;
+  allowed_actions?: string[];
+  proposal_id?: string;
+  plugin_id?: string;
+  review_receipt_id?: string;
+  review_receipt?: PluginForgeProposalReview;
+  item?: PluginForgeProposal;
+  governance?: Record<string, unknown>;
+};
+
 export type PluginForgeProposalListResponse = {
   items: PluginForgeProposal[];
   total?: number;
@@ -1141,6 +1166,7 @@ export type PluginBrowserEndpoints = {
   promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
   proposalsList: (q?: PluginForgeArtifactListParams) => string;
   proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
+  proposalDecision: () => string;
   toolsList: (q?: PluginToolListParams) => string;
   toolsGet: (id: string) => string;
   toolsExport: (format: PluginToolsExportFormat, q?: PluginToolListParams) => string;
@@ -1204,6 +1230,7 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
         proposal_id: q?.proposal_id,
         status: q?.status,
       })}`,
+    proposalDecision: () => "/forge/proposals/decision",
     toolsList: (q) =>
       `/plugins/tools/list${encodeQuery({
         limit: q?.limit,
@@ -1602,6 +1629,53 @@ export class PluginBrowserClient {
       total: total > 0 ? total : undefined,
       offset: offset >= 0 ? offset : undefined,
       limit: limit > 0 ? limit : undefined,
+    };
+  }
+
+  /**
+   * Apply a governed Forge proposal decision.
+   */
+  async decideForgeProposal(
+    req: PluginForgeProposalDecisionRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginForgeProposalDecisionResponse> {
+    const id = (req?.id || "").trim();
+    const action = (req?.action || "").trim();
+    if (!id || !action) throw new Error("PluginBrowserClient.decideForgeProposal requires req.id and req.action");
+
+    const url = this.url(this.endpoints.proposalDecision());
+    const body = { ...req, id, action, actor: pluginMutationActor(req.actor) };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    assertPluginMutationAllowed(json, "Forge proposal decision denied.", url);
+    if (!isRecord(json)) return { ok: true, applied: true, proposal_id: id };
+
+    const reviewReceipt = parseForgeProposalReview((json as Record<string, unknown>).review_receipt);
+    const item = parseForgeProposal((json as Record<string, unknown>).item);
+    const allowedActions = safeStringArray((json as Record<string, unknown>).allowed_actions);
+
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      applied:
+        typeof (json as Record<string, unknown>).applied === "boolean"
+          ? Boolean((json as Record<string, unknown>).applied)
+          : undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      error: safeString((json as Record<string, unknown>).error, "") || undefined,
+      allowed_actions: allowedActions,
+      proposal_id: safeString((json as Record<string, unknown>).proposal_id, id) || id,
+      plugin_id: safeString((json as Record<string, unknown>).plugin_id, "") || undefined,
+      review_receipt_id: safeString((json as Record<string, unknown>).review_receipt_id, "") || undefined,
+      review_receipt: reviewReceipt ?? undefined,
+      item: item ?? undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
     };
   }
 

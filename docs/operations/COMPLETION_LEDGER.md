@@ -209,6 +209,19 @@ readback-only UI evidence: it does not call new write routes, make validation
 receipts a new promotion gate, decide proposals, promote staged capabilities,
 execute plugins, write memory, or infer readiness client-side.
 
+As of `2026-04-27`, the chat UI plugin browser has a first governed Forge
+proposal-decision workflow. `PluginBrowserClient` now posts proposal decisions
+to the existing `POST /forge/proposals/decision` route with an explicit
+`chat_ui.plugins` actor, preserves the returned review receipt/proposal item,
+and treats permission-gate denials as mutation errors. The Plugins panel renders
+bounded `Approve proposal`, `Request changes`, and `Reject proposal` controls
+for the selected linked Forge proposal, with a decision reason field and readback
+refresh after the backend responds. The chat UI route contract now asserts the
+decision endpoint is mounted. This uses the existing backend permission gate and
+review receipt path only: it does not change backend scopes, create promotion
+authority, promote staged capabilities, execute plugins, write memory, or bypass
+the explicit `/plugins/enable` promotion step.
+
 As of `2026-04-27`, Stage 4/Forge capability catalog readback has a first
 summary and lineage index at the plugin registry layer. The catalog emitted by
 `PluginRegistry.to_dict()` now includes deterministic plugin risk counts,
@@ -4211,6 +4224,25 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
+proposal-decision workflow slice:
+
+- `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_decision_receipts_without_promotion -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `75 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m ruff check tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_contract_chat_ui.py`
+  Result: `passed`; Ruff also reported a non-blocking cache write warning for
+  `.ruff_cache`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge plugin-browser
 validation-evidence readback slice:
