@@ -113,6 +113,32 @@ test("buildExplanationEvidenceQueries follows completed handoff receipt handles"
   ]);
 });
 
+test("buildExplanationEvidenceQueries follows loop-only mission receipt handles", () => {
+  const queries = buildExplanationEvidenceQueries({
+    receipt: {
+      current_task_mission_id: "msn_loop_current",
+      handoff_mission_id: "msn_loop_handoff",
+      current_task_operation_id: "tsk_loop_current",
+      current_task_trace_id: "trace_loop_current",
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "mission=msn_loop_current",
+      filters: { mission_id: "msn_loop_current", limit: 8 },
+    },
+    {
+      label: "task=tsk_loop_current",
+      filters: { operation_id: "tsk_loop_current", limit: 8 },
+    },
+    {
+      label: "trace=trace_loop_current",
+      filters: { trace_id: "trace_loop_current", limit: 8 },
+    },
+  ]);
+});
+
 test("mergeExplanationEvidenceResponses dedupes by id, sorts newest first, and limits results", () => {
   const items = mergeExplanationEvidenceResponses(
     [

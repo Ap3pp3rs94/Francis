@@ -426,6 +426,15 @@ records render returned mission/task references when present. This is read-only
 interface reachability; it does not create explanation records or infer missing
 evidence.
 
+As of `2026-04-27`, the chat UI explanation evidence query builder also follows
+loop-only mission receipt handles. `buildExplanationEvidenceQueries` now
+recognizes `current_task_mission_id` and `handoff_mission_id` on terminal
+receipts before falling back to top-level or normalized mission references, so
+bounded explanation lookups can follow the same mission handoff aliases already
+promoted by the backend explanation registry. This is interface query
+reachability only; it does not create explanation records, change backend
+filtering, execute operations, alter approvals, or infer mission state.
+
 As of `2026-04-26`, the repeated main-branch CI failure was traced to the
 workflow Mypy gate, not pytest runtime failures. The static typing gap in
 mission receipt readback and chat mission-ingress metadata compaction is now
@@ -3994,6 +4003,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation mission-hand
   Result: `passed`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_api_explanation.py -q`
   Result: `2 passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 explanation evidence mission-handle interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_evidence\index.test.ts`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `70 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation handle readback and CI Mypy recovery slice:
 
