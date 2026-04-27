@@ -285,6 +285,60 @@ def test_reactor_dispatch_attempt_records_retry_exhaustion_without_deadlettering
     assert status["retry_exhausted_counts"] == {"exhausted": 1}
 
 
+def test_reactor_event_list_filters_review_routes_and_receipt_kinds(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    approval_event = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Approval-gated mutation needs review",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "approval_id": "appr_reactor_filter",
+        }
+    )
+    approval_id = str(approval_event["event_id"])
+    record_dispatch_attempt(approval_id, {"actor": "reactor.test"})
+
+    budget_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted event needs deadletter review",
+            "action_class": "mission_tick",
+            "max_actions": 0,
+        }
+    )
+    budget_id = str(budget_event["event_id"])
+    record_dispatch_attempt(budget_id, {"actor": "reactor.test"})
+
+    retry_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Retry-exhausted event needs review",
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 1,
+        }
+    )
+    retry_id = str(retry_event["event_id"])
+    record_dispatch_attempt(retry_id, {"actor": "reactor.test"})
+    record_dispatch_attempt(retry_id, {"actor": "reactor.test"})
+
+    assert {item["event_id"] for item in list_events(review_route="approval_queue")} == {approval_id}
+    assert {item["event_id"] for item in list_events(blocker_route="deadletter_candidate")} == {budget_id}
+    assert {item["event_id"] for item in list_events(review_route="deadletter_candidate")} == {
+        budget_id,
+        retry_id,
+    }
+    assert {item["event_id"] for item in list_events(stable_state="retry_budget_exhausted")} == {retry_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.retry_exhausted.receipt")} == {retry_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter_candidate.receipt")} == {
+        budget_id
+    }
+
+
 def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

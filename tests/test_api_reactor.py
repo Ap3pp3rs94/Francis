@@ -90,6 +90,96 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["status_counts"] == {"dispatch_deferred": 1}
 
 
+def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    approval = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Approval-gated mutation needs review",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "approval_id": "appr_reactor_filter",
+        },
+    ).json()
+    approval_id = str(approval["event_id"])
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": approval_id, "actor": _REACTOR_ACTOR},
+    )
+
+    budget = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted event needs deadletter review",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 0,
+        },
+    ).json()
+    budget_id = str(budget["event_id"])
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": budget_id, "actor": _REACTOR_ACTOR},
+    )
+
+    retry = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Retry-exhausted event needs review",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 1,
+        },
+    ).json()
+    retry_id = str(retry["event_id"])
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": retry_id, "actor": _REACTOR_ACTOR},
+    )
+    client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": retry_id, "actor": _REACTOR_ACTOR},
+    )
+
+    approval_list = client.get("/reactor/events/list", params={"review_route": "approval_queue"})
+    assert approval_list.status_code == 200
+    assert {item["event_id"] for item in approval_list.json()["items"]} == {approval_id}
+
+    deadletter_blockers = client.get("/reactor/events/list", params={"blocker_route": "deadletter_candidate"})
+    assert deadletter_blockers.status_code == 200
+    assert {item["event_id"] for item in deadletter_blockers.json()["items"]} == {budget_id}
+
+    deadletter_review = client.get("/reactor/events/list", params={"review_route": "deadletter_candidate"})
+    assert deadletter_review.status_code == 200
+    assert {item["event_id"] for item in deadletter_review.json()["items"]} == {budget_id, retry_id}
+
+    exhausted_state = client.get("/reactor/events/list", params={"stable_state": "retry_budget_exhausted"})
+    assert exhausted_state.status_code == 200
+    assert {item["event_id"] for item in exhausted_state.json()["items"]} == {retry_id}
+
+    exhausted_receipt = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.retry_exhausted.receipt"},
+    )
+    assert exhausted_receipt.status_code == 200
+    assert {item["event_id"] for item in exhausted_receipt.json()["items"]} == {retry_id}
+
+
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

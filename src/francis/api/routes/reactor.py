@@ -90,8 +90,20 @@ def events_list(
     limit: int = Query(200, ge=1, le=5000),
     status: str | None = None,
     trigger_source: str | None = None,
+    stable_state: str | None = None,
+    blocker_route: str | None = None,
+    review_route: str | None = None,
+    receipt_kind: str | None = None,
 ) -> dict[str, Any]:
-    items = list_events(limit=limit, status=status, trigger_source=trigger_source)
+    items = list_events(
+        limit=limit,
+        status=status,
+        trigger_source=trigger_source,
+        stable_state=stable_state,
+        blocker_route=blocker_route,
+        review_route=review_route,
+        receipt_kind=receipt_kind,
+    )
     return {"ok": True, "items": items, "total": len(items), "limit": limit}
 
 

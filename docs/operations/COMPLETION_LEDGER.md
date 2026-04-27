@@ -499,6 +499,15 @@ at the `deadletter_candidate` route but remains readback only: it does not
 enqueue a deadletter, schedule or start a retry, execute work, consume operation
 budgets, decide approvals, write memory, or create UI claims.
 
+As of `2026-04-27`, Reactor event readback also supports bounded review filters.
+`GET /reactor/events/list` can now filter persisted events by stable state,
+blocker route, review route, and receipt kind, so approval-queue blockers,
+operator-review blockers, deadletter candidates, retry candidates, and
+retry-exhausted records can be discovered without manually scanning every event.
+These filters are readback-only and reuse persisted Reactor records; they do not
+enqueue approvals or deadletters, schedule or start retries, dispatch work,
+execute anything, write memory, or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4372,6 +4381,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+event review-filter readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 retry-exhaustion receipt slice:
@@ -8808,10 +8835,11 @@ These remain true and should block any "finished" claim:
   product-ready surfaces
 - Stage 5/Reactor currently has non-executing trigger intake, readback,
   dispatch-attempt receipts, blocked-dispatch blocker records, and
-  deadletter-candidate, retry-candidate, and retry-exhausted receipts only;
-  bounded dispatch execution, real approval/deadletter queue integration,
-  verification, real retry scheduling/backoff execution, deadletter/escalation,
-  stable-return receipts, and operator visibility are still remaining work
+  deadletter-candidate, retry-candidate, retry-exhausted, and review-filter
+  readback only; bounded dispatch execution, real approval/deadletter queue
+  integration, verification, real retry scheduling/backoff execution,
+  deadletter/escalation, stable-return receipts, and operator visibility are
+  still remaining work
 
 ## 6. Update rule
 

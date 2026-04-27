@@ -270,6 +270,10 @@ def _read_raw_event(path: Path) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _filtered_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in receipt.items() if value not in ("", {}, [])}
 
@@ -700,12 +704,20 @@ def list_events(
     limit: int = 200,
     status: str | None = None,
     trigger_source: str | None = None,
+    stable_state: str | None = None,
+    blocker_route: str | None = None,
+    review_route: str | None = None,
+    receipt_kind: str | None = None,
 ) -> list[dict[str, Any]]:
     root = _event_root()
     if not root.exists():
         return []
     status_filter = _safe_str(status).strip().lower()
     source_filter = _safe_str(trigger_source).strip().lower()
+    stable_state_filter = _safe_str(stable_state).strip().lower()
+    blocker_route_filter = _safe_str(blocker_route).strip().lower()
+    review_route_filter = _safe_str(review_route).strip().lower()
+    receipt_kind_filter = _safe_str(receipt_kind).strip().lower()
     items: list[dict[str, Any]] = []
     for path in sorted(root.glob("*.json")):
         if not path.is_file():
@@ -713,11 +725,19 @@ def list_events(
         item = _read_event(path)
         if not item:
             continue
-        raw_trigger = item.get("trigger")
-        trigger = raw_trigger if isinstance(raw_trigger, dict) else {}
+        trigger = _as_dict(item.get("trigger"))
+        dispatch = _as_dict(item.get("dispatch"))
         if status_filter and _safe_str(item.get("status")).strip().lower() != status_filter:
             continue
         if source_filter and _safe_str(trigger.get("source")).strip().lower() != source_filter:
+            continue
+        if stable_state_filter and _safe_str(item.get("stable_state")).strip().lower() != stable_state_filter:
+            continue
+        if blocker_route_filter and blocker_route_filter not in _blocker_routes(dispatch):
+            continue
+        if review_route_filter and review_route_filter not in _review_routes(item):
+            continue
+        if receipt_kind_filter and receipt_kind_filter not in _receipt_kinds(item):
             continue
         items.append(item)
     items.sort(
@@ -728,6 +748,51 @@ def list_events(
         reverse=True,
     )
     return items[: max(1, min(int(limit), 5000))]
+
+
+def _blocker_routes(dispatch: dict[str, Any]) -> set[str]:
+    routes = {_safe_str(dispatch.get("blocked_route")).strip().lower()}
+    blocker = _as_dict(dispatch.get("blocker"))
+    routes.add(_safe_str(blocker.get("route")).strip().lower())
+    return {route for route in routes if route}
+
+
+def _review_routes(item: dict[str, Any]) -> set[str]:
+    dispatch = _as_dict(item.get("dispatch"))
+    routes = set(_blocker_routes(dispatch))
+    routes.add(_safe_str(dispatch.get("retry_exhausted_route")).strip().lower())
+    for key in ("deadletter_candidate", "retry_candidate", "retry_exhausted"):
+        candidate = _as_dict(dispatch.get(key))
+        routes.add(_safe_str(candidate.get("route")).strip().lower())
+    for key in ("latest_blocker", "latest_deadletter_candidate", "latest_retry_candidate", "latest_retry_exhausted"):
+        candidate = _as_dict(item.get(key))
+        routes.add(_safe_str(candidate.get("route")).strip().lower())
+    raw_blockers = item.get("blockers")
+    blockers = raw_blockers if isinstance(raw_blockers, list) else []
+    for blocker_item in blockers:
+        blocker = _as_dict(blocker_item)
+        routes.add(_safe_str(blocker.get("route")).strip().lower())
+    return {route for route in routes if route}
+
+
+def _receipt_kinds(item: dict[str, Any]) -> set[str]:
+    kinds = set()
+    for key in (
+        "receipt",
+        "latest_receipt",
+        "latest_dispatch_attempt_receipt",
+        "latest_deadletter_candidate",
+        "latest_retry_candidate",
+        "latest_retry_exhausted",
+    ):
+        receipt = _as_dict(item.get(key))
+        kinds.add(_safe_str(receipt.get("kind")).strip().lower())
+    raw_receipts = item.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    for receipt_item in receipts:
+        receipt = _as_dict(receipt_item)
+        kinds.add(_safe_str(receipt.get("kind")).strip().lower())
+    return {kind for kind in kinds if kind}
 
 
 def get_event(event_id: str) -> dict[str, Any] | None:
