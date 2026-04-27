@@ -4063,6 +4063,8 @@ promotion-receipt, and readback boundary:
   Result: `passed`
 - `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
   Result: `passed`
+- `python -m mypy src\francis\api\routes\forge.py`
+  Result: `passed`
 - `python -m ruff check src\francis\api\routes\forge.py tests\test_api_forge.py`
   Result: `passed`
 - `python -m ruff format --check src\francis\api\routes\forge.py tests\test_api_forge.py`

@@ -186,7 +186,8 @@ def _read_proposal(proposal_id: str) -> dict[str, Any]:
 def _proposal_review_state(proposal: dict[str, Any]) -> dict[str, Any]:
     if not proposal:
         return {"status": "missing", "receipt_id": "", "approved": False}
-    review = proposal.get("review") if isinstance(proposal.get("review"), dict) else {}
+    review_raw = proposal.get("review")
+    review: dict[str, Any] = review_raw if isinstance(review_raw, dict) else {}
     proposal_status = _safe_str(proposal.get("status")).strip().lower() or "unknown"
     review_status = _safe_str(review.get("status")).strip().lower() or proposal_status
     receipt_id = _safe_str(proposal.get("review_receipt_id") or review.get("receipt_id")).strip()
@@ -198,11 +199,14 @@ def _proposal_review_state(proposal: dict[str, Any]) -> dict[str, Any]:
 
 
 def _promotion_readiness_for_plugin(plugin_id: str, plugin: dict[str, Any]) -> dict[str, Any]:
-    meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
+    meta_raw = plugin.get("meta")
+    meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
     proposal_id = _safe_str(meta.get("proposal_id") or meta.get("forge_proposal_id")).strip()
     proposal = _read_proposal(proposal_id)
-    friction = proposal.get("friction") if isinstance(proposal.get("friction"), dict) else {}
-    quality = proposal.get("quality_requirements") if isinstance(proposal.get("quality_requirements"), dict) else {}
+    friction_raw = proposal.get("friction")
+    friction: dict[str, Any] = friction_raw if isinstance(friction_raw, dict) else {}
+    quality_raw = proposal.get("quality_requirements")
+    quality: dict[str, Any] = quality_raw if isinstance(quality_raw, dict) else {}
     review = _proposal_review_state(proposal)
 
     evidence = meta.get("proposal_evidence") or meta.get("evidence") or friction.get("evidence") or []
