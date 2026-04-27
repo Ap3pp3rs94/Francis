@@ -1385,6 +1385,14 @@ operator handoff. When the linked operation output already carries
 surfaces. This is read-only plan context for the Stage 3 loop; it does not
 revise plans, execute work, approve actions, or synthesize missing plan output.
 
+As of `2026-04-26`, the chat UI missions client preserves that mission
+current-task plan summary contract. `MissionCurrentTask` now keeps
+`plan_status`, current step id/title, step count, and checkpoint count from
+mission detail payloads, and the missions client contract test proves those
+fields survive browser-side parsing. This is typed readback only; it does not
+add new rendering claims, plan mutation, execution authority, or approval
+authority.
+
 As of `2026-04-26`, completed receipt-backed mission loops now return their
 active handoff to the `interface` stage after memory closes. A completed mission
 with a terminal operation memory receipt keeps the `memory` stage and receipt
@@ -4416,6 +4424,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission interface plan s
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m mypy src\francis\api\routes\missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 mission current-task plan summary client slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `15 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

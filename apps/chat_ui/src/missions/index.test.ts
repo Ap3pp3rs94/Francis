@@ -1425,6 +1425,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         latest_receipt_status: "queued",
         latest_receipt_ts: "2024-03-09T16:00:01Z",
         last_advance_operation_id: "tsk_loop",
+        plan_status: "in_progress",
+        plan_current_step_id: "understand",
+        plan_current_step_title: "Understand goal + constraints",
+        plan_step_count: 4,
+        plan_checkpoint_count: 3,
       },
       receipt_summary: {
         linked_operation_count: 1,
@@ -1783,6 +1788,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.current_task?.latest_receipt_event, "governance_hold");
     assert.equal(response.current_task?.latest_receipt_status, "queued");
     assert.equal(response.current_task?.latest_receipt_ts, "2024-03-09T16:00:01Z");
+    assert.equal(response.current_task?.plan_status, "in_progress");
+    assert.equal(response.current_task?.plan_current_step_id, "understand");
+    assert.equal(response.current_task?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(response.current_task?.plan_step_count, 4);
+    assert.equal(response.current_task?.plan_checkpoint_count, 3);
     assert.equal(response.receipt_summary?.linked_operation_count, 1);
     assert.equal(response.receipt_summary?.run_ledger_count, 1);
     assert.equal(response.receipt_summary?.history_count, 2);

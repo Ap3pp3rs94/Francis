@@ -183,6 +183,11 @@ export type MissionCurrentTask = {
   latest_receipt_status?: string;
   latest_receipt_ts?: string;
   last_advance_operation_id?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
 };
 
 export type MissionReceiptSummary = {
@@ -1011,6 +1016,11 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    plan_status: safeString(raw.plan_status, "") || undefined,
+    plan_current_step_id: safeString(raw.plan_current_step_id, "") || undefined,
+    plan_current_step_title: safeString(raw.plan_current_step_title, "") || undefined,
+    plan_step_count: safeNumber(raw.plan_step_count, 0) || undefined,
+    plan_checkpoint_count: safeNumber(raw.plan_checkpoint_count, 0) || undefined,
   };
 
   if (
@@ -1029,7 +1039,12 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     !task.run_id &&
     !task.artifact_dir &&
     !task.latest_receipt_event &&
-    !task.latest_receipt_status
+    !task.latest_receipt_status &&
+    !task.plan_status &&
+    !task.plan_current_step_id &&
+    !task.plan_current_step_title &&
+    !task.plan_step_count &&
+    !task.plan_checkpoint_count
   ) {
     return undefined;
   }
