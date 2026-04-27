@@ -74,6 +74,17 @@ mission loop leaves receipt-backed tick, deadletter, continuity, and
 reconstruction evidence, Stage 3 remains active and Stage 4 Forge should not be
 started from this ledger.
 
+As of `2026-04-27`, Stage 3 readiness proof has a bounded operator diagnostic
+command instead of relying on a hand-reconstructed test recipe. `python -m
+francis stage3-readiness-proof --confirm --actor <scoped_actor>` creates one
+completed proof mission and one explicitly deadlettered proof mission through
+the public mission API routes, then reports the continuity briefing readiness
+payload. The command refuses to run without `--confirm` and still requires the
+actor to have `missions.write` in `FRANCIS_API_ACTOR_SCOPES`; it does not create
+new mission authority, execution authority, approval bypasses, memory writes, or
+Stage 4 behavior. This makes the remaining Stage 3 blocker reproducible without
+claiming Stage 3 closure.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -3947,6 +3958,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 3 readiness proof
+diagnostic slice:
+
+- `python -m pytest tests\test_stage3_readiness_proof.py -q`
+  Result: `3 passed`
+- `python -m pytest tests\test_stage3_readiness_proof.py tests\test_api_continuity.py::test_continuity_briefing_reports_ready_stage3_mission_posture -q`
+  Result: `4 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\missions\readiness_proof.py src\francis\__main__.py tests\test_stage3_readiness_proof.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\missions\readiness_proof.py src\francis\__main__.py tests\test_stage3_readiness_proof.py`
+  Result: `3 files already formatted`
+- `python -m francis stage3-readiness-proof`
+  Result: refused without `--confirm` and returned `confirmation_required`
 
 Latest targeted validation for the `2026-04-26` Stage 3 mission queue receipt
 reachability slice:

@@ -203,6 +203,23 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
     return int(daemon())
 
 
+def cmd_stage3_readiness_proof(args: argparse.Namespace) -> int:
+    from francis.missions.readiness_proof import run_stage3_readiness_proof
+
+    result = run_stage3_readiness_proof(
+        actor=args.actor,
+        confirm=bool(args.confirm),
+        force=bool(args.force),
+        deadletter_reason=args.deadletter_reason,
+    )
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    if result.get("ok") is True:
+        return 0
+    if result.get("error") == "confirmation_required":
+        return 2
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="francis", description="FRANCIS - autonomous digital colleague")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
@@ -220,6 +237,24 @@ def main(argv: list[str] | None = None) -> int:
 
     p_daemon = sub.add_parser("daemon", help="Run the daemon loop")
     p_daemon.set_defaults(fn=cmd_daemon)
+
+    p_stage3 = sub.add_parser(
+        "stage3-readiness-proof",
+        help="Create bounded proof missions and report Stage 3 readiness",
+    )
+    p_stage3.add_argument("--actor", default="operator.stage3.readiness")
+    p_stage3.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required; creates proof missions in the configured Francis data directory.",
+    )
+    p_stage3.add_argument(
+        "--force",
+        action="store_true",
+        help="Create fresh proof missions even when Stage 3 readiness is already satisfied.",
+    )
+    p_stage3.add_argument("--deadletter-reason", default="stage3_readiness_proof_deadletter")
+    p_stage3.set_defaults(fn=cmd_stage3_readiness_proof)
 
     p_supervised = sub.add_parser("supervised-exec", help="Run a supervised command execution plan")
     p_supervised.add_argument(
