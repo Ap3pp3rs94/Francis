@@ -293,6 +293,20 @@ def _refresh_approval_meta(meta: dict[str, Any], repo_root: Path | None = None) 
     return refreshed
 
 
+def _payload_receipt_text(payload: dict[str, Any], *keys: str) -> str:
+    receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+    sandbox = payload.get("sandbox") if isinstance(payload.get("sandbox"), dict) else {}
+    receipt_sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    audit_event = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    for source in (payload, receipt, sandbox, receipt_sandbox, audit_event, sandbox_audit):
+        for key in keys:
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+    return ""
+
+
 def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[str, Any]:
     task = _read_json_dict(_task_record_path(task_id, repo_root))
     if not task:
@@ -300,9 +314,9 @@ def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[s
     result = task.get("result") if isinstance(task.get("result"), dict) else {}
     payload = result.get("data") if isinstance(result.get("data"), dict) else {}
     governance = payload.get("governance") if isinstance(payload.get("governance"), dict) else {}
-    approval_id = str(payload.get("approval_id") or "").strip()
-    previous_approval_id = str(payload.get("previous_approval_id") or "").strip()
-    approval_status = str(governance.get("approval_status") or "").strip()
+    approval_id = _payload_receipt_text(payload, "approval_id", "approvalId")
+    previous_approval_id = _payload_receipt_text(payload, "previous_approval_id", "previousApprovalId")
+    approval_status = _payload_receipt_text(governance, "approval_status", "approvalStatus")
     updated_at = str(task.get("updated_at") or "")
     created_at = str(task.get("created_at") or "")
     return {

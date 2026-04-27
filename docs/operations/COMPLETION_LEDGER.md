@@ -282,6 +282,14 @@ history/linked-operation/run-ledger counts. This is a read projection only; it
 does not advance missions, run operations, widen approvals, or replace the full
 mission detail/log inspection route.
 
+As of `2026-04-27`, mission tick reconstruction also promotes approval handles
+from nested execution receipts on linked task records. When `tick_mission`
+rebuilds blocked mission state from task truth, it now treats
+`result.data.receipt.approval_id` and `previous_approval_id` as bounded approval
+references for mission meta, queue hints, and current-task readback. This is
+mission readback normalization only; it does not approve work, execute tasks, or
+create new receipts.
+
 As of `2026-04-26`, the chat UI missions client can consume that direct queue
 read projection. `MissionsClient.queue` now reads `GET /missions/queue` with
 bounded limit and terminal-inclusion params, and `MissionQueueItem` preserves
@@ -4881,6 +4889,23 @@ Latest targeted validation for the `2026-04-27` Stage 3 executor mission-alias s
   Result: `4 files already formatted` (Ruff cache write warned on local `.ruff_cache` access)
 - `python -m pytest tests\unit\test_daemon_runner.py tests\unit\test_workers_runner.py -q`
   Result: `4 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m mypy src`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 mission tick nested-approval receipt slice:
+
+- `python -m pytest tests\test_mission_store.py::test_tick_mission_promotes_nested_receipt_approval_context -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_mission_store.py -q`
+  Result: `7 passed`
+- `python -m ruff check src\francis\missions\store.py tests\test_mission_store.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\missions\store.py tests\test_mission_store.py`
+  Result: `2 files already formatted`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m mypy src`

@@ -364,3 +364,66 @@ def test_tick_mission_derives_approval_context_from_linked_task_record(tmp_path:
     assert latest["details"]["latest_task_approval_id"] == "apr_refresh_200"
     assert latest["details"]["latest_task_previous_approval_id"] == "apr_refresh_199"
     assert latest["details"]["latest_task_approval_status"] == "pending"
+
+
+def test_tick_mission_promotes_nested_receipt_approval_context(tmp_path: Path) -> None:
+    mission, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Rebuild approval hold context from nested receipt truth.",
+            requester_id="test.mission.store",
+            linked_task_ids=["tsk_nested_receipt_hold"],
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert mission is not None
+
+    _write_task_record(
+        tmp_path,
+        "tsk_nested_receipt_hold",
+        {
+            "task_id": "tsk_nested_receipt_hold",
+            "status": "accepted",
+            "created_at": "2026-04-15T22:00:00+00:00",
+            "updated_at": "2026-04-15T22:01:00+00:00",
+            "result": {
+                "data": {
+                    "status": "needs_approval",
+                    "message": "approval is carried by execution receipt",
+                    "receipt": {
+                        "approval_id": "apr_nested_receipt_200",
+                        "previous_approval_id": "apr_nested_receipt_199",
+                    },
+                    "governance": {
+                        "gate": "approvals_gate",
+                        "approval_status": "pending",
+                        "next_step": "approve_exact_action",
+                    },
+                }
+            },
+        },
+    )
+
+    ticked, applied, err = mission_store.tick_mission(
+        mission.mission_id,
+        repo_root=tmp_path,
+        actor="test.mission.store",
+        note="derive latest approval context from nested receipt",
+    )
+    assert err is None
+    assert applied is True
+    assert ticked is not None
+    assert ticked.status == MissionStatus.BLOCKED
+    assert ticked.meta["last_task_approval_id"] == "apr_nested_receipt_200"
+    assert ticked.meta["last_task_previous_approval_id"] == "apr_nested_receipt_199"
+    assert ticked.meta["last_task_approval_status"] == "pending"
+
+    _, queue_item, err = mission_store.mission_queue_item(mission.mission_id, repo_root=tmp_path)
+    assert err is None
+    assert queue_item is not None
+    assert queue_item["last_task_approval_id"] == "apr_nested_receipt_200"
+    assert queue_item["last_task_previous_approval_id"] == "apr_nested_receipt_199"
+    assert queue_item["current_task"]["approval_id"] == "apr_nested_receipt_200"
+    assert queue_item["operator_hint"] == (
+        "Approval apr_nested_receipt_200 is pending before the mission can continue."
+    )
