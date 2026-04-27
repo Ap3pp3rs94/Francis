@@ -993,6 +993,14 @@ execution receipt truth available to the existing operation-detail and memory
 evidence client paths without creating evidence, inspecting artifacts, or
 widening execution authority.
 
+As of `2026-04-27`, the chat UI operations client also preserves current-task
+previous approval lineage on operation memory receipts. Operation detail
+`latest_memory_receipt` and `memory_receipts` arrays now keep
+`current_task_previous_approval_id` and
+`current_task_previous_approval_status` when the backend supplies them from
+receipt metadata. This is typed interface preservation only; it does not alter
+operation state, approval decisions, execution authority, or memory writes.
+
 As of `2026-04-26`, the selected operation detail surface uses those operation
 memory receipt handoff and current-task handles when rendering operation memory
 receipt context and when building bounded memory/explanation evidence queries.
@@ -5039,6 +5047,17 @@ Latest targeted validation for the `2026-04-26` Stage 3 operations memory-receip
   Result: `8 passed`
 - `cd apps\chat_ui; npm run test`
   Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 operations-client memory receipt previous-approval interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\operations\index.test.ts`
+  Result: `failed before implementation because operation memory receipt parsing omitted current_task_previous_approval_id; passed after parser fix with 9 tests`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`

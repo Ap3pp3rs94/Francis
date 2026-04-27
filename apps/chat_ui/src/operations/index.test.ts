@@ -329,6 +329,8 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
         current_task_source: "terminal_operation_receipt",
         current_task_approval_id: "apr_memory_alpha",
         current_task_approval_status: "approved",
+        current_task_previous_approval_id: "apr_previous_memory_alpha",
+        current_task_previous_approval_status: "approved",
         current_task_operation_id: "task_memory_alpha",
         current_task_operation_name: "plugin.run",
         current_task_operation_plane: "P7_EXECUTION",
@@ -373,6 +375,8 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
           current_task_source: "terminal_operation_receipt",
           current_task_approval_id: "apr_memory_alpha",
           current_task_approval_status: "approved",
+          current_task_previous_approval_id: "apr_previous_memory_alpha",
+          current_task_previous_approval_status: "approved",
           current_task_operation_id: "task_memory_alpha",
           current_task_operation_name: "plugin.run",
           current_task_operation_plane: "P7_EXECUTION",
@@ -429,6 +433,8 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.latest_memory_receipt?.current_task_source, "terminal_operation_receipt");
     assert.equal(detail?.latest_memory_receipt?.current_task_approval_id, "apr_memory_alpha");
     assert.equal(detail?.latest_memory_receipt?.current_task_approval_status, "approved");
+    assert.equal(detail?.latest_memory_receipt?.current_task_previous_approval_id, "apr_previous_memory_alpha");
+    assert.equal(detail?.latest_memory_receipt?.current_task_previous_approval_status, "approved");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_id, "task_memory_alpha");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.latest_memory_receipt?.current_task_operation_plane, "P7_EXECUTION");
@@ -445,6 +451,8 @@ test("OperationsClient.get preserves operation memory receipt summaries", async 
     assert.equal(detail?.latest_memory_receipt?.plan_step_count, 4);
     assert.equal(detail?.latest_memory_receipt?.plan_checkpoint_count, 3);
     assert.equal(detail?.memory_receipts?.[0]?.references?.operation_id, "task_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_previous_approval_id, "apr_previous_memory_alpha");
+    assert.equal(detail?.memory_receipts?.[0]?.current_task_previous_approval_status, "approved");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_name, "plugin.run");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_operation_plane, "P7_EXECUTION");
     assert.equal(detail?.memory_receipts?.[0]?.current_task_advance_action, "run_operation");
