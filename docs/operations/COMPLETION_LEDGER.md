@@ -1098,6 +1098,14 @@ fields with typed count parsing. This keeps the `plan -> gate` context visible
 in the world-state interface path only; it does not change approval decisions,
 execution, policy gates, memory writes, or plan mutation.
 
+As of `2026-04-27`, the chat UI settings/world-state client also preserves
+current-task previous approval lineage on pending approval overview items.
+`SettingsClient.getWorldState` keeps `current_task_previous_approval_id` and
+`current_task_previous_approval_status` when `/system/world_state` returns them
+from the shared approval projection. This is typed interface preservation only;
+it does not change approval decisions, execution, policy gates, memory writes,
+or rendered controls.
+
 As of `2026-04-27`, the chat UI approval review surfaces render those
 approval-gate plan summaries when backend truth provides them. The selected
 approval card, approval queue cards, and system pending-approval overview now
@@ -5154,6 +5162,17 @@ Latest targeted validation for the `2026-04-27` Stage 3 approval queue previous-
 
 - `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
   Result: `failed before implementation with undefined current_task_previous_approval_id; passed after the parser fix`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 world-state pending approval previous-approval interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\settings\index.test.ts`
+  Result: `failed before implementation because pending approval overview parsing omitted current_task_previous_approval_id; passed after parser fix with 12 tests`
 - `cd apps\chat_ui; npm run test`
   Result: `72 passed`
 - `cd apps\chat_ui; npm run build`

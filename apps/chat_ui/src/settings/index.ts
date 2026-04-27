@@ -131,6 +131,8 @@ export type WorldStateApprovalSummary = {
   request_kind?: string;
   previous_approval_id?: string;
   previous_approval_status?: string;
+  current_task_previous_approval_id?: string;
+  current_task_previous_approval_status?: string;
   replacement_kind?: string;
   replacement_reason?: string;
   replacement_expected_payload_keys?: string[];
@@ -2523,6 +2525,8 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         request_kind: safeString(item.request_kind, ""),
         previous_approval_id: safeString(item.previous_approval_id, ""),
         previous_approval_status: safeString(item.previous_approval_status, ""),
+        current_task_previous_approval_id: safeString(item.current_task_previous_approval_id, ""),
+        current_task_previous_approval_status: safeString(item.current_task_previous_approval_status, ""),
         replacement_kind: safeString(item.replacement_kind, ""),
         replacement_reason: safeString(item.replacement_reason, ""),
         replacement_expected_payload_keys: safeStringArray(item.replacement_expected_payload_keys),
