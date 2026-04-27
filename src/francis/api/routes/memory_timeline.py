@@ -67,7 +67,7 @@ _LOOP_CSV_FIELDS = (
     "plan_checkpoint_count",
 )
 _REFERENCE_FALLBACK_KEYS: dict[str, tuple[str, ...]] = {
-    "mission_id": ("mission_id",),
+    "mission_id": ("mission_id", "current_task_mission_id", "handoff_mission_id"),
     "operation_id": ("operation_id", "task_id", "current_task_operation_id", "handoff_operation_id"),
     "trace_id": ("trace_id", "current_task_trace_id", "handoff_trace_id"),
     "approval_id": ("approval_id", "current_task_approval_id", "handoff_approval_id"),
@@ -611,7 +611,11 @@ def _filter_events(
             ("trace_id", "correlation_id", "handoff_trace_id", "current_task_trace_id"),
         ):
             continue
-        if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
+        if mission_filter and not _matches_text_handle(
+            item,
+            mission_filter,
+            ("mission_id", "handoff_mission_id", "current_task_mission_id"),
+        ):
             continue
         if operation_filter and not _matches_text_handle(
             item,

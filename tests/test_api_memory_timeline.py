@@ -479,7 +479,8 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
         {
             "domain": "operations",
             "scope": "mission.loop",
-            "mission_id": "msn-loop-handle-memory",
+            "handoff_mission_id": "msn-loop-handle-memory",
+            "current_task_mission_id": "msn-loop-handle-memory",
             "handoff_operation_id": "tsk-loop-handle-memory",
             "handoff_trace_id": "trace-loop-handle-memory",
             "handoff_approval_id": "apr-loop-handle-memory",
@@ -512,6 +513,10 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     assert item["loop"]["handoff_operation_id"] == "tsk-loop-handle-memory"
     assert item["loop"]["current_task_approval_id"] == "apr-loop-handle-memory"
 
+    mission_listed = client.get("/memory/timeline/list?mission_id=msn-loop-handle-memory")
+    assert mission_listed.status_code == 200
+    assert [event["id"] for event in mission_listed.json()["items"]] == [item["id"]]
+
     trace_listed = client.get("/memory/timeline/list?trace_id=trace-loop-handle-memory")
     assert trace_listed.status_code == 200
     assert [event["id"] for event in trace_listed.json()["items"]] == [item["id"]]
@@ -534,6 +539,7 @@ def test_memory_timeline_filters_continuity_loop_handle_fallbacks(monkeypatch, t
     assert exported_csv.status_code == 200
     rows = list(csv.DictReader(io.StringIO(exported_csv.text)))
     assert [row["id"] for row in rows] == [item["id"]]
+    assert rows[0]["mission_id"] == "msn-loop-handle-memory"
     assert rows[0]["operation_id"] == "tsk-loop-handle-memory"
     assert rows[0]["trace_id"] == "trace-loop-handle-memory"
     assert rows[0]["approval_id"] == "apr-loop-handle-memory"

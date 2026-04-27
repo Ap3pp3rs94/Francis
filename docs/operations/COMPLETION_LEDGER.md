@@ -1056,6 +1056,15 @@ not present. This keeps receipt-backed evidence lookup aligned with the visible
 `loop` projection without broad search, inferred linkage, execution, or
 approval authority.
 
+As of `2026-04-27`, memory timeline filters and public references also resolve
+loop-only mission handles from `handoff_mission_id` and
+`current_task_mission_id`. `/memory/timeline/list?mission_id=...` can now find
+continuity receipts whose mission id is present only in mission-loop metadata,
+and JSON/CSV readbacks promote that same handle into the bounded
+`references.mission_id` field. This is retrieval/readback normalization only; it
+does not create memory, execute operations, infer mission state, or broaden
+authority beyond exact supplied receipt handles.
+
 As of `2026-04-26`, memory timeline public events also promote those loop-only
 receipt handles into the bounded `references` block when top-level references
 are sparse. `/memory/timeline/list`, `/memory/timeline/get`, and exports now
@@ -4833,6 +4842,21 @@ Latest targeted validation for the `2026-04-27` Stage 3 operation memory receipt
 - `cd apps\chat_ui; npm run test`
   Result: `67 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 memory timeline mission-handle fallback slice:
+
+- `python -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_filters_continuity_loop_handle_fallbacks -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `10 passed`
+- `python -m ruff check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
