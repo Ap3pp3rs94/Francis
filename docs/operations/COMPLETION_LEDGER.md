@@ -270,6 +270,15 @@ proposal references. This is a backend helper only: it does not add a route,
 mutate proposal records, change promotion readiness, create approval authority,
 execute tools, write memory, or create UI claims.
 
+As of `2026-04-27`, that passive proposal-quality summary is now included in
+the read-only Forge status API. `GET /forge/status` reuses existing proposal
+records and returns `proposal_quality_summary` with ready/blocked totals,
+status/risk/review distributions, missing-requirement counts, blocked proposal
+references, and analysis-only governance flags. This is aggregate readback
+only: it does not mutate proposal records, change proposal decisions, create
+approval authority, create promotion authority, execute tools, write memory, or
+create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4143,6 +4152,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal-quality
+status summary readback slice:
+
+- `python -m pytest tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py -q`
+  Result: `7 passed`
+- `python -m mypy src\francis\api\routes\forge.py src\francis\forge\proposal_quality_summary.py src\francis\forge\proposal_quality.py`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\forge.py src\francis\forge tests\test_api_forge.py tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\forge.py src\francis\forge tests\test_api_forge.py tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge passive
 proposal-quality summary helper slice:

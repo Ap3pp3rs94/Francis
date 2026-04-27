@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from francis.forge import analyze_proposal_quality
+from francis.forge import analyze_proposal_quality, summarize_proposal_quality
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir, repo_root
@@ -426,12 +426,14 @@ class ProposalDecisionIn(BaseModel):
 
 @router.get("/status")
 def status() -> dict[str, Any]:
+    proposals = _records("proposals")
     readiness_items = _promotion_readiness_items()
     return {
         "ok": True,
         "route": "forge",
         "status": "ready",
-        "proposal_count": len(_records("proposals")),
+        "proposal_count": len(proposals),
+        "proposal_quality_summary": summarize_proposal_quality(proposals),
         "proposal_review_count": len(_records("proposal_reviews")),
         "promotion_count": len(_records("promotions")),
         "promotion_candidate_count": len(readiness_items),

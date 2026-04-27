@@ -36,6 +36,8 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     empty_status = client.get("/forge/status")
     assert empty_status.status_code == 200
     assert empty_status.json()["proposal_count"] == 0
+    assert empty_status.json()["proposal_quality_summary"]["total"] == 0
+    assert empty_status.json()["proposal_quality_summary"]["governance"]["analysis_only"] is True
     assert empty_status.json()["proposal_review_count"] == 0
     assert empty_status.json()["promotion_count"] == 0
 
@@ -122,6 +124,31 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert ready_status_body["promotion_candidate_count"] == 1
     assert ready_status_body["promotion_ready_count"] == 1
     assert ready_status_body["promotion_blocked_count"] == 0
+    quality_summary = ready_status_body["proposal_quality_summary"]
+    assert quality_summary["kind"] == "plugin.proposal.quality_summary"
+    assert quality_summary["total"] == 1
+    assert quality_summary["ready_count"] == 0
+    assert quality_summary["blocked_count"] == 1
+    assert quality_summary["status_counts"] == {"approved": 1}
+    assert quality_summary["risk_tier_counts"] == {"normal": 1}
+    assert quality_summary["review_status_counts"] == {"approved": 1}
+    assert quality_summary["missing_requirement_counts"] == {
+        "validation_path": 1,
+        "known_limits": 1,
+    }
+    assert quality_summary["blocked_proposals"] == [
+        {
+            "proposal_id": proposal_id,
+            "plugin_id": plugin_id,
+            "status": "approved",
+            "missing_requirements": ["validation_path", "known_limits"],
+        }
+    ]
+    assert quality_summary["governance"]["analysis_only"] is True
+    assert quality_summary["governance"]["promotion_authority"] is False
+    assert quality_summary["governance"]["execution_authority"] is False
+    assert quality_summary["governance"]["approval_authority"] is False
+    assert raw_secret not in str(quality_summary)
 
     ready_readiness = client.get("/forge/promotion_readiness/list", params={"status": "ready"})
     assert ready_readiness.status_code == 200
