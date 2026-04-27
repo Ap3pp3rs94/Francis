@@ -61,18 +61,21 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 2. complete the end-to-end plan -> gate -> execute -> trace -> memory loop
 3. expose that loop clearly in the chat UI
 
-As of `2026-04-27`, the Stage 3/Missions completion audit does not support a
-truthful closure claim yet. The implemented contracts cover mission creation,
-advancement, governed approvals, denied paths, approved execution, trace/run and
-artifact handles, mission memory receipts, explanation/evidence readback,
-operator readback, and failed/deadletter recovery paths in targeted tests.
-However, the current local continuity briefing still reports Stage 3 readiness
-as `review`, with `1/5` criteria satisfied and unresolved
-`idempotent_ticks`, `deadletter_cleanly`, `session_continuity`, and
-`reconstruction_reduced` evidence for the live data set. Until a real local
-mission loop leaves receipt-backed tick, deadletter, continuity, and
-reconstruction evidence, Stage 3 remains active and Stage 4 Forge should not be
-started from this ledger.
+As of `2026-04-27`, the Stage 3/Missions completion audit now supports a
+truthful closure claim for the current local data set. The implemented contracts
+cover mission creation, advancement, governed approvals, denied paths, approved
+execution, trace/run and artifact handles, mission memory receipts,
+explanation/evidence readback, operator readback, and failed/deadletter recovery
+paths in targeted tests. The live continuity briefing for `D:\Francis\data` was
+first confirmed at `review`, with `1/5` criteria satisfied, then the bounded
+Stage 3 readiness proof was run through public API routes after a scoped
+operator-posture transition from Observe to Assist. The proof created completed
+mission `msn_20260427_133357_b4e13d71` and deadlettered mission
+`msn_20260427_133357_367eab3c`, then `/continuity/briefing` reported Stage 3
+readiness as `ready`, with `5/5` criteria satisfied and no blocked, attention,
+or review criteria. Observe mode was restored after the proof and a follow-up
+briefing still reported Stage 3 readiness as `ready`. Stage 4 Forge has not
+started in this ledger entry.
 
 As of `2026-04-27`, Stage 3 readiness proof has a bounded operator diagnostic
 command instead of relying on a hand-reconstructed test recipe. `python -m
@@ -82,8 +85,8 @@ the public mission API routes, then reports the continuity briefing readiness
 payload. The command refuses to run without `--confirm` and still requires the
 actor to have `missions.write` in `FRANCIS_API_ACTOR_SCOPES`; it does not create
 new mission authority, execution authority, approval bypasses, memory writes, or
-Stage 4 behavior. This makes the remaining Stage 3 blocker reproducible without
-claiming Stage 3 closure.
+Stage 4 behavior. This made the remaining Stage 3 blocker reproducible before
+the live readiness proof closed it.
 
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
@@ -3958,6 +3961,35 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 3/Missions closure proof:
+
+- `python -c "... GET /continuity/briefing ..."`
+  Result: `D:\Francis\data` initially reported Stage 3 readiness as `review`,
+  with `1/5` criteria satisfied.
+- `POST /system/operator_mode` with actor `operator.stage3.readiness` and
+  `system.write` scope
+  Result: control mode changed from Observe to Assist for the bounded proof run.
+- `python -m francis stage3-readiness-proof --confirm --actor operator.stage3.readiness`
+  Result: `ok: true`, status `ready`, completed mission
+  `msn_20260427_133357_b4e13d71`, deadlettered mission
+  `msn_20260427_133357_367eab3c`, Stage 3 readiness `5/5`.
+- `POST /system/operator_mode` with actor `operator.stage3.readiness` and
+  `system.write` scope
+  Result: control mode restored to Observe after the proof.
+- `python -c "... GET /system/operator_mode and /continuity/briefing ..."`
+  Result: control mode `observe`; Stage 3 readiness still `ready`, with `5/5`
+  criteria satisfied and no blocked, attention, or review criteria.
+- `python -m pytest tests\test_stage3_readiness_proof.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_approvals.py tests\test_api_credentials.py tests\unit\test_governance_redaction.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 3 readiness proof
 diagnostic slice:
