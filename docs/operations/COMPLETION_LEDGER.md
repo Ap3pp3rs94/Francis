@@ -149,6 +149,16 @@ promotion. Non-staged plugin enable remains governed by the existing
 `plugins.write` permission gate. This is readiness enforcement only; it is still
 not an independent proposal approval workflow or UI review surface.
 
+As of `2026-04-27`, Stage 4/Forge proposal artifacts have a first explicit
+review decision receipt. `POST /forge/proposals/decision` requires the existing
+`plugins.write` actor scope, accepts bounded approve/reject/request-changes
+decisions, updates only the proposal artifact status/review fields, and writes a
+redacted `plugin.proposal.review.receipt` under
+`data/artifacts/plugins/proposal_reviews/`. The Forge readback API now includes
+proposal-review counts plus list/get routes for those receipts. This creates an
+inspectable proposal review workflow without promoting plugins, enabling staged
+capabilities, granting execution authority, or adding UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4024,10 +4034,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
-proposal, staging, promotion-receipt, readback, and promotion-readiness boundary:
+proposal, staging, proposal review, promotion-receipt, readback, and
+promotion-readiness boundary:
 
 - `python -m pytest tests\test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests\test_api_operations.py::test_operations_plugin_run_action_executes tests\test_api_operations.py::test_operations_run_surfaces_completed_mission_memory_receipt tests\test_api_operations.py::test_operations_tool_run_action_executes -q`
   Result: `4 passed`
+- `python -m pytest tests\test_api_forge.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\forge.py tests\test_api_forge.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\forge.py tests\test_api_forge.py`
+  Result: `2 files already formatted`
 - `python -m pytest tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run -q`
   Result: `passed`
 - `python -m pytest tests\test_api_plugins.py::test_staged_plugin_promotion_requires_forge_readiness tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\test_api_plugins.py::test_plugins_tools_catalog_and_action_validation -q`
