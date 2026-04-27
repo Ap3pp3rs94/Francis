@@ -61,6 +61,19 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 2. complete the end-to-end plan -> gate -> execute -> trace -> memory loop
 3. expose that loop clearly in the chat UI
 
+As of `2026-04-27`, the Stage 3/Missions completion audit does not support a
+truthful closure claim yet. The implemented contracts cover mission creation,
+advancement, governed approvals, denied paths, approved execution, trace/run and
+artifact handles, mission memory receipts, explanation/evidence readback,
+operator readback, and failed/deadletter recovery paths in targeted tests.
+However, the current local continuity briefing still reports Stage 3 readiness
+as `review`, with `1/5` criteria satisfied and unresolved
+`idempotent_ticks`, `deadletter_cleanly`, `session_continuity`, and
+`reconstruction_reduced` evidence for the live data set. Until a real local
+mission loop leaves receipt-backed tick, deadletter, continuity, and
+reconstruction evidence, Stage 3 remains active and Stage 4 Forge should not be
+started from this ledger.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
