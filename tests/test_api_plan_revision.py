@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import io
+
 
 def test_plan_revise_result_carries_bounded_plan_summary(monkeypatch, tmp_path) -> None:
     data_root = tmp_path / "francis_data"
@@ -64,3 +67,14 @@ def test_plan_revise_result_carries_bounded_plan_summary(monkeypatch, tmp_path) 
     fetched_output = fetched.json()["operation"]["output"]
     assert fetched_output["plan_status"] == "revised"
     assert fetched_output["plan_step_count"] == 7
+
+    exported = client.get("/operations/export", params={"format": "csv", "run_id": output["run_id"]})
+    assert exported.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported.text)))
+    assert len(rows) == 1
+    assert rows[0]["id"] == revision_operation_id
+    assert rows[0]["plan_status"] == "revised"
+    assert rows[0]["plan_current_step_id"] == "understand"
+    assert rows[0]["plan_current_step_title"] == "Understand goal + constraints"
+    assert rows[0]["plan_step_count"] == "7"
+    assert rows[0]["plan_checkpoint_count"] == "3"

@@ -906,12 +906,18 @@ def export_operations(
                 "trace_id",
                 "run_id",
                 "artifact_dir",
+                "plan_status",
+                "plan_current_step_id",
+                "plan_current_step_title",
+                "plan_step_count",
+                "plan_checkpoint_count",
                 "duration_ms",
                 "error",
             ],
         )
         writer.writeheader()
         for item in items:
+            operation_output = item.get("output") if isinstance(item.get("output"), dict) else {}
             writer.writerow(
                 {
                     "id": item.get("id"),
@@ -927,6 +933,11 @@ def export_operations(
                     "trace_id": item.get("trace_id"),
                     "run_id": item.get("run_id"),
                     "artifact_dir": item.get("artifact_dir"),
+                    "plan_status": operation_output.get("plan_status"),
+                    "plan_current_step_id": operation_output.get("plan_current_step_id"),
+                    "plan_current_step_title": operation_output.get("plan_current_step_title"),
+                    "plan_step_count": operation_output.get("plan_step_count"),
+                    "plan_checkpoint_count": operation_output.get("plan_checkpoint_count"),
                     "duration_ms": item.get("duration_ms"),
                     "error": item.get("error"),
                 }

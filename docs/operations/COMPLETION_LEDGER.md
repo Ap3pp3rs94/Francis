@@ -722,6 +722,14 @@ This keeps the cognition recovery path inspectable from operation read models
 and the chat UI operation parser without changing planner state transitions,
 execution authority, approvals, or mission mutation behavior.
 
+As of `2026-04-26`, operation CSV export also preserves those bounded plan
+summary fields. `/operations/export?format=csv` now includes `plan_status`,
+current step id/title, step count, and checkpoint count from existing
+plan-create or plan-revise operation output, so exported operation ledgers can
+show cognition progress without parsing the full embedded plan object. This is
+read-model/export only; it does not change planner state, execution, approval,
+or memory behavior.
+
 As of `2026-04-26`, untraced capability execution results also receive bounded
 task execution trace/run handles. `plan.create` now returns `trace_id` and
 `run_id` from the persisted task result, so `/operations/list` can filter the
@@ -4365,6 +4373,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 plan revision receipt su
 - `cd apps\chat_ui; npm run test`
   Result: `64 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 operations plan summary CSV export slice:
+
+- `python -m pytest tests\test_api_plan_revision.py::test_plan_revise_result_carries_bounded_plan_summary -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_plan_revision.py -q`
+  Result: `1 passed`
+- `python -m pytest tests\test_api_operations.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\operations.py tests\test_api_plan_revision.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\operations.py tests\test_api_plan_revision.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
