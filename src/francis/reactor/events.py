@@ -286,6 +286,7 @@ def _dispatch_attempt_receipt(
     actor: str,
     ts: int,
     bounds: dict[str, Any],
+    blocker: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return _filtered_receipt(
         {
@@ -303,6 +304,57 @@ def _dispatch_attempt_receipt(
             "stable_state": stable_state,
             "next_step": next_step,
             "budget_snapshot": bounds,
+            "blocker": blocker or {},
+        }
+    )
+
+
+def _blocker_route(stable_state: str) -> tuple[str, str, str]:
+    if stable_state == "awaiting_approval":
+        return ("approval_queue", "waiting_for_approval", "approval_required")
+    if stable_state == "blocked_by_mode":
+        return ("operator_review", "waiting_for_mode_change", "mode_boundary")
+    if stable_state == "blocked_by_budget":
+        return ("deadletter_candidate", "waiting_for_budget_review", "budget_exhausted")
+    return ("operator_review", "waiting_for_blocker_review", stable_state or "dispatch_not_allowed")
+
+
+def _dispatch_blocker_record(
+    *,
+    event_id: str,
+    stable_state: str,
+    next_step: str,
+    classification: dict[str, Any],
+    bounds: dict[str, Any],
+    trigger: dict[str, Any],
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any]:
+    route, queue_status, gate = _blocker_route(stable_state)
+    return _filtered_receipt(
+        {
+            "kind": "reactor.dispatch_blocker",
+            "blocker_id": f"{event_id}_blocker_{attempt_count}",
+            "event_id": event_id,
+            "ts": ts,
+            "route": route,
+            "status": queue_status,
+            "gate": gate,
+            "stable_state": stable_state,
+            "next_step": next_step,
+            "actor": actor,
+            "reason": reason,
+            "approval_required": bool(classification.get("approval_required")),
+            "approval_id": _safe_str(trigger.get("approval_id")).strip(),
+            "mode": _safe_str(classification.get("mode")).strip(),
+            "risk_tier": _safe_str(classification.get("risk_tier")).strip(),
+            "action_class": _safe_str(classification.get("action_class")).strip(),
+            "max_actions": bounds.get("max_actions"),
+            "deadletter_candidate": route == "deadletter_candidate",
+            "execution_started": False,
+            "applied": False,
         }
     )
 
@@ -328,20 +380,37 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     raw_dispatch = record.get("dispatch")
     dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
     allowed = bool(classification.get("dispatch_allowed"))
+    raw_trigger = record.get("trigger")
+    trigger = raw_trigger if isinstance(raw_trigger, dict) else {}
+    event_key = _safe_str(record.get("event_id") or record.get("id")).strip()
+    attempt_count = _safe_int(dispatch.get("attempt_count"), default=0, minimum=0, maximum=100_000) + 1
 
     if allowed:
         status = "dispatch_deferred"
         outcome = "dispatch_engine_not_implemented"
         stable_state = "awaiting_dispatch_engine"
         next_step = "implement_dispatch_engine_before_execution"
+        blocker = None
     else:
         status = "dispatch_blocked"
         outcome = _safe_str(classification.get("stable_state")).strip() or "dispatch_not_allowed"
         stable_state = outcome
         next_step = _safe_str(classification.get("next_step")).strip() or "resolve_blocker_before_dispatch"
+        blocker = _dispatch_blocker_record(
+            event_id=event_key,
+            stable_state=stable_state,
+            next_step=next_step,
+            classification=classification,
+            bounds=bounds,
+            trigger=trigger,
+            actor=actor,
+            reason=reason,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
 
     receipt = _dispatch_attempt_receipt(
-        event_id=_safe_str(record.get("event_id") or record.get("id")).strip(),
+        event_id=event_key,
         status=status,
         outcome=outcome,
         allowed=allowed,
@@ -351,8 +420,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         actor=actor,
         ts=ts,
         bounds=bounds,
+        blocker=blocker,
     )
-    attempt_count = _safe_int(dispatch.get("attempt_count"), default=0, minimum=0, maximum=100_000) + 1
     updated_dispatch = {
         **dispatch,
         "status": status,
@@ -364,27 +433,39 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         "last_outcome": outcome,
         "last_receipt": receipt,
     }
+    if blocker is not None:
+        updated_dispatch["blocker"] = blocker
+        updated_dispatch["blocked_route"] = blocker.get("route")
+    else:
+        updated_dispatch.pop("blocker", None)
+        updated_dispatch.pop("blocked_route", None)
 
     raw_journal = record.get("decision_journal")
     decision_journal = raw_journal if isinstance(raw_journal, list) else []
-    decision_journal.append(
-        {
-            "kind": "reactor.dispatch.attempted",
-            "ts": ts,
-            "decision": status,
-            "outcome": outcome,
-            "applied": False,
-            "execution_started": False,
-            "stable_state": stable_state,
-            "next_step": next_step,
-        }
-    )
+    journal_entry = {
+        "kind": "reactor.dispatch.attempted",
+        "ts": ts,
+        "decision": status,
+        "outcome": outcome,
+        "applied": False,
+        "execution_started": False,
+        "stable_state": stable_state,
+        "next_step": next_step,
+    }
+    if blocker is not None:
+        journal_entry["blocker_id"] = blocker.get("blocker_id")
+        journal_entry["blocked_route"] = blocker.get("route")
+    decision_journal.append(journal_entry)
 
     raw_receipts = record.get("receipts")
     receipts = raw_receipts if isinstance(raw_receipts, list) else []
     if not receipts and isinstance(record.get("receipt"), dict):
         receipts.append(record["receipt"])
     receipts.append(receipt)
+    raw_blockers = record.get("blockers")
+    blockers = raw_blockers if isinstance(raw_blockers, list) else []
+    if blocker is not None:
+        blockers.append(blocker)
 
     record["status"] = status
     record["updated_ts"] = ts
@@ -393,6 +474,11 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
     record["latest_receipt"] = receipt
+    if blocker is not None:
+        record["blockers"] = blockers
+        record["latest_blocker"] = blocker
+    else:
+        record.pop("latest_blocker", None)
     raw_governance = record.get("governance")
     governance = raw_governance if isinstance(raw_governance, dict) else {}
     governance.update(
@@ -468,6 +554,7 @@ def reactor_status() -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     source_counts: dict[str, int] = {}
     stable_state_counts: dict[str, int] = {}
+    blocker_route_counts: dict[str, int] = {}
     for item in items:
         status = _safe_str(item.get("status")).strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -477,6 +564,13 @@ def reactor_status() -> dict[str, Any]:
         trigger = raw_trigger if isinstance(raw_trigger, dict) else {}
         source = _safe_str(trigger.get("source")).strip() or "unknown"
         source_counts[source] = source_counts.get(source, 0) + 1
+        raw_dispatch = item.get("dispatch")
+        dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+        raw_blocker = dispatch.get("blocker")
+        blocker = raw_blocker if isinstance(raw_blocker, dict) else {}
+        route = _safe_str(blocker.get("route")).strip()
+        if route:
+            blocker_route_counts[route] = blocker_route_counts.get(route, 0) + 1
     return {
         "ok": True,
         "status": "ready",
@@ -484,6 +578,7 @@ def reactor_status() -> dict[str, Any]:
         "status_counts": status_counts,
         "trigger_source_counts": source_counts,
         "stable_state_counts": stable_state_counts,
+        "blocker_route_counts": blocker_route_counts,
         "dispatch_engine": "not_implemented",
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {

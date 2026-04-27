@@ -453,6 +453,18 @@ mode, or another blocker prevents dispatch. This is traceability only: it does
 not start execution, consume operation budgets, decide approvals, retry,
 deadletter, write memory, promote capabilities, or dispatch missions/plugins.
 
+As of `2026-04-27`, blocked Reactor dispatch attempts also preserve explicit
+blocker records. When classification prevents dispatch, the Reactor event now
+records a `reactor.dispatch_blocker` with blocker id, route, gate, queue
+status, stable state, next step, mode/risk/action class, budget snapshot, and
+approval id when present. Approval-required blockers route to
+`approval_queue`, Observe/mode blockers route to `operator_review`, and budget
+blockers are marked as `deadletter_candidate` without creating a real
+deadletter item. `/reactor/status` now summarizes `blocker_route_counts` from
+persisted event state. This is blocker readback and receipt context only: it
+does not create approvals, decide approvals, enqueue deadletters, retry,
+dispatch, execute, write memory, or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4326,6 +4338,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+blocked-dispatch blocker readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`; Ruff reported non-blocking cache write warnings under
+  `.ruff_cache`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 dispatch-attempt receipt slice:
@@ -8693,10 +8718,11 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
-- Stage 5/Reactor currently has non-executing trigger intake, readback, and
-  dispatch-attempt receipts only; bounded dispatch execution, verification,
-  retry/backoff, deadletter/escalation, stable-return receipts, and operator
-  visibility are still remaining work
+- Stage 5/Reactor currently has non-executing trigger intake, readback,
+  dispatch-attempt receipts, and blocked-dispatch blocker records only;
+  bounded dispatch execution, real approval/deadletter queue integration,
+  verification, retry/backoff, deadletter/escalation, stable-return receipts,
+  and operator visibility are still remaining work
 
 ## 6. Update rule
 

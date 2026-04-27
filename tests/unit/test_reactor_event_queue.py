@@ -118,7 +118,10 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert event["dispatch"]["engine"] == "not_implemented"
     assert event["latest_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
     assert event["latest_receipt"]["execution_started"] is False
+    assert "blocker" not in event["latest_receipt"]
     assert event["latest_receipt"]["budget_snapshot"]["max_actions"] == 2
+    assert "blocker" not in event["dispatch"]
+    assert "blocked_route" not in event["dispatch"]
     assert event["governance"]["dispatch_authority"] is False
     assert event["governance"]["execution_authority"] is False
     assert event["governance"]["attempt_only"] is True
@@ -142,6 +145,7 @@ def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatc
             "risk_tier": "critical",
             "action_class": "mutate",
             "approval_required": True,
+            "approval_id": "appr_reactor_mutation",
         }
     )
     event_id = str(created["event_id"])
@@ -154,10 +158,47 @@ def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatc
     assert event["stable_state"] == "awaiting_approval"
     assert event["dispatch"]["allowed"] is False
     assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["blocked_route"] == "approval_queue"
+    assert event["dispatch"]["blocker"]["route"] == "approval_queue"
+    assert event["dispatch"]["blocker"]["gate"] == "approval_required"
+    assert event["dispatch"]["blocker"]["approval_id"] == "appr_reactor_mutation"
+    assert event["dispatch"]["blocker"]["deadletter_candidate"] is False
     assert event["latest_receipt"]["outcome"] == "awaiting_approval"
+    assert event["latest_receipt"]["blocker"]["route"] == "approval_queue"
     assert event["latest_receipt"]["next_step"] == "request_or_attach_approval_before_dispatch"
+    assert event["latest_blocker"]["blocker_id"] == event["dispatch"]["blocker"]["blocker_id"]
+    assert event["blockers"][-1]["route"] == "approval_queue"
     assert event["governance"]["approval_authority"] is False
-    assert reactor_status()["stable_state_counts"] == {"awaiting_approval": 1}
+    status = reactor_status()
+    assert status["stable_state_counts"] == {"awaiting_approval": 1}
+    assert status["blocker_route_counts"] == {"approval_queue": 1}
+
+
+def test_reactor_dispatch_attempt_routes_mode_blocker_to_operator_review(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Observe mode request cannot mutate",
+            "mode": "observe",
+            "action_class": "mutate",
+        }
+    )
+
+    attempted = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+
+    assert attempted["ok"] is True
+    event = attempted["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "blocked_by_mode"
+    assert event["dispatch"]["blocker"]["route"] == "operator_review"
+    assert event["dispatch"]["blocker"]["gate"] == "mode_boundary"
+    assert event["dispatch"]["blocker"]["status"] == "waiting_for_mode_change"
+    assert event["latest_receipt"]["blocker"]["route"] == "operator_review"
+    assert event["decision_journal"][-1]["blocked_route"] == "operator_review"
+    assert reactor_status()["blocker_route_counts"] == {"operator_review": 1}
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:
