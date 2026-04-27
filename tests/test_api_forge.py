@@ -82,8 +82,44 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert proposal_get_body["item"]["relative_path"] == f"proposals/{proposal_id}.json"
     assert raw_secret not in str(proposal_get_body)
 
+    blocked_readiness = client.get("/forge/promotion_readiness/list", params={"plugin_id": plugin_id})
+    assert blocked_readiness.status_code == 200
+    blocked_readiness_body = blocked_readiness.json()
+    assert blocked_readiness_body["total"] == 1
+    blocked_item = blocked_readiness_body["items"][0]
+    assert blocked_item["plugin_id"] == plugin_id
+    assert blocked_item["proposal_id"] == proposal_id
+    assert blocked_item["ready"] is False
+    assert blocked_item["status"] == "blocked"
+    assert blocked_item["requirements"]["proposal_review"] is False
+    assert blocked_item["evidence"]["proposal_review_status"] == "staged"
+    assert blocked_item["evidence"]["proposal_review_receipt_id"] == ""
+    assert blocked_item["governance"]["promotion_authority"] is False
+    assert blocked_item["governance"]["execution_authority"] is False
+    assert raw_secret not in str(blocked_readiness_body)
+
     approved = _approve_forge_proposal(client, proposal_id)
     review_receipt_id = str(approved["review_receipt_id"])
+
+    ready_status = client.get("/forge/status")
+    assert ready_status.status_code == 200
+    ready_status_body = ready_status.json()
+    assert ready_status_body["promotion_candidate_count"] == 1
+    assert ready_status_body["promotion_ready_count"] == 1
+    assert ready_status_body["promotion_blocked_count"] == 0
+
+    ready_readiness = client.get("/forge/promotion_readiness/list", params={"status": "ready"})
+    assert ready_readiness.status_code == 200
+    ready_readiness_body = ready_readiness.json()
+    assert ready_readiness_body["total"] == 1
+    ready_item = ready_readiness_body["items"][0]
+    assert ready_item["plugin_id"] == plugin_id
+    assert ready_item["proposal_id"] == proposal_id
+    assert ready_item["ready"] is True
+    assert ready_item["missing_requirements"] == []
+    assert ready_item["evidence"]["proposal_review_status"] == "approved"
+    assert ready_item["evidence"]["proposal_review_receipt_id"] == review_receipt_id
+    assert raw_secret not in str(ready_readiness_body)
 
     enabled = client.post(
         "/plugins/enable",
@@ -126,6 +162,9 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert final_status.status_code == 200
     assert final_status.json()["proposal_count"] == 1
     assert final_status.json()["promotion_count"] == 1
+    assert final_status.json()["promotion_candidate_count"] == 0
+    assert final_status.json()["promotion_ready_count"] == 0
+    assert final_status.json()["promotion_blocked_count"] == 0
 
     invalid = client.get("/forge/proposals/get", params={"id": "../outside"})
     assert invalid.status_code == 200
@@ -241,12 +280,29 @@ def test_forge_proposal_decision_receipts_without_promotion(monkeypatch, tmp_pat
     assert plugin_item["status"] == "staged"
     assert plugin_item["enabled"] is False
 
+    readiness = client.get("/forge/promotion_readiness/list", params={"proposal_id": proposal_id})
+    assert readiness.status_code == 200
+    readiness_body = readiness.json()
+    assert readiness_body["total"] == 1
+    readiness_item = readiness_body["items"][0]
+    assert readiness_item["plugin_id"] == plugin_id
+    assert readiness_item["proposal_id"] == proposal_id
+    assert readiness_item["ready"] is True
+    assert readiness_item["status"] == "ready"
+    assert readiness_item["missing_requirements"] == []
+    assert readiness_item["evidence"]["proposal_review_status"] == "approved"
+    assert readiness_item["evidence"]["proposal_review_receipt_id"] == receipt_id
+    assert raw_secret not in str(readiness_body)
+
     final_status = client.get("/forge/status")
     assert final_status.status_code == 200
     final_status_body = final_status.json()
     assert final_status_body["proposal_count"] == 1
     assert final_status_body["proposal_review_count"] == 1
     assert final_status_body["promotion_count"] == 0
+    assert final_status_body["promotion_candidate_count"] == 1
+    assert final_status_body["promotion_ready_count"] == 1
+    assert final_status_body["promotion_blocked_count"] == 0
 
     persisted_text = "\n".join(
         [

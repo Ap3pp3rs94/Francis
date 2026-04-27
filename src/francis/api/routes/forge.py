@@ -14,12 +14,13 @@ from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
-from francis.kernel.paths import data_dir
+from francis.kernel.paths import data_dir, repo_root
 
 router = APIRouter()
 
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _FORGE_WRITE_SCOPE = "plugins.write"
+_RISK_ORDER = {"readonly": 0, "normal": 1, "critical": 2, "safety_critical": 3}
 _PROPOSAL_DECISIONS = {
     "approve": "approved",
     "approved": "approved",
@@ -73,6 +74,14 @@ def _artifact_root() -> Path:
 
 def _collection_dir(collection: str) -> Path:
     return _artifact_root() / collection
+
+
+def _registry_path() -> Path:
+    return data_dir() / "plugins" / "_registry.json"
+
+
+def _generated_plugin_dir(plugin_id: str) -> Path:
+    return repo_root() / "plugins" / "generated" / plugin_id
 
 
 def _is_under(root: Path, target: Path) -> bool:
@@ -134,6 +143,140 @@ def _read_raw_record(path: Path) -> dict[str, Any] | None:
     except Exception:
         return None
     return raw if isinstance(raw, dict) else None
+
+
+def _has_readiness_value(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_has_readiness_value(item) for item in value)
+    if isinstance(value, tuple | set):
+        return any(_has_readiness_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_readiness_value(item) for item in value.values())
+    return value is not None
+
+
+def _registry_plugins() -> dict[str, Any]:
+    path = _registry_path()
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        registry = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    if not isinstance(registry, dict):
+        return {}
+    plugins = registry.get("plugins")
+    return plugins if isinstance(plugins, dict) else {}
+
+
+def _read_proposal(proposal_id: str) -> dict[str, Any]:
+    resolved_id = _safe_str(proposal_id).strip()
+    if not resolved_id or not _SAFE_RECORD_ID_RE.match(resolved_id):
+        return {}
+    root = _collection_dir("proposals")
+    path = root / f"{resolved_id}.json"
+    if not _is_under(root, path) or not path.exists() or not path.is_file():
+        return {}
+    proposal = _read_raw_record(path)
+    return proposal if isinstance(proposal, dict) else {}
+
+
+def _proposal_review_state(proposal: dict[str, Any]) -> dict[str, Any]:
+    if not proposal:
+        return {"status": "missing", "receipt_id": "", "approved": False}
+    review = proposal.get("review") if isinstance(proposal.get("review"), dict) else {}
+    proposal_status = _safe_str(proposal.get("status")).strip().lower() or "unknown"
+    review_status = _safe_str(review.get("status")).strip().lower() or proposal_status
+    receipt_id = _safe_str(proposal.get("review_receipt_id") or review.get("receipt_id")).strip()
+    return {
+        "status": review_status,
+        "receipt_id": receipt_id,
+        "approved": proposal_status == "approved" and review_status == "approved" and bool(receipt_id),
+    }
+
+
+def _promotion_readiness_for_plugin(plugin_id: str, plugin: dict[str, Any]) -> dict[str, Any]:
+    meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
+    proposal_id = _safe_str(meta.get("proposal_id") or meta.get("forge_proposal_id")).strip()
+    proposal = _read_proposal(proposal_id)
+    friction = proposal.get("friction") if isinstance(proposal.get("friction"), dict) else {}
+    quality = proposal.get("quality_requirements") if isinstance(proposal.get("quality_requirements"), dict) else {}
+    review = _proposal_review_state(proposal)
+
+    evidence = meta.get("proposal_evidence") or meta.get("evidence") or friction.get("evidence") or []
+    tests = meta.get("tests") or meta.get("test_refs") or quality.get("tests") or []
+    docs = meta.get("docs") or meta.get("documentation") or quality.get("docs") or []
+    generated_dir = _safe_str(plugin.get("generated_dir")).strip()
+    readme_path = Path(generated_dir) / "README.md" if generated_dir else _generated_plugin_dir(plugin_id) / "README.md"
+    if not _has_readiness_value(docs) and readme_path.exists():
+        docs = [str(readme_path.resolve())]
+    risk_tier = _safe_str(meta.get("risk_tier") or quality.get("risk_tier")).strip().lower()
+
+    requirements = {
+        "proposal_id": bool(proposal_id),
+        "proposal_review": bool(review["approved"]),
+        "proposal_evidence": _has_readiness_value(evidence),
+        "tests": _has_readiness_value(tests),
+        "docs": _has_readiness_value(docs),
+        "risk_tier": risk_tier in _RISK_ORDER,
+    }
+    missing = [key for key, present in requirements.items() if not present]
+    item = {
+        "kind": "plugin.promotion.readiness",
+        "plugin_id": plugin_id,
+        "proposal_id": proposal_id,
+        "ready": not missing,
+        "status": "ready" if not missing else "blocked",
+        "missing_requirements": missing,
+        "requirements": requirements,
+        "plugin": {
+            "id": plugin_id,
+            "name": _safe_str(plugin.get("name")).strip() or plugin_id,
+            "status": _safe_str(plugin.get("status")).strip() or "unknown",
+            "enabled": bool(plugin.get("enabled", False)),
+            "source_kind": _safe_str(plugin.get("source_kind")).strip() or "unknown",
+        },
+        "evidence": {
+            "proposal_review_status": review["status"],
+            "proposal_review_receipt_id": review["receipt_id"],
+            "proposal_evidence": evidence,
+            "tests": tests,
+            "docs": docs,
+            "risk_tier": risk_tier,
+        },
+        "governance": {
+            "gate": "forge_promotion_readiness",
+            "scope": _FORGE_WRITE_SCOPE,
+            "inspection_route": "/forge/promotion_readiness/list",
+            "promotion_route": "/plugins/enable",
+            "promotion_authority": False,
+            "execution_authority": False,
+            "next_step": (
+                "explicit_enable_with_plugins_write_scope"
+                if not missing
+                else "satisfy_missing_requirements_before_promotion"
+            ),
+        },
+    }
+    redacted = redact_governed_display_value(item)
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _promotion_readiness_items() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for raw_plugin_id, raw in _registry_plugins().items():
+        if not isinstance(raw, dict):
+            continue
+        plugin_id = _safe_str(raw.get("id")).strip() or _safe_str(raw_plugin_id).strip()
+        if not plugin_id:
+            continue
+        if _safe_str(raw.get("status")).strip().lower() != "staged":
+            continue
+        items.append(_promotion_readiness_for_plugin(plugin_id, raw))
+    items.sort(key=lambda item: (_safe_str(item.get("status")), _safe_str(item.get("plugin_id"))))
+    return items
 
 
 def _records(collection: str) -> list[dict[str, Any]]:
@@ -270,6 +413,7 @@ class ProposalDecisionIn(BaseModel):
 
 @router.get("/status")
 def status() -> dict[str, Any]:
+    readiness_items = _promotion_readiness_items()
     return {
         "ok": True,
         "route": "forge",
@@ -277,7 +421,34 @@ def status() -> dict[str, Any]:
         "proposal_count": len(_records("proposals")),
         "proposal_review_count": len(_records("proposal_reviews")),
         "promotion_count": len(_records("promotions")),
+        "promotion_candidate_count": len(readiness_items),
+        "promotion_ready_count": sum(1 for item in readiness_items if bool(item.get("ready"))),
+        "promotion_blocked_count": sum(1 for item in readiness_items if not bool(item.get("ready"))),
     }
+
+
+@router.get("/promotion_readiness/list")
+def list_promotion_readiness(
+    limit: int = Query(200, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    plugin_id: str | None = None,
+    proposal_id: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    plugin_filter = _safe_str(plugin_id).strip().lower()
+    proposal_filter = _safe_str(proposal_id).strip().lower()
+    status_filter = _safe_str(status).strip().lower()
+    safe_limit = max(1, min(int(limit), 5000))
+    safe_offset = max(0, int(offset))
+    items = [
+        item
+        for item in _promotion_readiness_items()
+        if (not plugin_filter or _safe_str(item.get("plugin_id")).strip().lower() == plugin_filter)
+        and (not proposal_filter or _safe_str(item.get("proposal_id")).strip().lower() == proposal_filter)
+        and (not status_filter or _safe_str(item.get("status")).strip().lower() == status_filter)
+    ]
+    page = items[safe_offset : safe_offset + safe_limit]
+    return {"items": page, "total": len(items), "offset": safe_offset, "limit": safe_limit}
 
 
 @router.get("/proposals/list")

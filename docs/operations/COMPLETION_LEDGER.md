@@ -170,6 +170,17 @@ review workflow to promotion readiness without auto-promoting plugins, granting
 execution authority, changing non-staged plugin enable behavior, or adding UI
 claims.
 
+As of `2026-04-27`, Stage 4/Forge promotion readiness also has a read-only
+backend readback surface. `GET /forge/promotion_readiness/list` inspects staged
+generated-plugin registry records and linked proposal artifacts, reports whether
+each staged candidate is blocked or ready for explicit promotion, exposes the
+missing readiness requirements, and returns proposal-review status/receipt
+evidence without mutating plugin state. `GET /forge/status` now includes staged
+promotion candidate, ready, and blocked counts. This gives operators and future
+UI surfaces promotion-readiness truth before attempting `/plugins/enable`, but
+does not promote plugins, grant write authority, execute capabilities, or claim
+that the chat UI exposes Forge review yet.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4048,6 +4059,16 @@ Latest targeted validation for the `2026-04-27` Stage 4/Forge generated-build
 proposal, staging, proposal review, review-gated promotion-readiness,
 promotion-receipt, and readback boundary:
 
+- `python -m pytest tests\test_api_forge.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_forge.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py tests\unit\test_plugin_factory_spec_builder.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\forge.py tests\test_api_forge.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\forge.py tests\test_api_forge.py`
+  Result: `2 files already formatted`
+- `git diff --check`
+  Result: `passed`
 - `python -m pytest tests\test_api_plugins.py::test_staged_plugin_promotion_requires_approved_proposal_review tests\test_api_plugins.py::test_plugins_build_lifecycle_and_run tests\test_api_plugins.py::test_plugins_tools_catalog_and_action_validation tests\test_api_forge.py::test_forge_proposal_and_promotion_readback -q`
   Result: `passed`
 - `python -m pytest tests\test_api_plugins.py tests\test_api_forge.py tests\test_api_plugins_permission_gate.py tests\test_api_operations.py tests\test_api_missions.py tests\unit\test_plugin_factory_spec_builder.py -q`
