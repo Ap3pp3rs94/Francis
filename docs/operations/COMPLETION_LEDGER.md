@@ -352,6 +352,15 @@ those fields as read-only evidence. This is recovery evidence readback only; it
 does not create retry authority, deadletter authority, execution state, or new
 operator controls.
 
+As of `2026-04-26`, explanation evidence also preserves bounded plan receipt
+summaries from mission-loop evidence. Explanation records can promote
+`plan_status`, current step id/title, step count, and checkpoint count from
+top-level fields, `loop`, `references`, or metadata into list/get/export
+summaries and CSV exports, and the chat UI explanation client preserves those
+fields as typed read-only evidence. This is plan evidence readback only; it does
+not create plans, revise plans, execute work, write memory, or infer missing
+plan state.
+
 As of `2026-04-26`, the chat UI explanation evidence path can use those
 mission and operation explanation filters. The selected operation/mission audit
 evidence helper now sends bounded `mission_id` and `operation_id` queries before
@@ -5046,6 +5055,25 @@ Latest targeted validation for the `2026-04-26` Stage 3 explanation recovery-con
 - `cd apps\chat_ui; npm run test`
   Result: `66 passed`
 - `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 explanation plan-summary readback slice:
+
+- `python -m pytest tests\test_api_explanation.py::test_explanations_preserve_current_task_receipt_identity -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_explanation.py -q`
+  Result: `5 passed`
+- `python -m ruff check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\explanation.py tests\test_api_explanation.py`
+  Result: `2 files already formatted`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\explanation_explorer\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `67 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
   Result: `passed`
 
 Latest targeted validation for the `2026-04-26` Stage 3 explanation metadata approval-handle slice:

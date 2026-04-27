@@ -80,6 +80,11 @@ export type ExplanationRecord = {
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   current_task_next_step?: string;
+  plan_status?: string;
+  plan_current_step_id?: string;
+  plan_current_step_title?: string;
+  plan_step_count?: number;
+  plan_checkpoint_count?: number;
 
   // Forward-compatible metadata
   tags?: string[];
@@ -174,6 +179,22 @@ function firstString(...values: unknown[]): string {
 
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function safeOptionalNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v !== "string") return undefined;
+
+  const parsed = Number(v.trim());
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const parsed = safeOptionalNumber(value);
+    if (parsed !== undefined) return Math.max(0, parsed);
+  }
+  return undefined;
 }
 
 function parseReceiptReferences(raw: unknown): ExplanationReceiptReferences | undefined {
@@ -594,6 +615,36 @@ function parseExplanationRecord(raw: unknown): ExplanationRecord | null {
     meta.current_task_next_step,
   );
   if (currentTaskNextStep) rec.current_task_next_step = currentTaskNextStep;
+
+  const planStatus = firstString(raw.plan_status, raw.planStatus, loop.plan_status, meta.plan_status);
+  if (planStatus) rec.plan_status = planStatus;
+
+  const planCurrentStepId = firstString(
+    raw.plan_current_step_id,
+    raw.planCurrentStepId,
+    loop.plan_current_step_id,
+    meta.plan_current_step_id,
+  );
+  if (planCurrentStepId) rec.plan_current_step_id = planCurrentStepId;
+
+  const planCurrentStepTitle = firstString(
+    raw.plan_current_step_title,
+    raw.planCurrentStepTitle,
+    loop.plan_current_step_title,
+    meta.plan_current_step_title,
+  );
+  if (planCurrentStepTitle) rec.plan_current_step_title = planCurrentStepTitle;
+
+  const planStepCount = firstNumber(raw.plan_step_count, raw.planStepCount, loop.plan_step_count, meta.plan_step_count);
+  if (planStepCount !== undefined) rec.plan_step_count = planStepCount;
+
+  const planCheckpointCount = firstNumber(
+    raw.plan_checkpoint_count,
+    raw.planCheckpointCount,
+    loop.plan_checkpoint_count,
+    meta.plan_checkpoint_count,
+  );
+  if (planCheckpointCount !== undefined) rec.plan_checkpoint_count = planCheckpointCount;
 
   if (Array.isArray(raw.tags)) {
     const tags = (raw.tags as unknown[]).map((x) => safeString(x)).filter((x) => x.length > 0);

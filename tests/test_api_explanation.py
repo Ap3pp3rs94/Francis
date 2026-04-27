@@ -292,6 +292,11 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
                 "current_task_advance_action": "run_linked_operation",
                 "current_task_gate": "operator_review",
                 "current_task_next_step": "review_completed_mission",
+                "plan_status": "in_progress",
+                "plan_current_step_id": "understand",
+                "plan_current_step_title": "Understand goal + constraints",
+                "plan_step_count": "4",
+                "plan_checkpoint_count": 3,
             },
         },
     )
@@ -313,6 +318,11 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert written_item["current_task_advance_action"] == "run_linked_operation"
     assert written_item["current_task_gate"] == "operator_review"
     assert written_item["current_task_next_step"] == "review_completed_mission"
+    assert written_item["plan_status"] == "in_progress"
+    assert written_item["plan_current_step_id"] == "understand"
+    assert written_item["plan_current_step_title"] == "Understand goal + constraints"
+    assert written_item["plan_step_count"] == 4
+    assert written_item["plan_checkpoint_count"] == 3
     assert written_item["references"] == {
         "mission_id": "msn-loop",
         "operation_id": "tsk-loop",
@@ -339,6 +349,11 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert listed_items[0]["operation_error"] == "plugin_id_required"
     assert listed_items[0]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert listed_items[0]["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert listed_items[0]["plan_status"] == "in_progress"
+    assert listed_items[0]["plan_current_step_id"] == "understand"
+    assert listed_items[0]["plan_current_step_title"] == "Understand goal + constraints"
+    assert listed_items[0]["plan_step_count"] == 4
+    assert listed_items[0]["plan_checkpoint_count"] == 3
 
     fetched = client.get("/explanations/get?id=exp-current-task")
     assert fetched.status_code == 200
@@ -347,6 +362,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert fetched_item["current_task_operation_plane"] == "P9_OBSERVABILITY"
     assert fetched_item["operation_error"] == "plugin_id_required"
     assert fetched_item["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert fetched_item["plan_status"] == "in_progress"
+    assert fetched_item["plan_current_step_id"] == "understand"
 
     exported_json = client.get("/explanations/export", params={"format": "json", "operation_id": "tsk-loop"})
     assert exported_json.status_code == 200
@@ -354,6 +371,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert exported_json_body["items"][0]["current_task_advance_action"] == "run_linked_operation"
     assert exported_json_body["items"][0]["operation_error"] == "plugin_id_required"
     assert exported_json_body["items"][0]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
+    assert exported_json_body["items"][0]["plan_step_count"] == 4
+    assert exported_json_body["items"][0]["plan_checkpoint_count"] == 3
 
     exported_csv = client.get("/explanations/export?format=csv&operation_id=tsk-loop")
     assert exported_csv.status_code == 200
@@ -363,6 +382,11 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert rows[0]["operation_error"] == "plugin_id_required"
     assert rows[0]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     assert rows[0]["recovery_next_step"] == "review_operation_detail token=[REDACTED:secret]"
+    assert rows[0]["plan_status"] == "in_progress"
+    assert rows[0]["plan_current_step_id"] == "understand"
+    assert rows[0]["plan_current_step_title"] == "Understand goal + constraints"
+    assert rows[0]["plan_step_count"] == "4"
+    assert rows[0]["plan_checkpoint_count"] == "3"
 
     registry_path = data_root / "explanations" / "_registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -371,6 +395,8 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
     assert (
         registry["records"]["exp-current-task"]["result_message"] == "Plugin id is required. password=[REDACTED:secret]"
     )
+    assert registry["records"]["exp-current-task"]["plan_status"] == "in_progress"
+    assert registry["records"]["exp-current-task"]["plan_step_count"] == 4
 
 
 def test_explanations_promote_handoff_receipt_references(monkeypatch, tmp_path: Path) -> None:

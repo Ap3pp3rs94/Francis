@@ -75,6 +75,11 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
           current_task_advance_action: "run_linked_operation",
           current_task_gate: "operator_review",
           current_task_next_step: "review_completed_mission",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: "4",
+          plan_checkpoint_count: 3,
           references: {
             mission_id: "msn_alpha",
             operation_id: "tsk_alpha",
@@ -140,6 +145,11 @@ test("ExplanationClient.list requests trace and artifact filters", async () => {
     assert.equal(response.items[0]?.current_task_run_id, "run_alpha");
     assert.equal(response.items[0]?.current_task_artifact_dir, "runs/run_alpha/artifacts");
     assert.equal(response.items[0]?.current_task_next_step, "review_completed_mission");
+    assert.equal(response.items[0]?.plan_status, "in_progress");
+    assert.equal(response.items[0]?.plan_current_step_id, "understand");
+    assert.equal(response.items[0]?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(response.items[0]?.plan_step_count, 4);
+    assert.equal(response.items[0]?.plan_checkpoint_count, 3);
     assert.deepEqual(response.items[0]?.references, {
       mission_id: "msn_alpha",
       operation_id: "tsk_alpha",
@@ -193,6 +203,11 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
           operation_error: "approval_pending",
           result_message: "Operation is waiting on approval.",
           recovery_next_step: "review_pending_approval",
+          plan_status: "in_progress",
+          plan_current_step_id: "understand",
+          plan_current_step_title: "Understand goal + constraints",
+          plan_step_count: 4,
+          plan_checkpoint_count: "3",
         },
         current_task_operation_name: "plan.create",
         current_task_operation_plane: "P9_OBSERVABILITY",
@@ -227,6 +242,11 @@ test("ExplanationClient.get and export preserve receipt linkage", async () => {
     assert.equal(detail?.current_task_operation_name, "plan.create");
     assert.equal(detail?.current_task_operation_plane, "P9_OBSERVABILITY");
     assert.equal(detail?.current_task_advance_action, "run_linked_operation");
+    assert.equal(detail?.plan_status, "in_progress");
+    assert.equal(detail?.plan_current_step_id, "understand");
+    assert.equal(detail?.plan_current_step_title, "Understand goal + constraints");
+    assert.equal(detail?.plan_step_count, 4);
+    assert.equal(detail?.plan_checkpoint_count, 3);
     assert.equal(detail?.operation_error, "approval_pending");
     assert.equal(detail?.result_message, "Operation is waiting on approval.");
     assert.equal(detail?.recovery_next_step, "review_pending_approval");

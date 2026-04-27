@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import os
 import re
 import time
@@ -38,6 +39,15 @@ _RECEIPT_CONTEXT_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "operation_error": ("operation_error", "operationError"),
     "result_message": ("result_message", "resultMessage"),
     "recovery_next_step": ("recovery_next_step", "recoveryNextStep"),
+}
+_PLAN_TEXT_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "plan_status": ("plan_status", "planStatus"),
+    "plan_current_step_id": ("plan_current_step_id", "planCurrentStepId"),
+    "plan_current_step_title": ("plan_current_step_title", "planCurrentStepTitle"),
+}
+_PLAN_NUMBER_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "plan_step_count": ("plan_step_count", "planStepCount"),
+    "plan_checkpoint_count": ("plan_checkpoint_count", "planCheckpointCount"),
 }
 _REFERENCE_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "mission_id": (
@@ -102,6 +112,29 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return max(0, int(value))
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = float(text)
+        except ValueError:
+            return None
+        if not math.isfinite(parsed):
+            return None
+        return max(0, int(parsed))
+    return None
 
 
 def _now_s() -> int:
@@ -196,6 +229,25 @@ def _receipt_context_fields(*sources: Any) -> dict[str, str]:
     return out
 
 
+def _plan_fields(*sources: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for field, aliases in _PLAN_TEXT_FIELD_ALIASES.items():
+        value = _first_text(sources, aliases)
+        if value:
+            out[field] = value
+    for field, aliases in _PLAN_NUMBER_FIELD_ALIASES.items():
+        for source in sources:
+            raw = _meta(source)
+            for alias in aliases:
+                value = _safe_nonnegative_int(raw.get(alias))
+                if value is not None:
+                    out[field] = value
+                    break
+            if field in out:
+                break
+    return out
+
+
 def _validate_id(value: str, field: str = "id") -> str:
     text = value.strip()
     if not text:
@@ -231,6 +283,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     references = _reference_handles(raw_references, loop, meta, raw)
     current_task_fields = _current_task_fields(raw, loop, raw_references, meta)
     receipt_context_fields = _receipt_context_fields(raw, loop, raw_references, meta)
+    plan_fields = _plan_fields(raw, loop, raw_references, meta)
     trace_id = (
         _safe_str(raw.get("trace_id") or raw.get("traceId")).strip()
         or references.get("trace_id", "")
@@ -315,6 +368,7 @@ def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     }
     normalized.update(current_task_fields)
     normalized.update(receipt_context_fields)
+    normalized.update(plan_fields)
     return normalized
 
 
@@ -346,6 +400,14 @@ def _summary(record: dict[str, Any]) -> dict[str, Any]:
     for key in _RECEIPT_CONTEXT_FIELD_ALIASES:
         value = _safe_str(record.get(key)).strip()
         if value:
+            summary[key] = value
+    for key in _PLAN_TEXT_FIELD_ALIASES:
+        value = _safe_str(record.get(key)).strip()
+        if value:
+            summary[key] = value
+    for key in _PLAN_NUMBER_FIELD_ALIASES:
+        value = _safe_nonnegative_int(record.get(key))
+        if value is not None:
             summary[key] = value
     return summary
 
@@ -541,6 +603,11 @@ def _csv(records: list[dict[str, Any]]) -> str:
             "current_task_run_id",
             "current_task_artifact_dir",
             "current_task_next_step",
+            "plan_status",
+            "plan_current_step_id",
+            "plan_current_step_title",
+            "plan_step_count",
+            "plan_checkpoint_count",
             "domain",
             "conversation_id",
             "approval_id",
@@ -580,6 +647,11 @@ def _csv(records: list[dict[str, Any]]) -> str:
                 "current_task_run_id": item.get("current_task_run_id"),
                 "current_task_artifact_dir": item.get("current_task_artifact_dir"),
                 "current_task_next_step": item.get("current_task_next_step"),
+                "plan_status": item.get("plan_status"),
+                "plan_current_step_id": item.get("plan_current_step_id"),
+                "plan_current_step_title": item.get("plan_current_step_title"),
+                "plan_step_count": item.get("plan_step_count"),
+                "plan_checkpoint_count": item.get("plan_checkpoint_count"),
                 "domain": item.get("domain"),
                 "conversation_id": item.get("conversation_id"),
                 "approval_id": item.get("approval_id"),
@@ -860,6 +932,11 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             existing_obj, existing_obj.get("loop"), existing_obj.get("references"), existing_meta
         )
         receipt_context_fields = {**existing_receipt_context, **payload_receipt_context}
+        payload_plan_fields = _plan_fields(payload, payload.get("loop"), payload.get("references"), payload_meta)
+        existing_plan_fields = _plan_fields(
+            existing_obj, existing_obj.get("loop"), existing_obj.get("references"), existing_meta
+        )
+        plan_fields = {**existing_plan_fields, **payload_plan_fields}
         trace_id = (
             _safe_str(payload.get("trace_id") or payload.get("traceId")).strip()
             or _safe_str(existing_obj.get("trace_id") or existing_obj.get("traceId")).strip()
@@ -931,6 +1008,7 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             **existing_obj,
             **current_task_fields,
             **receipt_context_fields,
+            **plan_fields,
             "id": explanation_id,
             "ts": ts,
             "kind": kind or _safe_str(existing_obj.get("kind")).strip() or "audit",
