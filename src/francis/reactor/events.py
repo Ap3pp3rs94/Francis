@@ -74,6 +74,13 @@ def _event_root() -> Path:
     return data_dir() / "reactor" / "events"
 
 
+def _event_path(event_id: str) -> Path | None:
+    cleaned = _safe_str(event_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _event_root() / f"{cleaned}.json"
+
+
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -255,6 +262,163 @@ def _read_event(path: Path) -> dict[str, Any] | None:
     return _display(raw) if isinstance(raw, dict) else None
 
 
+def _read_raw_event(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _filtered_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in receipt.items() if value not in ("", {}, [])}
+
+
+def _dispatch_attempt_receipt(
+    *,
+    event_id: str,
+    status: str,
+    outcome: str,
+    allowed: bool,
+    stable_state: str,
+    next_step: str,
+    reason: str,
+    actor: str,
+    ts: int,
+    bounds: dict[str, Any],
+) -> dict[str, Any]:
+    return _filtered_receipt(
+        {
+            "kind": "reactor.dispatch_attempt.receipt",
+            "event_id": event_id,
+            "status": status,
+            "outcome": outcome,
+            "allowed": allowed,
+            "applied": False,
+            "execution_started": False,
+            "engine": "not_implemented",
+            "actor": actor,
+            "reason": reason,
+            "ts": ts,
+            "stable_state": stable_state,
+            "next_step": next_step,
+            "budget_snapshot": bounds,
+        }
+    )
+
+
+def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    path = _event_path(event_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "event": None}
+
+    record = _read_raw_event(path)
+    if record is None:
+        return {"ok": False, "applied": False, "error": "unreadable_event", "event": None}
+
+    redacted_payload = redact_governed_value(payload or {})
+    data = redacted_payload if isinstance(redacted_payload, dict) else {}
+    actor = _safe_str(data.get("actor")).strip()
+    reason = _safe_str(data.get("reason") or data.get("summary")).strip()
+    ts = _now_s()
+    raw_classification = record.get("classification")
+    classification = raw_classification if isinstance(raw_classification, dict) else {}
+    raw_bounds = record.get("bounds")
+    bounds = raw_bounds if isinstance(raw_bounds, dict) else {}
+    raw_dispatch = record.get("dispatch")
+    dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+    allowed = bool(classification.get("dispatch_allowed"))
+
+    if allowed:
+        status = "dispatch_deferred"
+        outcome = "dispatch_engine_not_implemented"
+        stable_state = "awaiting_dispatch_engine"
+        next_step = "implement_dispatch_engine_before_execution"
+    else:
+        status = "dispatch_blocked"
+        outcome = _safe_str(classification.get("stable_state")).strip() or "dispatch_not_allowed"
+        stable_state = outcome
+        next_step = _safe_str(classification.get("next_step")).strip() or "resolve_blocker_before_dispatch"
+
+    receipt = _dispatch_attempt_receipt(
+        event_id=_safe_str(record.get("event_id") or record.get("id")).strip(),
+        status=status,
+        outcome=outcome,
+        allowed=allowed,
+        stable_state=stable_state,
+        next_step=next_step,
+        reason=reason,
+        actor=actor,
+        ts=ts,
+        bounds=bounds,
+    )
+    attempt_count = _safe_int(dispatch.get("attempt_count"), default=0, minimum=0, maximum=100_000) + 1
+    updated_dispatch = {
+        **dispatch,
+        "status": status,
+        "allowed": allowed,
+        "applied": False,
+        "engine": "not_implemented",
+        "attempt_count": attempt_count,
+        "last_attempt_ts": ts,
+        "last_outcome": outcome,
+        "last_receipt": receipt,
+    }
+
+    raw_journal = record.get("decision_journal")
+    decision_journal = raw_journal if isinstance(raw_journal, list) else []
+    decision_journal.append(
+        {
+            "kind": "reactor.dispatch.attempted",
+            "ts": ts,
+            "decision": status,
+            "outcome": outcome,
+            "applied": False,
+            "execution_started": False,
+            "stable_state": stable_state,
+            "next_step": next_step,
+        }
+    )
+
+    raw_receipts = record.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    if not receipts and isinstance(record.get("receipt"), dict):
+        receipts.append(record["receipt"])
+    receipts.append(receipt)
+
+    record["status"] = status
+    record["updated_ts"] = ts
+    record["stable_state"] = stable_state
+    record["dispatch"] = updated_dispatch
+    record["decision_journal"] = decision_journal
+    record["receipts"] = receipts
+    record["latest_receipt"] = receipt
+    raw_governance = record.get("governance")
+    governance = raw_governance if isinstance(raw_governance, dict) else {}
+    governance.update(
+        {
+            "gate": "reactor_dispatch_attempt",
+            "execution_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+            "dispatch_authority": False,
+            "attempt_only": True,
+            "next_step": next_step,
+        }
+    )
+    record["governance"] = governance
+
+    _atomic_write_json(path, record)
+    return {
+        "ok": True,
+        "applied": True,
+        "event_id": record.get("event_id") or record.get("id"),
+        "receipt": _display(receipt),
+        "event": _display(record),
+    }
+
+
 def list_events(
     *,
     limit: int = 200,
@@ -291,10 +455,9 @@ def list_events(
 
 
 def get_event(event_id: str) -> dict[str, Any] | None:
-    cleaned = _safe_str(event_id).strip()
-    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+    path = _event_path(event_id)
+    if path is None:
         return None
-    path = _event_root() / f"{cleaned}.json"
     if not path.exists() or not path.is_file():
         return None
     return _read_event(path)

@@ -441,6 +441,18 @@ journal, and an intake receipt. The current dispatch engine is explicitly
 `not_implemented`; the slice creates no autonomous execution, approval,
 promotion, memory-write, plugin, mission, or operation authority.
 
+As of `2026-04-27`, Stage 5/Reactor also records bounded dispatch-attempt
+receipts without executing work. `POST /reactor/events/dispatch_attempt`
+requires the same explicit `reactor.write` actor scope before mutating an
+existing Reactor event record. A dispatch attempt appends a decision-journal
+entry, preserves a `reactor.dispatch_attempt.receipt`, records the current
+budget snapshot, and moves the event to either `dispatch_deferred` when the
+event is dispatch-eligible but the dispatch engine is still
+`not_implemented`, or `dispatch_blocked` when classification says approval,
+mode, or another blocker prevents dispatch. This is traceability only: it does
+not start execution, consume operation budgets, decide approvals, retry,
+deadletter, write memory, promote capabilities, or dispatch missions/plugins.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4314,6 +4326,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+dispatch-attempt receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `failed before widening the payload helper type; passed after fix`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\test_api_contract_chat_ui.py tests\unit\test_imports.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor trigger
 intake queue slice:
@@ -8663,9 +8693,10 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
-- Stage 5/Reactor currently has non-dispatching trigger intake and readback
-  only; bounded dispatch, verification, retry/backoff, deadletter/escalation,
-  stable-return receipts, and operator visibility are still remaining work
+- Stage 5/Reactor currently has non-executing trigger intake, readback, and
+  dispatch-attempt receipts only; bounded dispatch execution, verification,
+  retry/backoff, deadletter/escalation, stable-return receipts, and operator
+  visibility are still remaining work
 
 ## 6. Update rule
 

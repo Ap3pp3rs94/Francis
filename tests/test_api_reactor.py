@@ -65,10 +65,29 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert fetched.json()["ok"] is True
     assert fetched.json()["item"]["event_id"] == event_id
 
+    dispatch_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "record a bounded dispatch attempt before execution exists",
+        },
+    )
+    assert dispatch_attempt.status_code == 200
+    attempt_body = dispatch_attempt.json()
+    assert attempt_body["ok"] is True
+    assert attempt_body["applied"] is True
+    assert attempt_body["receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert attempt_body["receipt"]["execution_started"] is False
+    assert attempt_body["event"]["status"] == "dispatch_deferred"
+    assert attempt_body["event"]["dispatch"]["engine"] == "not_implemented"
+    assert attempt_body["event"]["governance"]["execution_authority"] is False
+
     status = client.get("/reactor/status")
     assert status.status_code == 200
     assert status.json()["total"] == 1
     assert status.json()["trigger_source_counts"] == {"mission_queue": 1}
+    assert status.json()["status_counts"] == {"dispatch_deferred": 1}
 
 
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
@@ -94,6 +113,17 @@ def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_p
     assert denied.json()["ok"] is False
     assert denied.json()["error"] == "api_permission_denied"
     assert denied.json()["governance"]["scope"] == "reactor.write"
+
+    denied_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": "reactor_evt_missing",
+            "actor": _REACTOR_ACTOR,
+        },
+    )
+    assert denied_attempt.status_code == 200
+    assert denied_attempt.json()["ok"] is False
+    assert denied_attempt.json()["error"] == "api_permission_denied"
 
     monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
     client = TestClient(create_app())

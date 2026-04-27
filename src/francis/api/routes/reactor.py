@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
-from francis.reactor import enqueue_event, get_event, list_events, reactor_status
+from francis.reactor import enqueue_event, get_event, list_events, reactor_status, record_dispatch_attempt
 
 router = APIRouter()
 _REACTOR_WRITE_SCOPE = "reactor.write"
@@ -37,6 +37,15 @@ class ReactorEventIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ReactorDispatchAttemptIn(BaseModel):
+    event_id: str = ""
+    id: str = ""
+    actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 def _write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
@@ -62,7 +71,7 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
     }
 
 
-def _payload_dict(payload: ReactorEventIn) -> dict[str, Any]:
+def _payload_dict(payload: Any) -> dict[str, Any]:
     dump = getattr(payload, "model_dump", None)
     if callable(dump):
         data = dump()
@@ -100,3 +109,13 @@ def events_enqueue(payload: ReactorEventIn, request: Request) -> dict[str, Any]:
     if not permission.allowed:
         return _permission_denied(permission)
     return enqueue_event(_payload_dict(payload))
+
+
+@router.post("/events/dispatch_attempt")
+def events_dispatch_attempt(payload: ReactorDispatchAttemptIn, request: Request) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    event_id = str(data.get("event_id") or data.get("id") or "")
+    return record_dispatch_attempt(event_id, data)
