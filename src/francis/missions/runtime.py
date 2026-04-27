@@ -39,6 +39,8 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
         "status": outcome.get("status"),
         "operation_id": outcome.get("operation_id"),
         "approval_id": outcome.get("approval_id"),
+        "previous_approval_id": outcome.get("previous_approval_id"),
+        "approval_status": outcome.get("approval_status"),
         "gate": outcome.get("gate"),
         "next_step": outcome.get("next_step"),
         "trace_id": outcome.get("trace_id"),
@@ -83,21 +85,18 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
 def _operation_handoff(operation: Any) -> dict[str, object]:
     operation_record = _as_dict(operation)
     operation_meta = _as_dict(operation_record.get("meta"))
     operation_output = _as_dict(operation_record.get("output"))
-    governance = _as_dict(operation_meta.get("governance"))
-    approval_id = (
-        _safe_str(operation_meta.get("approval_id")).strip() or _safe_str(operation_output.get("approval_id")).strip()
-    )
-    gate = _safe_str(governance.get("gate")).strip()
-    next_step = _redact_free_text(governance.get("next_step"))
-    trace_id = (
-        _safe_str(operation_record.get("trace_id")).strip()
-        or _safe_str(operation_meta.get("trace_id")).strip()
-        or _safe_str(operation_output.get("trace_id")).strip()
-    )
     output_receipt = operation_output.get("receipt") if isinstance(operation_output.get("receipt"), dict) else {}
     output_sandbox = (
         operation_output.get("sandbox")
@@ -109,6 +108,73 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
     output_audit = output_receipt.get("audit_event") if isinstance(output_receipt.get("audit_event"), dict) else {}
     output_sandbox_audit = (
         output_sandbox.get("audit_event") if isinstance(output_sandbox.get("audit_event"), dict) else {}
+    )
+    operation_governance = _as_dict(operation_meta.get("governance"))
+    output_governance = _as_dict(operation_output.get("governance"))
+    receipt_governance = _as_dict(output_receipt.get("governance"))
+    sandbox_governance = _as_dict(output_sandbox.get("governance"))
+    audit_governance = _as_dict(output_audit.get("governance"))
+    sandbox_audit_governance = _as_dict(output_sandbox_audit.get("governance"))
+    governance = (
+        operation_governance
+        or output_governance
+        or receipt_governance
+        or sandbox_governance
+        or audit_governance
+        or sandbox_audit_governance
+    )
+    approval_id = _first_text(
+        operation_meta.get("approval_id"),
+        operation_output.get("approval_id"),
+        output_receipt.get("approval_id"),
+        output_sandbox.get("approval_id"),
+        output_audit.get("approval_id"),
+        output_sandbox_audit.get("approval_id"),
+    )
+    previous_approval_id = _first_text(
+        operation_meta.get("previous_approval_id"),
+        operation_meta.get("previousApprovalId"),
+        operation_output.get("previous_approval_id"),
+        operation_output.get("previousApprovalId"),
+        output_receipt.get("previous_approval_id"),
+        output_receipt.get("previousApprovalId"),
+        output_sandbox.get("previous_approval_id"),
+        output_sandbox.get("previousApprovalId"),
+        output_audit.get("previous_approval_id"),
+        output_audit.get("previousApprovalId"),
+        output_sandbox_audit.get("previous_approval_id"),
+        output_sandbox_audit.get("previousApprovalId"),
+    )
+    approval_status = _first_text(
+        operation_meta.get("approval_status"),
+        operation_meta.get("approvalStatus"),
+        operation_output.get("approval_status"),
+        operation_output.get("approvalStatus"),
+        governance.get("approval_status"),
+        governance.get("approvalStatus"),
+        output_receipt.get("approval_status"),
+        output_receipt.get("approvalStatus"),
+        receipt_governance.get("approval_status"),
+        receipt_governance.get("approvalStatus"),
+        output_sandbox.get("approval_status"),
+        output_sandbox.get("approvalStatus"),
+        sandbox_governance.get("approval_status"),
+        sandbox_governance.get("approvalStatus"),
+        output_audit.get("approval_status"),
+        output_audit.get("approvalStatus"),
+        audit_governance.get("approval_status"),
+        audit_governance.get("approvalStatus"),
+        output_sandbox_audit.get("approval_status"),
+        output_sandbox_audit.get("approvalStatus"),
+        sandbox_audit_governance.get("approval_status"),
+        sandbox_audit_governance.get("approvalStatus"),
+    )
+    gate = _safe_str(governance.get("gate")).strip()
+    next_step = _redact_free_text(governance.get("next_step"))
+    trace_id = (
+        _safe_str(operation_record.get("trace_id")).strip()
+        or _safe_str(operation_meta.get("trace_id")).strip()
+        or _safe_str(operation_output.get("trace_id")).strip()
     )
     trace_id = (
         trace_id
@@ -146,6 +212,10 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
     handoff: dict[str, object] = {}
     if approval_id:
         handoff["approval_id"] = approval_id
+    if previous_approval_id:
+        handoff["previous_approval_id"] = previous_approval_id
+    if approval_status:
+        handoff["approval_status"] = approval_status
     if gate:
         handoff["gate"] = gate
     if next_step:
@@ -413,6 +483,8 @@ def run_queue_once(
             "operation_id": _safe_str(outcome.get("operation_id")).strip() or None,
             "message": _redact_free_text(outcome.get("message")),
             "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
+            "previous_approval_id": _safe_str(outcome.get("previous_approval_id")).strip() or None,
+            "approval_status": _safe_str(outcome.get("approval_status")).strip() or None,
             "gate": _safe_str(outcome.get("gate")).strip() or None,
             "next_step": _redact_result_text(outcome.get("next_step")),
             "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,

@@ -290,6 +290,14 @@ references for mission meta, queue hints, and current-task readback. This is
 mission readback normalization only; it does not approve work, execute tasks, or
 create new receipts.
 
+As of `2026-04-27`, mission queue-run handoff results also promote nested
+approval receipt lineage. When the mission runtime advances a queued linked
+operation and the operation returns approval handles under its receipt, the
+queue-run result/error readback preserves the current approval id, previous
+approval id, and approval status alongside gate and next-step context. This is
+runtime readback normalization only; it does not approve work, execute tasks, or
+widen queue eligibility.
+
 As of `2026-04-26`, the chat UI missions client can consume that direct queue
 read projection. `MissionsClient.queue` now reads `GET /missions/queue` with
 bounded limit and terminal-inclusion params, and `MissionQueueItem` preserves
@@ -4909,6 +4917,23 @@ Latest targeted validation for the `2026-04-27` Stage 3 mission tick nested-appr
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m mypy src`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 mission runtime nested-approval receipt slice:
+
+- `python -m pytest tests\test_mission_runtime.py -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_api_mission_runtime_redaction.py tests\test_mission_runtime.py -q`
+  Result: `3 passed`
+- `python -m ruff check src\francis\missions\runtime.py tests\test_mission_runtime.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\missions\runtime.py tests\test_mission_runtime.py`
+  Result: `2 files already formatted`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\missions\runtime.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`
