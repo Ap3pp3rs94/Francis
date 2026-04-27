@@ -1211,6 +1211,13 @@ leaving the mission detail route. This is read-model propagation only; it does n
 add new controls, execute missions, infer missing operation records, or change
 mission authority.
 
+As of `2026-04-27`, continuity and world-state mission current-task read models
+also preserve previous approval lineage. Shift-briefing/deadletter current-task
+projections now carry `previous_approval_id` and `previous_approval_status` from
+existing mission and approval projection truth alongside the current approval id
+and status. This is read-model propagation only; it does not approve work,
+refresh approvals, execute missions, or widen memory writes.
+
 As of `2026-04-26`, chat mission ingress continuity metadata and memory timeline
 loop projections also preserve current-task operation identity. Compact assistant
 ledger metadata, `/memory/timeline/list` loop projection, and the chat UI memory
@@ -4959,6 +4966,23 @@ Latest targeted validation for the `2026-04-27` Stage 3 mission current-task app
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `python -m mypy src\francis\api\routes\missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 continuity current-task approval-lineage readback slice:
+
+- `python -m pytest tests\test_api_continuity.py::test_continuity_briefing_deadletter_preview_preserves_pending_approval_linkage -q`
+  Result: `failed before implementation, then passed`
+- `python -m pytest tests\test_api_continuity.py -q`
+  Result: `12 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\world_state\snapshot.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

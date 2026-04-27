@@ -1155,6 +1155,14 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             existing.get("approval_status"),
             latest_memory_receipt.get("approval_status"),
         ),
+        "previous_approval_id": _first_text(
+            item.get("last_task_previous_approval_id"),
+            existing.get("previous_approval_id"),
+        ),
+        "previous_approval_status": _first_text(
+            item.get("last_task_previous_approval_status"),
+            existing.get("previous_approval_status"),
+        ),
         "trace_id": _first_text(
             existing.get("trace_id"),
             latest_memory_receipt.get("current_task_trace_id"),
