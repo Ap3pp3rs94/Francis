@@ -262,6 +262,14 @@ evidence, and analysis-only governance flags without adding proposal decisions,
 promotion authority, execution authority, approval authority, memory writes, or
 UI claims.
 
+As of `2026-04-27`, Stage 4/Forge proposal quality also has a passive summary
+helper. The helper accepts existing proposal records, reuses the deterministic
+proposal-quality analyzer, and summarizes ready/blocked counts, status counts,
+risk-tier counts, review-status counts, missing-requirement counts, and blocked
+proposal references. This is a backend helper only: it does not add a route,
+mutate proposal records, change promotion readiness, create approval authority,
+execute tools, write memory, or create UI claims.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4135,6 +4143,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 4/Forge passive
+proposal-quality summary helper slice:
+
+- `python -m pytest tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py -q`
+  Result: `5 passed`
+- `python -m pytest tests\unit\test_imports.py -q`
+  Result: `17 passed, 1 skipped`
+- `python -m mypy src\francis\forge\proposal_quality_summary.py src\francis\forge\proposal_quality.py`
+  Result: `passed`
+- `python -m ruff check src\francis\forge tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\forge tests\unit\test_forge_proposal_quality_summary.py tests\unit\test_forge_proposal_quality.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 4/Forge proposal
 quality-readback API slice:
