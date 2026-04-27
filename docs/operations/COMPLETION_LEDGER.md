@@ -468,6 +468,15 @@ completed continuity. Existing focus, preview, and receipt arrays remain
 unchanged; this is read-model selection only and does not create retry,
 deadletter, execution, memory, or UI state.
 
+As of `2026-04-27`, operator-mode continuity readback also preserves the mission
+briefing's existing terminal operation memory receipts. `/system/operator_mode`
+now returns `continuity.memory_receipts` from the already-built mission
+continuity briefing so operator surfaces can inspect receipt-backed mission,
+operation, trace, run, artifact, and handoff evidence without requiring a
+separate continuity lookup. This is read-model pass-through only; it does not
+create memory receipts, inspect artifacts, execute operations, or change ORB
+handback focus selection.
+
 As of `2026-04-26`, mission advance and queue-run handoff results preserve that
 receipt-backed recovery context when linked operation execution fails. The
 mission runtime projects `operation_error`, `result_message` when present, and
@@ -3988,6 +3997,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 operator-mode handoff fo
   Result: `2 files already formatted`
 - `python -m pytest tests\unit\test_operator_mode.py tests\test_api_system_settings.py -q`
   Result: `28 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 operator-mode memory receipt pass-through slice:
+
+- `python -m pytest tests\unit\test_operator_mode.py::test_operator_mode_snapshot_preserves_briefing_memory_receipts -q`
+  Result: `failed before implementation with KeyError: memory_receipts; passed after the operator-mode readback fix`
+- `python -m pytest tests\unit\test_operator_mode.py tests\unit\test_kernel_contracts.py -q`
+  Result: `14 passed`
+- `python -m ruff check src\francis\world_state\operator_mode.py tests\unit\test_operator_mode.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\world_state\operator_mode.py tests\unit\test_operator_mode.py`
+  Result: `2 files already formatted`
+- `python -m mypy src\francis\world_state\operator_mode.py`
+  Result: `passed`
 - `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
   Result: `passed`
 - `git diff --check`

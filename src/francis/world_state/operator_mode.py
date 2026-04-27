@@ -499,6 +499,7 @@ def snapshot() -> dict[str, Any]:
             "recently_completed": _briefing_list(mission_briefing, "recently_completed"),
             "failed_preview": _briefing_list(mission_briefing, "failed_preview"),
             "deadletter_preview": _briefing_list(mission_briefing, "deadletter_preview"),
+            "memory_receipts": _briefing_list(mission_briefing, "memory_receipts"),
             "handoff_focus": _as_dict(handoff_focus.get("item")),
             "handoff_focus_source": _safe_str(handoff_focus.get("source")).strip(),
         },

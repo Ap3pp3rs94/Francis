@@ -355,3 +355,88 @@ ui:
     assert continuity["handoff_focus"]["current_task"]["trace_id"] == "trace_failed_receipt"
     assert continuity["handoff_focus"]["latest_memory_receipt"]["operation_status"] == "failed"
     assert continuity["handoff_focus"]["latest_memory_receipt"]["recovery_next_step"] == "review_operation_detail"
+
+
+def test_operator_mode_snapshot_preserves_briefing_memory_receipts(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from francis.world_state import operator_mode as operator_mode_module
+
+    monkeypatch.setattr(
+        operator_mode_module,
+        "mission_continuity_snapshot",
+        lambda **_: {
+            "mission_status_counts": {"completed": 1},
+            "mission_briefing": {
+                "headline": "Completed mission receipt is ready for interface review",
+                "counts": {"completed": 1},
+                "focus": [],
+                "failed_preview": [],
+                "recently_completed": [],
+                "deadletter_preview": [],
+                "memory_receipts": [
+                    {
+                        "id": "mem_terminal_receipt",
+                        "mission_id": "msn_terminal_receipt",
+                        "operation_id": "tsk_terminal_receipt",
+                        "operation_status": "completed",
+                        "trace_id": "trace_terminal_receipt",
+                        "run_id": "run_terminal_receipt",
+                        "artifact_dir": "D:/Francis/.data/artifacts/run_terminal_receipt",
+                        "handoff_action": "review_result",
+                        "current_task_operation_id": "tsk_terminal_receipt",
+                        "current_task_next_step": "review_completed_mission",
+                    }
+                ],
+            },
+        },
+    )
+
+    state = operator_mode_module.snapshot()
+
+    memory_receipts = state["continuity"]["memory_receipts"]
+    assert memory_receipts[0]["id"] == "mem_terminal_receipt"
+    assert memory_receipts[0]["mission_id"] == "msn_terminal_receipt"
+    assert memory_receipts[0]["operation_id"] == "tsk_terminal_receipt"
+    assert memory_receipts[0]["trace_id"] == "trace_terminal_receipt"
+    assert memory_receipts[0]["run_id"] == "run_terminal_receipt"
+    assert memory_receipts[0]["handoff_action"] == "review_result"
