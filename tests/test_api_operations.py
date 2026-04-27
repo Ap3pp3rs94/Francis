@@ -242,6 +242,41 @@ def test_operations_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Pat
     assert listed_body["items"] == []
 
 
+def test_operations_create_denies_unscoped_actor_before_mutation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "permission_gate_create",
+            "actor": "test.operations.write",
+            "input": {"goal": "do not create without scoped actor"},
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    task_root = data_root / "tasks"
+    assert not task_root.exists() or not any(task_root.iterdir())
+
+
 def test_operations_run_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -378,6 +413,69 @@ def test_operations_lifecycle_mutations_are_blocked_in_observe_mode(monkeypatch,
     patch_record = json.loads((data_root / "tasks" / patch_operation_id / "record.json").read_text(encoding="utf-8"))
     assert patch_record.get("tags") is None
     assert "observe patch should not persist" not in json.dumps(patch_record, sort_keys=True)
+    assert "should not persist" not in json.dumps(patch_record, sort_keys=True)
+
+    for operation_id in (patch_operation_id, cancel_operation_id, delete_operation_id):
+        fetched = client.get(f"/operations/{operation_id}")
+        assert fetched.status_code == 200
+        assert fetched.json()["operation"]["status"] == "queued"
+
+
+def test_operations_lifecycle_mutations_deny_unscoped_actor_before_mutation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    operation_ids: list[str] = []
+    for label in ("patch", "cancel", "delete"):
+        created = client.post(
+            "/operations/create",
+            json={"action": "plan.create", "reason": f"permission_{label}", "input": {"goal": label}},
+        )
+        assert created.status_code == 200
+        operation_ids.append(str(created.json()["operation_id"]))
+
+    patch_operation_id, cancel_operation_id, delete_operation_id = operation_ids
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    patched = client.patch(
+        f"/operations/{patch_operation_id}",
+        json={
+            "tags": ["permission-mutated"],
+            "meta": {"operator_note": "should not persist"},
+            "note": "permission patch should not persist",
+            "actor": "test.operations.write",
+        },
+    )
+    cancelled = client.post(
+        f"/operations/{cancel_operation_id}/cancel",
+        json={"reason": "permission_cancel", "actor": "test.operations.write"},
+    )
+    deleted = client.request(
+        "DELETE",
+        f"/operations/{delete_operation_id}",
+        json={"reason": "permission_delete", "actor": "test.operations.write"},
+    )
+
+    for response in (patched, cancelled, deleted):
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is False
+        assert body["status"] == "denied"
+        assert body["error"] == "api_permission_denied"
+        assert body["governance"]["gate"] == "permission_gate"
+        assert body["governance"]["reason"] == "missing_scopes"
+        assert body["governance"]["evidence"]["actor_present"] is True
+        assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    patch_record = json.loads((data_root / "tasks" / patch_operation_id / "record.json").read_text(encoding="utf-8"))
+    assert patch_record.get("tags") is None
+    assert "permission patch should not persist" not in json.dumps(patch_record, sort_keys=True)
     assert "should not persist" not in json.dumps(patch_record, sort_keys=True)
 
     for operation_id in (patch_operation_id, cancel_operation_id, delete_operation_id):

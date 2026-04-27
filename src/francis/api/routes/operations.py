@@ -36,6 +36,7 @@ _TASK_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 _TERMINAL_STATUSES = {"complete", "completed", "failed", "canceled", "cancelled"}
 _RETRYABLE_GOVERNANCE_STATUSES = {"pending", "needs_approval", "blocked", "denied"}
 _OPERATIONS_RUN_SCOPE = "operations.run"
+_OPERATIONS_WRITE_SCOPE = "operations.write"
 _DEFAULT_OPERATION_RUN_ACTOR = "api.operations"
 
 _ACTION_TO_CAPABILITY: dict[str, str] = {
@@ -73,7 +74,7 @@ class OperationCreateIn(BaseModel):
     action: str
     reason: str = "requested"
     domain: str | None = None
-    actor: str | None = None
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
     mission_id: str | None = None
     idempotency_key: str | None = None
     input: dict[str, Any] = Field(default_factory=dict)
@@ -90,14 +91,17 @@ class OperationPatchIn(BaseModel):
     tags: list[str] | None = None
     meta: dict[str, Any] | None = None
     note: str | None = None
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
 
 
 class OperationCancelIn(BaseModel):
     reason: str = "cancelled_by_operator"
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
 
 
 class OperationDeleteIn(BaseModel):
     reason: str = "deleted_by_operator"
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
 
 
 class OperationGetManyIn(BaseModel):
@@ -147,7 +151,20 @@ def _operation_run_permission(actor: Any, *, route: str, method: str) -> ApiPerm
     )
 
 
-def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+def _operation_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_OPERATIONS_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(
+    decision: ApiPermissionDecision,
+    *,
+    next_step: str = "configure_actor_scope_before_running_operations",
+) -> dict[str, object]:
     return {
         "ok": False,
         "status": "denied",
@@ -155,7 +172,7 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
         "governance": {
             "gate": "permission_gate",
             "reason": decision.reason,
-            "next_step": "configure_actor_scope_before_running_operations",
+            "next_step": next_step,
             "evidence": decision.evidence,
         },
     }
@@ -834,7 +851,10 @@ def get_many_operations(payload: OperationGetManyIn) -> dict[str, object]:
 
 
 @router.post("/create")
-def create_operation(payload: OperationCreateIn) -> dict[str, object]:
+def create_operation(request: Request, payload: OperationCreateIn) -> dict[str, object]:
+    permission = _operation_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission, next_step="configure_actor_scope_before_mutating_operations")
     blocked_reason = posture_write_guard("declaring an operation")
     if blocked_reason:
         return {"ok": False, "error": blocked_reason, "status": "blocked"}
@@ -1013,11 +1033,15 @@ def _operation_lifecycle_posture_block(op_id: str, blocked_reason: str) -> dict[
 
 
 @router.patch("/{operation_id}")
-def patch_operation(operation_id: str, payload: OperationPatchIn) -> dict[str, object]:
+def patch_operation(operation_id: str, request: Request, payload: OperationPatchIn) -> dict[str, object]:
     try:
         op_id = _safe_str(operation_id).strip()
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
+
+        permission = _operation_write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission, next_step="configure_actor_scope_before_mutating_operations")
 
         blocked_reason = posture_write_guard("updating operation metadata")
         if blocked_reason:
@@ -1068,11 +1092,15 @@ def patch_operation(operation_id: str, payload: OperationPatchIn) -> dict[str, o
 
 
 @router.post("/{operation_id}/cancel")
-def cancel_operation(operation_id: str, payload: OperationCancelIn) -> dict[str, object]:
+def cancel_operation(operation_id: str, request: Request, payload: OperationCancelIn) -> dict[str, object]:
     try:
         op_id = _safe_str(operation_id).strip()
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
+
+        permission = _operation_write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission, next_step="configure_actor_scope_before_mutating_operations")
 
         blocked_reason = posture_write_guard("cancelling an operation")
         if blocked_reason:
@@ -1116,11 +1144,15 @@ def run_operation(operation_id: str, request: Request, payload: OperationRunIn) 
 
 
 @router.delete("/{operation_id}")
-def delete_operation(operation_id: str, payload: OperationDeleteIn) -> dict[str, object]:
+def delete_operation(operation_id: str, request: Request, payload: OperationDeleteIn) -> dict[str, object]:
     try:
         op_id = _safe_str(operation_id).strip()
         if not _validate_operation_id(op_id):
             return {"ok": False, "error": "invalid_operation_id"}
+
+        permission = _operation_write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission, next_step="configure_actor_scope_before_mutating_operations")
 
         blocked_reason = posture_write_guard("deleting an operation")
         if blocked_reason:

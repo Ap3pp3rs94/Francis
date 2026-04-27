@@ -104,6 +104,11 @@ OPERATION_RUN_TEST_ACTORS = (
     "api.operations",
     "test.operations.run",
 )
+OPERATION_WRITE_TEST_SCOPE = "operations.write"
+OPERATION_WRITE_TEST_ACTORS = (
+    "api.operations",
+    "test.operations.write",
+)
 
 
 def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], scope: str) -> None:
@@ -121,6 +126,7 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     _add_actor_scopes(policy, PLUGIN_WRITE_TEST_ACTORS, PLUGIN_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, MISSION_WRITE_TEST_ACTORS, MISSION_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, OPERATION_RUN_TEST_ACTORS, OPERATION_RUN_TEST_SCOPE)
+    _add_actor_scopes(policy, OPERATION_WRITE_TEST_ACTORS, OPERATION_WRITE_TEST_SCOPE)
     return policy
 
 

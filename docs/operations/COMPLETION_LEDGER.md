@@ -127,6 +127,15 @@ unless the request actor is present in the server-side
 posture guards, exact-action approvals, traces, artifacts, and operation memory
 receipts remain unchanged when the permission gate allows execution.
 
+As of `2026-04-27`, direct operation declaration and lifecycle mutation routes
+are also wired to the API permission gate. `POST /operations/create`,
+`PATCH /operations/{operation_id}`, `POST /operations/{operation_id}/cancel`,
+and `DELETE /operations/{operation_id}` now deny before creating queued work or
+changing operation metadata, cancellation, or deletion state unless the request
+actor has `operations.write` in `FRANCIS_API_ACTOR_SCOPES`. Existing Observe
+mode posture blocks and read projections remain unchanged when the permission
+gate allows the request.
+
 As of `2026-04-26`, domain registry write routes are also wired to the API
 permission gate. `POST /domains/create`, `PATCH /domains/update`, and
 `POST /domains/delete` now deny before mutating local domain registry state unless
@@ -4059,6 +4068,25 @@ Latest targeted validation for the `2026-04-27` direct operation execution permi
   Result: `28 passed`
 - `python -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py tests\conftest.py`
   Result: `passed; Ruff emitted .ruff_cache access warnings`
+- `python -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py tests\conftest.py`
+  Result: `3 files already formatted`
+- `python -m mypy src\francis\api\routes\operations.py`
+  Result: `passed`
+- `python -m pytest tests\unit\test_api_permission_gate.py tests\test_api_missions_permission_gate.py -q`
+  Result: `5 passed`
+- `python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` direct operation mutation permission-gate slice:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_create_denies_unscoped_actor_before_mutation tests\test_api_operations.py::test_operations_lifecycle_mutations_deny_unscoped_actor_before_mutation -q`
+  Result: `failed before implementation because create, patch, cancel, and delete still mutated; passed after the permission-gate integration`
+- `python -m pytest tests\test_api_operations.py -q`
+  Result: `30 passed`
+- `python -m ruff check src\francis\api\routes\operations.py tests\test_api_operations.py tests\conftest.py`
+  Result: `passed`
 - `python -m ruff format --check src\francis\api\routes\operations.py tests\test_api_operations.py tests\conftest.py`
   Result: `3 files already formatted`
 - `python -m mypy src\francis\api\routes\operations.py`
