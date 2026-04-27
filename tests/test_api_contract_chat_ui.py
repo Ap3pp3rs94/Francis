@@ -104,6 +104,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/operations/{operation_id}/cancel"),
         ("DELETE", "/operations/{operation_id}"),
         ("GET", "/operations/export"),
+        ("GET", "/reactor/review_queue"),
         ("GET", "/forge/proposals/list"),
         ("POST", "/forge/proposals/decision"),
         ("GET", "/forge/proposal_reviews/list"),

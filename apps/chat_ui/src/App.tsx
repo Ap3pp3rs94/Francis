@@ -35,6 +35,7 @@ import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline"
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
+import { ReactorApiError, ReactorClient, type ReactorReviewQueueSnapshot } from "./reactor";
 import type {
   PluginCapabilityCatalogCoherence,
   PluginCapabilityCatalogEntry,
@@ -3798,6 +3799,7 @@ function SystemPanel(props: {
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const reactorClient = useMemo(() => new ReactorClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -3817,6 +3819,9 @@ function SystemPanel(props: {
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
   const [takeoverOperationsLoadedAt, setTakeoverOperationsLoadedAt] = useState<number | null>(null);
+  const [reactorReviewQueue, setReactorReviewQueue] = useState<ReactorReviewQueueSnapshot | null>(null);
+  const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
+  const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -3913,6 +3918,14 @@ function SystemPanel(props: {
     return "Operations request failed.";
   }, []);
 
+  const reactorError = useCallback((err: unknown): string => {
+    if (err instanceof ReactorApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Reactor request failed.";
+  }, []);
+
   const scrollOrbSection = useCallback((sectionId: string) => {
     window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3943,6 +3956,7 @@ function SystemPanel(props: {
         nextObserverEvents,
         nextOrbStatus,
         nextOperations,
+        nextReactorReviewQueue,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -3953,6 +3967,7 @@ function SystemPanel(props: {
         client.getObserverEvents({ limit: 8 }),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
+        reactorClient.getReviewQueue({ limit: 8 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4022,6 +4037,15 @@ function SystemPanel(props: {
         degradedFeeds.push("live operations");
       }
 
+      if (nextReactorReviewQueue.status === "fulfilled") {
+        setReactorReviewQueue(nextReactorReviewQueue.value);
+        setReactorReviewQueueError(null);
+        setReactorReviewQueueLoadedAt(refreshStartedAt);
+      } else {
+        setReactorReviewQueueError(reactorError(nextReactorReviewQueue.reason));
+        degradedFeeds.push("reactor review queue");
+      }
+
       if (degradedFeeds.length > 0) {
         setRefreshNotice(`Refresh completed with degraded feeds: ${degradedFeeds.join(", ")}.`);
       }
@@ -4031,7 +4055,7 @@ function SystemPanel(props: {
       setLastRefreshCompletedAt(nowUnixSeconds());
       setBusy(false);
     }
-  }, [client, operationsClient, operationsError, settingsError]);
+  }, [client, operationsClient, operationsError, reactorClient, reactorError, settingsError]);
 
   const recordObserverScan = useCallback(async () => {
     if (!modeClient) {
@@ -4201,6 +4225,15 @@ function SystemPanel(props: {
   const observerEventEntries = observerEvents?.items ?? [];
   const observerEventCount = observerEvents?.total ?? observerEventEntries.length;
   const observerEventsRouteError = safeString(observerEvents?.error).trim();
+  const reactorReviewItems = reactorReviewQueue?.items ?? [];
+  const reactorReviewTotal = reactorReviewQueue?.available_total ?? reactorReviewQueue?.total ?? reactorReviewItems.length;
+  const reactorReviewRouteError = safeString(reactorReviewQueue?.error).trim();
+  const reactorReviewRouteBadges = Object.entries(reactorReviewQueue?.route_counts ?? {})
+    .filter(([, count]) => count > 0)
+    .slice(0, 4);
+  const reactorReviewStableBadges = Object.entries(reactorReviewQueue?.stable_state_counts ?? {})
+    .filter(([, count]) => count > 0)
+    .slice(0, 3);
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const overviewMissionReadiness = overview?.mission_briefing?.readiness ?? shiftBriefingReadiness;
@@ -6442,6 +6475,147 @@ function SystemPanel(props: {
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div id="francis-reactor-review-queue" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Reactor Review Queue</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Read-only Reactor review projection from persisted event receipts.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(reactorReviewTotal > 0 ? "attention" : "clear")}>review {reactorReviewTotal}</span>
+            {reactorReviewQueueLoadedAt ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Loaded {toLocaleTime(reactorReviewQueueLoadedAt)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {reactorReviewQueueError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor review queue unavailable: {reactorReviewQueueError}
+          </div>
+        ) : null}
+
+        {reactorReviewRouteError && !reactorReviewQueueError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor review route reported: {reactorReviewRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+          {reactorReviewRouteBadges.map(([route, count]) => (
+            <span key={`reactor-route-${route}`} style={badgeStyle(route)}>
+              {route} {count}
+            </span>
+          ))}
+          {reactorReviewStableBadges.map(([state, count]) => (
+            <span key={`reactor-state-${state}`} style={badgeStyle(state)}>
+              {state} {count}
+            </span>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {reactorReviewItems.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No Reactor review events are queued. Approval, retry, and deadletter candidates will appear here after intake.
+            </div>
+          ) : (
+            reactorReviewItems.slice(0, 6).map((item) => {
+              const trigger = item.trigger;
+              const review = item.review;
+              const classification = item.classification;
+              const route = safeString(review?.route).trim();
+              const status = safeString(item.status).trim() || safeString(review?.status).trim() || "review";
+              const stableState = safeString(item.stable_state).trim();
+              const gate = safeString(review?.gate).trim();
+              const action = safeString(review?.action).trim();
+              const nextStep = safeString(review?.next_step).trim();
+              const summary = safeString(trigger?.summary).trim();
+              const source = safeString(trigger?.source).trim();
+              const triggerType = safeString(trigger?.type).trim();
+              const missionId = safeString(trigger?.mission_id).trim();
+              const operationId = safeString(trigger?.operation_id).trim();
+              const approvalId = safeString(trigger?.approval_id).trim();
+              const receiptKind = safeString(review?.receipt_kind).trim();
+              const receiptRef = safeString(review?.receipt_ref).trim() || safeString(review?.blocker_ref).trim();
+              return (
+                <div
+                  key={`reactor-review-${item.event_id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>
+                        <code>{item.event_id}</code>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {summary || nextStep || "Reactor event needs operator review."}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(status)}>{status}</span>
+                      {route ? <span style={badgeStyle(route)}>{route}</span> : null}
+                      {stableState ? <span style={badgeStyle(stableState)}>{stableState}</span> : null}
+                      {gate ? <span style={badgeStyle(gate)}>{gate}</span> : null}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {source ? <span style={badgeStyle(source)}>{source}</span> : null}
+                    {triggerType ? <span style={badgeStyle(triggerType)}>{triggerType}</span> : null}
+                    {classification?.risk_tier ? (
+                      <span style={badgeStyle(classification.risk_tier)}>{classification.risk_tier}</span>
+                    ) : null}
+                    {action ? <span style={badgeStyle(action)}>{action}</span> : null}
+                    {receiptKind ? <span style={badgeStyle("receipt")}>{receiptKind}</span> : null}
+                  </div>
+
+                  {nextStep && summary !== nextStep ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>{nextStep}</div>
+                  ) : null}
+                  {receiptRef ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                      Receipt <code>{receiptRef}</code>
+                    </div>
+                  ) : null}
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    {approvalId ? (
+                      <button
+                        style={buttonStyle}
+                        onClick={() =>
+                          props.onOpenApprovals(approvalId, {
+                            missionId: missionId || undefined,
+                            operationId: operationId || undefined,
+                            source: "reactor.review_queue",
+                            reviewKind: route || undefined,
+                            reviewReason: nextStep || summary || undefined,
+                          })
+                        }
+                      >
+                        Review approval
+                      </button>
+                    ) : null}
+                    {operationId ? (
+                      <button style={buttonStyle} onClick={() => props.onOpenOperation(operationId)}>
+                        Open task
+                      </button>
+                    ) : null}
+                    {missionId ? (
+                      <button style={buttonStyle} onClick={() => inspectMission(missionId)}>
+                        Inspect mission
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       <div id="francis-continuity-ledger" style={{ ...summaryCardStyle(), marginTop: 12 }}>
