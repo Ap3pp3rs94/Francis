@@ -1056,6 +1056,14 @@ matched task result or metadata, keeping retry lineage visible at the gate
 review surface. This is read-only gate readback only; it does not create
 approvals, refresh approvals, approve work, execute operations, or write memory.
 
+As of `2026-04-27`, the chat UI approvals client also preserves that current-task
+previous approval lineage. `ApprovalsClient.list` and decision item parsing keep
+`current_task_previous_approval_id` and
+`current_task_previous_approval_status` when the backend provides them, so the
+interface contract does not drop retry lineage exposed by the approval gate
+readback. This is typed interface preservation only; it does not change approval
+decisions, execution, policy, memory writes, or rendered controls.
+
 As of `2026-04-26`, approval decision responses are also covered for the same
 mission/operation loop-handle readback. When an approval decision returns the
 approved item, the API projection and chat UI approvals client preserve the
@@ -5130,6 +5138,17 @@ Latest targeted validation for the `2026-04-27` Stage 3 approval queue previous-
 - `python -m ruff format --check src\francis\governance\approval_projection.py tests\test_api_approvals.py`
   Result: `2 files already formatted`
 - `python -m mypy src\francis\governance\approval_projection.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-27` Stage 3 approval queue previous-approval interface slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\index.test.ts`
+  Result: `failed before implementation with undefined current_task_previous_approval_id; passed after the parser fix`
+- `cd apps\chat_ui; npm run test`
+  Result: `72 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

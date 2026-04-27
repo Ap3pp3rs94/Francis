@@ -45,6 +45,8 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
           request_kind: "plugin.run.request",
           previous_approval_id: "apr_old",
           previous_approval_status: "approved",
+          current_task_previous_approval_id: "apr_current_task_old",
+          current_task_previous_approval_status: "approved",
           replacement_kind: "plugin.run.mismatch",
           replacement_reason: "approval_payload_mismatch",
           replacement_expected_payload_keys: ["action", "input", "plugin_id"],
@@ -88,6 +90,8 @@ test("ApprovalsClient.list preserves bounded approval projection fields", async 
     assert.equal(result.items.length, 1);
     assert.equal(result.items[0]?.request_kind, "plugin.run.request");
     assert.equal(result.items[0]?.previous_approval_id, "apr_old");
+    assert.equal(result.items[0]?.current_task_previous_approval_id, "apr_current_task_old");
+    assert.equal(result.items[0]?.current_task_previous_approval_status, "approved");
     assert.equal(result.items[0]?.replacement_kind, "plugin.run.mismatch");
     assert.equal(result.items[0]?.replacement_reason, "approval_payload_mismatch");
     assert.deepEqual(result.items[0]?.replacement_expected_payload_keys, ["action", "input", "plugin_id"]);
@@ -132,6 +136,8 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
         ts: 1,
         action: "plugin.run",
         status: "approved",
+        current_task_previous_approval_id: "apr_current_task_old",
+        current_task_previous_approval_status: "approved",
         operation_id: "tsk_projection",
         operation_name: "plugin.run",
         operation_plane: "P3_GOVERNANCE",
@@ -167,6 +173,8 @@ test("ApprovalsClient.decide sends an explicit approval actor", async () => {
     assert.equal(capturedBody?.action, "approve");
     assert.equal(capturedBody?.actor, "chat_ui.approvals");
     assert.equal(result.item?.operation_id, "tsk_projection");
+    assert.equal(result.item?.current_task_previous_approval_id, "apr_current_task_old");
+    assert.equal(result.item?.current_task_previous_approval_status, "approved");
     assert.equal(result.item?.operation_name, "plugin.run");
     assert.equal(result.item?.operation_plane, "P3_GOVERNANCE");
     assert.equal(result.item?.advance_action, "run_linked_operation");

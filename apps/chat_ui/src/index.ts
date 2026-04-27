@@ -37,6 +37,8 @@ export type ApprovalItem = {
   request_kind?: string;
   previous_approval_id?: string;
   previous_approval_status?: string;
+  current_task_previous_approval_id?: string;
+  current_task_previous_approval_status?: string;
   replacement_kind?: string;
   replacement_reason?: string;
   replacement_expected_payload_keys?: string[];
@@ -176,6 +178,8 @@ function parseApprovalItem(raw: unknown): ApprovalItem | null {
     request_kind: safeString(raw.request_kind) || undefined,
     previous_approval_id: safeString(raw.previous_approval_id) || undefined,
     previous_approval_status: safeString(raw.previous_approval_status) || undefined,
+    current_task_previous_approval_id: safeString(raw.current_task_previous_approval_id) || undefined,
+    current_task_previous_approval_status: safeString(raw.current_task_previous_approval_status) || undefined,
     replacement_kind: safeString(raw.replacement_kind) || undefined,
     replacement_reason: safeString(raw.replacement_reason) || undefined,
     replacement_expected_payload_keys: safeStringList(raw.replacement_expected_payload_keys),
