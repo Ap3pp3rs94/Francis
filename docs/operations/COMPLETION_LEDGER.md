@@ -10604,6 +10604,33 @@ sender-contract readback slice:
 - `python -m mypy src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
   Result: `passed`
 
+As of `2026-04-28`, the Reactor backend operator visibility summary also
+surfaces the external delivery sender contract. `GET
+/reactor/operator_visibility/summary` now carries the sender-contract status,
+ready/blocked attention counts, supported external sender adapter list,
+required sender fields, the current contract blocker, a stable readback surface
+link to `/reactor/deadletters/external_escalation_deliveries/sender_contract`,
+and the no-authority sender-contract record. This makes the compact Reactor
+operator summary explain why local outbox items cannot be marked sent without
+adding UI controls or requiring source inspection. This is backend readback
+only: it does not configure a sender, attempt delivery, send external messages,
+start execution, decide approvals, write memory, promote capabilities, or add
+UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor operator visibility
+sender-contract slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py::test_reactor_operator_visibility_summary_aggregates_readbacks_without_authority tests\unit\test_reactor_visibility.py::test_reactor_operator_visibility_summary_surfaces_external_sender_readiness tests\test_api_reactor_visibility.py::test_reactor_operator_visibility_summary_route_is_read_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\visibility.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10708,7 +10735,8 @@ These remain true and should block any "finished" claim:
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, processor-readiness readback, local
   processor-handoff/completion receipt readback, and blocked sender-attempt
-  receipt/readback plus sender-readiness and sender-contract readback
+  receipt/readback plus sender-readiness, sender-contract, and operator-summary
+  sender-contract readback
 
 ## 6. Update rule
 

@@ -120,7 +120,20 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["dispatch_engine_boundary_action_total"] == 4
     assert summary["attention"]["dispatch_engine_boundary_action_total"] == 4
     assert summary["proposal_review_history_total"] == 1
+    assert summary["external_delivery_sender_contract_status"] == "blocked"
+    assert summary["external_delivery_sender_contract_ready"] is False
+    assert summary["external_delivery_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert summary["supported_external_sender_adapters"] == []
+    assert summary["supported_external_sender_adapter_total"] == 0
+    assert summary["external_sender_required_fields"] == [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+    ]
     assert summary["attention"]["review_queue_total"] == 2
+    assert summary["attention"]["external_delivery_sender_contract_ready_total"] == 0
+    assert summary["attention"]["external_delivery_sender_contract_blocked_total"] == 1
     assert summary["attention"]["proposal_review_ready_total"] == 1
     assert summary["attention"]["proposal_review_blocked_total"] == 0
     assert summary["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
@@ -140,7 +153,15 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
         "proposal_review_ready": 1,
     }
     assert summary["counts"]["stable_return"] == {"settled": 3}
+    assert summary["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
     assert summary["readback_surfaces"]["proposal_review_history"] == ("/reactor/proposal_reviews/history/list")
+    assert summary["readback_surfaces"]["external_delivery_sender_contract"] == (
+        "/reactor/deadletters/external_escalation_deliveries/sender_contract"
+    )
+    assert summary["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
+    assert summary["external_delivery_sender_contract"]["completion_claim_allowed"] is False
+    assert summary["external_delivery_sender_contract"]["governance"]["external_delivery_authority"] is False
+    assert summary["external_delivery_sender_contract"]["governance"]["external_escalation_authority"] is False
     review_by_event_id = {item["event_id"]: item for item in summary["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}
     plugin_review = review_by_event_id[plugin_event_id]

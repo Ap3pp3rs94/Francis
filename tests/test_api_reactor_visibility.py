@@ -146,6 +146,19 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert body["dispatch_engine_boundary_action_total"] == 4
     assert body["attention"]["dispatch_engine_boundary_action_total"] == 4
     assert body["proposal_review_history_total"] == 1
+    assert body["external_delivery_sender_contract_status"] == "blocked"
+    assert body["external_delivery_sender_contract_ready"] is False
+    assert body["external_delivery_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert body["supported_external_sender_adapters"] == []
+    assert body["supported_external_sender_adapter_total"] == 0
+    assert body["external_sender_required_fields"] == [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+    ]
+    assert body["attention"]["external_delivery_sender_contract_ready_total"] == 0
+    assert body["attention"]["external_delivery_sender_contract_blocked_total"] == 1
     assert body["attention"]["proposal_review_ready_total"] == 1
     assert body["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
     assert body["counts"]["blocker_route"] == {"approval_queue": 1, "operator_review": 1}
@@ -164,7 +177,15 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
         "proposal_review_ready": 1,
     }
     assert body["counts"]["stable_return"] == {"settled": 3}
+    assert body["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
     assert body["readback_surfaces"]["review_queue"] == "/reactor/review_queue"
+    assert body["readback_surfaces"]["external_delivery_sender_contract"] == (
+        "/reactor/deadletters/external_escalation_deliveries/sender_contract"
+    )
+    assert body["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
+    assert body["external_delivery_sender_contract"]["completion_claim_allowed"] is False
+    assert body["external_delivery_sender_contract"]["governance"]["external_delivery_authority"] is False
+    assert body["external_delivery_sender_contract"]["governance"]["external_escalation_authority"] is False
     review_by_event_id = {item["event_id"]: item for item in body["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}
     plugin_review = review_by_event_id[plugin_event_id]

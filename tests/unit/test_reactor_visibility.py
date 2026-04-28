@@ -114,13 +114,35 @@ def test_reactor_operator_visibility_summary_surfaces_external_sender_readiness(
     assert summary["kind"] == "reactor.operator_visibility.summary"
     assert summary["external_delivery_total"] == 1
     assert summary["external_delivery_sender_readiness_total"] == 1
+    assert summary["external_delivery_sender_contract_status"] == "blocked"
+    assert summary["external_delivery_sender_contract_ready"] is False
+    assert summary["external_delivery_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert summary["supported_external_sender_adapters"] == []
+    assert summary["supported_external_sender_adapter_total"] == 0
+    assert summary["external_sender_required_fields"] == [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+    ]
     assert summary["attention"]["ready_external_delivery_sender_total"] == 0
     assert summary["attention"]["blocked_external_delivery_sender_total"] == 1
+    assert summary["attention"]["external_delivery_sender_contract_ready_total"] == 0
+    assert summary["attention"]["external_delivery_sender_contract_blocked_total"] == 1
     assert summary["counts"]["delivery_sender_status"] == {"blocked": 1}
+    assert summary["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
     assert (
         summary["readback_surfaces"]["external_delivery_sender_readiness"]
         == "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list"
     )
+    assert (
+        summary["readback_surfaces"]["external_delivery_sender_contract"]
+        == "/reactor/deadletters/external_escalation_deliveries/sender_contract"
+    )
+    assert summary["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
+    assert summary["external_delivery_sender_contract"]["completion_claim_allowed"] is False
+    assert summary["external_delivery_sender_contract"]["governance"]["external_delivery_authority"] is False
+    assert summary["external_delivery_sender_contract"]["governance"]["external_escalation_authority"] is False
     assert summary["ready_external_delivery_sender_items"] == []
 
     blocked_items = summary["blocked_external_delivery_sender_items"]
