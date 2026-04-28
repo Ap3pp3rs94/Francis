@@ -11018,15 +11018,49 @@ readiness readback:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens resident host readiness contract
+
+Stage 6/Lens now has a dedicated read-only resident-host readiness contract.
+`GET /lens/host` returns `kind: lens.resident_host`, and `GET /lens/status`
+embeds the same `resident_host` readback. The contract names the missing
+components required before Francis can truthfully claim a resident Lens host:
+resident host process, tray or equivalent presence, global summon hotkey,
+always-on-top overlay window, native command-palette bridge, and summon binding.
+Stage 6 readiness now includes `resident_host_runtime` as `not_implemented`, and
+the existing `summon_anywhere` blocker list is tied to `/lens/host` evidence
+instead of an empty claim.
+
+This is a backend readback/contract slice only. It does not create a host
+process, launch a local process, register a tray icon, install a hotkey, create
+an overlay window, bind OS-level summon, change UI behavior, write memory,
+decide approvals, execute actions, or grant overlay-control, summon, capture,
+sensing, telemetry, promotion, policy, or local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens resident host
+readiness contract:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
 
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
-  binding for Lens primitives, and now explicitly marks the HUD runtime as
-  chat-UI readback only, but no OS-wide summon, resident overlay/HUD runtime,
-  OS-level command palette, or live Pilot takeover surface yet
+  binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
+  readback only, and has a `/lens/host` resident-host readiness contract, but no
+  OS-wide summon, resident host process, resident overlay/HUD runtime, OS-level
+  command palette, tray presence, hotkey binding, or live Pilot takeover surface
+  yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

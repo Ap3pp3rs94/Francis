@@ -221,6 +221,85 @@ def _hud_runtime_surface() -> dict[str, Any]:
     }
 
 
+def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
+    blockers = [
+        "resident_host_process_missing",
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "always_on_top_window_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    components = [
+        {
+            "id": "host_process",
+            "label": "Resident host process",
+            "status": "missing",
+            "required_for": ["resident_presence", "startup_supervision"],
+        },
+        {
+            "id": "tray_presence",
+            "label": "Tray or equivalent presence",
+            "status": "missing",
+            "required_for": ["operator_visibility", "lifecycle_control"],
+        },
+        {
+            "id": "global_hotkey",
+            "label": "Global summon hotkey",
+            "status": "missing",
+            "required_for": ["summon_anywhere"],
+        },
+        {
+            "id": "overlay_window",
+            "label": "Always-on-top Lens window",
+            "status": "missing",
+            "required_for": ["hud_layer_runtime", "in_place_assistance"],
+        },
+        {
+            "id": "command_palette_bridge",
+            "label": "Native command palette bridge",
+            "status": "missing",
+            "required_for": ["os_level_command_palette"],
+        },
+    ]
+    return {
+        "ok": True,
+        "kind": "lens.resident_host",
+        "status": "not_implemented",
+        "contract_status": "readback_ready",
+        "availability": "backend_readback_only",
+        "route": "/lens/host",
+        "status_route": "/lens/status",
+        "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
+        "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
+        "handoff_target": "chat_ui.system_orb",
+        "resident": False,
+        "process_supervision": False,
+        "startup_integration": False,
+        "tray_presence": False,
+        "global_hotkey": False,
+        "always_on_top_overlay": False,
+        "overlay_window": False,
+        "command_palette_binding": False,
+        "summon_anywhere": False,
+        "components": components,
+        "blockers": blockers,
+        "message": "Resident Lens host is not implemented; this route preserves the launch and readiness contract only.",
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "new_sensing_authority": False,
+            "local_process_launch_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _hud_surface(
     *,
     mode: dict[str, Any],
@@ -509,6 +588,7 @@ def _stage6_readiness(
     *,
     mode: dict[str, Any],
     hud: dict[str, Any],
+    resident_host: dict[str, Any],
     approvals: dict[str, Any],
     incidents: dict[str, Any],
     missions: dict[str, Any],
@@ -520,6 +600,13 @@ def _stage6_readiness(
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
         "criteria": [
+            {
+                "id": "resident_host_runtime",
+                "status": "not_implemented",
+                "evidence": ["/lens/host", "/lens/status"],
+                "resident": bool(resident_host.get("resident")),
+                "blockers": _as_list(resident_host.get("blockers")),
+            },
             {
                 "id": "hud_layer_runtime",
                 "status": "readback_only",
@@ -566,7 +653,13 @@ def _stage6_readiness(
             {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
-                "evidence": [],
+                "evidence": ["/lens/host", "/lens/status"],
+                "blockers": [
+                    item
+                    for item in _as_list(resident_host.get("blockers"))
+                    if item
+                    in {"resident_host_process_missing", "global_hotkey_binding_missing", "summon_binding_missing"}
+                ],
             },
         ],
     }
@@ -595,6 +688,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         reactor=reactor,
     )
     command_palette = _command_palette_surface(approvals=approvals)
+    resident_host = _resident_host_surface(hud=hud, command_palette=command_palette)
 
     return {
         "ok": True,
@@ -608,6 +702,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "available_modes": operator.get("available_modes", []),
         "scope": scope,
         "hud": hud,
+        "resident_host": resident_host,
         "command_palette": command_palette,
         "mode_selector": {
             "status": "readback_ready",
@@ -630,6 +725,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "stage6_readiness": _stage6_readiness(
             mode=mode,
             hud=hud,
+            resident_host=resident_host,
             approvals=approvals,
             incidents=incidents,
             missions=missions,
@@ -646,3 +742,11 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "new_sensing_authority": False,
         },
     }
+
+
+def lens_host_status(*, limit: int = 5) -> dict[str, Any]:
+    status = lens_status(limit=limit)
+    host = dict(_as_dict(status.get("resident_host")))
+    host["generated_at"] = status.get("generated_at")
+    host["limit"] = status.get("limit")
+    return host

@@ -127,6 +127,52 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "mutation_authority_granted": False,
         },
     }
+    resident_host = body["resident_host"]
+    assert resident_host["kind"] == "lens.resident_host"
+    assert resident_host["status"] == "not_implemented"
+    assert resident_host["contract_status"] == "readback_ready"
+    assert resident_host["availability"] == "backend_readback_only"
+    assert resident_host["route"] == "/lens/host"
+    assert resident_host["status_route"] == "/lens/status"
+    assert resident_host["local_hud_route"] == "/lens/hud"
+    assert resident_host["local_palette_route"] == "/lens/status"
+    assert resident_host["handoff_target"] == "chat_ui.system_orb"
+    assert resident_host["resident"] is False
+    assert resident_host["process_supervision"] is False
+    assert resident_host["startup_integration"] is False
+    assert resident_host["tray_presence"] is False
+    assert resident_host["global_hotkey"] is False
+    assert resident_host["always_on_top_overlay"] is False
+    assert resident_host["overlay_window"] is False
+    assert resident_host["command_palette_binding"] is False
+    assert resident_host["summon_anywhere"] is False
+    assert [item["id"] for item in resident_host["components"]] == [
+        "host_process",
+        "tray_presence",
+        "global_hotkey",
+        "overlay_window",
+        "command_palette_bridge",
+    ]
+    assert resident_host["blockers"] == [
+        "resident_host_process_missing",
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "always_on_top_window_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    assert resident_host["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "local_process_launch_authority": False,
+        "mutation_authority_granted": False,
+    }
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
     assert {
         "nav.briefing",
@@ -151,6 +197,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["mode_selector"]["status"] == "readback_ready"
     assert body["pilot_indicator"]["status"] == "standby"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
+    assert _criterion(body, "resident_host_runtime")["status"] == "not_implemented"
+    assert _criterion(body, "resident_host_runtime")["resident"] is False
+    assert "resident_host_process_missing" in _criterion(body, "resident_host_runtime")["blockers"]
     assert _criterion(body, "hud_layer_runtime")["status"] == "readback_only"
     assert _criterion(body, "hud_layer_runtime")["resident_overlay"] is False
     assert "resident_overlay_runtime_missing" in _criterion(body, "hud_layer_runtime")["blockers"]
@@ -161,10 +210,21 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert _criterion(body, "incident_view")["status"] == "readback_ready"
     assert _criterion(body, "receipt_visibility")["status"] == "readback_ready"
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
+    assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
 
     hud = client.get("/lens/hud")
     assert hud.status_code == 200
     assert hud.json()["kind"] == "lens.status"
+    host = client.get("/lens/host")
+    assert host.status_code == 200
+    host_body = host.json()
+    assert host_body["kind"] == "lens.resident_host"
+    assert host_body["status"] == "not_implemented"
+    assert host_body["contract_status"] == "readback_ready"
+    assert host_body["resident"] is False
+    assert host_body["global_hotkey"] is False
+    assert host_body["summon_anywhere"] is False
+    assert host_body["governance"]["local_process_launch_authority"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:
