@@ -10829,6 +10829,31 @@ blocked-action readiness audit:
 - `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
   Result: `passed`
 
+As of `2026-04-28`, a focused Stage 5/Reactor dispatch matrix audit revalidated
+the current implemented action matrix without changing Reactor runtime code, UI
+code, execution authority, approval authority, memory-write behavior, promotion
+authority, external-delivery authority, or operator-facing claims. The current
+matrix is explicit in repo truth: supported dispatch actions are `classify`,
+`mission_tick`, `operation_run`, `proposal_review`, and `resume`; boundary
+actions are `dispatch`, `execute`, `mutate`, and `plugin_run`; read-only
+classification covers `telemetry_event`, `observer_anomaly`, `schedule_window`,
+`federated_handoff`, `build_failure`, `validation_completion`,
+`apprenticeship_teaching_session`, bare `user_request`, and bare
+`deadletter_recovery`. Focused and broad Reactor validation prove that each
+implemented supported action has receipt/readback coverage, each implemented
+boundary action blocks with typed receipts/readback instead of generic hidden
+continuation, and the dispatch status surface exposes the supported and boundary
+action lists. This does not close Stage 5; it narrows the dispatch-action gap
+from "unmapped implementation" to a remaining stage-level closure decision about
+whether the current validated action matrix is sufficient for Reactor closure or
+whether additional action classes must be implemented before the Stage 5 audit.
+
+Latest checkpoint validation for the `2026-04-28` Stage 5/Reactor dispatch
+matrix audit:
+
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10920,14 +10945,9 @@ These remain true and should block any "finished" claim:
   `dispatch`, `execute`, `mutate`, and `plugin_run` dispatch boundaries with
   operator-review readback, so those attempts are blocked by typed receipts
   instead of generic
-  not-implemented deferment. Remaining Stage 5 gaps still include broader dispatch action
-  coverage beyond existing
-  operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
-  read-only `telemetry_event` / `observer_anomaly` / `schedule_window` /
-  `federated_handoff` / `build_failure` / `validation_completion` /
-  `user_request` / bare `deadletter_recovery` classification, read-only
-  approval-decision resume receipts, and the blocked generic execution
-  boundaries; broader
+  not-implemented deferment. Remaining Stage 5 gaps still include a stage-level
+  closure decision about whether the current validated dispatch matrix is
+  sufficient or whether additional action classes are required; broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review
