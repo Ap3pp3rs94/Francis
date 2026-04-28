@@ -2353,6 +2353,77 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert second_recovery_request["status"] == "already_recovery_requested"
     assert len(second_recovery_request["event"]["deadletter_recovery_requests"]) == 1
 
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({"reactor.test": ["operations.run"]}))
+    recovery_dispatch = record_dispatch_attempt(
+        recovery_event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "dispatch queued deadletter recovery through the existing operation gate",
+        },
+    )
+
+    assert recovery_dispatch["ok"] is True
+    assert recovery_dispatch["applied"] is True
+    dispatched_recovery = recovery_dispatch["event"]
+    assert dispatched_recovery["event_id"] == recovery_event_id
+    assert dispatched_recovery["trigger"]["source"] == "deadletter_recovery"
+    assert dispatched_recovery["trigger"]["operation_id"] == operation_id
+    assert dispatched_recovery["trigger"]["metadata"]["deadletter_id"] == deadletter_id
+    assert dispatched_recovery["trigger"]["metadata"]["source_event_id"] == str(created["event_id"])
+    assert dispatched_recovery["status"] == "dispatch_completed"
+    assert dispatched_recovery["stable_state"] == "dispatch_succeeded"
+    assert dispatched_recovery["dispatch"]["engine"] == "operation_run"
+    assert dispatched_recovery["dispatch"]["applied"] is True
+    assert dispatched_recovery["dispatch"]["execution_started"] is True
+    recovery_execution = dispatched_recovery["latest_dispatch_execution_receipt"]
+    assert recovery_execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_execution["operation_id"] == operation_id
+    assert recovery_execution["status"] == "completed"
+    assert recovery_execution["outcome"] == "operation_succeeded"
+    assert recovery_execution["execution_started"] is True
+    assert recovery_execution["dispatch_applied"] is True
+    assert recovery_execution["verified"] is True
+    assert recovery_execution["governance"]["authority_source"] == "operations.run"
+    assert recovery_execution["governance"]["approval_authority"] is False
+    assert recovery_execution["governance"]["memory_write"] is False
+    recovery_verification = dispatched_recovery["latest_verification_receipt"]
+    assert recovery_verification["verification_status"] == "passed"
+    assert recovery_verification["verification_outcome"] == "operation_succeeded"
+    assert recovery_verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_verification["operation_id"] == operation_id
+    assert recovery_verification["verified"] is True
+    assert recovery_verification["completion_claim_allowed"] is True
+    recovery_stable_return = dispatched_recovery["latest_stable_return"]
+    assert recovery_stable_return["route"] == "operation_run"
+    assert recovery_stable_return["stable_state"] == "dispatch_succeeded"
+    assert recovery_stable_return["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_stable_return["operation_id"] == operation_id
+    assert recovery_stable_return["dispatch_applied"] is True
+    assert recovery_stable_return["execution_started"] is True
+    assert {item["event_id"] for item in list_events(stable_state="dispatch_succeeded")} == {recovery_event_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == {
+        recovery_event_id
+    }
+    recovered_deadletter = get_deadletter(deadletter_id)
+    assert recovered_deadletter is not None
+    assert recovered_deadletter["status"] == "recovery_requested"
+    assert recovered_deadletter["recovery_event_id"] == recovery_event_id
+    recovery_dispatch_status = reactor_status()
+    assert recovery_dispatch_status["stable_state_counts"] == {
+        "deadletter_recovery_requested": 1,
+        "dispatch_succeeded": 1,
+    }
+    assert recovery_dispatch_status["dispatch_execution_counts"] == {"completed": 1}
+    assert recovery_dispatch_status["verification_counts"] == {"not_run": 1, "passed": 1}
+    assert recovery_dispatch_status["verification_outcome_counts"] == {
+        "deadletter_queued_for_review": 1,
+        "operation_succeeded": 1,
+    }
+    assert recovery_dispatch_status["deadletter_queue_counts"] == {"recovery_requested": 1}
+
+    operation_detail = operations_runtime.get_operation_detail(operation_id)
+    assert operation_detail["operation"]["status"] == "succeeded"
+
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"

@@ -1183,6 +1183,80 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_recovery_request.json()["applied"] is False
     assert second_recovery_request.json()["status"] == "already_recovery_requested"
 
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write", "operations.run"]}),
+    )
+    recovery_dispatch = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": recovery_event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "dispatch queued deadletter recovery through existing operation gate",
+        },
+    )
+    assert recovery_dispatch.status_code == 200
+    recovery_dispatch_body = recovery_dispatch.json()
+    assert recovery_dispatch_body["ok"] is True
+    assert recovery_dispatch_body["applied"] is True
+    dispatched_recovery = recovery_dispatch_body["event"]
+    assert dispatched_recovery["event_id"] == recovery_event_id
+    assert dispatched_recovery["trigger"]["source"] == "deadletter_recovery"
+    assert dispatched_recovery["trigger"]["operation_id"] == operation_id
+    assert dispatched_recovery["trigger"]["metadata"]["deadletter_id"] == deadletter_id
+    assert dispatched_recovery["trigger"]["metadata"]["source_event_id"] == event_id
+    assert dispatched_recovery["status"] == "dispatch_completed"
+    assert dispatched_recovery["stable_state"] == "dispatch_succeeded"
+    assert dispatched_recovery["dispatch"]["engine"] == "operation_run"
+    assert dispatched_recovery["dispatch"]["applied"] is True
+    assert dispatched_recovery["dispatch"]["execution_started"] is True
+    recovery_execution = dispatched_recovery["latest_dispatch_execution_receipt"]
+    assert recovery_execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_execution["operation_id"] == operation_id
+    assert recovery_execution["status"] == "completed"
+    assert recovery_execution["outcome"] == "operation_succeeded"
+    assert recovery_execution["execution_started"] is True
+    assert recovery_execution["dispatch_applied"] is True
+    assert recovery_execution["verified"] is True
+    assert recovery_execution["governance"]["authority_source"] == "operations.run"
+    assert recovery_execution["governance"]["approval_authority"] is False
+    recovery_verification = dispatched_recovery["latest_verification_receipt"]
+    assert recovery_verification["verification_status"] == "passed"
+    assert recovery_verification["verification_outcome"] == "operation_succeeded"
+    assert recovery_verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_verification["operation_id"] == operation_id
+    assert recovery_verification["verified"] is True
+    recovery_stable_return = dispatched_recovery["latest_stable_return"]
+    assert recovery_stable_return["route"] == "operation_run"
+    assert recovery_stable_return["stable_state"] == "dispatch_succeeded"
+    assert recovery_stable_return["operation_id"] == operation_id
+    assert recovery_stable_return["dispatch_applied"] is True
+
+    recovery_execution_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.dispatch.execution.receipt"},
+    )
+    assert recovery_execution_list.status_code == 200
+    assert {item["event_id"] for item in recovery_execution_list.json()["items"]} == {recovery_event_id}
+    recovered_deadletters = client.get("/reactor/deadletters/list", params={"status": "recovery_requested"})
+    assert recovered_deadletters.status_code == 200
+    assert {item["deadletter_id"] for item in recovered_deadletters.json()["items"]} == {deadletter_id}
+    recovery_dispatch_status = client.get("/reactor/status")
+    assert recovery_dispatch_status.status_code == 200
+    assert recovery_dispatch_status.json()["stable_state_counts"] == {
+        "deadletter_recovery_requested": 1,
+        "dispatch_succeeded": 1,
+    }
+    assert recovery_dispatch_status.json()["dispatch_execution_counts"] == {"completed": 1}
+    assert recovery_dispatch_status.json()["verification_counts"] == {"not_run": 1, "passed": 1}
+    assert recovery_dispatch_status.json()["verification_outcome_counts"] == {
+        "deadletter_queued_for_review": 1,
+        "operation_succeeded": 1,
+    }
+
+    operation_detail = operations_runtime.get_operation_detail(operation_id)
+    assert operation_detail["operation"]["status"] == "succeeded"
+
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     monkeypatch,
