@@ -39,6 +39,7 @@ from francis.reactor.retries import (
     mark_retry_due,
     schedule_retry,
 )
+from francis.reactor.visibility import reactor_operator_visibility_summary
 
 __all__ = [
     "VALID_TRIGGER_SOURCES",
@@ -59,6 +60,7 @@ __all__ = [
     "list_retry_schedules",
     "queue_deadletter",
     "reactor_review_queue",
+    "reactor_operator_visibility_summary",
     "record_deadletter_escalation_acknowledgement",
     "record_deadletter_escalation_handoff",
     "record_deadletter_external_escalation_attempt",

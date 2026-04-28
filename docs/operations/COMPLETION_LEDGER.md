@@ -971,6 +971,19 @@ promote staged capabilities, execute plugins, write memory, or grant execution,
 approval, proposal-decision, promotion, dispatch, or external-escalation
 authority.
 
+As of `2026-04-28`, Reactor operator visibility also has a compact no-authority
+backend summary readback. `GET /reactor/operator_visibility/summary` aggregates
+existing Reactor status, review queue, retry schedule, deadletter, recovery
+receipt, proposal-review history, external-delivery artifact, and
+delivery-processor readiness readbacks into one bounded operator snapshot with
+attention counts, stable surface links, latest review/proposal-review items, and
+explicit governance denying execution, dispatch, approval, deadletter, retry,
+external-delivery, external-escalation, proposal-decision, promotion, and
+memory-write authority. This is backend readback only: it does not add UI
+claims, dispatch events, decide approvals or proposals, resolve deadletters,
+start retries, send external messages, promote capabilities, execute plugins, or
+write memory.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9897,6 +9910,22 @@ history readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor operator visibility
+summary readback slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py -q`
+  Result: `failed before aligning approval-state assertions to the existing awaiting_approval contract; passed after correction`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor.py tests\test_api_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `failed before formatting src\francis\reactor\visibility.py, tests\unit\test_reactor_operator_visibility.py, and tests\test_api_reactor_visibility.py; passed after formatting`
+- `python -m mypy src\francis\reactor\visibility.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9965,14 +9994,18 @@ These remain true and should block any "finished" claim:
   Forge proposal inspections. Direct proposal-review history readback now
   projects completed `forge_proposal` Reactor inspections through a dedicated
   list route with proposal, plugin, quality-ready, and review-status filters.
+  Backend operator visibility summary now aggregates status, review queue,
+  retry/deadletter, recovery receipt, proposal-review history, external
+  delivery/readiness, and stable route-link readbacks through
+  `/reactor/operator_visibility/summary` without new authority.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, bounded mission queue ticks, and read-only Forge
   proposal reviews, broader
   execution-failure routing/deadletter proof beyond the currently tested
-  `operation_run` and `mission_tick` dispatch-engine paths, broader operator
-  visibility beyond the current route-filtered review queue and direct recovery
-  receipt/proposal-review history readbacks, and actual external escalation
-  send/execution beyond the current non-sending
+  `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
+  visibility beyond backend status, operator-visibility summary,
+  route-filtered review queue, and direct recovery/proposal-review readbacks,
+  and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, and processor-readiness readback
 
 ## 6. Update rule

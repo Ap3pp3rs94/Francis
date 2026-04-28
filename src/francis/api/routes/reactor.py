@@ -22,6 +22,7 @@ from francis.reactor import (
     list_external_escalation_delivery_processor_readiness,
     list_proposal_review_history,
     list_retry_schedules,
+    reactor_operator_visibility_summary,
     reactor_review_queue,
     reactor_status,
     record_deadletter_escalation_acknowledgement,
@@ -200,6 +201,11 @@ def _payload_dict(payload: Any) -> dict[str, Any]:
 @router.get("/status")
 def status() -> dict[str, Any]:
     return reactor_status()
+
+
+@router.get("/operator_visibility/summary")
+def operator_visibility_summary(limit: int = Query(10, ge=1, le=100)) -> dict[str, Any]:
+    return reactor_operator_visibility_summary(limit=limit)
 
 
 @router.get("/events/list")
