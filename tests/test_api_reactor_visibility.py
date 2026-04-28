@@ -149,6 +149,10 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert body["external_delivery_sender_contract_status"] == "blocked"
     assert body["external_delivery_sender_contract_ready"] is False
     assert body["external_delivery_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert body["bounded_plan_trace_total"] == 3
+    assert body["bounded_plan_dispatch_linked_total"] == 3
+    assert body["bounded_plan_dispatch_pending_total"] == 0
+    assert body["bounded_plan_dispatch_unlinked_total"] == 0
     assert body["supported_external_sender_adapters"] == []
     assert body["supported_external_sender_adapter_total"] == 0
     assert body["external_sender_required_fields"] == [
@@ -159,6 +163,8 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     ]
     assert body["attention"]["external_delivery_sender_contract_ready_total"] == 0
     assert body["attention"]["external_delivery_sender_contract_blocked_total"] == 1
+    assert body["attention"]["bounded_plan_dispatch_pending_total"] == 0
+    assert body["attention"]["bounded_plan_dispatch_unlinked_total"] == 0
     assert body["attention"]["proposal_review_ready_total"] == 1
     assert body["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
     assert body["counts"]["blocker_route"] == {"approval_queue": 1, "operator_review": 1}
@@ -177,15 +183,32 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
         "proposal_review_ready": 1,
     }
     assert body["counts"]["stable_return"] == {"settled": 3}
+    assert body["counts"]["bounded_plan_trace"] == {"dispatch_linked": 3}
     assert body["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
     assert body["readback_surfaces"]["review_queue"] == "/reactor/review_queue"
     assert body["readback_surfaces"]["external_delivery_sender_contract"] == (
         "/reactor/deadletters/external_escalation_deliveries/sender_contract"
     )
+    assert body["readback_surfaces"]["bounded_plan_events"] == (
+        "/reactor/events/list?receipt_kind=reactor.bounded_plan.receipt"
+    )
+    assert body["readback_surfaces"]["bounded_plan_dispatch_traces"] == (
+        "/reactor/events/list?receipt_kind=reactor.dispatch_attempt.receipt"
+    )
     assert body["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
     assert body["external_delivery_sender_contract"]["completion_claim_allowed"] is False
     assert body["external_delivery_sender_contract"]["governance"]["external_delivery_authority"] is False
     assert body["external_delivery_sender_contract"]["governance"]["external_escalation_authority"] is False
+    bounded_plan_traces = {item["event_id"]: item for item in body["latest_bounded_plan_traces"]}
+    assert set(bounded_plan_traces) == {approval_id, plugin_event_id, proposal_event_id}
+    plugin_trace = bounded_plan_traces[plugin_event_id]
+    assert plugin_trace["kind"] == "reactor.bounded_plan_trace.readback"
+    assert plugin_trace["trace_status"] == "dispatch_linked"
+    assert plugin_trace["dispatch_attempt_linked"] is True
+    assert plugin_trace["bounded_plan_status"] == "planned"
+    assert plugin_trace["dispatch_attempt_bounded_plan_receipt_id"] == plugin_trace["bounded_plan_receipt_id"]
+    assert plugin_trace["execution_started"] is False
+    assert plugin_trace["governance"]["execution_authority"] is False
     review_by_event_id = {item["event_id"]: item for item in body["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}
     plugin_review = review_by_event_id[plugin_event_id]

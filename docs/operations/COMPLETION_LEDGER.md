@@ -10724,6 +10724,32 @@ linkage slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, Reactor operator visibility now surfaces bounded-plan
+traceability without requiring raw event inspection. `GET
+/reactor/operator_visibility/summary` reports bounded-plan trace totals, linked
+dispatch totals, pending/unlinked trace totals, trace-status counts, readback
+links for bounded-plan and dispatch-attempt event filters, and latest
+`reactor.bounded_plan_trace.readback` items that show whether each dispatch
+attempt links back to the intake bounded-plan receipt. This is backend
+readback-only and grants no execution, dispatch, approval, retry, memory,
+promotion, external-delivery, or UI authority.
+
+Latest targeted validation for the `2026-04-28` Reactor bounded-plan operator
+visibility slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py::test_reactor_operator_visibility_summary_aggregates_readbacks_without_authority tests\test_api_reactor_visibility.py::test_reactor_operator_visibility_summary_route_is_read_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `failed before formatting src\francis\reactor\visibility.py; passed after formatting`
+- `python -m mypy src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10736,8 +10762,8 @@ These remain true and should block any "finished" claim:
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
 - Stage 5/Reactor currently has trigger intake, readback, bounded-plan receipts
-  linked through dispatch-attempt
-  receipts, blocked-dispatch blocker records, and deadletter-candidate,
+  linked through dispatch-attempt receipts and operator-visibility trace
+  readback, blocked-dispatch blocker records, and deadletter-candidate,
   retry-candidate, retry-exhausted, and review-filter readback plus a read-only
   review-queue projection with chat UI readback only. Reactor dispatch attempts
   can create a pending approval request when missing, reconcile terminal

@@ -123,6 +123,10 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["external_delivery_sender_contract_status"] == "blocked"
     assert summary["external_delivery_sender_contract_ready"] is False
     assert summary["external_delivery_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert summary["bounded_plan_trace_total"] == 3
+    assert summary["bounded_plan_dispatch_linked_total"] == 3
+    assert summary["bounded_plan_dispatch_pending_total"] == 0
+    assert summary["bounded_plan_dispatch_unlinked_total"] == 0
     assert summary["supported_external_sender_adapters"] == []
     assert summary["supported_external_sender_adapter_total"] == 0
     assert summary["external_sender_required_fields"] == [
@@ -134,6 +138,8 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["attention"]["review_queue_total"] == 2
     assert summary["attention"]["external_delivery_sender_contract_ready_total"] == 0
     assert summary["attention"]["external_delivery_sender_contract_blocked_total"] == 1
+    assert summary["attention"]["bounded_plan_dispatch_pending_total"] == 0
+    assert summary["attention"]["bounded_plan_dispatch_unlinked_total"] == 0
     assert summary["attention"]["proposal_review_ready_total"] == 1
     assert summary["attention"]["proposal_review_blocked_total"] == 0
     assert summary["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
@@ -153,10 +159,17 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
         "proposal_review_ready": 1,
     }
     assert summary["counts"]["stable_return"] == {"settled": 3}
+    assert summary["counts"]["bounded_plan_trace"] == {"dispatch_linked": 3}
     assert summary["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
     assert summary["readback_surfaces"]["proposal_review_history"] == ("/reactor/proposal_reviews/history/list")
     assert summary["readback_surfaces"]["external_delivery_sender_contract"] == (
         "/reactor/deadletters/external_escalation_deliveries/sender_contract"
+    )
+    assert summary["readback_surfaces"]["bounded_plan_events"] == (
+        "/reactor/events/list?receipt_kind=reactor.bounded_plan.receipt"
+    )
+    assert summary["readback_surfaces"]["bounded_plan_dispatch_traces"] == (
+        "/reactor/events/list?receipt_kind=reactor.dispatch_attempt.receipt"
     )
     assert summary["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
     assert summary["external_delivery_sender_contract"]["completion_claim_allowed"] is False
@@ -164,6 +177,17 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["external_delivery_sender_contract"]["governance"]["external_escalation_authority"] is False
     review_by_event_id = {item["event_id"]: item for item in summary["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}
+    bounded_plan_traces = {item["event_id"]: item for item in summary["latest_bounded_plan_traces"]}
+    assert set(bounded_plan_traces) == {approval_id, plugin_event_id, proposal_event_id}
+    plugin_trace = bounded_plan_traces[plugin_event_id]
+    assert plugin_trace["kind"] == "reactor.bounded_plan_trace.readback"
+    assert plugin_trace["trace_status"] == "dispatch_linked"
+    assert plugin_trace["dispatch_attempt_linked"] is True
+    assert plugin_trace["bounded_plan_status"] == "planned"
+    assert plugin_trace["bounded_plan_route"] == "bounded_plan"
+    assert plugin_trace["dispatch_attempt_bounded_plan_receipt_id"] == plugin_trace["bounded_plan_receipt_id"]
+    assert plugin_trace["execution_started"] is False
+    assert plugin_trace["governance"]["execution_authority"] is False
     plugin_review = review_by_event_id[plugin_event_id]
     assert plugin_review["classification"]["action_class"] == "plugin_run"
     assert plugin_review["review"]["route"] == "operator_review"
