@@ -11084,6 +11084,44 @@ manifest contract:
 - `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens host status runner
+
+Stage 6/Lens now has the first safe host entrypoint for the future resident
+Lens process. `scripts/lens-host.ps1` exists as a status-only PowerShell runner
+that emits `kind: lens.host.status_runner`, reports the Lens host runtime as
+not implemented, and preserves explicit false values for launch support,
+foreground support, resident process supervision, tray presence, global hotkey,
+always-on-top overlay, overlay window, command-palette binding, and
+summon-anywhere behavior. If invoked with foreground/launch intent, it returns a
+refusal payload and exits non-zero instead of starting a process.
+
+`GET /lens/host/manifest` now reflects the entrypoint as present and exposes a
+separate executable status command while keeping the foreground candidate
+command disabled. `/lens/host` embeds the same manifest and marks
+`status_runner_present: true`, but its resident-host runtime status remains
+`not_implemented` with blockers for the missing runtime process, service config,
+tray host, global hotkey binding, overlay window, and summon binding.
+
+This is a status/readback and launch-boundary slice only. It does not create a
+resident process, install or start a service, register a hotkey, open an
+overlay, change UI behavior, write memory, decide approvals, execute actions,
+or grant overlay-control, summon, capture, sensing, telemetry, promotion,
+policy, service-install, or local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host status
+runner:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-host.ps1 -Mode Foreground; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11092,10 +11130,11 @@ These remain true and should block any "finished" claim:
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
-  disabled `/lens/host/manifest` launch-manifest contract, but no OS-wide summon,
-  resident host process, `scripts/lens-host.ps1`, service config, resident
-  overlay/HUD runtime, OS-level command palette, tray presence, hotkey binding,
-  or live Pilot takeover surface yet
+  disabled `/lens/host/manifest` launch-manifest contract plus a status-only
+  `scripts/lens-host.ps1` runner that refuses foreground launch, but no OS-wide
+  summon, resident host process, service config, resident overlay/HUD runtime,
+  OS-level command palette, tray presence, hotkey binding, or live Pilot
+  takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

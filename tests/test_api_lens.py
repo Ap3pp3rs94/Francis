@@ -39,6 +39,12 @@ ui:
     )
 
 
+def _write_lens_host_status_runner(repo_root: Path) -> None:
+    script = repo_root / "scripts" / "lens-host.ps1"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("# Lens host status runner fixture\n", encoding="utf-8")
+
+
 def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     readiness = body.get("stage6_readiness") if isinstance(body.get("stage6_readiness"), dict) else {}
     criteria = readiness.get("criteria") if isinstance(readiness.get("criteria"), list) else []
@@ -52,6 +58,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
@@ -138,6 +145,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["local_hud_route"] == "/lens/hud"
     assert resident_host["local_palette_route"] == "/lens/status"
     assert resident_host["handoff_target"] == "chat_ui.system_orb"
+    assert resident_host["status_runner_present"] is True
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
     assert resident_host["startup_integration"] is False
@@ -148,6 +156,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["command_palette_binding"] is False
     assert resident_host["summon_anywhere"] is False
     assert [item["id"] for item in resident_host["components"]] == [
+        "host_status_runner",
         "host_process",
         "tray_presence",
         "global_hotkey",
@@ -155,6 +164,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "command_palette_bridge",
     ]
     assert resident_host["blockers"] == [
+        "lens_host_runtime_not_implemented",
         "resident_host_process_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
@@ -164,18 +174,32 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     ]
     launch_manifest = resident_host["launch_manifest"]
     assert launch_manifest["kind"] == "lens.host.launch_manifest"
-    assert launch_manifest["status"] == "entrypoint_missing"
+    assert launch_manifest["status"] == "status_runner_present"
     assert launch_manifest["contract_status"] == "readback_ready"
     assert launch_manifest["enabled"] is False
     assert launch_manifest["launch_authority"] is False
     assert launch_manifest["auto_start"] is False
-    assert launch_manifest["default_action"] == "manual_review_required"
+    assert launch_manifest["default_action"] == "status_readback_only"
     assert launch_manifest["route"] == "/lens/host/manifest"
     assert launch_manifest["host_route"] == "/lens/host"
     assert launch_manifest["declared_entrypoint"] == {
         "path": "scripts/lens-host.ps1",
-        "exists": False,
-        "purpose": "Future foreground Lens host runner for tray, summon, and overlay lifecycle.",
+        "exists": True,
+        "purpose": "Status-only Lens host runner; future foreground tray, summon, and overlay lifecycle.",
+    }
+    assert launch_manifest["status_command"] == {
+        "shell": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/lens-host.ps1",
+            "-Mode",
+            "Status",
+        ],
+        "working_directory": ".",
+        "executable": True,
     }
     assert launch_manifest["candidate_command"] == {
         "shell": "pwsh",
@@ -185,11 +209,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "Bypass",
             "-File",
             "scripts/lens-host.ps1",
-            "--mode",
-            "foreground",
+            "-Mode",
+            "Foreground",
         ],
         "working_directory": ".",
         "executable": False,
+        "reason": "Foreground Lens host runtime is not implemented.",
     }
     assert launch_manifest["service_install"] == {
         "manager": "scripts/service-install.ps1",
@@ -200,13 +225,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
+        "host_status_runner",
         "host_readiness",
         "tray_presence",
         "global_hotkey",
         "overlay_window",
     ]
     assert launch_manifest["blockers"] == [
-        "lens_host_entrypoint_missing",
+        "lens_host_runtime_not_implemented",
         "lens_host_service_config_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
@@ -264,6 +290,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
     assert _criterion(body, "resident_host_runtime")["status"] == "not_implemented"
     assert _criterion(body, "resident_host_runtime")["resident"] is False
+    assert "lens_host_runtime_not_implemented" in _criterion(body, "resident_host_runtime")["blockers"]
     assert "resident_host_process_missing" in _criterion(body, "resident_host_runtime")["blockers"]
     assert _criterion(body, "hud_layer_runtime")["status"] == "readback_only"
     assert _criterion(body, "hud_layer_runtime")["resident_overlay"] is False
@@ -286,6 +313,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_body["kind"] == "lens.resident_host"
     assert host_body["status"] == "not_implemented"
     assert host_body["contract_status"] == "readback_ready"
+    assert host_body["status_runner_present"] is True
     assert host_body["resident"] is False
     assert host_body["global_hotkey"] is False
     assert host_body["summon_anywhere"] is False
@@ -294,9 +322,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest.status_code == 200
     manifest_body = manifest.json()
     assert manifest_body["kind"] == "lens.host.launch_manifest"
-    assert manifest_body["status"] == "entrypoint_missing"
+    assert manifest_body["status"] == "status_runner_present"
     assert manifest_body["enabled"] is False
-    assert manifest_body["declared_entrypoint"]["exists"] is False
+    assert manifest_body["declared_entrypoint"]["exists"] is True
+    assert manifest_body["status_command"]["executable"] is True
     assert manifest_body["candidate_command"]["executable"] is False
     assert manifest_body["governance"]["local_process_launch_authority"] is False
     assert manifest_body["governance"]["service_install_authority"] is False
@@ -306,6 +335,7 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")

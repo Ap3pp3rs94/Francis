@@ -224,7 +224,9 @@ def _hud_runtime_surface() -> dict[str, Any]:
 
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
+    status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     blockers = [
+        "lens_host_runtime_not_implemented",
         "resident_host_process_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
@@ -232,7 +234,15 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "overlay_window_missing",
         "summon_binding_missing",
     ]
+    if not status_runner_present:
+        blockers.insert(0, "lens_host_entrypoint_missing")
     components = [
+        {
+            "id": "host_status_runner",
+            "label": "Host status runner",
+            "status": "present" if status_runner_present else "missing",
+            "required_for": ["launch_readiness_readback"],
+        },
         {
             "id": "host_process",
             "label": "Resident host process",
@@ -277,6 +287,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
         "handoff_target": "chat_ui.system_orb",
+        "status_runner_present": status_runner_present,
         "resident": False,
         "process_supervision": False,
         "startup_integration": False,
