@@ -894,6 +894,142 @@ def _external_delivery_processor_readiness(item: dict[str, Any]) -> dict[str, An
     return _display(redacted if isinstance(redacted, dict) else {})
 
 
+def _history_entry(
+    *,
+    item: dict[str, Any],
+    source: str,
+    receipt: dict[str, Any],
+    sequence: int,
+    fallback_ts: int,
+) -> dict[str, Any]:
+    receipt_kind = _safe_str(receipt.get("kind")).strip()
+    receipt_id = (
+        _safe_str(receipt.get("receipt_id")).strip()
+        or _safe_str(receipt.get("candidate_id")).strip()
+        or _safe_str(receipt.get("exhaustion_id")).strip()
+        or _safe_str(receipt.get("blocker_id")).strip()
+        or _safe_str(receipt.get("delivery_id")).strip()
+        or _safe_str(receipt.get("deadletter_id")).strip()
+    )
+    ts = _safe_int(
+        receipt.get("ts") or receipt.get("created_ts") or receipt.get("updated_ts"),
+        default=fallback_ts,
+        minimum=0,
+        maximum=2_147_483_647,
+    )
+    entry = {
+        "kind": "reactor.deadletter.history.entry",
+        "entry_id": f"{item.get('deadletter_id')}:{source}:{sequence}:{receipt_id or 'receipt'}",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "sequence": sequence,
+        "source": source,
+        "receipt_kind": receipt_kind,
+        "receipt_id": receipt_id,
+        "status": receipt.get("status"),
+        "route": receipt.get("route"),
+        "gate": receipt.get("gate"),
+        "stable_state": receipt.get("stable_state"),
+        "next_step": receipt.get("next_step"),
+        "ts": ts,
+        "actor": receipt.get("actor"),
+        "reason": receipt.get("reason"),
+        "applied": bool(receipt.get("applied")),
+        "execution_started": bool(receipt.get("execution_started")),
+        "dispatch_applied": bool(receipt.get("dispatch_applied")),
+        "retry_started": bool(receipt.get("retry_started")),
+        "escalation_started": bool(receipt.get("escalation_started")),
+        "external_delivery_started": bool(receipt.get("external_delivery_started")),
+        "external_message_sent": bool(receipt.get("external_message_sent")),
+        "external_network_send": bool(receipt.get("external_network_send")),
+        "memory_write": bool(receipt.get("memory_write")),
+        "completion_claim_allowed": bool(receipt.get("completion_claim_allowed")),
+        "governance": _as_dict(receipt.get("governance")),
+    }
+    redacted = redact_governed_value(entry)
+    return _display(redacted if isinstance(redacted, dict) else {})
+
+
+_DEADLETTER_HISTORY_RECEIPT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("source_receipt", "source_receipt"),
+    ("review_receipts", "review"),
+    ("resolution_receipts", "resolution"),
+    ("escalation_handoff_receipts", "escalation_handoff"),
+    ("escalation_acknowledgement_receipts", "escalation_acknowledgement"),
+    ("external_escalation_attempt_receipts", "external_escalation_attempt"),
+    ("external_escalation_delivery_receipts", "external_escalation_delivery"),
+    ("recovery_request_receipts", "recovery_request"),
+    ("recovery_dispatch_receipts", "recovery_dispatch"),
+)
+
+
+def _deadletter_history(
+    item: dict[str, Any],
+    *,
+    limit: int = 200,
+    receipt_kind: str | None = None,
+    route: str | None = None,
+) -> list[dict[str, Any]]:
+    created_ts = _safe_int(item.get("created_ts"), default=0, minimum=0, maximum=2_147_483_647)
+    base_receipt = {
+        "kind": item.get("kind"),
+        "receipt_id": item.get("deadletter_id"),
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": "queued",
+        "route": "deadletter",
+        "gate": item.get("gate"),
+        "stable_state": item.get("stable_state"),
+        "next_step": "review_deadletter_item_before_escalation_or_recovery",
+        "created_ts": created_ts,
+        "actor": item.get("actor"),
+        "reason": item.get("reason"),
+        "applied": item.get("applied"),
+        "execution_started": item.get("execution_started"),
+        "dispatch_applied": item.get("dispatch_applied"),
+        "retry_started": item.get("retry_started"),
+        "escalation_started": item.get("escalation_started"),
+        "memory_write": item.get("memory_write"),
+        "governance": item.get("governance"),
+    }
+    entries = [
+        _history_entry(item=item, source="deadletter_item", receipt=base_receipt, sequence=0, fallback_ts=created_ts)
+    ]
+    sequence = 1
+    for field, source in _DEADLETTER_HISTORY_RECEIPT_FIELDS:
+        raw_value = item.get(field)
+        raw_receipts = raw_value if isinstance(raw_value, list) else [raw_value]
+        for receipt_value in raw_receipts:
+            receipt = _as_dict(receipt_value)
+            if not receipt:
+                continue
+            entries.append(
+                _history_entry(
+                    item=item,
+                    source=source,
+                    receipt=receipt,
+                    sequence=sequence,
+                    fallback_ts=created_ts,
+                )
+            )
+            sequence += 1
+
+    receipt_kind_filter = _safe_str(receipt_kind).strip()
+    route_filter = _safe_str(route).strip()
+    if receipt_kind_filter:
+        entries = [entry for entry in entries if _safe_str(entry.get("receipt_kind")).strip() == receipt_kind_filter]
+    if route_filter:
+        entries = [entry for entry in entries if _safe_str(entry.get("route")).strip() == route_filter]
+    entries.sort(
+        key=lambda entry: (
+            _safe_int(entry.get("ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_int(entry.get("sequence"), default=0, minimum=0, maximum=2_147_483_647),
+        )
+    )
+    safe_limit = _safe_int(limit, default=200, minimum=1, maximum=5000)
+    return entries[:safe_limit]
+
+
 def _recovery_dispatch_receipt(
     *,
     item: dict[str, Any],
@@ -1905,6 +2041,55 @@ def get_deadletter(deadletter_id: str) -> dict[str, Any] | None:
     if path is None or not path.exists() or not path.is_file():
         return None
     return _read(path)
+
+
+def get_deadletter_history(
+    deadletter_id: str,
+    *,
+    limit: int = 200,
+    receipt_kind: str | None = None,
+    route: str | None = None,
+) -> dict[str, Any] | None:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return None
+    item = _read_raw(path)
+    if item is None:
+        return None
+    history = _deadletter_history(item, limit=limit, receipt_kind=receipt_kind, route=route)
+    latest = history[-1] if history else {}
+    result = {
+        "kind": "reactor.deadletter.history",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": item.get("status"),
+        "route": "deadletter_history",
+        "gate": "reactor_deadletter_history_readback",
+        "stable_state": item.get("stable_state"),
+        "history": history,
+        "total": len(history),
+        "limit": _safe_int(limit, default=200, minimum=1, maximum=5000),
+        "latest_receipt_kind": latest.get("receipt_kind"),
+        "latest_route": latest.get("route"),
+        "latest_ts": latest.get("ts"),
+        "governance": {
+            "gate": "reactor_deadletter_history_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(result)
+    return _display(redacted if isinstance(redacted, dict) else {})
 
 
 def list_external_escalation_deliveries(

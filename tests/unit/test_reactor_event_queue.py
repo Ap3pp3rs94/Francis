@@ -9,6 +9,7 @@ from francis.operations import runtime as operations_runtime
 from francis.reactor import dispatch as reactor_dispatch
 from francis.reactor.deadletters import (
     get_deadletter,
+    get_deadletter_history,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
     list_deadletters,
@@ -2310,6 +2311,25 @@ def test_reactor_deadletter_resolution_records_receipt_without_recovery(
     assert stored_deadletter is not None
     assert stored_deadletter["status"] == "resolved"
     assert stored_deadletter["latest_resolution_receipt"]["resolution_decision"] == "resolved_no_action"
+    history = get_deadletter_history(deadletter_id)
+    assert history is not None
+    assert history["deadletter_id"] == deadletter_id
+    assert history["status"] == "resolved"
+    history_kinds = [entry["receipt_kind"] for entry in history["history"]]
+    assert "reactor.deadletter.item" in history_kinds
+    assert "reactor.deadletter.review.receipt" in history_kinds
+    assert "reactor.deadletter.resolution.receipt" in history_kinds
+    assert history["latest_receipt_kind"] == "reactor.deadletter.resolution.receipt"
+    assert history["governance"]["deadletter_resolution_authority"] is False
+    assert history["governance"]["execution_authority"] is False
+    resolution_history = get_deadletter_history(
+        deadletter_id,
+        receipt_kind="reactor.deadletter.resolution.receipt",
+    )
+    assert resolution_history is not None
+    assert resolution_history["total"] == 1
+    assert resolution_history["history"][0]["route"] == "deadletter_resolution"
+    assert get_deadletter_history("rdl_missing") is None
     assert [item["deadletter_id"] for item in list_deadletters(status="resolved")] == [deadletter_id]
     assert {item["event_id"] for item in list_events(stable_state="deadletter_resolved")} == {str(created["event_id"])}
     assert {item["event_id"] for item in list_events(review_route="deadletter_resolution")} == {

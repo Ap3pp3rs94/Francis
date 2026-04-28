@@ -9,6 +9,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.reactor import (
     enqueue_event,
     get_deadletter,
+    get_deadletter_history,
     get_event,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
@@ -267,6 +268,34 @@ def deadletters_get(id: str) -> dict[str, Any]:
             "retry_authority": False,
             "deadletter_resolution_authority": False,
             "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/history/get")
+def deadletters_history_get(
+    id: str,
+    limit: int = Query(200, ge=1, le=5000),
+    receipt_kind: str | None = None,
+    route: str | None = None,
+) -> dict[str, Any]:
+    history = get_deadletter_history(id, limit=limit, receipt_kind=receipt_kind, route=route)
+    if history is None:
+        return {"ok": False, "error": "not_found", "history": []}
+    return {
+        "ok": True,
+        "history": history,
+        "governance": {
+            "gate": "reactor_deadletter_history_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
             "memory_write": False,
         },
     }

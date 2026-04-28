@@ -896,6 +896,19 @@ claim, lease, send, deliver, start execution, change deadletter state, decide
 approvals, write memory, or grant external-delivery, external-escalation,
 execution, dispatch, approval, retry, promotion, or memory-write authority.
 
+As of `2026-04-28`, Reactor deadletters have direct read-only history
+readback. `GET /reactor/deadletters/history/get` derives a chronological
+history for one persisted deadletter from the durable deadletter item,
+source receipt, review receipts, resolution receipts, escalation receipts,
+external-escalation receipts, delivery receipts, and recovery receipts already
+stored on the deadletter record. The route supports receipt-kind and route
+filters and carries explicit readback governance denying execution, dispatch,
+retry, deadletter-resolution, external-delivery, external-escalation,
+approval, promotion, and memory-write authority. This is direct history
+readback only: it does not mutate deadletters, start recovery, send or deliver
+external messages, execute work, decide approvals, write memory, or grant new
+authority.
+
 As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
 request and recovery-dispatch settlement truth from the existing backend routes.
 The typed Reactor UI client parses `latest_recovery_request_receipt`,
@@ -9799,6 +9812,26 @@ processor readiness readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor deadletter history
+readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_resolution_records_receipt_without_recovery -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\deadletters.py and tests\test_api_reactor.py; passed after formatting`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9854,7 +9887,10 @@ These remain true and should block any "finished" claim:
   execution, verification, stable-return, and readback receipts, and successful
   recovery dispatches now settle the original `recovery_requested` deadletter
   into `recovery_dispatched` with a dedicated recovery-dispatch receipt and
-  parent-event readback. Chat UI Reactor readback now preserves recovery-request
+  parent-event readback. Direct deadletter history readback now derives
+  chronological receipt history for one deadletter from the durable item and
+  stored receipt arrays with receipt-kind and route filters. Chat UI Reactor
+  readback now preserves recovery-request
   and recovery-dispatch filters, badges, and latest receipt handles from the
   existing read routes, and the System/ORB panel now exposes read-only
   proposal-review execution receipts from Reactor event history for completed
@@ -9864,8 +9900,8 @@ These remain true and should block any "finished" claim:
   proposal reviews, broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator
-  visibility beyond the current route-filtered review queue, direct deadletter
-  history, recovery receipt readback, and proposal-review event-history readback,
+  visibility beyond the current route-filtered review queue, recovery receipt
+  readback, and proposal-review event-history readback,
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, and processor-readiness readback
 

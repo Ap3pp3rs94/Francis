@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from francis.reactor.deadletters import (
     get_deadletter,
+    get_deadletter_history,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
     list_deadletters,
@@ -40,6 +41,7 @@ __all__ = [
     "VALID_TRIGGER_SOURCES",
     "enqueue_event",
     "get_deadletter",
+    "get_deadletter_history",
     "get_external_escalation_delivery",
     "get_external_escalation_delivery_processor_readiness",
     "get_event",

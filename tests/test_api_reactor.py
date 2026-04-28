@@ -1281,6 +1281,29 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     fetched = client.get("/reactor/deadletters/get", params={"id": deadletter_id})
     assert fetched.status_code == 200
     assert fetched.json()["item"]["latest_resolution_receipt"]["resolution_decision"] == "escalation_pending"
+    history = client.get("/reactor/deadletters/history/get", params={"id": deadletter_id})
+    assert history.status_code == 200
+    history_body = history.json()
+    assert history_body["ok"] is True
+    assert history_body["history"]["deadletter_id"] == deadletter_id
+    assert history_body["history"]["status"] == "escalation_pending"
+    assert history_body["history"]["latest_receipt_kind"] == "reactor.deadletter.resolution.receipt"
+    history_kinds = [entry["receipt_kind"] for entry in history_body["history"]["history"]]
+    assert "reactor.deadletter.item" in history_kinds
+    assert "reactor.deadletter.review.receipt" in history_kinds
+    assert "reactor.deadletter.resolution.receipt" in history_kinds
+    assert history_body["governance"]["execution_authority"] is False
+    assert history_body["governance"]["deadletter_resolution_authority"] is False
+    filtered_history = client.get(
+        "/reactor/deadletters/history/get",
+        params={"id": deadletter_id, "route": "deadletter_escalation"},
+    )
+    assert filtered_history.status_code == 200
+    assert filtered_history.json()["history"]["total"] == 1
+    assert filtered_history.json()["history"]["history"][0]["receipt_kind"] == ("reactor.deadletter.resolution.receipt")
+    missing_history = client.get("/reactor/deadletters/history/get", params={"id": "rdl_missing"})
+    assert missing_history.status_code == 200
+    assert missing_history.json() == {"ok": False, "error": "not_found", "history": []}
 
     receipt_list = client.get(
         "/reactor/events/list",
