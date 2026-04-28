@@ -67,6 +67,20 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "description": "Disabled readiness baseline for the future resident Lens host.",
   "manager": "scripts/service-install.ps1",
   "entrypoint": "scripts/lens-host.ps1",
+  "service_executable": "pwsh",
+  "service_arguments": [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "scripts/lens-host.ps1",
+    "-Mode",
+    "Foreground"
+  ],
+  "working_dir": ".",
+  "use_wrapper": true,
+  "stdout": "data/logs/lens-host/stdout.log",
+  "stderr": "data/logs/lens-host/stderr.log",
   "runtime_state_path": "data/runtime/lens-host/status.json",
   "pid_path": "data/runtime/lens-host/lens-host.pid",
   "status_mode": "Status",
@@ -248,6 +262,53 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "service_control_authority": False,
         "blocked_reason": "lens_host_service_status_runner_required",
     }
+    expected_service_plan = {
+        "kind": "service_install.plan_projection",
+        "status": "blocked",
+        "ready": False,
+        "source": "config/runtime/services/lens-host.json",
+        "manager": "scripts/service-install.ps1",
+        "manager_exists": True,
+        "plan_mode": "Plan",
+        "service_name": "Francis-LensHost",
+        "service_executable": "pwsh",
+        "service_arguments": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/lens-host.ps1",
+            "-Mode",
+            "Foreground",
+        ],
+        "planned_command": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/lens-host.ps1 -Mode Foreground",
+        "working_directory": ".",
+        "start_type": "Manual",
+        "use_wrapper": True,
+        "would_install": False,
+        "would_start": False,
+        "wrapper_would_write": False,
+        "blocked_by": [
+            "installable_false",
+            "install_authority_false",
+            "service_install_authority_false",
+            "service_control_authority_false",
+        ],
+        "blocked_reason": "lens_host_runtime_not_implemented",
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "wrapper_write_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+    assert resident_host["service_plan_ready"] is False
+    assert resident_host["service_plan"] == expected_service_plan
     assert resident_host["process_readback_ready"] is True
     assert resident_host["process_readback"] == {
         "status": "missing",
@@ -363,6 +424,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_status_runner",
         "host_service_config",
         "host_service_readback",
+        "host_service_plan",
         "host_process_readback",
         "host_process",
         "tray_presence",
@@ -436,6 +498,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "start_after_install": False,
         "auto_start": False,
     }
+    assert launch_manifest["service_plan"] == expected_service_plan
     assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
     assert launch_manifest["supervision_readiness"] == expected_supervision_readiness
@@ -445,6 +508,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_status_runner",
         "host_service_config",
         "host_service_readback",
+        "host_service_plan",
         "host_process_readback",
         "host_readiness",
         "tray_presence",
@@ -552,6 +616,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["declared_entrypoint"]["exists"] is True
     assert manifest_body["service_install"]["config_exists"] is True
     assert manifest_body["service_install"]["installable"] is False
+    assert manifest_body["service_plan"] == expected_service_plan
     assert manifest_body["service_readback"]["status"] == "not_checked_by_api"
     assert manifest_body["service_readback"]["service_control_authority"] is False
     assert manifest_body["process_readback"]["status"] == "missing"
@@ -595,7 +660,11 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert process_readback["blocked_reason"] == "resident_host_not_supervised"
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
-    assert resident_host["components"][4] == {
+    assert resident_host["service_plan_ready"] is False
+    assert resident_host["service_plan"]["status"] == "blocked"
+    assert resident_host["service_plan"]["would_install"] is False
+    assert resident_host["service_plan"]["governance"]["service_install_authority"] is False
+    assert resident_host["components"][5] == {
         "id": "host_process",
         "label": "Resident host process",
         "status": "foreground_observed",
@@ -620,6 +689,7 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert manifest.status_code == 200
     manifest_body = manifest.json()
     assert manifest_body["process_readback"] == process_readback
+    assert manifest_body["service_plan"] == resident_host["service_plan"]
     assert manifest_body["governance"]["local_process_launch_authority"] is False
 
 

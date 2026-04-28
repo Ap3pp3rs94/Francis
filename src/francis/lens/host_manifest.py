@@ -160,6 +160,102 @@ def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[
     }
 
 
+def _as_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
+def _quote_command_arg(value: str) -> str:
+    if any(character.isspace() for character in value) or '"' in value:
+        return '"' + value.replace('"', '\\"') + '"'
+    return value
+
+
+def _join_command_line(executable: str, items: list[str]) -> str:
+    parts: list[str] = []
+    if executable.strip():
+        parts.append(_quote_command_arg(executable))
+    parts.extend(_quote_command_arg(item) for item in items)
+    return " ".join(parts)
+
+
+def _lens_host_service_plan(
+    *,
+    entrypoint_exists: bool,
+    service_manager: str,
+    service_manager_exists: bool,
+    service_config_exists: bool,
+    service_config_payload: dict[str, Any],
+) -> dict[str, Any]:
+    service_name = str(service_config_payload.get("service_name") or "Francis-LensHost")
+    service_executable = str(service_config_payload.get("service_executable") or "")
+    service_arguments = _as_str_list(service_config_payload.get("service_arguments"))
+    working_directory = str(service_config_payload.get("working_dir") or "")
+    start_type = str(service_config_payload.get("start_type") or "Manual")
+    installable = bool(service_config_payload.get("installable"))
+    install_authority = bool(service_config_payload.get("install_authority"))
+    service_install_authority = bool(service_config_payload.get("service_install_authority"))
+    service_control_authority = bool(service_config_payload.get("service_control_authority"))
+    start_after_install = bool(service_config_payload.get("start_after_install"))
+    use_wrapper = bool(service_config_payload.get("use_wrapper"))
+    blocked_reason = str(service_config_payload.get("blocked_reason") or "lens_host_runtime_not_implemented")
+    blocked_by = []
+    if not service_config_exists:
+        blocked_by.append("service_config_missing")
+    if not service_manager_exists:
+        blocked_by.append("service_manager_missing")
+    if not entrypoint_exists:
+        blocked_by.append("host_entrypoint_missing")
+    if not service_executable.strip():
+        blocked_by.append("service_executable_missing")
+    if not installable:
+        blocked_by.append("installable_false")
+    if not install_authority:
+        blocked_by.append("install_authority_false")
+    if not service_install_authority:
+        blocked_by.append("service_install_authority_false")
+    if not service_control_authority:
+        blocked_by.append("service_control_authority_false")
+    ready = not blocked_by
+    return {
+        "kind": "service_install.plan_projection",
+        "status": "ready" if ready else "blocked",
+        "ready": ready,
+        "source": "config/runtime/services/lens-host.json",
+        "manager": service_manager,
+        "manager_exists": service_manager_exists,
+        "plan_mode": "Plan",
+        "service_name": service_name,
+        "service_executable": service_executable,
+        "service_arguments": service_arguments,
+        "planned_command": _join_command_line(service_executable, service_arguments),
+        "working_directory": working_directory,
+        "start_type": start_type,
+        "use_wrapper": use_wrapper,
+        "would_install": installable and install_authority and service_install_authority,
+        "would_start": start_after_install,
+        "wrapper_would_write": False,
+        "blocked_by": blocked_by,
+        "blocked_reason": blocked_reason,
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "wrapper_write_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _readiness_item(item_id: str, *, label: str, ready: bool, status: str, reason: str = "") -> dict[str, Any]:
     return {
         "id": item_id,
@@ -265,6 +361,13 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     service_manager = str(service_config_payload.get("manager") or "scripts/service-install.ps1")
     service_manager_exists = _runtime_file_exists(service_manager)
     service_readback = _lens_host_service_readback(service_config_payload)
+    service_plan = _lens_host_service_plan(
+        entrypoint_exists=entrypoint_exists,
+        service_manager=service_manager,
+        service_manager_exists=service_manager_exists,
+        service_config_exists=service_config_exists,
+        service_config_payload=service_config_payload,
+    )
     process_readback = _lens_host_process_readback()
     supervision_readiness = _lens_host_supervision_readiness(
         entrypoint_exists=entrypoint_exists,
@@ -350,6 +453,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "start_after_install": False,
             "auto_start": False,
         },
+        "service_plan": service_plan,
         "foreground_session": {
             "supported": foreground_supported,
             "default_seconds": int(service_config_payload.get("foreground_session_default_seconds") or 0),
@@ -385,6 +489,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_service_readback",
                 "service_name": service_readback["service_name"],
                 "status": "readback_ready",
+            },
+            {
+                "id": "host_service_plan",
+                "path": service_config,
+                "status": service_plan["status"],
             },
             {
                 "id": "host_process_readback",

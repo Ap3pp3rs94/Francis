@@ -228,6 +228,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
     service_readback = _as_dict(launch_manifest.get("service_readback"))
+    service_plan = _as_dict(launch_manifest.get("service_plan"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
@@ -263,6 +264,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "id": "host_service_readback",
             "label": "Host service status readback",
             "status": "readback_ready" if service_readback.get("readback_ready") else "missing",
+            "required_for": ["startup_supervision"],
+        },
+        {
+            "id": "host_service_plan",
+            "label": "Host service dry-run plan",
+            "status": _safe_str(service_plan.get("status")).strip() or "missing",
             "required_for": ["startup_supervision"],
         },
         {
@@ -320,6 +327,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "service_config_path": _safe_str(service_install.get("config_path")).strip(),
         "service_readback": service_readback,
         "service_readback_ready": bool(service_readback.get("readback_ready")),
+        "service_plan": service_plan,
+        "service_plan_ready": bool(service_plan.get("ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
         "supervision_readiness": supervision_readiness,
