@@ -55,6 +55,20 @@ def _list_presence_counts(items: list[str]) -> dict[str, int]:
     return {item: 1 for item in items}
 
 
+def _safe_count_map(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for raw_key, raw_count in value.items():
+        key = _safe_str(raw_key).strip()
+        if not key:
+            continue
+        count = _safe_int(raw_count)
+        if count > 0:
+            counts[key] = count
+    return counts
+
+
 def _readback_governance() -> dict[str, Any]:
     return {
         "gate": "reactor_operator_visibility_readback",
@@ -150,10 +164,47 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             "event_status": status.get("status_counts", {}),
             "stable_state": status.get("stable_state_counts", {}),
             "trigger_source": status.get("trigger_source_counts", {}),
+            "blocker_route": _safe_count_map(status.get("blocker_route_counts")),
+            "approval_request": _safe_count_map(status.get("approval_request_counts")),
+            "approval_decision": _safe_count_map(status.get("approval_decision_counts")),
             "review_route": review_queue.get("route_counts", {}),
+            "dispatch_execution": _safe_count_map(status.get("dispatch_execution_counts")),
             "dispatch_engine_supported_action": _list_presence_counts(dispatch_engine_supported_actions),
             "dispatch_engine_boundary_action": _list_presence_counts(dispatch_engine_boundary_actions),
+            "verification": _safe_count_map(status.get("verification_counts")),
+            "verification_outcome": _safe_count_map(status.get("verification_outcome_counts")),
+            "stable_return": _safe_count_map(status.get("stable_return_counts")),
+            "deadletter_candidate": _safe_count_map(status.get("deadletter_candidate_counts")),
+            "deadletter_queue": _safe_count_map(status.get("deadletter_queue_counts")),
             "deadletter_status": _count_by(deadletters, "status"),
+            "deadletter_review": _safe_count_map(status.get("deadletter_review_counts")),
+            "deadletter_resolution": _safe_count_map(status.get("deadletter_resolution_counts")),
+            "deadletter_escalation_handoff": _safe_count_map(status.get("deadletter_escalation_handoff_counts")),
+            "deadletter_escalation_acknowledgement": _safe_count_map(
+                status.get("deadletter_escalation_acknowledgement_counts")
+            ),
+            "deadletter_external_escalation_attempt": _safe_count_map(
+                status.get("deadletter_external_escalation_attempt_counts")
+            ),
+            "deadletter_external_escalation_delivery": _safe_count_map(
+                status.get("deadletter_external_escalation_delivery_counts")
+            ),
+            "deadletter_external_delivery_processor_handoff": _safe_count_map(
+                status.get("deadletter_external_escalation_delivery_processor_handoff_counts")
+            ),
+            "deadletter_external_delivery_processor_completion": _safe_count_map(
+                status.get("deadletter_external_escalation_delivery_processor_completion_counts")
+            ),
+            "deadletter_external_delivery_sender_attempt": _safe_count_map(
+                status.get("deadletter_external_escalation_delivery_sender_attempt_counts")
+            ),
+            "deadletter_recovery_request": _safe_count_map(status.get("deadletter_recovery_request_counts")),
+            "deadletter_recovery_dispatch": _safe_count_map(status.get("deadletter_recovery_dispatch_counts")),
+            "retry_candidate": _safe_count_map(status.get("retry_candidate_counts")),
+            "retry_schedule": _safe_count_map(status.get("retry_schedule_counts")),
+            "retry_due": _safe_count_map(status.get("retry_due_counts")),
+            "retry_dispatch_attempt": _safe_count_map(status.get("retry_dispatch_attempt_counts")),
+            "retry_exhausted": _safe_count_map(status.get("retry_exhausted_counts")),
             "retry_status": _count_by(retry_schedules, "status"),
             "external_delivery_status": _count_by(external_deliveries, "status"),
             "delivery_processor_status": _count_by(

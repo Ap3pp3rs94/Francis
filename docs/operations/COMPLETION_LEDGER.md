@@ -10503,6 +10503,34 @@ classification dispatch slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, the Reactor backend operator visibility summary also
+mirrors existing Reactor status outcome counts for dispatch execution,
+verification, stable-return, blockers, approvals, retry candidates/schedules,
+retry exhaustion, deadletter queue/review/resolution, recovery receipts, and
+external-escalation delivery handoffs. This makes failure-routing and
+deadletter/retry evidence inspectable from `/reactor/operator_visibility/summary`
+without forcing operators to manually correlate `/reactor/status` with the
+review/deadletter readbacks. This is readback-only and does not start execution,
+decide approvals, schedule retries, enqueue deadletters, resolve deadletters,
+send externally, promote capabilities, write memory, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor operator visibility
+status-count readback slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py::test_reactor_operator_visibility_summary_aggregates_readbacks_without_authority tests\test_api_reactor_visibility.py::test_reactor_operator_visibility_summary_route_is_read_only -q`
+  Result: `failed before aligning the expected preexisting-approval receipt
+  outcome with the existing approval_required contract; passed after
+  correction`
+- `python -m pytest tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_visibility.py`
+  Result: `failed before formatting src\francis\reactor\visibility.py;
+  passed after formatting`
+- `python -m mypy src\francis\reactor\visibility.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10576,6 +10604,7 @@ These remain true and should block any "finished" claim:
   projects completed `forge_proposal` Reactor inspections through a dedicated
   list route with proposal, plugin, quality-ready, and review-status filters.
   Backend operator visibility summary now aggregates status, review queue,
+  dispatch execution, verification/stable-return, blocker/approval,
   retry/deadletter, recovery receipt, proposal-review history, external
   delivery/readiness, and stable route-link readbacks through
   `/reactor/operator_visibility/summary` without new authority, and the chat UI

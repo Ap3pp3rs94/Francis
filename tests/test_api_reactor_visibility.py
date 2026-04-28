@@ -148,12 +148,22 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert body["proposal_review_history_total"] == 1
     assert body["attention"]["proposal_review_ready_total"] == 1
     assert body["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert body["counts"]["blocker_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert body["counts"]["approval_request"] == {}
+    assert body["counts"]["dispatch_execution"] == {"blocked": 1, "completed": 1}
     assert body["counts"]["dispatch_engine_boundary_action"] == {
         "dispatch": 1,
         "execute": 1,
         "mutate": 1,
         "plugin_run": 1,
     }
+    assert body["counts"]["verification"] == {"not_run": 2, "passed": 1}
+    assert body["counts"]["verification_outcome"] == {
+        "approval_required": 1,
+        "plugin_run_dispatch_not_enabled": 1,
+        "proposal_review_ready": 1,
+    }
+    assert body["counts"]["stable_return"] == {"settled": 3}
     assert body["readback_surfaces"]["review_queue"] == "/reactor/review_queue"
     review_by_event_id = {item["event_id"]: item for item in body["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}

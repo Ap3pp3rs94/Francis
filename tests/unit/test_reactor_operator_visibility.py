@@ -124,12 +124,22 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["attention"]["proposal_review_ready_total"] == 1
     assert summary["attention"]["proposal_review_blocked_total"] == 0
     assert summary["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert summary["counts"]["blocker_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert summary["counts"]["approval_request"] == {}
+    assert summary["counts"]["dispatch_execution"] == {"blocked": 1, "completed": 1}
     assert summary["counts"]["dispatch_engine_boundary_action"] == {
         "dispatch": 1,
         "execute": 1,
         "mutate": 1,
         "plugin_run": 1,
     }
+    assert summary["counts"]["verification"] == {"not_run": 2, "passed": 1}
+    assert summary["counts"]["verification_outcome"] == {
+        "approval_required": 1,
+        "plugin_run_dispatch_not_enabled": 1,
+        "proposal_review_ready": 1,
+    }
+    assert summary["counts"]["stable_return"] == {"settled": 3}
     assert summary["readback_surfaces"]["proposal_review_history"] == ("/reactor/proposal_reviews/history/list")
     review_by_event_id = {item["event_id"]: item for item in summary["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}
