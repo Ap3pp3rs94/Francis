@@ -199,12 +199,15 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
       deadletter_total: 0,
       retry_schedule_total: 0,
       external_delivery_total: 0,
+      external_delivery_sender_readiness_total: "1",
       recovery_receipt_total: 0,
       proposal_review_history_total: 1,
       attention: {
         review_queue_total: 1,
         due_retry_total: "0",
         proposal_review_ready_total: 1,
+        ready_external_delivery_sender_total: 0,
+        blocked_external_delivery_sender_total: "1",
       },
       counts: {
         review_route: {
@@ -213,10 +216,14 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
         proposal_review_outcome: {
           proposal_review_ready: "1",
         },
+        delivery_sender_status: {
+          blocked: "1",
+        },
       },
       readback_surfaces: {
         review_queue: "/reactor/review_queue",
         proposal_review_history: "/reactor/proposal_reviews/history/list",
+        external_delivery_sender_readiness: "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
       },
       latest_review_items: [
         {
@@ -258,6 +265,36 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
         },
       ],
       ready_external_delivery_processor_items: [],
+      ready_external_delivery_sender_items: [],
+      blocked_external_delivery_sender_items: [
+        {
+          delivery_id: "red_visibility",
+          deadletter_id: "rdl_visibility",
+          event_id: "evt_visibility_review",
+          status: "blocked",
+          route: "deadletter_external_escalation_delivery_sender_readiness",
+          delivery_status: "processor_completed",
+          external_delivery_sender_status: "blocked",
+          external_delivery_sender_ready: false,
+          external_delivery_sender_blockers: ["external_sender_adapter"],
+          external_sender_status: "not_configured",
+          external_sender_blocker: "external_sender_adapter_required",
+          delivery_processor_completed: true,
+          local_outbox_processor_completed: true,
+          external_delivery_started: false,
+          external_message_sent: false,
+          external_network_send: false,
+          external_escalation_started: false,
+          execution_started: false,
+          memory_write: false,
+          next_step: "configure_explicit_external_delivery_sender_before_marking_sent",
+          governance: {
+            external_delivery_authority: false,
+            external_escalation_authority: false,
+            memory_write: false,
+          },
+        },
+      ],
       governance: {
         execution_authority: false,
         dispatch_authority: false,
@@ -287,9 +324,16 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
     assert.equal(summary.event_total, 2);
     assert.equal(summary.review_queue_total, 1);
     assert.equal(summary.proposal_review_history_total, 1);
+    assert.equal(summary.external_delivery_sender_readiness_total, 1);
     assert.equal(summary.attention.review_queue_total, 1);
+    assert.equal(summary.attention.blocked_external_delivery_sender_total, 1);
     assert.equal(summary.counts.review_route?.approval_queue, 1);
+    assert.equal(summary.counts.delivery_sender_status?.blocked, 1);
     assert.equal(summary.readback_surfaces.proposal_review_history, "/reactor/proposal_reviews/history/list");
+    assert.equal(
+      summary.readback_surfaces.external_delivery_sender_readiness,
+      "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
+    );
     assert.equal(summary.latest_review_items[0]?.event_id, "evt_visibility_review");
     assert.equal(summary.latest_review_items[0]?.trigger?.approval_id, "apr_visibility");
     assert.equal(summary.latest_review_items[0]?.review?.execution_started, false);
@@ -299,6 +343,15 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
     assert.equal(summary.latest_proposal_reviews[0]?.readback_only, true);
     assert.equal(summary.latest_proposal_reviews[0]?.promotion_applied, false);
     assert.equal(summary.latest_proposal_reviews[0]?.memory_write, false);
+    assert.equal(summary.ready_external_delivery_sender_items.length, 0);
+    assert.equal(summary.blocked_external_delivery_sender_items.length, 1);
+    assert.equal(summary.blocked_external_delivery_sender_items[0]?.delivery_id, "red_visibility");
+    assert.equal(summary.blocked_external_delivery_sender_items[0]?.external_delivery_sender_ready, false);
+    assert.deepEqual(summary.blocked_external_delivery_sender_items[0]?.external_delivery_sender_blockers, [
+      "external_sender_adapter",
+    ]);
+    assert.equal(summary.blocked_external_delivery_sender_items[0]?.external_message_sent, false);
+    assert.equal(summary.blocked_external_delivery_sender_items[0]?.governance?.external_delivery_authority, false);
     assert.equal(summary.governance?.execution_authority, false);
     assert.equal(summary.governance?.approval_authority, false);
     assert.equal(summary.governance?.promotion_authority, false);
@@ -957,6 +1010,15 @@ test("parseReactorOperatorVisibilitySummary drops malformed nested items and pre
     latest_review_items: [{ no_id: true }, { id: "evt_review_fallback", review: { route: "retry_due" } }],
     latest_proposal_reviews: [{ no_id: true }, { id: "evt_proposal_fallback", proposal_id: "proposal_fallback" }],
     ready_external_delivery_processor_items: [{ no_id: true }, { deadletter_id: "rdl_ready", delivery_processor_ready: true }],
+    ready_external_delivery_sender_items: [{ no_id: true }, { delivery_id: "red_ready", external_delivery_sender_ready: true }],
+    blocked_external_delivery_sender_items: [
+      { no_id: true },
+      {
+        delivery_id: "red_blocked",
+        external_delivery_sender_ready: false,
+        external_delivery_sender_blockers: ["external_sender_adapter"],
+      },
+    ],
     attention: { due_retry_total: "2" },
     counts: { retry_status: { due: "2" } },
     readback_surfaces: { retry_schedules: "/reactor/retries/list", empty: "" },
@@ -971,6 +1033,14 @@ test("parseReactorOperatorVisibilitySummary drops malformed nested items and pre
   assert.equal(summary.ready_external_delivery_processor_items.length, 1);
   assert.equal(summary.ready_external_delivery_processor_items[0]?.deadletter_id, "rdl_ready");
   assert.equal(summary.ready_external_delivery_processor_items[0]?.delivery_processor_ready, true);
+  assert.equal(summary.ready_external_delivery_sender_items.length, 1);
+  assert.equal(summary.ready_external_delivery_sender_items[0]?.delivery_id, "red_ready");
+  assert.equal(summary.ready_external_delivery_sender_items[0]?.external_delivery_sender_ready, true);
+  assert.equal(summary.blocked_external_delivery_sender_items.length, 1);
+  assert.equal(summary.blocked_external_delivery_sender_items[0]?.delivery_id, "red_blocked");
+  assert.deepEqual(summary.blocked_external_delivery_sender_items[0]?.external_delivery_sender_blockers, [
+    "external_sender_adapter",
+  ]);
   assert.equal(summary.attention.due_retry_total, 2);
   assert.equal(summary.counts.retry_status?.due, 2);
   assert.equal(summary.readback_surfaces.retry_schedules, "/reactor/retries/list");

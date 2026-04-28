@@ -1140,6 +1140,16 @@ write memory, promote capabilities, or grant external-delivery,
 external-escalation, execution, approval, promotion, retry, dispatch, or
 memory-write authority.
 
+As of `2026-04-28`, the chat UI Reactor operator-visibility card also consumes
+that sender-readiness summary. The typed Reactor client parses
+`external_delivery_sender_readiness_total`, sender readiness attention/count
+maps, readback links, and ready/blocked sender-readiness items; the System/ORB
+panel renders the sender blocker, processor-complete evidence, and no-send
+state inside the existing read-only Reactor Operator Visibility surface. This
+is readback/UI-only: it does not add backend routes, write controls, delivery
+attempts, external sends, execution, approval decisions, memory writes,
+promotion, retry execution, or external-delivery authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -10231,6 +10241,16 @@ sender-readiness readback slice:
 - `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
   Result: `passed`
 - `python -m mypy src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-28` Reactor sender-readiness UI
+readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

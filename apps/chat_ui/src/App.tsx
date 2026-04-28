@@ -4305,10 +4305,22 @@ function SystemPanel(props: {
   const reactorOperatorVisibilityStatus = safeString(reactorOperatorVisibility?.status).trim() || "unknown";
   const reactorOperatorVisibilityLatestReviewItems = reactorOperatorVisibility?.latest_review_items ?? [];
   const reactorOperatorVisibilityLatestProposalReviews = reactorOperatorVisibility?.latest_proposal_reviews ?? [];
+  const reactorOperatorVisibilityReadySenderItems = reactorOperatorVisibility?.ready_external_delivery_sender_items ?? [];
+  const reactorOperatorVisibilityBlockedSenderItems = reactorOperatorVisibility?.blocked_external_delivery_sender_items ?? [];
+  const reactorOperatorVisibilitySenderReadinessItems = [
+    ...reactorOperatorVisibilityBlockedSenderItems,
+    ...reactorOperatorVisibilityReadySenderItems,
+  ];
+  const reactorOperatorVisibilitySenderReadinessTotal = safeNumber(
+    reactorOperatorVisibility?.external_delivery_sender_readiness_total,
+    reactorOperatorVisibilitySenderReadinessItems.length,
+  );
   const reactorOperatorVisibilityAttentionBadges = [
     ["review", safeNumber(reactorOperatorVisibilityAttention.review_queue_total, 0)] as const,
     ["delivery_ready", safeNumber(reactorOperatorVisibilityAttention.ready_external_delivery_processor_total, 0)] as const,
     ["delivery_blocked", safeNumber(reactorOperatorVisibilityAttention.blocked_external_delivery_processor_total, 0)] as const,
+    ["sender_ready", safeNumber(reactorOperatorVisibilityAttention.ready_external_delivery_sender_total, 0)] as const,
+    ["sender_blocked", safeNumber(reactorOperatorVisibilityAttention.blocked_external_delivery_sender_total, 0)] as const,
     ["due_retry", safeNumber(reactorOperatorVisibilityAttention.due_retry_total, 0)] as const,
     ["proposal_ready", safeNumber(reactorOperatorVisibilityAttention.proposal_review_ready_total, 0)] as const,
     ["proposal_blocked", safeNumber(reactorOperatorVisibilityAttention.proposal_review_blocked_total, 0)] as const,
@@ -6622,6 +6634,9 @@ function SystemPanel(props: {
               <span style={badgeStyle(reactorOperatorVisibility.external_delivery_total > 0 ? "attention" : "clear")}>
                 external {reactorOperatorVisibility.external_delivery_total}
               </span>
+              <span style={badgeStyle(reactorOperatorVisibilitySenderReadinessTotal > 0 ? "attention" : "clear")}>
+                senders {reactorOperatorVisibilitySenderReadinessTotal}
+              </span>
               <span style={badgeStyle("receipts")}>recovery {reactorOperatorVisibility.recovery_receipt_total}</span>
               <span style={badgeStyle("proposal_review")}>forge reviews {reactorOperatorVisibility.proposal_review_history_total}</span>
             </div>
@@ -6728,6 +6743,59 @@ function SystemPanel(props: {
                   })
                 )}
               </div>
+
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>External Sender</div>
+                {reactorOperatorVisibilitySenderReadinessItems.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>No sender-readiness item in the summary.</div>
+                ) : (
+                  reactorOperatorVisibilitySenderReadinessItems.slice(0, 2).map((item, index) => {
+                    const deliveryId = safeString(item.delivery_id).trim();
+                    const deadletterId = safeString(item.deadletter_id).trim();
+                    const senderStatus =
+                      safeString(item.external_delivery_sender_status).trim() || safeString(item.status).trim();
+                    const deliveryStatus = safeString(item.delivery_status).trim();
+                    const blocker =
+                      (item.external_delivery_sender_blockers ?? []).map((value) => safeString(value).trim()).find(Boolean) ||
+                      safeString(item.external_sender_blocker).trim();
+                    const noSend = item.external_message_sent === false || item.external_network_send === false;
+                    return (
+                      <div
+                        key={`reactor-operator-sender-${deliveryId || deadletterId || index}`}
+                        style={{ marginTop: 8 }}
+                      >
+                        <div style={{ fontSize: 11 }}>
+                          <code>{deliveryId || deadletterId || "sender-readiness"}</code>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                          <span style={badgeStyle(item.external_delivery_sender_ready ? "ready" : "blocked")}>
+                            sender {item.external_delivery_sender_ready ? "ready" : "blocked"}
+                          </span>
+                          {senderStatus ? <span style={badgeStyle(senderStatus)}>{senderStatus}</span> : null}
+                          {deliveryStatus ? <span style={badgeStyle(deliveryStatus)}>delivery {deliveryStatus}</span> : null}
+                          {item.delivery_processor_completed ? <span style={badgeStyle("processor_complete")}>processor complete</span> : null}
+                          {noSend ? <span style={badgeStyle("no_send")}>no send</span> : null}
+                        </div>
+                        {blocker || item.next_step ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {blocker ? (
+                              <>
+                                blocker=<code>{blocker}</code>
+                              </>
+                            ) : null}
+                            {blocker && item.next_step ? " / " : null}
+                            {item.next_step ? (
+                              <>
+                                next=<code>{item.next_step}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
@@ -6739,6 +6807,9 @@ function SystemPanel(props: {
               ) : null}
               {reactorOperatorVisibilitySurfaces.recovery_receipts ? (
                 <span style={badgeStyle("readback")}>recovery {reactorOperatorVisibilitySurfaces.recovery_receipts}</span>
+              ) : null}
+              {reactorOperatorVisibilitySurfaces.external_delivery_sender_readiness ? (
+                <span style={badgeStyle("readback")}>sender {reactorOperatorVisibilitySurfaces.external_delivery_sender_readiness}</span>
               ) : null}
             </div>
           </>

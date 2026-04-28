@@ -216,16 +216,46 @@ export type ReactorProposalReviewHistoryItem = {
 
 export type ReactorExternalDeliveryProcessorItem = {
   readiness_id?: string;
+  delivery_id?: string;
   deadletter_id?: string;
   event_id?: string;
   status?: string;
   route?: string;
+  delivery_status?: string;
   delivery_processor_status?: string;
   delivery_processor_ready?: boolean;
+  delivery_processor_blockers?: string[];
   external_delivery_started?: boolean;
   external_escalation_started?: boolean;
   blockers?: string[];
   next_step?: string;
+};
+
+export type ReactorExternalDeliverySenderItem = {
+  readiness_id?: string;
+  delivery_id?: string;
+  deadletter_id?: string;
+  event_id?: string;
+  status?: string;
+  route?: string;
+  delivery_status?: string;
+  external_delivery_sender_status?: string;
+  external_delivery_sender_ready?: boolean;
+  external_delivery_sender_blockers?: string[];
+  external_delivery_sender_attempted?: boolean;
+  external_sender_adapter?: string;
+  external_sender_status?: string;
+  external_sender_blocker?: string;
+  delivery_processor_completed?: boolean;
+  local_outbox_processor_completed?: boolean;
+  external_delivery_started?: boolean;
+  external_message_sent?: boolean;
+  external_network_send?: boolean;
+  external_escalation_started?: boolean;
+  execution_started?: boolean;
+  memory_write?: boolean;
+  next_step?: string;
+  governance?: Record<string, unknown>;
 };
 
 export type ReactorOperatorVisibilitySummary = {
@@ -239,6 +269,7 @@ export type ReactorOperatorVisibilitySummary = {
   deadletter_total: number;
   retry_schedule_total: number;
   external_delivery_total: number;
+  external_delivery_sender_readiness_total: number;
   recovery_receipt_total: number;
   proposal_review_history_total: number;
   attention: Record<string, number>;
@@ -247,6 +278,8 @@ export type ReactorOperatorVisibilitySummary = {
   latest_review_items: ReactorReviewQueueItem[];
   latest_proposal_reviews: ReactorProposalReviewHistoryItem[];
   ready_external_delivery_processor_items: ReactorExternalDeliveryProcessorItem[];
+  ready_external_delivery_sender_items: ReactorExternalDeliverySenderItem[];
+  blocked_external_delivery_sender_items: ReactorExternalDeliverySenderItem[];
   governance?: Record<string, unknown>;
   error?: string;
 };
@@ -437,6 +470,12 @@ export function parseReactorOperatorVisibilitySummary(
   const readyExternalDeliveryProcessorItemsRaw = Array.isArray(record.ready_external_delivery_processor_items)
     ? record.ready_external_delivery_processor_items
     : [];
+  const readyExternalDeliverySenderItemsRaw = Array.isArray(record.ready_external_delivery_sender_items)
+    ? record.ready_external_delivery_sender_items
+    : [];
+  const blockedExternalDeliverySenderItemsRaw = Array.isArray(record.blocked_external_delivery_sender_items)
+    ? record.blocked_external_delivery_sender_items
+    : [];
   const error = safeString(record.error).trim();
 
   return {
@@ -450,6 +489,10 @@ export function parseReactorOperatorVisibilitySummary(
     deadletter_total: Math.max(0, safeNumber(record.deadletter_total, 0)),
     retry_schedule_total: Math.max(0, safeNumber(record.retry_schedule_total, 0)),
     external_delivery_total: Math.max(0, safeNumber(record.external_delivery_total, 0)),
+    external_delivery_sender_readiness_total: Math.max(
+      0,
+      safeNumber(record.external_delivery_sender_readiness_total, 0),
+    ),
     recovery_receipt_total: Math.max(0, safeNumber(record.recovery_receipt_total, 0)),
     proposal_review_history_total: Math.max(0, safeNumber(record.proposal_review_history_total, 0)),
     attention: parseCountMap(record.attention),
@@ -464,6 +507,12 @@ export function parseReactorOperatorVisibilitySummary(
     ready_external_delivery_processor_items: readyExternalDeliveryProcessorItemsRaw
       .map(parseReactorExternalDeliveryProcessorItem)
       .filter((item): item is ReactorExternalDeliveryProcessorItem => Boolean(item)),
+    ready_external_delivery_sender_items: readyExternalDeliverySenderItemsRaw
+      .map(parseReactorExternalDeliverySenderItem)
+      .filter((item): item is ReactorExternalDeliverySenderItem => Boolean(item)),
+    blocked_external_delivery_sender_items: blockedExternalDeliverySenderItemsRaw
+      .map(parseReactorExternalDeliverySenderItem)
+      .filter((item): item is ReactorExternalDeliverySenderItem => Boolean(item)),
     governance: isRecord(record.governance) ? record.governance : undefined,
     error: error || undefined,
   };
@@ -580,22 +629,63 @@ export function parseReactorExternalDeliveryProcessorItem(raw: unknown): Reactor
   const record = isRecord(raw) ? raw : null;
   if (!record) return null;
   const readinessId = safeString(record.readiness_id).trim() || safeString(record.id).trim();
+  const deliveryId = safeString(record.delivery_id).trim();
   const deadletterId = safeString(record.deadletter_id).trim();
   const eventId = safeString(record.event_id).trim();
-  if (!readinessId && !deadletterId && !eventId) return null;
+  if (!readinessId && !deliveryId && !deadletterId && !eventId) return null;
 
   return {
     readiness_id: readinessId || undefined,
+    delivery_id: deliveryId || undefined,
     deadletter_id: deadletterId || undefined,
     event_id: eventId || undefined,
     status: optionalString(record.status),
     route: optionalString(record.route),
+    delivery_status: optionalString(record.delivery_status),
     delivery_processor_status: optionalString(record.delivery_processor_status),
     delivery_processor_ready: optionalBoolean(record.delivery_processor_ready),
+    delivery_processor_blockers: optionalStringList(record.delivery_processor_blockers),
     external_delivery_started: optionalBoolean(record.external_delivery_started),
     external_escalation_started: optionalBoolean(record.external_escalation_started),
     blockers: optionalStringList(record.blockers),
     next_step: optionalString(record.next_step),
+  };
+}
+
+export function parseReactorExternalDeliverySenderItem(raw: unknown): ReactorExternalDeliverySenderItem | null {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return null;
+  const readinessId = safeString(record.readiness_id).trim() || safeString(record.id).trim();
+  const deliveryId = safeString(record.delivery_id).trim();
+  const deadletterId = safeString(record.deadletter_id).trim();
+  const eventId = safeString(record.event_id).trim();
+  if (!readinessId && !deliveryId && !deadletterId && !eventId) return null;
+
+  return {
+    readiness_id: readinessId || undefined,
+    delivery_id: deliveryId || undefined,
+    deadletter_id: deadletterId || undefined,
+    event_id: eventId || undefined,
+    status: optionalString(record.status),
+    route: optionalString(record.route),
+    delivery_status: optionalString(record.delivery_status),
+    external_delivery_sender_status: optionalString(record.external_delivery_sender_status),
+    external_delivery_sender_ready: optionalBoolean(record.external_delivery_sender_ready),
+    external_delivery_sender_blockers: optionalStringList(record.external_delivery_sender_blockers),
+    external_delivery_sender_attempted: optionalBoolean(record.external_delivery_sender_attempted),
+    external_sender_adapter: optionalString(record.external_sender_adapter),
+    external_sender_status: optionalString(record.external_sender_status),
+    external_sender_blocker: optionalString(record.external_sender_blocker),
+    delivery_processor_completed: optionalBoolean(record.delivery_processor_completed),
+    local_outbox_processor_completed: optionalBoolean(record.local_outbox_processor_completed),
+    external_delivery_started: optionalBoolean(record.external_delivery_started),
+    external_message_sent: optionalBoolean(record.external_message_sent),
+    external_network_send: optionalBoolean(record.external_network_send),
+    external_escalation_started: optionalBoolean(record.external_escalation_started),
+    execution_started: optionalBoolean(record.execution_started),
+    memory_write: optionalBoolean(record.memory_write),
+    next_step: optionalString(record.next_step),
+    governance: isRecord(record.governance) ? record.governance : undefined,
   };
 }
 
