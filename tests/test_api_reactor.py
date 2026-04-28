@@ -5,6 +5,7 @@ from pathlib import Path
 
 from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
+from francis.reactor import dispatch as reactor_dispatch
 
 _REACTOR_ACTOR = "test.reactor.write"
 _APPROVAL_ACTOR = "test.reactor.approvals.decide"
@@ -309,6 +310,119 @@ def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp
     assert status.json()["status_counts"] == {"dispatch_completed": 1}
     assert status.json()["dispatch_execution_counts"] == {"completed": 1}
     assert status.json()["verification_counts"] == {"passed": 1}
+
+
+def test_reactor_mission_tick_retry_exhaustion_route_queues_deadletter(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write", "missions.write"]}),
+    )
+    run_calls: list[int] = []
+
+    def fail_mission_tick(*, limit: int, actor: str, note: str) -> dict[str, object]:
+        run_calls.append(limit)
+        return {
+            "ok": False,
+            "status": "failed",
+            "processed": 1,
+            "total": 1,
+            "applied": 0,
+            "advanced": 0,
+            "counts": {"queued": 1, "active": 0, "blocked": 0, "failed": 0, "deadlettered": 0},
+            "errors": [{"mission_id": "msn_failed_tick_api", "error": "synthetic mission tick failure"}],
+            "request": {"actor": actor, "note": note, "limit": limit},
+        }
+
+    monkeypatch.setattr(reactor_dispatch.mission_runtime, "run_queue_once", fail_mission_tick)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    enqueued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Failed mission tick should exhaust into deadletter through API.",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "actor": _REACTOR_ACTOR,
+            "max_actions": 2,
+            "max_retries": 1,
+            "backoff_seconds": 0,
+        },
+    )
+    assert enqueued.status_code == 200
+    event_id = str(enqueued.json()["event_id"])
+
+    first_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "run failed mission tick and schedule retry",
+        },
+    )
+    assert first_attempt.status_code == 200
+    first_event = first_attempt.json()["event"]
+    assert first_event["status"] == "dispatch_failed"
+    assert first_event["stable_state"] == "awaiting_retry"
+    retry_schedule_id = str(first_event["latest_retry_schedule"]["retry_schedule_id"])
+
+    due = client.post(
+        "/reactor/retries/mark_due",
+        json={
+            "retry_schedule_id": retry_schedule_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "make failed mission tick retry due",
+        },
+    )
+    assert due.status_code == 200
+    assert due.json()["status"] == "retry_due"
+
+    retry_attempt = client.post(
+        "/reactor/retries/dispatch_attempt",
+        json={
+            "retry_schedule_id": retry_schedule_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "retry failed mission tick and exhaust budget",
+        },
+    )
+    assert retry_attempt.status_code == 200
+    body = retry_attempt.json()
+    assert body["ok"] is True
+    assert body["status"] == "retry_dispatch_attempted"
+    event = body["event"]
+    assert event["status"] == "dispatch_failed"
+    assert event["stable_state"] == "retry_budget_exhausted"
+    assert event["dispatch"]["engine"] == "mission_tick"
+    assert run_calls == [2, 2]
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["route"] == "mission_tick"
+    assert execution["status"] == "failed"
+    assert execution["outcome"] == "mission_tick_failed"
+    assert execution["attempt_count"] == 2
+    retry_exhausted = event["latest_retry_exhausted"]
+    assert retry_exhausted["outcome"] == "mission_tick_failed"
+    assert retry_exhausted["deadletter_enqueued"] is True
+    deadletter_item = event["latest_deadletter_item"]
+    assert deadletter_item["status"] == "queued"
+    assert deadletter_item["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert event["latest_stable_return"]["route"] == "deadletter_queue"
+    assert event["latest_verification_receipt"]["route"] == "deadletter_queue"
+    assert event["latest_verification_receipt"]["verification_outcome"] == "mission_tick_failed"
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["status_counts"] == {"dispatch_failed": 1}
+    assert status.json()["stable_state_counts"] == {"retry_budget_exhausted": 1}
+    assert status.json()["retry_schedule_counts"] == {"attempted": 1}
+    assert status.json()["retry_dispatch_attempt_counts"] == {"attempted": 1}
+    assert status.json()["retry_exhausted_counts"] == {"exhausted": 1}
+    assert status.json()["deadletter_queue_counts"] == {"queued": 1}
 
 
 def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Path) -> None:

@@ -447,7 +447,10 @@ def test_reactor_dispatch_engine_runs_mission_tick_with_receipts(monkeypatch, tm
     assert status["verification_outcome_counts"] == {"mission_tick_succeeded": 1}
 
 
-def test_reactor_failed_mission_tick_dispatch_schedules_retry(monkeypatch, tmp_path: Path) -> None:
+def test_reactor_failed_mission_tick_dispatch_schedules_retry_then_deadletters(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     actor = "test.reactor.mission_tick"
@@ -510,6 +513,7 @@ def test_reactor_failed_mission_tick_dispatch_schedules_retry(monkeypatch, tmp_p
     assert retry_candidate["execution_started"] is True
     assert retry_candidate["retry_scheduled"] is True
     retry_schedule = event["latest_retry_schedule"]
+    retry_schedule_id = str(retry_schedule["retry_schedule_id"])
     assert retry_schedule["status"] == "scheduled"
     assert retry_schedule["gate"] == "mission_tick_failed"
     verification = event["latest_verification_receipt"]
@@ -523,6 +527,62 @@ def test_reactor_failed_mission_tick_dispatch_schedules_retry(monkeypatch, tmp_p
     assert stable_return["stable_state"] == "awaiting_retry"
     assert stable_return["source_receipt_kind"] == "reactor.retry.schedule.receipt"
     assert stable_return["retry_scheduled"] is True
+
+    due = record_retry_due(retry_schedule_id, {"actor": actor, "reason": "make failed mission tick retry due"})
+    assert due["status"] == "retry_due"
+
+    retry_attempt = record_retry_dispatch_attempt(
+        retry_schedule_id,
+        {
+            "actor": actor,
+            "reason": "retry failed mission tick and exhaust retry budget",
+        },
+    )
+
+    assert retry_attempt["ok"] is True
+    assert retry_attempt["status"] == "retry_dispatch_attempted"
+    event = retry_attempt["event"]
+    assert event["status"] == "dispatch_failed"
+    assert event["stable_state"] == "retry_budget_exhausted"
+    assert event["dispatch"]["engine"] == "mission_tick"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is True
+    assert run_calls == [2, 2]
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["status"] == "failed"
+    assert execution["outcome"] == "mission_tick_failed"
+    assert execution["route"] == "mission_tick"
+    assert execution["attempt_count"] == 2
+    assert execution["mission_queue_error_count"] == 1
+    assert execution["verified"] is False
+    retry_exhausted = event["latest_retry_exhausted"]
+    assert retry_exhausted["kind"] == "reactor.retry_exhausted.receipt"
+    assert retry_exhausted["outcome"] == "mission_tick_failed"
+    assert retry_exhausted["execution_started"] is True
+    assert retry_exhausted["attempt_count"] == 2
+    assert retry_exhausted["deadletter_enqueued"] is True
+    deadletter_item = event["latest_deadletter_item"]
+    assert deadletter_item["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert deadletter_item["gate"] == "retry_budget_exhausted"
+    assert deadletter_item["status"] == "queued"
+    deadletter_enqueue = event["latest_deadletter_enqueue"]
+    assert deadletter_enqueue["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert event["latest_stable_return"]["route"] == "deadletter_queue"
+    assert event["latest_stable_return"]["deadletter_enqueued"] is True
+    assert event["latest_stable_return"]["retry_exhausted"] is True
+    assert event["latest_verification_receipt"]["verification_status"] == "failed"
+    assert event["latest_verification_receipt"]["verification_outcome"] == "mission_tick_failed"
+    assert event["latest_verification_receipt"]["route"] == "deadletter_queue"
+    assert event["latest_verification_receipt"]["completion_claim_allowed"] is False
+    assert get_deadletter(str(deadletter_item["deadletter_id"]))["event_id"] == event_id  # type: ignore[index]
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_failed": 1}
+    assert status["stable_state_counts"] == {"retry_budget_exhausted": 1}
+    assert status["dispatch_execution_counts"] == {"failed": 1}
+    assert status["retry_schedule_counts"] == {"attempted": 1}
+    assert status["retry_dispatch_attempt_counts"] == {"attempted": 1}
+    assert status["retry_exhausted_counts"] == {"exhausted": 1}
+    assert status["deadletter_queue_counts"] == {"queued": 1}
 
 
 def test_reactor_dispatch_engine_blocks_mission_tick_without_missions_scope(monkeypatch, tmp_path: Path) -> None:

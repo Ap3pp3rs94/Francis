@@ -9584,6 +9584,22 @@ slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor mission tick retry
+exhaustion deadletter proof slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_failed_mission_tick_dispatch_schedules_retry_then_deadletters tests\test_api_reactor.py::test_reactor_mission_tick_retry_exhaustion_route_queues_deadletter -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed with Ruff cache write warnings only`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9610,12 +9626,13 @@ These remain true and should block any "finished" claim:
   readback. It also supports one bounded `mission_tick` dispatch through the
   existing mission queue runtime guarded by `missions.write` and operator
   posture, with execution, verification, stable-return, status readback,
-  permission-denial proof, and failure retry scheduling through a
-  `mission_tick_failed` gate. Failed `operation_run` dispatches can now schedule
-  bounded retries and deadletter after retry exhaustion through the same governed
-  retry handoff path, and successful due retry can settle back into operation
-  success readback without active retry/deadletter review leftovers. Deadletter
-  items can now record bounded resolved/no-action or escalation-pending
+  permission-denial proof, failure retry scheduling, and retry-exhaustion
+  deadletter proof through a `mission_tick_failed` gate. Failed `operation_run`
+  dispatches can now schedule bounded retries and deadletter after retry
+  exhaustion through the same governed retry handoff path, and successful due
+  retry can settle back into operation success readback without active
+  retry/deadletter review leftovers. Deadletter items can now record bounded
+  resolved/no-action or escalation-pending
   disposition receipts without starting recovery, retry, execution, memory
   writes, approval decisions, or external escalation, and escalation-pending
   deadletters can now record a durable non-executing escalation handoff receipt,
@@ -9633,7 +9650,8 @@ These remain true and should block any "finished" claim:
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs and bounded mission queue ticks, broader
   execution-failure routing/deadletter proof beyond the currently tested
-  dispatch-engine paths, broader operator visibility beyond the current
+  `operation_run` and `mission_tick` dispatch-engine paths, broader operator
+  visibility beyond the current
   route-filtered review queue and direct deadletter history, and external
   escalation execution after disposition, handoff, acknowledgement, and recovery
   request receipts
