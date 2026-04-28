@@ -40,6 +40,7 @@ import {
   ReactorClient,
   type ReactorDeadletterSnapshot,
   type ReactorEventSnapshot,
+  type ReactorOperatorVisibilitySummary,
   type ReactorReviewQueueSnapshot,
   type ReactorReviewRoute,
 } from "./reactor";
@@ -3846,6 +3847,9 @@ function SystemPanel(props: {
   const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
   const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
   const [reactorReviewRouteFilter, setReactorReviewRouteFilter] = useState<ReactorReviewRoute | "">("");
+  const [reactorOperatorVisibility, setReactorOperatorVisibility] = useState<ReactorOperatorVisibilitySummary | null>(null);
+  const [reactorOperatorVisibilityError, setReactorOperatorVisibilityError] = useState<string | null>(null);
+  const [reactorOperatorVisibilityLoadedAt, setReactorOperatorVisibilityLoadedAt] = useState<number | null>(null);
   const [reactorProposalReviews, setReactorProposalReviews] = useState<ReactorEventSnapshot | null>(null);
   const [reactorProposalReviewsError, setReactorProposalReviewsError] = useState<string | null>(null);
   const [reactorProposalReviewsLoadedAt, setReactorProposalReviewsLoadedAt] = useState<number | null>(null);
@@ -3986,6 +3990,7 @@ function SystemPanel(props: {
         nextObserverEvents,
         nextOrbStatus,
         nextOperations,
+        nextReactorOperatorVisibility,
         nextReactorReviewQueue,
         nextReactorProposalReviews,
         nextReactorDeadletters,
@@ -3999,6 +4004,7 @@ function SystemPanel(props: {
         client.getObserverEvents({ limit: 8 }),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
+        reactorClient.getOperatorVisibilitySummary({ limit: 6 }),
         reactorClient.getReviewQueue({ limit: 8, route: reactorReviewRouteFilter || undefined }),
         reactorClient.listEvents({
           limit: 6,
@@ -4074,6 +4080,15 @@ function SystemPanel(props: {
       } else {
         setTakeoverOperationsError(operationsError(nextOperations.reason));
         degradedFeeds.push("live operations");
+      }
+
+      if (nextReactorOperatorVisibility.status === "fulfilled") {
+        setReactorOperatorVisibility(nextReactorOperatorVisibility.value);
+        setReactorOperatorVisibilityError(null);
+        setReactorOperatorVisibilityLoadedAt(refreshStartedAt);
+      } else {
+        setReactorOperatorVisibilityError(reactorError(nextReactorOperatorVisibility.reason));
+        degradedFeeds.push("reactor operator visibility");
       }
 
       if (nextReactorReviewQueue.status === "fulfilled") {
@@ -4282,6 +4297,28 @@ function SystemPanel(props: {
   const observerEventEntries = observerEvents?.items ?? [];
   const observerEventCount = observerEvents?.total ?? observerEventEntries.length;
   const observerEventsRouteError = safeString(observerEvents?.error).trim();
+  const reactorOperatorVisibilityAttention = reactorOperatorVisibility?.attention ?? {};
+  const reactorOperatorVisibilityCounts = reactorOperatorVisibility?.counts ?? {};
+  const reactorOperatorVisibilitySurfaces = reactorOperatorVisibility?.readback_surfaces ?? {};
+  const reactorOperatorVisibilityRouteError = safeString(reactorOperatorVisibility?.error).trim();
+  const reactorOperatorVisibilityNextStep = safeString(reactorOperatorVisibility?.next_step).trim();
+  const reactorOperatorVisibilityStatus = safeString(reactorOperatorVisibility?.status).trim() || "unknown";
+  const reactorOperatorVisibilityLatestReviewItems = reactorOperatorVisibility?.latest_review_items ?? [];
+  const reactorOperatorVisibilityLatestProposalReviews = reactorOperatorVisibility?.latest_proposal_reviews ?? [];
+  const reactorOperatorVisibilityAttentionBadges = [
+    ["review", safeNumber(reactorOperatorVisibilityAttention.review_queue_total, 0)] as const,
+    ["delivery_ready", safeNumber(reactorOperatorVisibilityAttention.ready_external_delivery_processor_total, 0)] as const,
+    ["delivery_blocked", safeNumber(reactorOperatorVisibilityAttention.blocked_external_delivery_processor_total, 0)] as const,
+    ["due_retry", safeNumber(reactorOperatorVisibilityAttention.due_retry_total, 0)] as const,
+    ["proposal_ready", safeNumber(reactorOperatorVisibilityAttention.proposal_review_ready_total, 0)] as const,
+    ["proposal_blocked", safeNumber(reactorOperatorVisibilityAttention.proposal_review_blocked_total, 0)] as const,
+  ].filter(([, count]) => count > 0);
+  const reactorOperatorVisibilityRouteBadges = Object.entries(reactorOperatorVisibilityCounts.review_route ?? {})
+    .filter(([, count]) => count > 0)
+    .slice(0, 4);
+  const reactorOperatorVisibilityStableBadges = Object.entries(reactorOperatorVisibilityCounts.stable_state ?? {})
+    .filter(([, count]) => count > 0)
+    .slice(0, 3);
   const reactorReviewItems = reactorReviewQueue?.items ?? [];
   const reactorReviewTotal = reactorReviewQueue?.available_total ?? reactorReviewQueue?.total ?? reactorReviewItems.length;
   const reactorReviewRouteError = safeString(reactorReviewQueue?.error).trim();
@@ -6538,6 +6575,175 @@ function SystemPanel(props: {
               ) : null}
             </div>
           </div>
+        ) : null}
+      </div>
+
+      <div id="francis-reactor-operator-visibility" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Reactor Operator Visibility</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Read-only backend summary from Reactor receipt and queue readbacks.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(reactorOperatorVisibility?.ok ? "ready" : "unknown")}>{reactorOperatorVisibilityStatus}</span>
+            {reactorOperatorVisibilityLoadedAt ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Loaded {toLocaleTime(reactorOperatorVisibilityLoadedAt)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {reactorOperatorVisibilityError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor operator visibility unavailable: {reactorOperatorVisibilityError}
+          </div>
+        ) : null}
+
+        {reactorOperatorVisibilityRouteError && !reactorOperatorVisibilityError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor operator visibility route reported: {reactorOperatorVisibilityRouteError}
+          </div>
+        ) : null}
+
+        {reactorOperatorVisibility ? (
+          <>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              <span style={badgeStyle("events")}>events {reactorOperatorVisibility.event_total}</span>
+              <span style={badgeStyle(reactorOperatorVisibility.review_queue_total > 0 ? "attention" : "clear")}>
+                review {reactorOperatorVisibility.review_queue_total}
+              </span>
+              <span style={badgeStyle(reactorOperatorVisibility.deadletter_total > 0 ? "attention" : "clear")}>
+                deadletters {reactorOperatorVisibility.deadletter_total}
+              </span>
+              <span style={badgeStyle(reactorOperatorVisibility.retry_schedule_total > 0 ? "attention" : "clear")}>
+                retries {reactorOperatorVisibility.retry_schedule_total}
+              </span>
+              <span style={badgeStyle(reactorOperatorVisibility.external_delivery_total > 0 ? "attention" : "clear")}>
+                external {reactorOperatorVisibility.external_delivery_total}
+              </span>
+              <span style={badgeStyle("receipts")}>recovery {reactorOperatorVisibility.recovery_receipt_total}</span>
+              <span style={badgeStyle("proposal_review")}>forge reviews {reactorOperatorVisibility.proposal_review_history_total}</span>
+            </div>
+
+            {reactorOperatorVisibilityNextStep ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next_step=<code>{reactorOperatorVisibilityNextStep}</code>
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              {reactorOperatorVisibilityAttentionBadges.map(([label, count]) => (
+                <span key={`reactor-operator-attention-${label}`} style={badgeStyle(label)}>
+                  {label} {count}
+                </span>
+              ))}
+              {reactorOperatorVisibilityRouteBadges.map(([route, count]) => (
+                <span key={`reactor-operator-route-${route}`} style={badgeStyle(route)}>
+                  {route} {count}
+                </span>
+              ))}
+              {reactorOperatorVisibilityStableBadges.map(([state, count]) => (
+                <span key={`reactor-operator-state-${state}`} style={badgeStyle(state)}>
+                  {state} {count}
+                </span>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gap: 8, marginTop: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Latest Review</div>
+                {reactorOperatorVisibilityLatestReviewItems.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>No active review item in the summary.</div>
+                ) : (
+                  reactorOperatorVisibilityLatestReviewItems.slice(0, 2).map((item) => {
+                    const review = item.review;
+                    const trigger = item.trigger;
+                    const route = safeString(review?.route).trim();
+                    const stableState = safeString(item.stable_state).trim();
+                    const nextStep = safeString(review?.next_step).trim();
+                    const summary = safeString(trigger?.summary).trim();
+                    return (
+                      <div key={`reactor-operator-review-${item.event_id}`} style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 11 }}>
+                          <code>{item.event_id}</code>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                          {route ? <span style={badgeStyle(route)}>{route}</span> : null}
+                          {stableState ? <span style={badgeStyle(stableState)}>{stableState}</span> : null}
+                          {review?.execution_started === false ? <span style={badgeStyle("no_execution")}>no execution</span> : null}
+                        </div>
+                        {summary || nextStep ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{summary || nextStep}</div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Latest Forge Review</div>
+                {reactorOperatorVisibilityLatestProposalReviews.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>No proposal-review item in the summary.</div>
+                ) : (
+                  reactorOperatorVisibilityLatestProposalReviews.slice(0, 2).map((item) => {
+                    const proposalId = safeString(item.proposal_id).trim();
+                    const pluginId = safeString(item.plugin_id).trim();
+                    const outcome = safeString(item.outcome).trim();
+                    const reviewStatus = safeString(item.review_status).trim();
+                    return (
+                      <div key={`reactor-operator-proposal-${item.event_id}`} style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 11 }}>
+                          <code>{item.event_id}</code>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                          {outcome ? <span style={badgeStyle(outcome)}>{outcome}</span> : null}
+                          {item.quality_ready !== undefined ? (
+                            <span style={badgeStyle(item.quality_ready ? "ready" : "blocked")}>
+                              quality {item.quality_ready ? "ready" : "blocked"}
+                            </span>
+                          ) : null}
+                          {reviewStatus ? <span style={badgeStyle(reviewStatus)}>review {reviewStatus}</span> : null}
+                          {item.readback_only ? <span style={badgeStyle("readback")}>readback only</span> : null}
+                          {item.promotion_applied === false ? <span style={badgeStyle("no_promotion")}>no promotion</span> : null}
+                        </div>
+                        {proposalId || pluginId ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {proposalId ? (
+                              <>
+                                proposal=<code>{proposalId}</code>
+                              </>
+                            ) : null}
+                            {proposalId && pluginId ? " / " : null}
+                            {pluginId ? (
+                              <>
+                                plugin=<code>{pluginId}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              {reactorOperatorVisibilitySurfaces.review_queue ? (
+                <span style={badgeStyle("readback")}>queue {reactorOperatorVisibilitySurfaces.review_queue}</span>
+              ) : null}
+              {reactorOperatorVisibilitySurfaces.proposal_review_history ? (
+                <span style={badgeStyle("readback")}>forge {reactorOperatorVisibilitySurfaces.proposal_review_history}</span>
+              ) : null}
+              {reactorOperatorVisibilitySurfaces.recovery_receipts ? (
+                <span style={badgeStyle("readback")}>recovery {reactorOperatorVisibilitySurfaces.recovery_receipts}</span>
+              ) : null}
+            </div>
+          </>
+        ) : !reactorOperatorVisibilityError ? (
+          <div style={{ fontSize: 12, color: THEME.muted, marginTop: 10 }}>No Reactor operator visibility summary loaded.</div>
         ) : null}
       </div>
 

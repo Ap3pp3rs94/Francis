@@ -984,6 +984,18 @@ claims, dispatch events, decide approvals or proposals, resolve deadletters,
 start retries, send external messages, promote capabilities, execute plugins, or
 write memory.
 
+As of `2026-04-28`, the chat UI System/ORB panel also consumes that Reactor
+operator-visibility summary through the typed Reactor client. The client parses
+`GET /reactor/operator_visibility/summary` as a read-only contract, preserving
+attention counts, route/stable-state counts, readback surface links, latest
+review items, latest proposal-review items, and no-authority governance; the
+System/ORB panel renders those fields in a compact Reactor Operator Visibility
+card beside the existing Reactor review, Forge review, and deadletter surfaces.
+This is readback/UI-only: it does not add controls, dispatch events, decide
+approvals or proposals, resolve deadletters, start retries, send external
+messages, promote capabilities, execute plugins, write memory, or create new
+backend authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9926,6 +9938,14 @@ summary readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor operator visibility UI
+readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9997,14 +10017,15 @@ These remain true and should block any "finished" claim:
   Backend operator visibility summary now aggregates status, review queue,
   retry/deadletter, recovery receipt, proposal-review history, external
   delivery/readiness, and stable route-link readbacks through
-  `/reactor/operator_visibility/summary` without new authority.
+  `/reactor/operator_visibility/summary` without new authority, and the chat UI
+  System/ORB panel now renders that summary as read-only operator visibility.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, bounded mission queue ticks, and read-only Forge
   proposal reviews, broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
-  visibility beyond backend status, operator-visibility summary,
-  route-filtered review queue, and direct recovery/proposal-review readbacks,
+  visibility beyond the current read-only Reactor summary, route-filtered review
+  queue, deadletter queue, recovery receipt, and proposal-review readbacks,
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, and processor-readiness readback
 

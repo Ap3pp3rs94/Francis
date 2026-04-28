@@ -188,6 +188,69 @@ export type ReactorEventSnapshot = {
   error?: string;
 };
 
+export type ReactorProposalReviewHistoryItem = {
+  event_id: string;
+  status?: string;
+  stable_state?: string;
+  summary?: string;
+  route?: string;
+  outcome?: string;
+  next_step?: string;
+  proposal_id?: string;
+  plugin_id?: string;
+  proposal_status?: string;
+  quality_ready?: boolean;
+  missing_requirements?: string[];
+  review_status?: string;
+  review_receipt_id?: string;
+  validation_receipt_id?: string;
+  validation_receipt_path?: string;
+  readback_only?: boolean;
+  proposal_decision_applied?: boolean;
+  promotion_applied?: boolean;
+  execution_started?: boolean;
+  dispatch_applied?: boolean;
+  memory_write?: boolean;
+  verified?: boolean;
+};
+
+export type ReactorExternalDeliveryProcessorItem = {
+  readiness_id?: string;
+  deadletter_id?: string;
+  event_id?: string;
+  status?: string;
+  route?: string;
+  delivery_processor_status?: string;
+  delivery_processor_ready?: boolean;
+  external_delivery_started?: boolean;
+  external_escalation_started?: boolean;
+  blockers?: string[];
+  next_step?: string;
+};
+
+export type ReactorOperatorVisibilitySummary = {
+  ok: boolean;
+  kind?: string;
+  status?: string;
+  limit: number;
+  next_step?: string;
+  event_total: number;
+  review_queue_total: number;
+  deadletter_total: number;
+  retry_schedule_total: number;
+  external_delivery_total: number;
+  recovery_receipt_total: number;
+  proposal_review_history_total: number;
+  attention: Record<string, number>;
+  counts: Record<string, Record<string, number>>;
+  readback_surfaces: Record<string, string>;
+  latest_review_items: ReactorReviewQueueItem[];
+  latest_proposal_reviews: ReactorProposalReviewHistoryItem[];
+  ready_external_delivery_processor_items: ReactorExternalDeliveryProcessorItem[];
+  governance?: Record<string, unknown>;
+  error?: string;
+};
+
 export type ReactorReviewQueueParams = {
   limit?: number;
   route?: string;
@@ -206,6 +269,10 @@ export type ReactorEventListParams = {
   blocker_route?: string;
   review_route?: string;
   receipt_kind?: string;
+};
+
+export type ReactorOperatorVisibilityParams = {
+  limit?: number;
 };
 
 export class ReactorApiError extends Error {
@@ -247,6 +314,26 @@ export class ReactorClient {
 
     const raw = (await response.json()) as unknown;
     return parseReactorReviewQueueSnapshot(raw, { limit, route });
+  }
+
+  async getOperatorVisibilitySummary(
+    params: ReactorOperatorVisibilityParams = {},
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<ReactorOperatorVisibilitySummary> {
+    const url = new URL(`${this.baseUrl}/reactor/operator_visibility/summary`);
+    const limit = boundedLimit(params.limit, 10);
+    url.searchParams.set("limit", String(limit));
+
+    const response = await fetchWithTimeout(url.toString(), { method: "GET", signal: options.signal }, options.timeoutMs ?? 10_000);
+    if (!response.ok) {
+      throw new ReactorApiError(`Reactor operator visibility request failed with HTTP ${response.status}`, {
+        status: response.status,
+        url: url.toString(),
+      });
+    }
+
+    const raw = (await response.json()) as unknown;
+    return parseReactorOperatorVisibilitySummary(raw, { limit });
   }
 
   async listDeadletters(
@@ -340,6 +427,48 @@ export function parseReactorReviewQueueSnapshot(
   };
 }
 
+export function parseReactorOperatorVisibilitySummary(
+  raw: unknown,
+  defaults: { limit?: number } = {},
+): ReactorOperatorVisibilitySummary {
+  const record = isRecord(raw) ? raw : {};
+  const latestReviewItemsRaw = Array.isArray(record.latest_review_items) ? record.latest_review_items : [];
+  const latestProposalReviewsRaw = Array.isArray(record.latest_proposal_reviews) ? record.latest_proposal_reviews : [];
+  const readyExternalDeliveryProcessorItemsRaw = Array.isArray(record.ready_external_delivery_processor_items)
+    ? record.ready_external_delivery_processor_items
+    : [];
+  const error = safeString(record.error).trim();
+
+  return {
+    ok: typeof record.ok === "boolean" ? record.ok : error.length === 0,
+    kind: optionalString(record.kind),
+    status: optionalString(record.status),
+    limit: Math.max(0, safeNumber(record.limit, boundedLimit(defaults.limit, 10))),
+    next_step: optionalString(record.next_step),
+    event_total: Math.max(0, safeNumber(record.event_total, 0)),
+    review_queue_total: Math.max(0, safeNumber(record.review_queue_total, 0)),
+    deadletter_total: Math.max(0, safeNumber(record.deadletter_total, 0)),
+    retry_schedule_total: Math.max(0, safeNumber(record.retry_schedule_total, 0)),
+    external_delivery_total: Math.max(0, safeNumber(record.external_delivery_total, 0)),
+    recovery_receipt_total: Math.max(0, safeNumber(record.recovery_receipt_total, 0)),
+    proposal_review_history_total: Math.max(0, safeNumber(record.proposal_review_history_total, 0)),
+    attention: parseCountMap(record.attention),
+    counts: parseNestedCountMap(record.counts),
+    readback_surfaces: parseStringMap(record.readback_surfaces),
+    latest_review_items: latestReviewItemsRaw
+      .map(parseReactorReviewQueueItem)
+      .filter((item): item is ReactorReviewQueueItem => Boolean(item)),
+    latest_proposal_reviews: latestProposalReviewsRaw
+      .map(parseReactorProposalReviewHistoryItem)
+      .filter((item): item is ReactorProposalReviewHistoryItem => Boolean(item)),
+    ready_external_delivery_processor_items: readyExternalDeliveryProcessorItemsRaw
+      .map(parseReactorExternalDeliveryProcessorItem)
+      .filter((item): item is ReactorExternalDeliveryProcessorItem => Boolean(item)),
+    governance: isRecord(record.governance) ? record.governance : undefined,
+    error: error || undefined,
+  };
+}
+
 export function parseReactorReviewQueueItem(raw: unknown): ReactorReviewQueueItem | null {
   const record = isRecord(raw) ? raw : null;
   if (!record) return null;
@@ -411,6 +540,62 @@ export function parseReactorEventSnapshot(
     review_route: optionalString(record.review_route) || optionalString(defaults.review_route),
     receipt_kind: optionalString(record.receipt_kind) || optionalString(defaults.receipt_kind),
     error: error || undefined,
+  };
+}
+
+export function parseReactorProposalReviewHistoryItem(raw: unknown): ReactorProposalReviewHistoryItem | null {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return null;
+  const eventId = safeString(record.event_id).trim() || safeString(record.id).trim();
+  if (!eventId) return null;
+
+  return {
+    event_id: eventId,
+    status: optionalString(record.status),
+    stable_state: optionalString(record.stable_state),
+    summary: optionalString(record.summary),
+    route: optionalString(record.route),
+    outcome: optionalString(record.outcome),
+    next_step: optionalString(record.next_step),
+    proposal_id: optionalString(record.proposal_id),
+    plugin_id: optionalString(record.plugin_id),
+    proposal_status: optionalString(record.proposal_status),
+    quality_ready: optionalBoolean(record.quality_ready),
+    missing_requirements: optionalStringList(record.missing_requirements),
+    review_status: optionalString(record.review_status),
+    review_receipt_id: optionalString(record.review_receipt_id),
+    validation_receipt_id: optionalString(record.validation_receipt_id),
+    validation_receipt_path: optionalString(record.validation_receipt_path),
+    readback_only: optionalBoolean(record.readback_only),
+    proposal_decision_applied: optionalBoolean(record.proposal_decision_applied),
+    promotion_applied: optionalBoolean(record.promotion_applied),
+    execution_started: optionalBoolean(record.execution_started),
+    dispatch_applied: optionalBoolean(record.dispatch_applied),
+    memory_write: optionalBoolean(record.memory_write),
+    verified: optionalBoolean(record.verified),
+  };
+}
+
+export function parseReactorExternalDeliveryProcessorItem(raw: unknown): ReactorExternalDeliveryProcessorItem | null {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return null;
+  const readinessId = safeString(record.readiness_id).trim() || safeString(record.id).trim();
+  const deadletterId = safeString(record.deadletter_id).trim();
+  const eventId = safeString(record.event_id).trim();
+  if (!readinessId && !deadletterId && !eventId) return null;
+
+  return {
+    readiness_id: readinessId || undefined,
+    deadletter_id: deadletterId || undefined,
+    event_id: eventId || undefined,
+    status: optionalString(record.status),
+    route: optionalString(record.route),
+    delivery_processor_status: optionalString(record.delivery_processor_status),
+    delivery_processor_ready: optionalBoolean(record.delivery_processor_ready),
+    external_delivery_started: optionalBoolean(record.external_delivery_started),
+    external_escalation_started: optionalBoolean(record.external_escalation_started),
+    blockers: optionalStringList(record.blockers),
+    next_step: optionalString(record.next_step),
   };
 }
 
@@ -583,6 +768,31 @@ function parseCountMap(raw: unknown): Record<string, number> {
     counts[cleanKey] = Math.max(0, safeNumber(value, 0));
   }
   return counts;
+}
+
+function parseNestedCountMap(raw: unknown): Record<string, Record<string, number>> {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return {};
+  const counts: Record<string, Record<string, number>> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const cleanKey = safeString(key).trim();
+    if (!cleanKey) continue;
+    counts[cleanKey] = parseCountMap(value);
+  }
+  return counts;
+}
+
+function parseStringMap(raw: unknown): Record<string, string> {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return {};
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const cleanKey = safeString(key).trim();
+    const cleanValue = safeString(value).trim();
+    if (!cleanKey || !cleanValue) continue;
+    values[cleanKey] = cleanValue;
+  }
+  return values;
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
