@@ -32,6 +32,7 @@ from francis.reactor.events import (
     record_deadletter_external_escalation_delivery,
     record_deadletter_external_escalation_delivery_processor_completion,
     record_deadletter_external_escalation_delivery_processor_handoff,
+    record_deadletter_external_escalation_delivery_sender_attempt,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -39,7 +40,10 @@ from francis.reactor.events import (
     record_retry_dispatch_attempt,
     record_retry_due,
 )
-from francis.reactor.external_escalation import external_escalation_adapter_preflight
+from francis.reactor.external_escalation import (
+    external_delivery_sender_preflight,
+    external_escalation_adapter_preflight,
+)
 from francis.reactor.retries import get_retry_schedule, list_retry_schedules
 
 
@@ -105,6 +109,36 @@ def test_external_escalation_adapter_preflight_distinguishes_local_outbox() -> N
     assert local_outbox["external_delivery_ready"] is True
     assert local_outbox["external_delivery_queued"] is False
     assert local_outbox["external_delivery_started"] is False
+
+
+def test_external_delivery_sender_preflight_requires_explicit_sender() -> None:
+    missing = external_delivery_sender_preflight(
+        "",
+        channel="ops_bridge",
+        target="on_call",
+        processor_completed=True,
+    )
+    assert missing["external_sender_status"] == "not_configured"
+    assert missing["external_sender_ready"] is False
+    assert missing["external_sender_blocker"] == "external_sender_adapter_required"
+    assert "external_sender_adapter" in missing["missing_requirements"]
+    assert missing["external_delivery_started"] is False
+    assert missing["external_message_sent"] is False
+    assert missing["external_network_send"] is False
+
+    unsupported = external_delivery_sender_preflight(
+        "smtp",
+        channel="ops_bridge",
+        target="on_call",
+        processor_completed=True,
+    )
+    assert unsupported["external_sender_adapter"] == "smtp"
+    assert unsupported["external_sender_status"] == "unsupported"
+    assert unsupported["external_sender_known"] is False
+    assert unsupported["external_sender_configured"] is False
+    assert unsupported["external_sender_ready"] is False
+    assert unsupported["external_sender_blocker"] == "unsupported_external_sender_adapter"
+    assert "supported_external_sender_adapter" in unsupported["missing_requirements"]
 
 
 def _assert_stable_return(
@@ -3014,6 +3048,17 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert second_handoff["applied"] is False
     assert second_handoff["status"] == "already_external_escalation_delivery_processor_handoff_recorded"
 
+    premature_sender_attempt = record_deadletter_external_escalation_delivery_sender_attempt(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "sender attempt must wait for processor completion",
+        },
+    )
+    assert premature_sender_attempt["ok"] is False
+    assert premature_sender_attempt["applied"] is False
+    assert premature_sender_attempt["error"] == "external_escalation_delivery_processor_completion_required"
+
     completion = record_deadletter_external_escalation_delivery_processor_completion(
         delivery_id,
         {
@@ -3142,6 +3187,126 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert second_completion["ok"] is True
     assert second_completion["applied"] is False
     assert second_completion["status"] == "already_external_escalation_delivery_processor_completed"
+
+    sender_attempt = record_deadletter_external_escalation_delivery_sender_attempt(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "attempt sender boundary without configured external sender",
+        },
+    )
+
+    assert sender_attempt["ok"] is True
+    assert sender_attempt["applied"] is True
+    assert sender_attempt["status"] == "deadletter_external_escalation_delivery_sender_blocked"
+    sender_receipt = sender_attempt["receipt"]
+    assert sender_receipt["kind"] == "reactor.deadletter.external_escalation_delivery_sender_attempt.receipt"
+    assert sender_receipt["status"] == "sender_blocked"
+    assert sender_receipt["route"] == "deadletter_external_escalation_delivery_sender_attempt"
+    assert sender_receipt["stable_state"] == "deadletter_external_escalation_delivery_sender_blocked"
+    assert sender_receipt["source_receipt_kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_completion.receipt"
+    )
+    assert sender_receipt["delivery_processor_completed"] is True
+    assert sender_receipt["local_outbox_processor_completed"] is True
+    assert sender_receipt["external_sender_declared"] is False
+    assert sender_receipt["external_sender_ready"] is False
+    assert sender_receipt["external_sender_status"] == "not_configured"
+    assert sender_receipt["external_sender_blocker"] == "external_sender_adapter_required"
+    assert sender_receipt["missing_requirements"] == ["external_sender_adapter"]
+    assert sender_receipt["external_delivery_sender_attempted"] is True
+    assert sender_receipt["external_delivery_started"] is False
+    assert sender_receipt["external_message_sent"] is False
+    assert sender_receipt["external_network_send"] is False
+    assert sender_receipt["execution_started"] is False
+    assert sender_receipt["dispatch_applied"] is False
+    assert sender_receipt["memory_write"] is False
+    assert sender_receipt["completion_claim_allowed"] is False
+    assert sender_receipt["governance"]["external_delivery_sender_attempt_authority"] is True
+    assert sender_receipt["governance"]["external_delivery_authority"] is False
+    assert sender_receipt["governance"]["external_escalation_authority"] is False
+
+    sender_delivery = sender_attempt["delivery_item"]
+    assert sender_delivery["status"] == "sender_blocked"
+    assert sender_delivery["external_delivery_sender_attempted"] is True
+    assert sender_delivery["external_sender_ready"] is False
+    assert sender_delivery["external_delivery_started"] is False
+    assert sender_delivery["external_message_sent"] is False
+    assert sender_delivery["external_network_send"] is False
+    assert get_external_escalation_delivery(delivery_id)["status"] == "sender_blocked"  # type: ignore[index]
+    assert [item["delivery_id"] for item in list_external_escalation_deliveries(status="sender_blocked")] == [
+        delivery_id
+    ]
+
+    sender_event = sender_attempt["event"]
+    assert sender_event["stable_state"] == "deadletter_external_escalation_delivery_sender_blocked"
+    assert sender_event["dispatch"]["deadletter_external_escalation_delivery_sender_blocked"] is True
+    assert sender_event["dispatch"]["external_delivery_sender_attempted"] is True
+    assert sender_event["dispatch"]["external_sender_ready"] is False
+    assert sender_event["dispatch"]["external_sender_blocker"] == "external_sender_adapter_required"
+    assert sender_event["dispatch"]["external_delivery_started"] is False
+    assert sender_event["dispatch"]["external_network_send"] is False
+    assert sender_event["latest_receipt"]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_sender_attempt.receipt"
+    )
+    assert sender_event["decision_journal"][-1]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_sender_blocked"
+    )
+    assert sender_event["governance"]["external_delivery_sender_attempt_authority"] is True
+    assert sender_event["governance"]["external_delivery_authority"] is False
+
+    sender_deadletter = get_deadletter(deadletter_id)
+    assert sender_deadletter is not None
+    assert sender_deadletter["status"] == "external_escalation_delivery_sender_blocked"
+    assert [
+        item["deadletter_id"] for item in list_deadletters(status="external_escalation_delivery_sender_blocked")
+    ] == [deadletter_id]
+    assert {
+        item["event_id"] for item in list_events(stable_state="deadletter_external_escalation_delivery_sender_blocked")
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"]
+        for item in list_events(receipt_kind="reactor.deadletter.external_escalation_delivery_sender_attempt.receipt")
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"] for item in list_events(review_route="deadletter_external_escalation_delivery_sender_attempt")
+    } == {str(created["event_id"])}
+    sender_history = get_deadletter_history(
+        deadletter_id,
+        receipt_kind="reactor.deadletter.external_escalation_delivery_sender_attempt.receipt",
+    )
+    assert sender_history is not None
+    assert sender_history["total"] == 1
+    assert sender_history["history"][0]["route"] == "deadletter_external_escalation_delivery_sender_attempt"
+
+    sender_review_queue = reactor_review_queue(route="deadletter_external_escalation_delivery_sender_attempt")
+    assert sender_review_queue["available_total"] == 1
+    assert (
+        sender_review_queue["items"][0]["review"]["action"]
+        == "configure_explicit_external_delivery_sender_before_marking_sent"
+    )
+    sender_status = reactor_status()
+    assert sender_status["stable_state_counts"] == {"deadletter_external_escalation_delivery_sender_blocked": 1}
+    assert sender_status["deadletter_queue_counts"] == {"external_escalation_delivery_sender_blocked": 1}
+    assert sender_status["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+    assert sender_status["deadletter_external_escalation_delivery_processor_handoff_counts"] == {
+        "processor_handoff_recorded": 1
+    }
+    assert sender_status["deadletter_external_escalation_delivery_processor_completion_counts"] == {
+        "processor_completed": 1
+    }
+    assert sender_status["deadletter_external_escalation_delivery_sender_attempt_counts"] == {"sender_blocked": 1}
+
+    second_sender_attempt = record_deadletter_external_escalation_delivery_sender_attempt(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "sender boundary should be idempotent while no sender is configured",
+        },
+    )
+    assert second_sender_attempt["ok"] is True
+    assert second_sender_attempt["applied"] is False
+    assert second_sender_attempt["status"] == "already_external_escalation_delivery_sender_blocked"
 
 
 def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(

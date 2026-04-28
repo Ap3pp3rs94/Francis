@@ -2411,6 +2411,19 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
     assert second_handoff.json()["applied"] is False
     assert second_handoff.json()["status"] == "already_external_escalation_delivery_processor_handoff_recorded"
 
+    premature_sender_attempt = client.post(
+        "/reactor/deadletters/external_escalation_delivery_sender_attempt",
+        json={
+            "delivery_id": delivery_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "sender attempt must wait for processor completion",
+        },
+    )
+    assert premature_sender_attempt.status_code == 200
+    assert premature_sender_attempt.json()["ok"] is False
+    assert premature_sender_attempt.json()["applied"] is False
+    assert premature_sender_attempt.json()["error"] == "external_escalation_delivery_processor_completion_required"
+
     completion = client.post(
         "/reactor/deadletters/external_escalation_delivery_processor_completion",
         json={
@@ -2526,6 +2539,134 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
     assert second_completion.status_code == 200
     assert second_completion.json()["applied"] is False
     assert second_completion.json()["status"] == "already_external_escalation_delivery_processor_completed"
+
+    sender_attempt = client.post(
+        "/reactor/deadletters/external_escalation_delivery_sender_attempt",
+        json={
+            "delivery_id": delivery_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "attempt sender boundary without configured external sender",
+        },
+    )
+    assert sender_attempt.status_code == 200
+    sender_attempt_body = sender_attempt.json()
+    assert sender_attempt_body["ok"] is True
+    assert sender_attempt_body["applied"] is True
+    assert sender_attempt_body["status"] == "deadletter_external_escalation_delivery_sender_blocked"
+    sender_receipt = sender_attempt_body["receipt"]
+    assert sender_receipt["kind"] == "reactor.deadletter.external_escalation_delivery_sender_attempt.receipt"
+    assert sender_receipt["status"] == "sender_blocked"
+    assert sender_receipt["route"] == "deadletter_external_escalation_delivery_sender_attempt"
+    assert sender_receipt["stable_state"] == "deadletter_external_escalation_delivery_sender_blocked"
+    assert sender_receipt["source_receipt_kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_completion.receipt"
+    )
+    assert sender_receipt["delivery_processor_completed"] is True
+    assert sender_receipt["local_outbox_processor_completed"] is True
+    assert sender_receipt["external_sender_declared"] is False
+    assert sender_receipt["external_sender_ready"] is False
+    assert sender_receipt["external_sender_status"] == "not_configured"
+    assert sender_receipt["external_sender_blocker"] == "external_sender_adapter_required"
+    assert sender_receipt["missing_requirements"] == ["external_sender_adapter"]
+    assert sender_receipt["external_delivery_sender_attempted"] is True
+    assert sender_receipt["external_delivery_started"] is False
+    assert sender_receipt["external_message_sent"] is False
+    assert sender_receipt["external_network_send"] is False
+    assert sender_receipt["execution_started"] is False
+    assert sender_receipt["memory_write"] is False
+    assert sender_receipt["completion_claim_allowed"] is False
+    assert sender_receipt["governance"]["external_delivery_sender_attempt_authority"] is True
+    assert sender_receipt["governance"]["external_delivery_authority"] is False
+    assert sender_receipt["governance"]["external_escalation_authority"] is False
+
+    sender_delivery = sender_attempt_body["delivery_item"]
+    assert sender_delivery["status"] == "sender_blocked"
+    assert sender_delivery["external_delivery_sender_attempted"] is True
+    assert sender_delivery["external_sender_ready"] is False
+    assert sender_delivery["external_network_send"] is False
+    fetched_sender_delivery = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/get",
+        params={"id": delivery_id},
+    )
+    assert fetched_sender_delivery.status_code == 200
+    assert fetched_sender_delivery.json()["item"]["status"] == "sender_blocked"
+    assert fetched_sender_delivery.json()["item"]["external_delivery_started"] is False
+    assert fetched_sender_delivery.json()["item"]["external_network_send"] is False
+    filtered_sender_delivery = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/list",
+        params={"status": "sender_blocked"},
+    )
+    assert filtered_sender_delivery.status_code == 200
+    assert [item["delivery_id"] for item in filtered_sender_delivery.json()["items"]] == [delivery_id]
+
+    sender_event = sender_attempt_body["event"]
+    assert sender_event["stable_state"] == "deadletter_external_escalation_delivery_sender_blocked"
+    assert sender_event["dispatch"]["deadletter_external_escalation_delivery_sender_blocked"] is True
+    assert sender_event["dispatch"]["external_delivery_sender_attempted"] is True
+    assert sender_event["dispatch"]["external_sender_ready"] is False
+    assert sender_event["dispatch"]["external_sender_blocker"] == "external_sender_adapter_required"
+    assert sender_event["dispatch"]["external_delivery_started"] is False
+    assert sender_event["dispatch"]["external_network_send"] is False
+    assert sender_event["governance"]["external_delivery_sender_attempt_authority"] is True
+    assert sender_event["governance"]["external_delivery_authority"] is False
+
+    sender_list = client.get(
+        "/reactor/deadletters/list",
+        params={"status": "external_escalation_delivery_sender_blocked"},
+    )
+    assert sender_list.status_code == 200
+    assert {item["deadletter_id"] for item in sender_list.json()["items"]} == {deadletter_id}
+    sender_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.external_escalation_delivery_sender_attempt.receipt"},
+    )
+    assert sender_receipts.status_code == 200
+    assert {item["event_id"] for item in sender_receipts.json()["items"]} == {event_id}
+    sender_history = client.get(
+        "/reactor/deadletters/history/get",
+        params={
+            "id": deadletter_id,
+            "receipt_kind": "reactor.deadletter.external_escalation_delivery_sender_attempt.receipt",
+        },
+    )
+    assert sender_history.status_code == 200
+    assert sender_history.json()["history"]["total"] == 1
+    assert (
+        sender_history.json()["history"]["history"][0]["route"]
+        == "deadletter_external_escalation_delivery_sender_attempt"
+    )
+    sender_review = client.get(
+        "/reactor/review_queue",
+        params={"route": "deadletter_external_escalation_delivery_sender_attempt"},
+    )
+    assert sender_review.status_code == 200
+    assert sender_review.json()["available_total"] == 1
+    assert (
+        sender_review.json()["items"][0]["review"]["action"]
+        == "configure_explicit_external_delivery_sender_before_marking_sent"
+    )
+    sender_status = client.get("/reactor/status")
+    assert sender_status.status_code == 200
+    assert sender_status.json()["stable_state_counts"] == {"deadletter_external_escalation_delivery_sender_blocked": 1}
+    assert sender_status.json()["deadletter_queue_counts"] == {"external_escalation_delivery_sender_blocked": 1}
+    assert sender_status.json()["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+    assert sender_status.json()["deadletter_external_escalation_delivery_processor_handoff_counts"] == {
+        "processor_handoff_recorded": 1
+    }
+    assert sender_status.json()["deadletter_external_escalation_delivery_processor_completion_counts"] == {
+        "processor_completed": 1
+    }
+    assert sender_status.json()["deadletter_external_escalation_delivery_sender_attempt_counts"] == {
+        "sender_blocked": 1
+    }
+
+    second_sender_attempt = client.post(
+        "/reactor/deadletters/external_escalation_delivery_sender_attempt",
+        json={"delivery_id": delivery_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_sender_attempt.status_code == 200
+    assert second_sender_attempt.json()["applied"] is False
+    assert second_sender_attempt.json()["status"] == "already_external_escalation_delivery_sender_blocked"
 
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(

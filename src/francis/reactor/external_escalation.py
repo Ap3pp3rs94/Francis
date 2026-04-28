@@ -4,6 +4,7 @@ from typing import Any
 
 LOCAL_OUTBOX_ADAPTER = "local_outbox"
 SUPPORTED_EXTERNAL_ESCALATION_ADAPTERS = frozenset({LOCAL_OUTBOX_ADAPTER})
+SUPPORTED_EXTERNAL_DELIVERY_SENDERS: frozenset[str] = frozenset()
 
 
 def _safe_str(value: Any) -> str:
@@ -85,5 +86,67 @@ def external_escalation_adapter_preflight(
             "queue_local_outbox_external_escalation_delivery"
             if not missing
             else "provide_external_channel_and_target_before_delivery_queue"
+        ),
+    }
+
+
+def external_delivery_sender_preflight(
+    sender_adapter: Any,
+    *,
+    channel: Any = "",
+    target: Any = "",
+    processor_completed: Any = False,
+) -> dict[str, Any]:
+    sender_key = normalize_external_escalation_adapter(sender_adapter)
+    channel_key = _safe_str(channel).strip()
+    target_key = _safe_str(target).strip()
+    processor_ready = bool(processor_completed)
+
+    missing_requirements: list[str] = []
+    if not processor_ready:
+        missing_requirements.append("local_outbox_processor_completion")
+    if not sender_key:
+        missing_requirements.append("external_sender_adapter")
+    if not channel_key:
+        missing_requirements.append("external_sender_channel")
+    if not target_key:
+        missing_requirements.append("external_sender_target")
+
+    sender_supported = sender_key in SUPPORTED_EXTERNAL_DELIVERY_SENDERS
+    if sender_key and not sender_supported:
+        missing_requirements.append("supported_external_sender_adapter")
+
+    if not sender_key:
+        blocker = "external_sender_adapter_required"
+        status = "not_configured"
+    elif not sender_supported:
+        blocker = "unsupported_external_sender_adapter"
+        status = "unsupported"
+    elif missing_requirements:
+        blocker = "external_sender_metadata_required"
+        status = "not_ready"
+    else:
+        blocker = ""
+        status = "ready"
+
+    ready = status == "ready"
+    return {
+        "external_sender_adapter": sender_key,
+        "external_sender_declared": bool(sender_key),
+        "external_sender_known": sender_supported,
+        "external_sender_configured": ready,
+        "external_sender_status": status,
+        "external_sender_ready": ready,
+        "external_sender_blocker": blocker,
+        "missing_requirements": missing_requirements,
+        "external_sender_channel": channel_key,
+        "external_sender_target": target_key,
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "next_step": (
+            "execute_explicit_external_delivery_sender"
+            if ready
+            else "configure_explicit_external_delivery_sender_before_marking_sent"
         ),
     }

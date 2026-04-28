@@ -957,6 +957,24 @@ execution, approval, promotion, retry, or memory-write authority. The next
 truthful gap remains an explicit external delivery sender before any record may
 claim a sent external message.
 
+As of `2026-04-28`, Reactor local outbox external escalation artifacts can now
+record an explicit blocked sender-attempt receipt after local processor
+completion without claiming delivery. `POST
+/reactor/deadletters/external_escalation_delivery_sender_attempt` requires the
+existing `reactor.write` API scope, only applies after the local processor
+completion receipt exists, records
+`reactor.deadletter.external_escalation_delivery_sender_attempt.receipt`, moves
+the local outbox item, durable deadletter, and parent Reactor event to
+sender-blocked state, and links the receipt through the parent decision journal,
+receipt-kind filters, review-route filters, deadletter history, review-queue
+projection, and `/reactor/status` sender-attempt counts. The current sender
+preflight intentionally reports no configured external sender, preserving
+`external_delivery_started: false`, `external_message_sent: false`, and
+`external_network_send: false`; this grants no external-delivery,
+external-escalation, execution, approval, promotion, retry, or memory-write
+authority. The next truthful gap remains a real configured external sender
+contract before any record may claim a sent external message.
+
 As of `2026-04-28`, Reactor deadletters have direct read-only history
 readback. `GET /reactor/deadletters/history/get` derives a chronological
 history for one persisted deadletter from the durable deadletter item,
@@ -10158,6 +10176,24 @@ permission-denial API proof slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor external delivery
+sender-boundary slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_external_delivery_sender_preflight_requires_explicit_sender tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed before formatting and passed after formatting`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `formatted touched files before final format check`
+- `python -m ruff format --check src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10207,9 +10243,10 @@ These remain true and should block any "finished" claim:
   projection, direct artifact list/get readback, processor-readiness readback,
   explicit local processor-handoff receipt/readback, deadletter-history linkage,
   explicit local processor-completion receipt/readback, local processor output
-  artifact persistence, and status counts while still sending no external
-  message, starting no external delivery, and granting no
-  external-delivery or external-escalation authority. Queued
+  artifact persistence, explicit blocked sender-attempt receipt/readback after
+  processor completion, and status counts while still sending no external
+  message, starting no external delivery, and granting no external-delivery or
+  external-escalation authority. Queued
   `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
@@ -10248,8 +10285,9 @@ These remain true and should block any "finished" claim:
   visibility beyond the current read-only Reactor summary, route-filtered review
   queue, deadletter queue, recovery receipt, and proposal-review readbacks,
   and actual external escalation send/execution beyond the current non-sending
-  local outbox queue, artifact readback, processor-readiness readback, and
-  local processor-handoff/completion receipt readback
+  local outbox queue, artifact readback, processor-readiness readback, local
+  processor-handoff/completion receipt readback, and blocked sender-attempt
+  receipt/readback
 
 ## 6. Update rule
 

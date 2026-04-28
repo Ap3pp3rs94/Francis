@@ -32,6 +32,7 @@ from francis.reactor import (
     record_deadletter_external_escalation_delivery,
     record_deadletter_external_escalation_delivery_processor_completion,
     record_deadletter_external_escalation_delivery_processor_handoff,
+    record_deadletter_external_escalation_delivery_sender_attempt,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -173,6 +174,24 @@ class ReactorDeadletterExternalEscalationDeliveryProcessorCompletionIn(BaseModel
     actor: str = ""
     reason: str = ""
     summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactorDeadletterExternalEscalationDeliverySenderAttemptIn(BaseModel):
+    delivery_id: str = ""
+    id: str = ""
+    actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    external_sender_adapter: str = ""
+    external_sender_channel: str = ""
+    external_sender_target: str = ""
+    sender_adapter: str = ""
+    sender_channel: str = ""
+    sender_target: str = ""
+    adapter: str = ""
+    channel: str = ""
+    target: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -706,6 +725,19 @@ def deadletters_external_escalation_delivery_processor_completion(
     data = _payload_dict(payload)
     delivery_id = str(data.get("delivery_id") or data.get("id") or "")
     return record_deadletter_external_escalation_delivery_processor_completion(delivery_id, data)
+
+
+@router.post("/deadletters/external_escalation_delivery_sender_attempt")
+def deadletters_external_escalation_delivery_sender_attempt(
+    payload: ReactorDeadletterExternalEscalationDeliverySenderAttemptIn,
+    request: Request,
+) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    delivery_id = str(data.get("delivery_id") or data.get("id") or "")
+    return record_deadletter_external_escalation_delivery_sender_attempt(delivery_id, data)
 
 
 @router.post("/deadletters/recovery_request")
