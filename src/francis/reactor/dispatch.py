@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
+from francis.forge import analyze_proposal_quality
 from francis.governance.api_permission_gate import ApiPermissionGate
 from francis.governance.redaction import redact_governed_value
+from francis.kernel.paths import data_dir
 from francis.missions import runtime as mission_runtime
 from francis.operations import runtime as operations_runtime
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 _MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
+_SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
+SUPPORTED_ACTIONS = ("mission_tick", "operation_run", "proposal_review")
 
 
 def _safe_str(value: Any) -> str:
@@ -28,6 +34,18 @@ def _as_dict(value: Any) -> dict[str, Any]:
 def _redacted_dict(value: dict[str, Any]) -> dict[str, Any]:
     redacted = redact_governed_value(value)
     return redacted if isinstance(redacted, dict) else {}
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, (list, tuple, set)):
+        return [text for item in value if (text := _safe_str(item).strip())]
+    text = _safe_str(value).strip()
+    return [text] if text else []
 
 
 def _safe_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
@@ -133,6 +151,40 @@ def _mission_queue_identity(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _proposal_id_from_trigger(trigger: dict[str, Any]) -> str:
+    metadata = _as_dict(trigger.get("metadata"))
+    for value in (
+        metadata.get("proposal_id"),
+        metadata.get("forge_proposal_id"),
+        metadata.get("id"),
+        trigger.get("proposal_id"),
+        trigger.get("forge_proposal_id"),
+    ):
+        proposal_id = _safe_str(value).strip()
+        if proposal_id:
+            return proposal_id
+    return ""
+
+
+def _proposal_artifact(proposal_id: str) -> tuple[dict[str, Any], str]:
+    cleaned = _safe_str(proposal_id).strip()
+    if not cleaned or not _SAFE_RECORD_ID_RE.match(cleaned):
+        return {}, ""
+    root = (data_dir() / "artifacts" / "plugins" / "proposals").resolve()
+    path = (root / f"{cleaned}.json").resolve(strict=False)
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return {}, ""
+    if not path.exists() or not path.is_file():
+        return {}, str(path)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}, str(path)
+    return (raw if isinstance(raw, dict) else {}), str(path)
+
+
 def _blocked_receipt(
     *,
     event_id: str,
@@ -199,12 +251,125 @@ def dispatch_event(
 
     classification = _as_dict(event.get("classification"))
     action_class = _safe_str(classification.get("action_class")).strip().lower()
-    if action_class not in {"mission_tick", "operation_run"}:
+    if action_class not in SUPPORTED_ACTIONS:
         return {"handled": False}
 
     event_id = _safe_str(event.get("event_id") or event.get("id")).strip()
     trigger = _as_dict(event.get("trigger"))
     bounds = _as_dict(event.get("bounds"))
+    if action_class == "proposal_review":
+        proposal_id = _proposal_id_from_trigger(trigger)
+        if not proposal_id:
+            receipt = _blocked_receipt(
+                event_id=event_id,
+                actor=actor,
+                reason=reason,
+                attempt_count=attempt_count,
+                ts=ts,
+                gate="reactor_proposal_review_requires_proposal_id",
+                outcome="proposal_id_required",
+                next_step="link_proposal_id_before_reactor_dispatch",
+                route="proposal_review",
+            )
+            return {
+                "handled": True,
+                "applied": False,
+                "blocked": True,
+                "status": "dispatch_blocked",
+                "outcome": "proposal_id_required",
+                "stable_state": "proposal_id_required",
+                "next_step": "link_proposal_id_before_reactor_dispatch",
+                "receipt": receipt,
+            }
+
+        proposal, proposal_path = _proposal_artifact(proposal_id)
+        if not proposal:
+            receipt = _blocked_receipt(
+                event_id=event_id,
+                actor=actor,
+                reason=reason,
+                attempt_count=attempt_count,
+                ts=ts,
+                gate="reactor_proposal_review_requires_existing_artifact",
+                outcome="proposal_artifact_not_found",
+                next_step="create_or_link_existing_forge_proposal_before_reactor_dispatch",
+                route="proposal_review",
+                message=proposal_path,
+            )
+            return {
+                "handled": True,
+                "applied": False,
+                "blocked": True,
+                "status": "dispatch_blocked",
+                "outcome": "proposal_artifact_not_found",
+                "stable_state": "proposal_artifact_not_found",
+                "next_step": "create_or_link_existing_forge_proposal_before_reactor_dispatch",
+                "receipt": receipt,
+            }
+
+        analysis = analyze_proposal_quality(proposal)
+        evidence = _as_dict(analysis.get("evidence"))
+        ready = bool(analysis.get("ready"))
+        outcome = "proposal_review_ready" if ready else "proposal_review_blocked"
+        next_step = "eligible_for_operator_review_decision" if ready else "review_missing_proposal_quality_requirements"
+        receipt = _redacted_dict(
+            {
+                "kind": "reactor.dispatch.execution.receipt",
+                "receipt_id": f"{event_id}_dispatch_execution_{attempt_count}",
+                "event_id": event_id,
+                "status": "completed",
+                "outcome": outcome,
+                "route": "proposal_review",
+                "gate": "reactor_dispatch_engine",
+                "stable_state": "proposal_review_inspected",
+                "next_step": next_step,
+                "actor": actor,
+                "reason": reason,
+                "proposal_id": proposal_id,
+                "plugin_id": _safe_str(proposal.get("plugin_id") or analysis.get("plugin_id")).strip(),
+                "proposal_status": _safe_str(proposal.get("status") or analysis.get("status")).strip(),
+                "proposal_artifact_path": proposal_path,
+                "quality_ready": ready,
+                "missing_requirements": _as_str_list(analysis.get("missing_requirements")),
+                "review_status": _safe_str(evidence.get("review_status")).strip(),
+                "review_receipt_id": _safe_str(evidence.get("review_receipt_id")).strip(),
+                "validation_receipt_id": _safe_str(evidence.get("validation_receipt_id")).strip(),
+                "validation_receipt_path": _safe_str(evidence.get("validation_receipt_path")).strip(),
+                "proposal_quality_analysis": analysis,
+                "attempt_count": attempt_count,
+                "ts": ts,
+                "execution_started": False,
+                "dispatch_applied": True,
+                "verified": True,
+                "completion_claim_allowed": True,
+                "memory_write": False,
+                "readback_only": True,
+                "proposal_decision_applied": False,
+                "promotion_applied": False,
+                "governance": {
+                    "gate": "reactor_dispatch_engine",
+                    "execution_authority": False,
+                    "dispatch_authority": True,
+                    "approval_authority": False,
+                    "promotion_authority": False,
+                    "memory_write": False,
+                    "authority_source": "reactor.write",
+                    "readback_only": True,
+                },
+            }
+        )
+        return {
+            "handled": True,
+            "applied": True,
+            "blocked": False,
+            "status": "dispatch_completed",
+            "outcome": outcome,
+            "stable_state": "proposal_review_inspected",
+            "next_step": next_step,
+            "receipt": receipt,
+            "proposal_quality_analysis": analysis,
+        }
+
     if action_class == "mission_tick":
         allowed, permission = _mission_write_permission(actor)
         if not allowed:

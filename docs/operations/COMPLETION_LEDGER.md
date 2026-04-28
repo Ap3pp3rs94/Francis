@@ -853,6 +853,20 @@ receipt when present. This is readback/UI-only; it does not add backend routes,
 write controls, execution authority, retry authority, approval authority,
 memory-write behavior, external-escalation authority, or recovery execution.
 
+As of `2026-04-28`, Reactor `forge_proposal` events can dispatch a bounded
+read-only proposal-quality review through the Stage 5 dispatch engine. The
+default `proposal_review` action reads the linked Forge proposal artifact from
+the event metadata, reuses the existing passive proposal-quality analyzer, and
+records a `reactor.dispatch.execution.receipt` plus verification and
+stable-return readback with proposal id, plugin id, readiness, missing
+requirements, review status, and validation receipt references. Missing or
+unlinked proposal artifacts block back to operator review instead of claiming
+completion. This broadens dispatch coverage beyond `operation_run` and
+`mission_tick`, but remains readback-only: it does not decide proposals, approve
+reviews, promote capabilities, execute plugins, write memory, create UI claims,
+or grant execution, approval, promotion, retry, or external-escalation
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches

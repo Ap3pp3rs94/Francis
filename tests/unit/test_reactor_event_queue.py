@@ -441,7 +441,11 @@ def test_reactor_dispatch_engine_runs_mission_tick_with_receipts(monkeypatch, tm
     assert stable_return["governance"]["approval_authority"] is False
 
     status = reactor_status()
-    assert status["dispatch_engine_supported_actions"] == ["mission_tick", "operation_run"]
+    assert status["dispatch_engine_supported_actions"] == [
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
     assert status["status_counts"] == {"dispatch_completed": 1}
     assert status["dispatch_execution_counts"] == {"completed": 1}
     assert status["verification_counts"] == {"passed": 1}

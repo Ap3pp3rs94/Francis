@@ -22,7 +22,7 @@ from francis.reactor.deadletters import (
     resolve_deadletter,
     review_deadletter,
 )
-from francis.reactor.dispatch import dispatch_event
+from francis.reactor.dispatch import SUPPORTED_ACTIONS, dispatch_event
 from francis.reactor.retries import (
     get_retry_schedule,
     list_retry_schedules,
@@ -305,6 +305,7 @@ def _receipt_reference(receipt: dict[str, Any]) -> str:
         "operation_id",
         "deadletter_id",
         "approval_id",
+        "proposal_id",
         "candidate_id",
         "exhaustion_id",
         "blocker_id",
@@ -3826,7 +3827,7 @@ def reactor_status() -> dict[str, Any]:
         "verification_outcome_counts": verification_outcome_counts,
         "stable_return_counts": stable_return_counts,
         "dispatch_engine": "partial",
-        "dispatch_engine_supported_actions": ["mission_tick", "operation_run"],
+        "dispatch_engine_supported_actions": list(SUPPORTED_ACTIONS),
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {
             "gate": "reactor_trigger_intake",

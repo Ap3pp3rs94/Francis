@@ -27,7 +27,11 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert empty_status.json()["ok"] is True
     assert empty_status.json()["total"] == 0
     assert empty_status.json()["dispatch_engine"] == "partial"
-    assert empty_status.json()["dispatch_engine_supported_actions"] == ["mission_tick", "operation_run"]
+    assert empty_status.json()["dispatch_engine_supported_actions"] == [
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
 
     queued = client.post(
         "/reactor/events/enqueue",
@@ -133,6 +137,132 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["verification_counts"] == {"not_available": 1}
     assert status.json()["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
     assert status.json()["stable_return_counts"] == {"settled": 1}
+
+
+def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+    proposal_id = "plugin_proposal_reactor_quality"
+    proposal_path = data_root / "artifacts" / "plugins" / "proposals" / f"{proposal_id}.json"
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_text(
+        json.dumps(
+            {
+                "kind": "plugin.proposal",
+                "proposal_id": proposal_id,
+                "plugin_id": "generated.reactor_quality",
+                "status": "staged",
+                "friction": {
+                    "summary": "Repeated Reactor quality review needs a bounded readback pass.",
+                    "evidence": ["mission.reactor.quality.repeat"],
+                },
+                "quality_requirements": {
+                    "tests": ["tests/test_api_reactor.py::proposal_review"],
+                    "docs": ["README.md"],
+                    "risk_tier": "normal",
+                    "validation_path": ["tests/test_api_reactor.py"],
+                    "known_limits": ["readback only"],
+                },
+                "validation": {
+                    "validation_receipt_id": "validation_reactor_quality",
+                    "validation_receipt_path": "data/artifacts/plugins/validations/validation_reactor_quality.json",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    enqueued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "forge_proposal",
+            "summary": "Inspect the staged Forge proposal through Reactor.",
+            "mode": "pilot",
+            "actor": _REACTOR_ACTOR,
+            "max_actions": 1,
+            "metadata": {"proposal_id": proposal_id},
+        },
+    )
+    assert enqueued.status_code == 200
+    enqueued_body = enqueued.json()
+    assert enqueued_body["event"]["classification"]["action_class"] == "proposal_review"
+    event_id = str(enqueued_body["event_id"])
+
+    dispatched = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "read proposal quality without deciding or promoting it",
+        },
+    )
+
+    assert dispatched.status_code == 200
+    body = dispatched.json()
+    assert body["ok"] is True
+    assert body["applied"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "proposal_review_inspected"
+    assert event["dispatch"]["engine"] == "proposal_review"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is False
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["route"] == "proposal_review"
+    assert execution["status"] == "completed"
+    assert execution["outcome"] == "proposal_review_ready"
+    assert execution["proposal_id"] == proposal_id
+    assert execution["plugin_id"] == "generated.reactor_quality"
+    assert execution["quality_ready"] is True
+    assert execution["missing_requirements"] == []
+    assert execution["readback_only"] is True
+    assert execution["proposal_decision_applied"] is False
+    assert execution["promotion_applied"] is False
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is True
+    assert execution["memory_write"] is False
+    assert execution["governance"]["execution_authority"] is False
+    assert execution["governance"]["approval_authority"] is False
+    assert execution["governance"]["promotion_authority"] is False
+    assert execution["governance"]["memory_write"] is False
+    assert execution["governance"]["authority_source"] == "reactor.write"
+    verification = event["latest_verification_receipt"]
+    assert verification["route"] == "proposal_review"
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "proposal_review_ready"
+    assert verification["verified"] is True
+    assert verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is True
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "proposal_review"
+    assert stable_return["dispatch_applied"] is True
+    assert stable_return["execution_started"] is False
+    assert stable_return["governance"]["execution_authority"] is False
+    assert stable_return["governance"]["dispatch_authority"] is True
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["dispatch_engine_supported_actions"] == [
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
+    assert status_body["status_counts"] == {"dispatch_completed": 1}
+    assert status_body["dispatch_execution_counts"] == {"completed": 1}
+    assert status_body["verification_counts"] == {"passed": 1}
+    assert status_body["verification_outcome_counts"] == {"proposal_review_ready": 1}
 
 
 def test_reactor_operation_dispatch_route_runs_existing_operation(monkeypatch, tmp_path: Path) -> None:
@@ -306,7 +436,11 @@ def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp
     assert {item["event_id"] for item in execution_list.json()["items"]} == {event_id}
     status = client.get("/reactor/status")
     assert status.status_code == 200
-    assert status.json()["dispatch_engine_supported_actions"] == ["mission_tick", "operation_run"]
+    assert status.json()["dispatch_engine_supported_actions"] == [
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
     assert status.json()["status_counts"] == {"dispatch_completed": 1}
     assert status.json()["dispatch_execution_counts"] == {"completed": 1}
     assert status.json()["verification_counts"] == {"passed": 1}
