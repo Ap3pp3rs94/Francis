@@ -81,6 +81,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/industrial/telemetry"),
         ("POST", "/industrial/interventions/request"),
         ("POST", "/industrial/interventions/execute"),
+        ("GET", "/lens/status"),
+        ("GET", "/lens/hud"),
         ("GET", "/memory/timeline/list"),
         ("GET", "/memory/timeline/get"),
         ("GET", "/memory/timeline/export"),

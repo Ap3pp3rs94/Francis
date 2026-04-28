@@ -21,6 +21,7 @@ from francis.api.routes import (
     federation,
     forge,
     industrial,
+    lens,
     memory_timeline,
     missions,
     operations,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_timeline.router, prefix="/memory/timeline", tags=["memory_timeline"])
     app.include_router(missions.router, prefix="/missions", tags=["missions"])
     app.include_router(reactor.router, prefix="/reactor", tags=["reactor"])
+    app.include_router(lens.router, prefix="/lens", tags=["lens"])
     app.include_router(industrial.router, prefix="/industrial", tags=["industrial"])
     app.include_router(digital_twin.router, prefix="/digital_twin", tags=["digital_twin"])
 

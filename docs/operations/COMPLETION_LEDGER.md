@@ -10893,11 +10893,43 @@ closure:
 - `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
   Result: `passed`
 
+As of `2026-04-28`, Stage 6/Lens has started with a read-only backend
+readback contract instead of a UI claim. `GET /lens/status` and the
+`GET /lens/hud` alias now project existing operator-mode, scope, approval,
+incident, mission-continuity, Reactor operator-visibility, and receipt-route
+truth into stable Lens primitives: HUD, command palette groundwork, mode
+selector, approvals view, incident view, mission feed, Pilot indicator, and
+receipt visibility. The contract explicitly marks OS-wide summon as
+`not_implemented` and reports `summon_anywhere: false`, so this does not claim a
+resident overlay or global command palette. The route is read-only and grants no
+new execution authority, approval-decision authority, memory-write behavior,
+overlay-control authority, capture authority, sensing authority, telemetry
+authority, UI control, or policy authority. This is the first Stage 6 foundation
+slice for making mode/scope/approval/incident/mission/receipt state visible
+through one Lens contract before any broader HUD or chat UI binding.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens readback
+contract:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py tests\test_api_system_settings.py tests\test_api_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens src\francis\api\routes\lens.py src\francis\api\app.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens src\francis\api\routes\lens.py src\francis\api\app.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `failed before formatting src\francis\lens\status.py; passed after formatting`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py src\francis\api\app.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
 
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
+- Stage 6/Lens has a backend readback contract for Lens primitives, but no
+  OS-wide summon, resident overlay/HUD runtime, chat UI Lens binding, or live
+  Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
