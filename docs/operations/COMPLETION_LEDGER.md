@@ -938,6 +938,25 @@ execution, approval, promotion, retry, or memory-write authority. The next
 truthful gap remains an explicit external delivery sender before anything can
 be marked sent.
 
+As of `2026-04-28`, Reactor local outbox external escalation artifacts can also
+record a bounded local processor completion after handoff without claiming
+external send or delivery. `POST
+/reactor/deadletters/external_escalation_delivery_processor_completion`
+requires the existing `reactor.write` API scope and only applies after a
+processor handoff was recorded. The route writes a durable local processor
+output artifact under the Reactor outbox-processed store, records
+`reactor.deadletter.external_escalation_delivery_processor_completion.receipt`,
+moves the local outbox item, durable deadletter, and parent Reactor event to
+processor-completed state, and links the receipt through the parent decision
+journal, receipt-kind filters, review-route filters, deadletter history,
+review-queue projection, and `/reactor/status` processor-completion counts.
+This is local processor completion only: it does not send an external message,
+start external delivery, perform a network send, decide approvals, write
+memory, promote capabilities, or grant external-delivery, external-escalation,
+execution, approval, promotion, retry, or memory-write authority. The next
+truthful gap remains an explicit external delivery sender before any record may
+claim a sent external message.
+
 As of `2026-04-28`, Reactor deadletters have direct read-only history
 readback. `GET /reactor/deadletters/history/get` derives a chronological
 history for one persisted deadletter from the durable deadletter item,
@@ -9962,6 +9981,22 @@ handoff receipt slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor local outbox processor
+completion receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting tests\unit\test_reactor_event_queue.py; passed after formatting`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 Latest targeted validation for the `2026-04-28` Reactor deadletter history
 readback slice:
 
@@ -10171,8 +10206,9 @@ These remain true and should block any "finished" claim:
   an external-delivery receipt, receipt-kind/review-route filters, review-queue
   projection, direct artifact list/get readback, processor-readiness readback,
   explicit local processor-handoff receipt/readback, deadletter-history linkage,
-  and status counts while still sending no external message, starting no
-  external delivery, completing no processor run, and granting no
+  explicit local processor-completion receipt/readback, local processor output
+  artifact persistence, and status counts while still sending no external
+  message, starting no external delivery, and granting no
   external-delivery or external-escalation authority. Queued
   `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
@@ -10213,7 +10249,7 @@ These remain true and should block any "finished" claim:
   queue, deadletter queue, recovery receipt, and proposal-review readbacks,
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, processor-readiness readback, and
-  local processor-handoff receipt/readback
+  local processor-handoff/completion receipt readback
 
 ## 6. Update rule
 

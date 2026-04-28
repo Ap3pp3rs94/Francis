@@ -30,6 +30,7 @@ from francis.reactor.events import (
     record_deadletter_escalation_handoff,
     record_deadletter_external_escalation_attempt,
     record_deadletter_external_escalation_delivery,
+    record_deadletter_external_escalation_delivery_processor_completion,
     record_deadletter_external_escalation_delivery_processor_handoff,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
@@ -3012,6 +3013,135 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert second_handoff["ok"] is True
     assert second_handoff["applied"] is False
     assert second_handoff["status"] == "already_external_escalation_delivery_processor_handoff_recorded"
+
+    completion = record_deadletter_external_escalation_delivery_processor_completion(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "complete local processor without external send",
+        },
+    )
+
+    assert completion["ok"] is True
+    assert completion["applied"] is True
+    assert completion["status"] == "deadletter_external_escalation_delivery_processor_completed"
+    completion_receipt = completion["receipt"]
+    assert completion_receipt["kind"] == "reactor.deadletter.external_escalation_delivery_processor_completion.receipt"
+    assert completion_receipt["status"] == "processor_completed"
+    assert completion_receipt["route"] == "deadletter_external_escalation_delivery_processor_completion"
+    assert completion_receipt["stable_state"] == "deadletter_external_escalation_delivery_processor_completed"
+    assert completion_receipt["source_receipt_kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_handoff.receipt"
+    )
+    assert completion_receipt["external_adapter"] == "local_outbox"
+    assert completion_receipt["external_delivery_queued"] is True
+    assert completion_receipt["delivery_processor_handoff_recorded"] is True
+    assert completion_receipt["delivery_processor_started"] is True
+    assert completion_receipt["delivery_processor_completed"] is True
+    assert completion_receipt["local_outbox_processor_completed"] is True
+    assert completion_receipt["external_delivery_started"] is False
+    assert completion_receipt["external_message_sent"] is False
+    assert completion_receipt["external_network_send"] is False
+    assert completion_receipt["external_escalation_started"] is False
+    assert completion_receipt["execution_started"] is False
+    assert completion_receipt["dispatch_applied"] is False
+    assert completion_receipt["memory_write"] is False
+    assert completion_receipt["completion_claim_allowed"] is False
+    assert completion_receipt["governance"]["delivery_processor_completion_authority"] is True
+    assert completion_receipt["governance"]["external_delivery_authority"] is False
+    assert completion_receipt["governance"]["external_escalation_authority"] is False
+
+    processor_output = completion["processor_output"]
+    assert processor_output["kind"] == "reactor.deadletter.external_escalation.local_outbox.processor_output"
+    assert processor_output["status"] == "processor_completed"
+    assert processor_output["delivery_id"] == delivery_id
+    assert processor_output["delivery_processor_completed"] is True
+    assert processor_output["external_message_sent"] is False
+    assert processor_output["external_network_send"] is False
+    assert (data_root / "reactor" / "external_escalation_outbox_processed" / f"{delivery_id}.json").exists()
+
+    completed_outbox_item = completion["delivery_item"]
+    assert completed_outbox_item["status"] == "processor_completed"
+    assert completed_outbox_item["delivery_processor_completed"] is True
+    assert completed_outbox_item["local_outbox_processor_completed"] is True
+    assert completed_outbox_item["external_delivery_started"] is False
+    assert completed_outbox_item["external_message_sent"] is False
+    assert completed_outbox_item["external_network_send"] is False
+    assert get_external_escalation_delivery(delivery_id)["status"] == "processor_completed"  # type: ignore[index]
+
+    completion_event = completion["event"]
+    assert completion_event["stable_state"] == "deadletter_external_escalation_delivery_processor_completed"
+    assert completion_event["dispatch"]["deadletter_external_escalation_delivery_processor_completed"] is True
+    assert completion_event["dispatch"]["delivery_processor_completed"] is True
+    assert completion_event["dispatch"]["local_outbox_processor_completed"] is True
+    assert completion_event["dispatch"]["external_delivery_started"] is False
+    assert completion_event["dispatch"]["external_network_send"] is False
+    assert completion_event["latest_receipt"]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_completion.receipt"
+    )
+    assert completion_event["decision_journal"][-1]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_completed"
+    )
+    assert completion_event["governance"]["delivery_processor_completion_authority"] is True
+    assert completion_event["governance"]["external_delivery_authority"] is False
+
+    completion_deadletter = get_deadletter(deadletter_id)
+    assert completion_deadletter is not None
+    assert completion_deadletter["status"] == "external_escalation_delivery_processor_completed"
+    assert [
+        item["deadletter_id"] for item in list_deadletters(status="external_escalation_delivery_processor_completed")
+    ] == [deadletter_id]
+    assert {
+        item["event_id"]
+        for item in list_events(stable_state="deadletter_external_escalation_delivery_processor_completed")
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"]
+        for item in list_events(
+            receipt_kind="reactor.deadletter.external_escalation_delivery_processor_completion.receipt"
+        )
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"]
+        for item in list_events(review_route="deadletter_external_escalation_delivery_processor_completion")
+    } == {str(created["event_id"])}
+    completion_history = get_deadletter_history(
+        deadletter_id,
+        receipt_kind="reactor.deadletter.external_escalation_delivery_processor_completion.receipt",
+    )
+    assert completion_history is not None
+    assert completion_history["total"] == 1
+    assert completion_history["history"][0]["route"] == "deadletter_external_escalation_delivery_processor_completion"
+
+    completion_review_queue = reactor_review_queue(route="deadletter_external_escalation_delivery_processor_completion")
+    assert completion_review_queue["available_total"] == 1
+    assert (
+        completion_review_queue["items"][0]["review"]["action"]
+        == "await_explicit_external_delivery_sender_before_marking_sent"
+    )
+    completion_status = reactor_status()
+    assert completion_status["stable_state_counts"] == {
+        "deadletter_external_escalation_delivery_processor_completed": 1
+    }
+    assert completion_status["deadletter_queue_counts"] == {"external_escalation_delivery_processor_completed": 1}
+    assert completion_status["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+    assert completion_status["deadletter_external_escalation_delivery_processor_handoff_counts"] == {
+        "processor_handoff_recorded": 1
+    }
+    assert completion_status["deadletter_external_escalation_delivery_processor_completion_counts"] == {
+        "processor_completed": 1
+    }
+
+    second_completion = record_deadletter_external_escalation_delivery_processor_completion(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "processor completion should be idempotent",
+        },
+    )
+    assert second_completion["ok"] is True
+    assert second_completion["applied"] is False
+    assert second_completion["status"] == "already_external_escalation_delivery_processor_completed"
 
 
 def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(
