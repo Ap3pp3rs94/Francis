@@ -1008,6 +1008,20 @@ The path does not start execution, decide approvals, resolve deadletters,
 perform retries, send external messages, promote capabilities, execute plugins,
 or write memory.
 
+As of `2026-04-28`, Stage 5/Reactor also records bounded approval-decision
+resume receipts without executing the target event. The dispatch engine now
+supports `action_class=resume` for `approval_decision` Reactor events only. A
+dispatch attempt reads the existing approval record status from the approvals
+queue, requires a terminal approval state, and records a
+`reactor.dispatch.execution.receipt`, verification receipt, and stable-return
+receipt with `route=approval_resume`, approval id/status, target Reactor event
+id, and operation id readback. Missing or non-terminal approvals block back to
+operator review instead of claiming progress. This is approval-decision resume
+readback only: it does not dispatch the target event, decide approvals, start
+execution, write memory, promote capabilities, send external messages, or grant
+approval-decision, execution, memory-write, promotion, or external-delivery
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9970,6 +9984,22 @@ slice:
 - `python -m ruff format --check src\francis\reactor\dispatch.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor approval-decision
+resume dispatch slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_records_approval_resume_without_execution tests\test_api_reactor.py::test_reactor_approval_decision_event_records_resume_receipt_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\dispatch.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10044,10 +10074,13 @@ These remain true and should block any "finished" claim:
   `/reactor/operator_visibility/summary` without new authority, and the chat UI
   System/ORB panel now renders that summary as read-only operator visibility.
   Read-only classification dispatch now covers `telemetry_event` and
-  `observer_anomaly` triggers with receipts and stable-return proof. Remaining
-  Stage 5 gaps still include broader dispatch action coverage beyond existing
+  `observer_anomaly` triggers with receipts and stable-return proof, and
+  approval-decision Reactor events can now record read-only resume receipts
+  without dispatching the target event. Remaining Stage 5 gaps still include
+  broader dispatch action coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
-  and read-only telemetry/observer classification, broader
+  read-only telemetry/observer classification, and read-only approval-decision
+  resume receipts, broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review

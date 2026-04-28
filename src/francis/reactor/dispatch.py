@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from francis.forge import analyze_proposal_quality
+from francis.governance import approvals
 from francis.governance.api_permission_gate import ApiPermissionGate
 from francis.governance.redaction import redact_governed_value
 from francis.kernel.paths import data_dir
@@ -16,7 +17,7 @@ _MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _CLASSIFICATION_SOURCES = frozenset({"observer_anomaly", "telemetry_event"})
-SUPPORTED_ACTIONS = ("classify", "mission_tick", "operation_run", "proposal_review")
+SUPPORTED_ACTIONS = ("classify", "mission_tick", "operation_run", "proposal_review", "resume")
 
 
 def _safe_str(value: Any) -> str:
@@ -186,6 +187,51 @@ def _proposal_artifact(proposal_id: str) -> tuple[dict[str, Any], str]:
     return (raw if isinstance(raw, dict) else {}), str(path)
 
 
+def _approval_record_status(approval_id: str) -> str:
+    cleaned = _safe_str(approval_id).strip()
+    if not cleaned:
+        return ""
+    candidates = (
+        ("pending", approvals.pending_dir()),
+        ("approved", approvals.approved_dir()),
+        ("rejected", approvals.rejected_dir()),
+        ("emergency", approvals.emergency_dir()),
+    )
+    for status, folder in candidates:
+        path = folder / f"{cleaned}.json"
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return "corrupt"
+        return status
+    return "missing"
+
+
+def _approval_id_from_trigger(trigger: dict[str, Any]) -> str:
+    metadata = _as_dict(trigger.get("metadata"))
+    for value in (trigger.get("approval_id"), metadata.get("approval_id"), metadata.get("id")):
+        approval_id = _safe_str(value).strip()
+        if approval_id:
+            return approval_id
+    return ""
+
+
+def _target_event_id_from_trigger(trigger: dict[str, Any]) -> str:
+    metadata = _as_dict(trigger.get("metadata"))
+    for value in (
+        metadata.get("reactor_event_id"),
+        metadata.get("target_event_id"),
+        metadata.get("event_id"),
+        metadata.get("source_event_id"),
+    ):
+        target_event_id = _safe_str(value).strip()
+        if target_event_id:
+            return target_event_id
+    return ""
+
+
 def _classification_receipt(
     *,
     event_id: str,
@@ -244,6 +290,70 @@ def _classification_receipt(
                 "memory_write": False,
                 "authority_source": "reactor.write",
                 "classification_authority": True,
+                "readback_only": True,
+            },
+        }
+    )
+
+
+def _approval_resume_receipt(
+    *,
+    event_id: str,
+    trigger: dict[str, Any],
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any]:
+    approval_id = _approval_id_from_trigger(trigger)
+    approval_status = _approval_record_status(approval_id)
+    target_event_id = _target_event_id_from_trigger(trigger)
+    operation_id = _safe_str(trigger.get("operation_id") or _as_dict(trigger.get("metadata")).get("operation_id"))
+    approval_allows_dispatch = approval_status == "approved"
+    outcome = f"approval_resume_{approval_status or 'unknown'}"
+    next_step = (
+        "record_dispatch_attempt_on_approved_reactor_event"
+        if approval_allows_dispatch
+        else "review_approval_decision_before_reactor_dispatch"
+    )
+    return _redacted_dict(
+        {
+            "kind": "reactor.dispatch.execution.receipt",
+            "receipt_id": f"{event_id}_dispatch_execution_{attempt_count}",
+            "event_id": event_id,
+            "status": "completed",
+            "outcome": outcome,
+            "route": "approval_resume",
+            "gate": "reactor_dispatch_engine",
+            "stable_state": "approval_resume_recorded",
+            "next_step": next_step,
+            "actor": actor,
+            "reason": reason,
+            "approval_id": approval_id,
+            "approval_status": approval_status,
+            "approval_allows_dispatch": approval_allows_dispatch,
+            "target_event_id": target_event_id,
+            "operation_id": _safe_str(operation_id).strip(),
+            "trigger_source": _safe_str(trigger.get("source")).strip().lower(),
+            "trigger_type": _safe_str(trigger.get("type")).strip().lower(),
+            "attempt_count": attempt_count,
+            "ts": ts,
+            "execution_started": False,
+            "dispatch_applied": True,
+            "verified": True,
+            "completion_claim_allowed": True,
+            "memory_write": False,
+            "readback_only": True,
+            "approval_decision_applied": False,
+            "governance": {
+                "gate": "reactor_dispatch_engine",
+                "execution_authority": False,
+                "dispatch_authority": True,
+                "approval_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "authority_source": "reactor.write",
+                "resume_authority": True,
                 "readback_only": True,
             },
         }
@@ -458,6 +568,54 @@ def dispatch_event(
             "next_step": next_step,
             "receipt": receipt,
             "proposal_quality_analysis": analysis,
+        }
+
+    if action_class == "resume":
+        if _safe_str(trigger.get("source")).strip().lower() != "approval_decision":
+            return {"handled": False}
+        approval_id = _approval_id_from_trigger(trigger)
+        approval_status = _approval_record_status(approval_id)
+        if not approval_id or approval_status not in {"approved", "rejected", "emergency"}:
+            receipt = _blocked_receipt(
+                event_id=event_id,
+                actor=actor,
+                reason=reason,
+                attempt_count=attempt_count,
+                ts=ts,
+                gate="reactor_resume_requires_terminal_approval",
+                outcome=f"approval_{approval_status or 'id_required'}",
+                next_step="wait_for_terminal_approval_decision_before_reactor_resume",
+                route="approval_resume",
+                message=approval_id,
+            )
+            return {
+                "handled": True,
+                "applied": False,
+                "blocked": True,
+                "status": "dispatch_blocked",
+                "outcome": f"approval_{approval_status or 'id_required'}",
+                "stable_state": f"approval_{approval_status or 'id_required'}",
+                "next_step": "wait_for_terminal_approval_decision_before_reactor_resume",
+                "receipt": receipt,
+            }
+
+        receipt = _approval_resume_receipt(
+            event_id=event_id,
+            trigger=trigger,
+            actor=actor,
+            reason=reason,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
+        return {
+            "handled": True,
+            "applied": True,
+            "blocked": False,
+            "status": "dispatch_completed",
+            "outcome": receipt.get("outcome"),
+            "stable_state": "approval_resume_recorded",
+            "next_step": receipt.get("next_step"),
+            "receipt": receipt,
         }
 
     if action_class == "mission_tick":

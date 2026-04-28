@@ -32,6 +32,7 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
 
     queued = client.post(
@@ -230,6 +231,7 @@ def test_reactor_classification_dispatch_records_read_only_receipts(monkeypatch,
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
     assert status_body["status_counts"] == {"dispatch_completed": 1}
     assert status_body["dispatch_execution_counts"] == {"completed": 1}
@@ -357,6 +359,7 @@ def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
     assert status_body["status_counts"] == {"dispatch_completed": 1}
     assert status_body["dispatch_execution_counts"] == {"completed": 1}
@@ -573,6 +576,7 @@ def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
     assert status.json()["status_counts"] == {"dispatch_completed": 1}
     assert status.json()["dispatch_execution_counts"] == {"completed": 1}
@@ -2359,6 +2363,134 @@ def test_reactor_dispatch_attempt_reconciles_approved_decision(
     review_queue = client.get("/reactor/review_queue", params={"route": "approval_queue"})
     assert review_queue.status_code == 200
     assert review_queue.json()["available_total"] == 0
+
+
+def test_reactor_approval_decision_event_records_resume_receipt_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write"], _APPROVAL_ACTOR: ["approvals.decide"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Approval decision event should only record resume readiness",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "operation_id": "op_resume_api",
+        },
+    )
+    assert queued.status_code == 200
+    target_event_id = str(queued.json()["event_id"])
+    first_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": target_event_id, "actor": _REACTOR_ACTOR, "reason": "queue approval"},
+    )
+    assert first_attempt.status_code == 200
+    approval_id = first_attempt.json()["event"]["trigger"]["approval_id"]
+
+    approved = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": _APPROVAL_ACTOR,
+            "comment": "approved for explicit approval-decision event resume",
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    resume_event = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "approval_decision",
+            "trigger_type": "approved",
+            "summary": "Approved event can be resumed through explicit dispatch",
+            "actor": _REACTOR_ACTOR,
+            "approval_id": approval_id,
+            "metadata": {
+                "reactor_event_id": target_event_id,
+                "operation_id": "op_resume_api",
+            },
+        },
+    )
+    assert resume_event.status_code == 200
+    resume_event_id = str(resume_event.json()["event_id"])
+    assert resume_event.json()["event"]["classification"]["action_class"] == "resume"
+
+    resumed = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": resume_event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "record resume readiness without dispatching target event",
+        },
+    )
+    assert resumed.status_code == 200
+    body = resumed.json()
+    event = body["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "approval_resume_recorded"
+    assert event["dispatch"]["engine"] == "approval_resume"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is False
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["route"] == "approval_resume"
+    assert execution["outcome"] == "approval_resume_approved"
+    assert execution["approval_id"] == approval_id
+    assert execution["approval_status"] == "approved"
+    assert execution["approval_allows_dispatch"] is True
+    assert execution["target_event_id"] == target_event_id
+    assert execution["operation_id"] == "op_resume_api"
+    assert execution["approval_decision_applied"] is False
+    assert execution["execution_started"] is False
+    assert execution["readback_only"] is True
+    assert execution["memory_write"] is False
+    assert execution["governance"]["approval_decision_authority"] is False
+    assert execution["governance"]["execution_authority"] is False
+
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "approval_resume_approved"
+    assert verification["route"] == "approval_resume"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is True
+
+    target = client.get("/reactor/events/get", params={"id": target_event_id})
+    assert target.status_code == 200
+    assert target.json()["item"]["dispatch"]["applied"] is False
+    assert "dispatch_execution_receipt" not in target.json()["item"]["dispatch"]
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["dispatch_engine_supported_actions"] == [
+        "classify",
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+        "resume",
+    ]
+    assert status.json()["status_counts"] == {"dispatch_blocked": 1, "dispatch_completed": 1}
+    assert status.json()["dispatch_execution_counts"] == {"completed": 1}
+    assert status.json()["verification_outcome_counts"] == {
+        "approval_resume_approved": 1,
+        "awaiting_approval": 1,
+    }
 
 
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:

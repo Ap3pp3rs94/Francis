@@ -370,11 +370,123 @@ def test_reactor_dispatch_engine_classifies_telemetry_without_execution(monkeypa
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
     assert status["status_counts"] == {"dispatch_completed": 1}
     assert status["dispatch_execution_counts"] == {"completed": 1}
     assert status["verification_counts"] == {"passed": 1}
     assert status["verification_outcome_counts"] == {"telemetry_event_classified": 1}
+
+
+def test_reactor_dispatch_engine_records_approval_resume_without_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    blocked = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Critical mutation needs approval before dispatch",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+            "operation_id": "op_resume_unit",
+        }
+    )
+    target_event_id = str(blocked["event_id"])
+    first_attempt = record_dispatch_attempt(target_event_id, {"actor": "reactor.test", "reason": "queue approval"})
+    approval_id = first_attempt["event"]["trigger"]["approval_id"]
+    decided = approvals.decide(
+        approval_id,
+        "approve",
+        "approved for bounded Reactor resume record",
+        actor="operator.test",
+    )
+    assert decided["ok"] is True
+    assert decided["status"] == "approved"
+
+    created_resume = enqueue_event(
+        {
+            "trigger_source": "approval_decision",
+            "trigger_type": "approved",
+            "summary": "Approval decision can resume Reactor work",
+            "approval_id": approval_id,
+            "metadata": {
+                "reactor_event_id": target_event_id,
+                "operation_id": "op_resume_unit",
+            },
+        }
+    )
+    resume_event_id = str(created_resume["event_id"])
+    assert created_resume["event"]["classification"]["action_class"] == "resume"
+
+    resumed = record_dispatch_attempt(
+        resume_event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record approval resume without executing target event",
+        },
+    )
+
+    assert resumed["ok"] is True
+    event = resumed["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "approval_resume_recorded"
+    assert event["dispatch"]["engine"] == "approval_resume"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is False
+    assert event["governance"]["dispatch_authority"] is True
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["approval_authority"] is False
+
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["route"] == "approval_resume"
+    assert execution["outcome"] == "approval_resume_approved"
+    assert execution["approval_id"] == approval_id
+    assert execution["approval_status"] == "approved"
+    assert execution["approval_allows_dispatch"] is True
+    assert execution["target_event_id"] == target_event_id
+    assert execution["operation_id"] == "op_resume_unit"
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is True
+    assert execution["approval_decision_applied"] is False
+    assert execution["readback_only"] is True
+    assert execution["memory_write"] is False
+    assert execution["governance"]["approval_decision_authority"] is False
+    assert execution["governance"]["execution_authority"] is False
+
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "approval_resume_approved"
+    assert verification["verification_reason"] == "approval_resume_completed_with_execution_receipts"
+    assert verification["route"] == "approval_resume"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is True
+
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "approval_resume"
+    assert stable_return["stable_state"] == "approval_resume_recorded"
+    assert stable_return["execution_started"] is False
+    assert stable_return["dispatch_applied"] is True
+
+    target_event = get_event(target_event_id)
+    assert target_event is not None
+    assert target_event["status"] == "dispatch_blocked"
+    assert target_event["dispatch"]["applied"] is False
+    assert "dispatch_execution_receipt" not in target_event["dispatch"]
+
+    status = reactor_status()
+    assert status["dispatch_engine_supported_actions"] == [
+        "classify",
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+        "resume",
+    ]
+    assert status["status_counts"] == {"dispatch_blocked": 1, "dispatch_completed": 1}
+    assert status["dispatch_execution_counts"] == {"completed": 1}
+    assert status["verification_counts"] == {"not_run": 1, "passed": 1}
+    assert status["verification_outcome_counts"] == {"approval_resume_approved": 1, "awaiting_approval": 1}
 
 
 def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypatch, tmp_path: Path) -> None:
@@ -650,6 +762,7 @@ def test_reactor_dispatch_engine_runs_mission_tick_with_receipts(monkeypatch, tm
         "mission_tick",
         "operation_run",
         "proposal_review",
+        "resume",
     ]
     assert status["status_counts"] == {"dispatch_completed": 1}
     assert status["dispatch_execution_counts"] == {"completed": 1}
