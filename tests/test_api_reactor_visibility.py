@@ -77,6 +77,32 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert attempted.status_code == 200
     assert attempted.json()["event"]["stable_state"] == "awaiting_approval"
 
+    plugin = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "API plugin run boundary needs operator visibility without execution.",
+            "mode": "pilot",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "plugin_run",
+            "metadata": {"plugin_id": "generated.visibility_boundary_api"},
+        },
+    )
+    assert plugin.status_code == 200
+    plugin_event_id = str(plugin.json()["event_id"])
+    plugin_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": plugin_event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "prove plugin boundary visibility through API summary",
+        },
+    )
+    assert plugin_attempt.status_code == 200
+    plugin_attempt_body = plugin_attempt.json()
+    assert plugin_attempt_body["event"]["stable_state"] == "plugin_run_dispatch_not_enabled"
+    assert plugin_attempt_body["event"]["dispatch"]["dispatch_execution_receipt"]["plugin_execution_started"] is False
+
     proposal_id = "plugin_proposal_visibility_summary_api"
     plugin_id = "generated.visibility_summary_api"
     _write_proposal(data_root, proposal_id=proposal_id, plugin_id=plugin_id)
@@ -110,18 +136,31 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     body = response.json()
     assert body["ok"] is True
     assert body["kind"] == "reactor.operator_visibility.summary"
-    assert body["event_total"] == 2
-    assert body["review_queue_total"] == 1
+    assert body["event_total"] == 3
+    assert body["review_queue_total"] == 2
+    assert body["dispatch_engine"] == "partial"
+    assert "plugin_run" in body["dispatch_engine_boundary_actions"]
+    assert body["dispatch_engine_boundary_action_total"] == 1
+    assert body["attention"]["dispatch_engine_boundary_action_total"] == 1
     assert body["proposal_review_history_total"] == 1
     assert body["attention"]["proposal_review_ready_total"] == 1
-    assert body["counts"]["review_route"] == {"approval_queue": 1}
+    assert body["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert body["counts"]["dispatch_engine_boundary_action"] == {"plugin_run": 1}
     assert body["readback_surfaces"]["review_queue"] == "/reactor/review_queue"
-    assert [item["event_id"] for item in body["latest_review_items"]] == [approval_id]
+    review_by_event_id = {item["event_id"]: item for item in body["latest_review_items"]}
+    assert set(review_by_event_id) == {approval_id, plugin_event_id}
+    plugin_review = review_by_event_id[plugin_event_id]
+    assert plugin_review["classification"]["action_class"] == "plugin_run"
+    assert plugin_review["review"]["route"] == "operator_review"
+    assert plugin_review["review"]["receipt_kind"] == "reactor.dispatch_blocker"
+    assert plugin_review["review"]["execution_started"] is False
+    assert plugin_review["review"]["applied"] is False
     assert [item["event_id"] for item in body["latest_proposal_reviews"]] == [proposal_event_id]
 
     governance = body["governance"]
     assert governance["execution_authority"] is False
     assert governance["dispatch_authority"] is False
+    assert governance["plugin_run_authority"] is False
     assert governance["approval_authority"] is False
     assert governance["retry_authority"] is False
     assert governance["external_delivery_authority"] is False

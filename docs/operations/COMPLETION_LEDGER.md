@@ -10306,6 +10306,32 @@ slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, the Reactor backend operator visibility summary also
+surfaces the dispatch engine's supported and boundary action contract. The
+read-only `/reactor/operator_visibility/summary` response now mirrors
+`/reactor/status` dispatch-engine state, exposes supported and boundary action
+lists/counts, includes the `plugin_run` boundary in summary counts, and proves a
+blocked `plugin_run` review item remains visible without plugin execution. The
+summary governance explicitly keeps `plugin_run_authority` false. This is
+backend readback only: it does not run plugins, implement plugin dispatch,
+decide approvals, schedule retries, enqueue deadletters, send externally, write
+memory, promote capabilities, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor boundary visibility
+summary slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py::test_reactor_operator_visibility_summary_aggregates_readbacks_without_authority tests\test_api_reactor_visibility.py::test_reactor_operator_visibility_summary_route_is_read_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_visibility.py`
+  Result: `failed before formatting tests\test_api_reactor_visibility.py;
+  passed after formatting`
+- `python -m mypy src\francis\reactor\visibility.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

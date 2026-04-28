@@ -40,11 +40,27 @@ def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
     return counts
 
 
+def _safe_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = _safe_str(item).strip()
+        if text and text not in items:
+            items.append(text)
+    return items
+
+
+def _list_presence_counts(items: list[str]) -> dict[str, int]:
+    return {item: 1 for item in items}
+
+
 def _readback_governance() -> dict[str, Any]:
     return {
         "gate": "reactor_operator_visibility_readback",
         "execution_authority": False,
         "dispatch_authority": False,
+        "plugin_run_authority": False,
         "approval_authority": False,
         "deadletter_authority": False,
         "deadletter_resolution_authority": False,
@@ -68,6 +84,8 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
     external_deliveries = list_external_escalation_deliveries(limit=5000)
     delivery_processor_readiness = list_external_escalation_delivery_processor_readiness(limit=5000)
     delivery_sender_readiness = list_external_escalation_delivery_sender_readiness(limit=5000)
+    dispatch_engine_supported_actions = _safe_str_list(status.get("dispatch_engine_supported_actions"))
+    dispatch_engine_boundary_actions = _safe_str_list(status.get("dispatch_engine_boundary_actions"))
 
     ready_delivery_processors = [
         item for item in delivery_processor_readiness if bool(item.get("delivery_processor_ready"))
@@ -107,12 +125,18 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
         "review_queue_total": review_queue_total,
         "deadletter_total": len(deadletters),
         "retry_schedule_total": len(retry_schedules),
+        "dispatch_engine": _safe_str(status.get("dispatch_engine")).strip() or "unknown",
+        "dispatch_engine_supported_actions": dispatch_engine_supported_actions,
+        "dispatch_engine_supported_action_total": len(dispatch_engine_supported_actions),
+        "dispatch_engine_boundary_actions": dispatch_engine_boundary_actions,
+        "dispatch_engine_boundary_action_total": len(dispatch_engine_boundary_actions),
         "external_delivery_total": len(external_deliveries),
         "external_delivery_sender_readiness_total": len(delivery_sender_readiness),
         "recovery_receipt_total": len(recovery_receipts),
         "proposal_review_history_total": len(proposal_reviews),
         "attention": {
             "review_queue_total": review_queue_total,
+            "dispatch_engine_boundary_action_total": len(dispatch_engine_boundary_actions),
             "ready_external_delivery_processor_total": len(ready_delivery_processors),
             "blocked_external_delivery_processor_total": len(delivery_processor_readiness)
             - len(ready_delivery_processors),
@@ -127,6 +151,8 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             "stable_state": status.get("stable_state_counts", {}),
             "trigger_source": status.get("trigger_source_counts", {}),
             "review_route": review_queue.get("route_counts", {}),
+            "dispatch_engine_supported_action": _list_presence_counts(dispatch_engine_supported_actions),
+            "dispatch_engine_boundary_action": _list_presence_counts(dispatch_engine_boundary_actions),
             "deadletter_status": _count_by(deadletters, "status"),
             "retry_status": _count_by(retry_schedules, "status"),
             "external_delivery_status": _count_by(external_deliveries, "status"),

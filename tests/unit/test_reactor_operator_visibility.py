@@ -67,6 +67,24 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     approval_attempt = record_dispatch_attempt(approval_id, {"actor": actor})
     assert approval_attempt["event"]["stable_state"] == "awaiting_approval"
 
+    plugin_event = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Plugin run boundary needs operator visibility without execution.",
+            "mode": "pilot",
+            "actor": actor,
+            "action_class": "plugin_run",
+            "metadata": {"plugin_id": "generated.visibility_boundary"},
+        }
+    )
+    plugin_event_id = str(plugin_event["event_id"])
+    plugin_attempt = record_dispatch_attempt(
+        plugin_event_id,
+        {"actor": actor, "reason": "prove plugin run boundary is visible without execution"},
+    )
+    assert plugin_attempt["event"]["stable_state"] == "plugin_run_dispatch_not_enabled"
+    assert plugin_attempt["event"]["dispatch"]["dispatch_execution_receipt"]["plugin_execution_started"] is False
+
     proposal_id = "plugin_proposal_visibility_summary"
     plugin_id = "generated.visibility_summary"
     _write_proposal(data_root, proposal_id=proposal_id, plugin_id=plugin_id)
@@ -92,20 +110,33 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["ok"] is True
     assert summary["kind"] == "reactor.operator_visibility.summary"
     assert summary["status"] == "ready"
-    assert summary["event_total"] == 2
-    assert summary["review_queue_total"] == 1
+    assert summary["event_total"] == 3
+    assert summary["review_queue_total"] == 2
+    assert summary["dispatch_engine"] == "partial"
+    assert "plugin_run" in summary["dispatch_engine_boundary_actions"]
+    assert summary["dispatch_engine_boundary_action_total"] == 1
+    assert summary["attention"]["dispatch_engine_boundary_action_total"] == 1
     assert summary["proposal_review_history_total"] == 1
-    assert summary["attention"]["review_queue_total"] == 1
+    assert summary["attention"]["review_queue_total"] == 2
     assert summary["attention"]["proposal_review_ready_total"] == 1
     assert summary["attention"]["proposal_review_blocked_total"] == 0
-    assert summary["counts"]["review_route"] == {"approval_queue": 1}
+    assert summary["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
+    assert summary["counts"]["dispatch_engine_boundary_action"] == {"plugin_run": 1}
     assert summary["readback_surfaces"]["proposal_review_history"] == ("/reactor/proposal_reviews/history/list")
-    assert [item["event_id"] for item in summary["latest_review_items"]] == [approval_id]
+    review_by_event_id = {item["event_id"]: item for item in summary["latest_review_items"]}
+    assert set(review_by_event_id) == {approval_id, plugin_event_id}
+    plugin_review = review_by_event_id[plugin_event_id]
+    assert plugin_review["classification"]["action_class"] == "plugin_run"
+    assert plugin_review["review"]["route"] == "operator_review"
+    assert plugin_review["review"]["receipt_kind"] == "reactor.dispatch_blocker"
+    assert plugin_review["review"]["execution_started"] is False
+    assert plugin_review["review"]["applied"] is False
     assert [item["event_id"] for item in summary["latest_proposal_reviews"]] == [proposal_event_id]
 
     governance = summary["governance"]
     assert governance["execution_authority"] is False
     assert governance["dispatch_authority"] is False
+    assert governance["plugin_run_authority"] is False
     assert governance["approval_authority"] is False
     assert governance["deadletter_authority"] is False
     assert governance["deadletter_resolution_authority"] is False
