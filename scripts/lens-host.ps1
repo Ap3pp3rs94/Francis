@@ -13,6 +13,27 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $modeName = $Mode.ToLowerInvariant()
 $ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
 $ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
+$ProcessStatePath = Join-Path $RepoRoot 'data\runtime\lens-host\status.json'
+$PidPath = Join-Path $RepoRoot 'data\runtime\lens-host\lens-host.pid'
+$ProcessStateExists = Test-Path -LiteralPath $ProcessStatePath -PathType Leaf
+$PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+$PidValue = 0
+if ($PidPresent) {
+  try {
+    $PidValue = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+  } catch {
+    $PidValue = 0
+  }
+}
+$ProcessAlive = $false
+if ($PidValue -gt 0) {
+  try {
+    Get-Process -Id $PidValue -ErrorAction Stop | Out-Null
+    $ProcessAlive = $true
+  } catch {
+    $ProcessAlive = $false
+  }
+}
 $Blockers = @(
   'lens_host_runtime_not_implemented',
   'tray_host_missing',
@@ -32,6 +53,22 @@ $payload = [ordered]@{
   repo_root = $RepoRoot
   service_config_path = 'config/runtime/services/lens-host.json'
   service_config_exists = $ServiceConfigExists
+  process_readback = [ordered]@{
+    status = if ($ProcessAlive) { 'process_observed' } elseif ($PidPresent -or $ProcessStateExists) { 'state_present_process_not_running' } else { 'missing' }
+    readback_ready = $true
+    runtime_state_path = 'data/runtime/lens-host/status.json'
+    state_exists = $ProcessStateExists
+    pid_path = 'data/runtime/lens-host/lens-host.pid'
+    pid_present = $PidPresent
+    pid = $PidValue
+    process_alive = $ProcessAlive
+    supervision_enabled = $false
+    start_supported = $false
+    stop_supported = $false
+    restart_supported = $false
+    supervision_authority = $false
+    blocked_reason = 'resident_host_process_missing'
+  }
   route = '/lens/host'
   manifest_route = '/lens/host/manifest'
   launch_supported = $false

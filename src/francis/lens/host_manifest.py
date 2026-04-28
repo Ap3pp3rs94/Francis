@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from francis.kernel.paths import repo_root
+from francis.kernel.paths import data_dir, repo_root
 
 
 def _runtime_file_exists(relative_path: str) -> bool:
@@ -25,12 +25,63 @@ def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def _safe_pid(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return pid if pid > 0 else 0
+
+
+def _pid_from_file(path: Path) -> int:
+    try:
+        return _safe_pid(path.read_text(encoding="utf-8").strip())
+    except OSError:
+        return 0
+
+
+def _lens_host_process_readback() -> dict[str, Any]:
+    state_file = data_dir() / "runtime" / "lens-host" / "status.json"
+    pid_file = data_dir() / "runtime" / "lens-host" / "lens-host.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    status = "state_present_process_unverified" if state_exists or pid_present else "missing"
+    return {
+        "status": status,
+        "readback_ready": True,
+        "runtime_state_path": "data/runtime/lens-host/status.json",
+        "state_exists": state_exists,
+        "pid_path": "data/runtime/lens-host/lens-host.pid",
+        "pid_present": pid_present,
+        "pid": pid,
+        "process_alive": False,
+        "process_alive_check": "not_attempted_by_api",
+        "supervision_enabled": False,
+        "start_supported": False,
+        "stop_supported": False,
+        "restart_supported": False,
+        "supervision_authority": False,
+        "blocked_reason": "resident_host_process_missing",
+    }
+
+
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
     service_config = "config/runtime/services/lens-host.json"
     entrypoint_exists = _runtime_file_exists(entrypoint)
     service_config_payload = _runtime_json_dict(service_config)
     service_config_exists = bool(service_config_payload)
+    process_readback = _lens_host_process_readback()
     blockers = [
         "lens_host_runtime_not_implemented",
         "tray_host_missing",
@@ -101,6 +152,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "start_after_install": False,
             "auto_start": False,
         },
+        "process_readback": process_readback,
         "required_bindings": [
             {
                 "id": "api_status",
@@ -116,6 +168,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_service_config",
                 "path": service_config,
                 "status": "present_disabled" if service_config_exists else "missing",
+            },
+            {
+                "id": "host_process_readback",
+                "path": process_readback["runtime_state_path"],
+                "status": "readback_ready",
             },
             {
                 "id": "host_readiness",

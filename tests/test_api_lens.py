@@ -59,12 +59,16 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "description": "Disabled readiness baseline for the future resident Lens host.",
   "manager": "scripts/service-install.ps1",
   "entrypoint": "scripts/lens-host.ps1",
+  "runtime_state_path": "data/runtime/lens-host/status.json",
+  "pid_path": "data/runtime/lens-host/lens-host.pid",
   "status_mode": "Status",
   "foreground_mode": "Foreground",
   "start_type": "Manual",
   "auto_start": false,
   "start_after_install": false,
   "installable": false,
+  "process_supervision_enabled": false,
+  "process_supervision_readback": true,
   "install_authority": false,
   "service_install_authority": false,
   "blocked_reason": "lens_host_runtime_not_implemented"
@@ -178,6 +182,24 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["status_runner_present"] is True
     assert resident_host["service_config_present"] is True
     assert resident_host["service_config_path"] == "config/runtime/services/lens-host.json"
+    assert resident_host["process_readback_ready"] is True
+    assert resident_host["process_readback"] == {
+        "status": "missing",
+        "readback_ready": True,
+        "runtime_state_path": "data/runtime/lens-host/status.json",
+        "state_exists": False,
+        "pid_path": "data/runtime/lens-host/lens-host.pid",
+        "pid_present": False,
+        "pid": 0,
+        "process_alive": False,
+        "process_alive_check": "not_attempted_by_api",
+        "supervision_enabled": False,
+        "start_supported": False,
+        "stop_supported": False,
+        "restart_supported": False,
+        "supervision_authority": False,
+        "blocked_reason": "resident_host_process_missing",
+    }
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
     assert resident_host["startup_integration"] is False
@@ -190,6 +212,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert [item["id"] for item in resident_host["components"]] == [
         "host_status_runner",
         "host_service_config",
+        "host_process_readback",
         "host_process",
         "tray_presence",
         "global_hotkey",
@@ -261,10 +284,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "start_after_install": False,
         "auto_start": False,
     }
+    assert launch_manifest["process_readback"] == resident_host["process_readback"]
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
         "host_status_runner",
         "host_service_config",
+        "host_process_readback",
         "host_readiness",
         "tray_presence",
         "global_hotkey",
@@ -354,6 +379,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_body["contract_status"] == "readback_ready"
     assert host_body["status_runner_present"] is True
     assert host_body["service_config_present"] is True
+    assert host_body["process_readback_ready"] is True
     assert host_body["resident"] is False
     assert host_body["global_hotkey"] is False
     assert host_body["summon_anywhere"] is False
@@ -367,6 +393,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["declared_entrypoint"]["exists"] is True
     assert manifest_body["service_install"]["config_exists"] is True
     assert manifest_body["service_install"]["installable"] is False
+    assert manifest_body["process_readback"]["status"] == "missing"
     assert manifest_body["status_command"]["executable"] is True
     assert manifest_body["candidate_command"]["executable"] is False
     assert manifest_body["governance"]["local_process_launch_authority"] is False

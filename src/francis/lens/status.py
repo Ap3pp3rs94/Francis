@@ -227,6 +227,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
+    process_readback = _as_dict(launch_manifest.get("process_readback"))
     blockers = [
         "lens_host_runtime_not_implemented",
         "resident_host_process_missing",
@@ -253,6 +254,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "label": "Host service config",
             "status": "present_disabled" if service_config_present else "missing",
             "required_for": ["startup_supervision"],
+        },
+        {
+            "id": "host_process_readback",
+            "label": "Host process readback",
+            "status": "readback_ready",
+            "required_for": ["resident_presence", "startup_supervision"],
         },
         {
             "id": "host_process",
@@ -301,6 +308,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "status_runner_present": status_runner_present,
         "service_config_present": service_config_present,
         "service_config_path": _safe_str(service_install.get("config_path")).strip(),
+        "process_readback": process_readback,
+        "process_readback_ready": bool(process_readback.get("readback_ready")),
         "resident": False,
         "process_supervision": False,
         "startup_integration": False,

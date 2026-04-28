@@ -11167,6 +11167,50 @@ config baseline:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens host process readback boundary
+
+Stage 6/Lens now has a non-starting process-state readback boundary for the
+future resident Lens host. The disabled service config declares the future
+runtime state path `data/runtime/lens-host/status.json` and PID path
+`data/runtime/lens-host/lens-host.pid`, with `process_supervision_enabled:
+false` and `process_supervision_readback: true`.
+
+`scripts/lens-host.ps1 -Mode Status` now reports a `process_readback` object
+that checks only the declared local state/PID files and, if a PID file exists,
+uses a read-only process lookup to report whether that PID is alive. The API
+readback exposes the same contract through `/lens/host/manifest` and
+`/lens/host`, marks `process_readback_ready: true`, and keeps the resident host
+process itself missing. In the current validated repo posture, process readback
+reports `status: missing`, `process_alive: false`, `supervision_enabled: false`,
+and no start/stop/restart support.
+
+This is a process-readback slice only. It does not create a resident process,
+write PID/state files, install or start a service, register a hotkey, open an
+overlay, change UI behavior, write memory, decide approvals, execute actions,
+or grant overlay-control, summon, capture, sensing, telemetry, promotion,
+policy, service-install, supervision, restart, stop, or local-process-launch
+authority. `resident_host_process_missing` remains a blocker.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host process
+readback boundary:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-host.ps1 -Mode Foreground; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11176,10 +11220,11 @@ These remain true and should block any "finished" claim:
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a status-only
-  `scripts/lens-host.ps1` runner and disabled tracked service config baseline,
-  but no OS-wide summon, resident host process, installed/started service,
-  resident overlay/HUD runtime, OS-level command palette, tray presence, hotkey
-  binding, or live Pilot takeover surface yet
+  `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
+  non-starting process readback boundary, but no OS-wide summon, resident host
+  process, installed/started service, resident overlay/HUD runtime, OS-level
+  command palette, tray presence, hotkey binding, or live Pilot takeover surface
+  yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
