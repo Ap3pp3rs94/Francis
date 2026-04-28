@@ -11665,6 +11665,51 @@ readback:
 - `python -m json.tool config\runtime\services\lens-host.json`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens API primitive preflight readback
+
+Stage 6/Lens now exposes read-only API preflight for the Lens host, summon,
+tray, and overlay primitives. `GET /lens/preflight` reads the existing disabled
+Lens runtime configs and host launch manifest, then projects blocked readiness
+for the resident host, global hotkey summon, tray presence, and overlay window
+without invoking the PowerShell preflight scripts. `GET /lens/status` embeds the
+same preflight object and adds Stage 6 readiness criteria for summon, tray, and
+overlay preflight status.
+
+The API projection keeps all lifecycle surfaces blocked: host remains blocked,
+summon remains blocked, tray remains blocked, and overlay remains blocked. It
+reports the declared `Ctrl+Alt+Space` hotkey intent, disabled tray and overlay
+settings, missing resident host state, and no-authority blockers while preserving
+`execution_authority: false`, `local_process_launch_authority: false`,
+`service_control_authority: false`, `hotkey_registration_authority: false`,
+`tray_registration_authority: false`, `overlay_control_authority: false`, and
+`mutation_authority_granted: false`.
+
+This is readback-only. It does not bind a hotkey, register tray presence, open
+or focus an overlay, install/start/control a service, launch a resident process,
+summon Francis anywhere, capture screen content, write memory, decide approvals,
+execute operator actions, or grant overlay-control, window-management, summon,
+capture, sensing, telemetry, promotion, policy, service-install,
+service-control, tray, hotkey, wrapper-write, or API local-process-launch
+authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens API primitive
+preflight readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_service_install_plan_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m json.tool config\runtime\lens\summon.json; python -m json.tool config\runtime\lens\tray.json; python -m json.tool config\runtime\lens\overlay.json; python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11680,8 +11725,9 @@ These remain true and should block any "finished" claim:
   dry-run plan proof, service plan preflight/API readback, and non-starting process
   readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
-  preflight baseline plus a disabled tray/presence preflight baseline and
-  disabled overlay/window preflight baseline, but no OS-wide summon, resident
+  preflight baseline plus API preflight readback, a disabled tray/presence
+  preflight baseline plus API preflight readback, and disabled overlay/window
+  preflight baseline plus API preflight readback, but no OS-wide summon, resident
   host process, installed/started service, resident overlay/HUD runtime,
   OS-level command palette, tray presence, hotkey binding, or live Pilot takeover
   surface yet

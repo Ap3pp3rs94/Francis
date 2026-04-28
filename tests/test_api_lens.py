@@ -53,6 +53,116 @@ def _write_service_manager(repo_root: Path) -> None:
     script.write_text("# Service manager fixture\n", encoding="utf-8")
 
 
+def _write_lens_preflight_scripts(repo_root: Path) -> None:
+    script_dir = repo_root / "scripts"
+    script_dir.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "lens-host-preflight.ps1",
+        "lens-summon-preflight.ps1",
+        "lens-tray-preflight.ps1",
+        "lens-overlay-preflight.ps1",
+    ):
+        (script_dir / name).write_text("# Lens preflight fixture\n", encoding="utf-8")
+
+
+def _write_lens_runtime_configs(repo_root: Path) -> None:
+    config_root = repo_root / "config" / "runtime" / "lens"
+    config_root.mkdir(parents=True, exist_ok=True)
+    (config_root / "summon.json").write_text(
+        """
+{
+  "kind": "lens.summon.config",
+  "version": 1,
+  "enabled": false,
+  "summon_name": "Francis Lens Summon",
+  "global_hotkey": "Ctrl+Alt+Space",
+  "binding_scope": "global",
+  "binding_enabled": false,
+  "register_hotkey": false,
+  "startup_register": false,
+  "launch_target": "lens_host",
+  "launch_mode": "Foreground",
+  "palette_route": "/lens/status",
+  "host_preflight": "scripts/lens-host-preflight.ps1",
+  "host_status_runner": "scripts/lens-host.ps1",
+  "overlay_required": true,
+  "tray_required": true,
+  "requires_explicit_enable": true,
+  "summon_authority": false,
+  "hotkey_registration_authority": false,
+  "overlay_control_authority": false,
+  "local_process_launch_authority": false,
+  "blocked_reason": "lens_summon_binding_not_implemented"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (config_root / "tray.json").write_text(
+        """
+{
+  "kind": "lens.tray.config",
+  "version": 1,
+  "enabled": false,
+  "presence_name": "Francis Lens Tray Presence",
+  "tray_scope": "user_session",
+  "tray_host_enabled": false,
+  "tray_icon_enabled": false,
+  "startup_register": false,
+  "notification_supported": false,
+  "status_route": "/lens/host",
+  "lens_status_route": "/lens/status",
+  "launch_target": "lens_host",
+  "host_preflight": "scripts/lens-host-preflight.ps1",
+  "host_status_runner": "scripts/lens-host.ps1",
+  "summon_preflight": "scripts/lens-summon-preflight.ps1",
+  "summon_config": "config/runtime/lens/summon.json",
+  "requires_explicit_enable": true,
+  "tray_registration_authority": false,
+  "tray_icon_authority": false,
+  "notification_authority": false,
+  "overlay_control_authority": false,
+  "local_process_launch_authority": false,
+  "service_control_authority": false,
+  "summon_authority": false,
+  "blocked_reason": "lens_tray_presence_not_implemented"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (config_root / "overlay.json").write_text(
+        """
+{
+  "kind": "lens.overlay.config",
+  "version": 1,
+  "enabled": false,
+  "overlay_name": "Francis Lens Overlay",
+  "overlay_scope": "user_session",
+  "window_enabled": false,
+  "always_on_top": false,
+  "dock_supported": false,
+  "focus_supported": false,
+  "click_through_supported": false,
+  "capture_supported": false,
+  "status_route": "/lens/status",
+  "host_route": "/lens/host",
+  "host_preflight": "scripts/lens-host-preflight.ps1",
+  "host_status_runner": "scripts/lens-host.ps1",
+  "summon_preflight": "scripts/lens-summon-preflight.ps1",
+  "tray_preflight": "scripts/lens-tray-preflight.ps1",
+  "requires_explicit_enable": true,
+  "overlay_control_authority": false,
+  "window_management_authority": false,
+  "local_process_launch_authority": false,
+  "capture_authority": false,
+  "summon_authority": false,
+  "tray_registration_authority": false,
+  "blocked_reason": "lens_overlay_window_not_implemented"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_host_service_config(repo_root: Path) -> None:
     config = repo_root / "config" / "runtime" / "services" / "lens-host.json"
     config.parent.mkdir(parents=True, exist_ok=True)
@@ -155,6 +265,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
     _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
     _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -549,6 +661,40 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "service_control_authority": False,
         "mutation_authority_granted": False,
     }
+    preflight = body["preflight"]
+    assert preflight["kind"] == "lens.preflight"
+    assert preflight["status"] == "blocked"
+    assert preflight["ready"] is False
+    assert preflight["read_only"] is True
+    assert preflight["route"] == "/lens/preflight"
+    assert preflight["summary"]["surface_total"] == 4
+    assert preflight["summary"]["ready_total"] == 0
+    assert preflight["summary"]["blocked_total"] == 4
+    assert preflight["governance"]["execution_authority"] is False
+    assert preflight["governance"]["service_control_authority"] is False
+    assert preflight["governance"]["hotkey_registration_authority"] is False
+    assert preflight["governance"]["overlay_control_authority"] is False
+    assert preflight["governance"]["mutation_authority_granted"] is False
+    preflight_surfaces = preflight["surfaces"]
+    assert preflight_surfaces["host"]["kind"] == "lens.host.api_preflight"
+    assert preflight_surfaces["host"]["status"] == "blocked"
+    assert preflight_surfaces["host"]["service_plan_status"] == "blocked"
+    assert preflight_surfaces["summon"]["kind"] == "lens.summon.api_preflight"
+    assert preflight_surfaces["summon"]["status"] == "blocked"
+    assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert preflight_surfaces["summon"]["config_exists"] is True
+    assert "global_hotkey_binding_disabled" in preflight_surfaces["summon"]["blockers"]
+    assert "summon_authority_not_granted" in preflight_surfaces["summon"]["blockers"]
+    assert preflight_surfaces["tray"]["kind"] == "lens.tray.api_preflight"
+    assert preflight_surfaces["tray"]["status"] == "blocked"
+    assert preflight_surfaces["tray"]["config_exists"] is True
+    assert "tray_host_disabled" in preflight_surfaces["tray"]["blockers"]
+    assert "tray_registration_authority_not_granted" in preflight_surfaces["tray"]["blockers"]
+    assert preflight_surfaces["overlay"]["kind"] == "lens.overlay.api_preflight"
+    assert preflight_surfaces["overlay"]["status"] == "blocked"
+    assert preflight_surfaces["overlay"]["config_exists"] is True
+    assert "overlay_window_disabled" in preflight_surfaces["overlay"]["blockers"]
+    assert "overlay_control_authority_not_granted" in preflight_surfaces["overlay"]["blockers"]
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
     assert {
         "nav.briefing",
@@ -589,6 +735,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert _criterion(body, "receipt_visibility")["status"] == "readback_ready"
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
+    assert _criterion(body, "summon_preflight")["status"] == "blocked"
+    assert _criterion(body, "summon_preflight")["global_hotkey"] == "Ctrl+Alt+Space"
+    assert _criterion(body, "tray_preflight")["status"] == "blocked"
+    assert _criterion(body, "overlay_preflight")["status"] == "blocked"
 
     hud = client.get("/lens/hud")
     assert hud.status_code == 200
@@ -624,6 +774,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["candidate_command"]["executable"] is True
     assert manifest_body["governance"]["local_process_launch_authority"] is False
     assert manifest_body["governance"]["service_install_authority"] is False
+    preflight_response = client.get("/lens/preflight")
+    assert preflight_response.status_code == 200
+    assert preflight_response.json()["kind"] == "lens.preflight"
+    assert preflight_response.json()["surfaces"]["summon"] == preflight_surfaces["summon"]
 
 
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
@@ -632,6 +786,8 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
     _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
     _write_lens_host_service_config(repo_root)
     _write_lens_host_runtime_state(data_root, pid=os.getpid())
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
@@ -664,6 +820,10 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert resident_host["service_plan"]["status"] == "blocked"
     assert resident_host["service_plan"]["would_install"] is False
     assert resident_host["service_plan"]["governance"]["service_install_authority"] is False
+    assert body["preflight"]["surfaces"]["tray"]["status"] == "blocked"
+    assert "resident_host_process_missing" not in body["preflight"]["surfaces"]["tray"]["blockers"]
+    assert body["preflight"]["surfaces"]["overlay"]["status"] == "blocked"
+    assert "resident_host_process_missing" not in body["preflight"]["surfaces"]["overlay"]["blockers"]
     assert resident_host["components"][5] == {
         "id": "host_process",
         "label": "Resident host process",
@@ -699,6 +859,8 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
     _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
     _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

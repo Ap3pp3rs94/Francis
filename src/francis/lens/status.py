@@ -7,6 +7,7 @@ from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.host_manifest import lens_host_launch_manifest
+from francis.lens.preflight import lens_preflight
 from francis.reactor import reactor_operator_visibility_summary
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.snapshot import (
@@ -655,8 +656,13 @@ def _stage6_readiness(
     missions: dict[str, Any],
     reactor: dict[str, Any],
     command_palette: dict[str, Any],
+    preflight: dict[str, Any],
 ) -> dict[str, Any]:
     hud_runtime = _as_dict(hud.get("runtime"))
+    preflight_surfaces = _as_dict(preflight.get("surfaces"))
+    summon_preflight = _as_dict(preflight_surfaces.get("summon"))
+    tray_preflight = _as_dict(preflight_surfaces.get("tray"))
+    overlay_preflight = _as_dict(preflight_surfaces.get("overlay"))
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
@@ -714,13 +720,32 @@ def _stage6_readiness(
             {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
-                "evidence": ["/lens/host", "/lens/status"],
+                "evidence": ["/lens/host", "/lens/preflight", "/lens/status"],
                 "blockers": [
                     item
                     for item in _as_list(resident_host.get("blockers"))
                     if item
                     in {"resident_host_process_missing", "global_hotkey_binding_missing", "summon_binding_missing"}
                 ],
+            },
+            {
+                "id": "summon_preflight",
+                "status": _safe_str(summon_preflight.get("status")).strip() or "missing",
+                "evidence": ["/lens/preflight", "config/runtime/lens/summon.json"],
+                "global_hotkey": _safe_str(summon_preflight.get("global_hotkey")).strip(),
+                "blockers": _as_list(summon_preflight.get("blockers")),
+            },
+            {
+                "id": "tray_preflight",
+                "status": _safe_str(tray_preflight.get("status")).strip() or "missing",
+                "evidence": ["/lens/preflight", "config/runtime/lens/tray.json"],
+                "blockers": _as_list(tray_preflight.get("blockers")),
+            },
+            {
+                "id": "overlay_preflight",
+                "status": _safe_str(overlay_preflight.get("status")).strip() or "missing",
+                "evidence": ["/lens/preflight", "config/runtime/lens/overlay.json"],
+                "blockers": _as_list(overlay_preflight.get("blockers")),
             },
         ],
     }
@@ -750,6 +775,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     )
     command_palette = _command_palette_surface(approvals=approvals)
     resident_host = _resident_host_surface(hud=hud, command_palette=command_palette)
+    preflight = lens_preflight()
 
     return {
         "ok": True,
@@ -764,6 +790,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "scope": scope,
         "hud": hud,
         "resident_host": resident_host,
+        "preflight": preflight,
         "command_palette": command_palette,
         "mode_selector": {
             "status": "readback_ready",
@@ -792,6 +819,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             missions=missions,
             reactor=reactor,
             command_palette=command_palette,
+            preflight=preflight,
         ),
         "governance": {
             "gate": "lens_readback_only",
