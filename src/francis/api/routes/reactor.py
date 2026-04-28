@@ -15,6 +15,7 @@ from francis.reactor import (
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
     get_retry_schedule,
+    list_approval_resume_history,
     list_deadletters,
     list_deadletter_recovery_receipts,
     list_events,
@@ -265,6 +266,51 @@ def proposal_reviews_history_list(
             "proposal_decision_authority": False,
             "promotion_authority": False,
             "external_escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/approval_resumes/history/list")
+def approval_resumes_history_list(
+    limit: int = Query(200, ge=1, le=5000),
+    approval_id: str | None = None,
+    approval_status: str | None = None,
+    target_event_id: str | None = None,
+    operation_id: str | None = None,
+    approval_allows_dispatch: bool | None = None,
+) -> dict[str, Any]:
+    items = list_approval_resume_history(
+        limit=limit,
+        approval_id=approval_id,
+        approval_status=approval_status,
+        target_event_id=target_event_id,
+        operation_id=operation_id,
+        approval_allows_dispatch=approval_allows_dispatch,
+    )
+    allowed_total = len([item for item in items if bool(item.get("approval_allows_dispatch"))])
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "allowed_total": allowed_total,
+        "blocked_total": len(items) - allowed_total,
+        "limit": limit,
+        "approval_id": approval_id or "",
+        "approval_status": approval_status or "",
+        "target_event_id": target_event_id or "",
+        "operation_id": operation_id or "",
+        "approval_allows_dispatch": approval_allows_dispatch,
+        "governance": {
+            "gate": "reactor_approval_resume_history_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "approval_authority": False,
+            "approval_decision_authority": False,
+            "retry_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "promotion_authority": False,
             "memory_write": False,
         },
     }

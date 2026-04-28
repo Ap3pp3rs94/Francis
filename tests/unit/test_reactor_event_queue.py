@@ -21,6 +21,7 @@ from francis.reactor.deadletters import (
 from francis.reactor.events import (
     enqueue_event,
     get_event,
+    list_approval_resume_history,
     list_events,
     list_proposal_review_history,
     reactor_review_queue,
@@ -487,6 +488,28 @@ def test_reactor_dispatch_engine_records_approval_resume_without_execution(monke
     assert status["dispatch_execution_counts"] == {"completed": 1}
     assert status["verification_counts"] == {"not_run": 1, "passed": 1}
     assert status["verification_outcome_counts"] == {"approval_resume_approved": 1, "awaiting_approval": 1}
+
+    history = list_approval_resume_history(approval_id=approval_id)
+    assert len(history) == 1
+    history_item = history[0]
+    assert history_item["kind"] == "reactor.approval_resume.history.readback"
+    assert history_item["event_id"] == resume_event_id
+    assert history_item["route"] == "approval_resume"
+    assert history_item["outcome"] == "approval_resume_approved"
+    assert history_item["approval_id"] == approval_id
+    assert history_item["approval_status"] == "approved"
+    assert history_item["approval_allows_dispatch"] is True
+    assert history_item["target_event_id"] == target_event_id
+    assert history_item["operation_id"] == "op_resume_unit"
+    assert history_item["execution_started"] is False
+    assert history_item["approval_decision_applied"] is False
+    assert history_item["governance"]["approval_decision_authority"] is False
+    assert history_item["governance"]["execution_authority"] is False
+    assert list_approval_resume_history(approval_status="approved")[0]["event_id"] == resume_event_id
+    assert list_approval_resume_history(target_event_id=target_event_id)[0]["event_id"] == resume_event_id
+    assert list_approval_resume_history(operation_id="op_resume_unit")[0]["event_id"] == resume_event_id
+    assert list_approval_resume_history(approval_allows_dispatch=True)[0]["event_id"] == resume_event_id
+    assert list_approval_resume_history(approval_id="missing_approval") == []
 
 
 def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypatch, tmp_path: Path) -> None:

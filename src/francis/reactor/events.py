@@ -3511,6 +3511,132 @@ def list_proposal_review_history(
     return entries[:safe_limit]
 
 
+def _approval_resume_history_governance() -> dict[str, Any]:
+    return {
+        "gate": "reactor_approval_resume_history_readback",
+        "execution_authority": False,
+        "dispatch_authority": False,
+        "approval_authority": False,
+        "approval_decision_authority": False,
+        "retry_authority": False,
+        "external_delivery_authority": False,
+        "external_escalation_authority": False,
+        "promotion_authority": False,
+        "memory_write": False,
+    }
+
+
+def _approval_resume_history_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    trigger = _as_dict(item.get("trigger"))
+    classification = _as_dict(item.get("classification"))
+    dispatch = _as_dict(item.get("dispatch"))
+    receipt = _as_dict(dispatch.get("dispatch_execution_receipt")) or _as_dict(
+        item.get("latest_dispatch_execution_receipt")
+    )
+    if _safe_str(trigger.get("source")).strip().lower() != "approval_decision":
+        return None
+    if _safe_str(classification.get("action_class")).strip().lower() != "resume":
+        return None
+    if _safe_str(item.get("stable_state")).strip().lower() != "approval_resume_recorded":
+        return None
+    if _safe_str(receipt.get("kind")).strip() != "reactor.dispatch.execution.receipt":
+        return None
+    if _safe_str(receipt.get("route")).strip().lower() != "approval_resume":
+        return None
+
+    metadata = _as_dict(trigger.get("metadata"))
+    verification = _as_dict(item.get("latest_verification_receipt"))
+    stable_return = _as_dict(item.get("latest_stable_return"))
+    approval_id = receipt.get("approval_id") or trigger.get("approval_id") or metadata.get("approval_id")
+    target_event_id = receipt.get("target_event_id") or metadata.get("reactor_event_id")
+    entry = {
+        "kind": "reactor.approval_resume.history.readback",
+        "event_id": item.get("event_id") or item.get("id"),
+        "status": item.get("status"),
+        "stable_state": item.get("stable_state"),
+        "created_ts": item.get("created_ts"),
+        "updated_ts": item.get("updated_ts"),
+        "trigger_source": trigger.get("source"),
+        "trigger_type": trigger.get("type"),
+        "summary": trigger.get("summary"),
+        "action_class": classification.get("action_class"),
+        "risk_tier": classification.get("risk_tier"),
+        "approval_required": bool(classification.get("approval_required")),
+        "receipt_id": receipt.get("receipt_id"),
+        "receipt_kind": receipt.get("kind"),
+        "route": receipt.get("route"),
+        "outcome": receipt.get("outcome"),
+        "next_step": receipt.get("next_step"),
+        "approval_id": approval_id,
+        "approval_status": receipt.get("approval_status"),
+        "approval_allows_dispatch": bool(receipt.get("approval_allows_dispatch")),
+        "target_event_id": target_event_id,
+        "operation_id": receipt.get("operation_id") or trigger.get("operation_id") or metadata.get("operation_id"),
+        "readback_only": bool(receipt.get("readback_only")),
+        "approval_decision_applied": bool(receipt.get("approval_decision_applied")),
+        "execution_started": bool(receipt.get("execution_started")),
+        "dispatch_applied": bool(receipt.get("dispatch_applied")),
+        "memory_write": bool(receipt.get("memory_write")),
+        "verified": bool(receipt.get("verified") or verification.get("verified")),
+        "verification_status": verification.get("verification_status"),
+        "verification_outcome": verification.get("verification_outcome"),
+        "stable_return_receipt_id": stable_return.get("receipt_id"),
+        "stable_return_state": stable_return.get("stable_state"),
+        "source_governance": _as_dict(receipt.get("governance")),
+        "governance": _approval_resume_history_governance(),
+    }
+    return _display(entry)
+
+
+def list_approval_resume_history(
+    *,
+    limit: int = 200,
+    approval_id: str | None = None,
+    approval_status: str | None = None,
+    target_event_id: str | None = None,
+    operation_id: str | None = None,
+    approval_allows_dispatch: bool | None = None,
+) -> list[dict[str, Any]]:
+    approval_filter = _safe_str(approval_id).strip()
+    approval_status_filter = _safe_str(approval_status).strip()
+    target_event_filter = _safe_str(target_event_id).strip()
+    operation_filter = _safe_str(operation_id).strip()
+    entries: list[dict[str, Any]] = []
+    for item in list_events(
+        limit=5000,
+        trigger_source="approval_decision",
+        stable_state="approval_resume_recorded",
+        receipt_kind="reactor.dispatch.execution.receipt",
+    ):
+        entry = _approval_resume_history_item(item)
+        if entry is None:
+            continue
+        if approval_filter and _safe_str(entry.get("approval_id")).strip() != approval_filter:
+            continue
+        if approval_status_filter and _safe_str(entry.get("approval_status")).strip() != approval_status_filter:
+            continue
+        if target_event_filter and _safe_str(entry.get("target_event_id")).strip() != target_event_filter:
+            continue
+        if operation_filter and _safe_str(entry.get("operation_id")).strip() != operation_filter:
+            continue
+        if (
+            approval_allows_dispatch is not None
+            and bool(entry.get("approval_allows_dispatch")) is not approval_allows_dispatch
+        ):
+            continue
+        entries.append(entry)
+    entries.sort(
+        key=lambda entry: (
+            _safe_int(entry.get("updated_ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_int(entry.get("created_ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_str(entry.get("event_id")),
+        ),
+        reverse=True,
+    )
+    safe_limit = _safe_int(limit, default=200, minimum=1, maximum=5000)
+    return entries[:safe_limit]
+
+
 def _blocker_routes(dispatch: dict[str, Any]) -> set[str]:
     routes = {_safe_str(dispatch.get("blocked_route")).strip().lower()}
     blocker = _as_dict(dispatch.get("blocker"))

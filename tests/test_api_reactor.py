@@ -2492,6 +2492,46 @@ def test_reactor_approval_decision_event_records_resume_receipt_without_executio
         "awaiting_approval": 1,
     }
 
+    history = client.get(
+        "/reactor/approval_resumes/history/list",
+        params={"approval_id": approval_id, "approval_status": "approved"},
+    )
+    assert history.status_code == 200
+    history_body = history.json()
+    assert history_body["total"] == 1
+    assert history_body["allowed_total"] == 1
+    assert history_body["blocked_total"] == 0
+    assert history_body["governance"]["approval_decision_authority"] is False
+    assert history_body["governance"]["execution_authority"] is False
+    history_item = history_body["items"][0]
+    assert history_item["kind"] == "reactor.approval_resume.history.readback"
+    assert history_item["event_id"] == resume_event_id
+    assert history_item["route"] == "approval_resume"
+    assert history_item["outcome"] == "approval_resume_approved"
+    assert history_item["approval_id"] == approval_id
+    assert history_item["approval_status"] == "approved"
+    assert history_item["approval_allows_dispatch"] is True
+    assert history_item["target_event_id"] == target_event_id
+    assert history_item["operation_id"] == "op_resume_api"
+    assert history_item["execution_started"] is False
+    assert history_item["approval_decision_applied"] is False
+    assert history_item["governance"]["approval_decision_authority"] is False
+    assert history_item["governance"]["execution_authority"] is False
+
+    filtered_history = client.get(
+        "/reactor/approval_resumes/history/list",
+        params={"target_event_id": target_event_id, "operation_id": "op_resume_api", "approval_allows_dispatch": True},
+    )
+    assert filtered_history.status_code == 200
+    assert filtered_history.json()["items"][0]["event_id"] == resume_event_id
+
+    empty_history = client.get(
+        "/reactor/approval_resumes/history/list",
+        params={"approval_id": "missing_approval"},
+    )
+    assert empty_history.status_code == 200
+    assert empty_history.json()["items"] == []
+
 
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
