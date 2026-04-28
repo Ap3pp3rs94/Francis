@@ -226,6 +226,59 @@ test("ReactorClient.getReviewQueue preserves escalation handoff route filters", 
   }
 });
 
+test("ReactorClient.getReviewQueue preserves escalation acknowledgement route filters", async () => {
+  const requests: Array<{ route: string | null; limit: string | null }> = [];
+  const restoreFetch = installFetch((url) => {
+    const parsed = new URL(url);
+    requests.push({
+      route: parsed.searchParams.get("route"),
+      limit: parsed.searchParams.get("limit"),
+    });
+    return jsonResponse({
+      ok: true,
+      route: "deadletter_escalation_acknowledgement",
+      items: [
+        {
+          event_id: "evt_deadletter_acknowledgement",
+          stable_state: "deadletter_escalation_acknowledged",
+          review: {
+            route: "deadletter_escalation_acknowledgement",
+            status: "acknowledged",
+            gate: "reactor_deadletter_escalation_acknowledgement",
+            action: "wait_for_explicit_recovery_execution_boundary_after_acknowledgement",
+            next_step: "wait_for_explicit_recovery_execution_boundary_after_acknowledgement",
+            receipt_kind: "reactor.deadletter.escalation_acknowledgement.receipt",
+            receipt_ref: "rdl_alpha_escalation_acknowledgement",
+            execution_started: false,
+            applied: true,
+          },
+        },
+      ],
+      total: 1,
+      available_total: 1,
+      limit: 20,
+      route_counts: { deadletter_escalation_acknowledgement: 1 },
+      stable_state_counts: { deadletter_escalation_acknowledged: 1 },
+    });
+  });
+
+  try {
+    const client = new ReactorClient("http://127.0.0.1:8000");
+    const snapshot = await client.getReviewQueue({ route: "deadletter_escalation_acknowledgement", limit: 20 });
+
+    assert.deepEqual(requests, [{ route: "deadletter_escalation_acknowledgement", limit: "20" }]);
+    assert.equal(snapshot.route, "deadletter_escalation_acknowledgement");
+    assert.equal(snapshot.items[0]?.stable_state, "deadletter_escalation_acknowledged");
+    assert.equal(snapshot.items[0]?.review?.route, "deadletter_escalation_acknowledgement");
+    assert.equal(snapshot.items[0]?.review?.receipt_kind, "reactor.deadletter.escalation_acknowledgement.receipt");
+    assert.equal(snapshot.items[0]?.review?.execution_started, false);
+    assert.equal(snapshot.items[0]?.review?.applied, true);
+    assert.equal(snapshot.route_counts.deadletter_escalation_acknowledgement, 1);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("ReactorClient.listDeadletters reads disposition history without mutation authority", async () => {
   const requests: Array<{ path: string; method: string; limit: string | null; status: string | null }> = [];
   const restoreFetch = installFetch((url, init) => {
@@ -389,6 +442,102 @@ test("ReactorClient.listDeadletters preserves escalation handoff receipts withou
     assert.equal(snapshot.items[0]?.latest_escalation_handoff_receipt?.kind, "reactor.deadletter.escalation_handoff.receipt");
     assert.equal(snapshot.items[0]?.latest_escalation_handoff_receipt?.external_escalation_started, false);
     assert.equal(snapshot.items[0]?.latest_escalation_handoff_receipt?.memory_write, false);
+    assert.equal(snapshot.governance?.execution_authority, false);
+    assert.equal(snapshot.governance?.escalation_authority, false);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("ReactorClient.listDeadletters preserves escalation acknowledgement receipts without authority claims", async () => {
+  const requests: Array<{ path: string; method: string; limit: string | null; status: string | null }> = [];
+  const restoreFetch = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      limit: parsed.searchParams.get("limit"),
+      status: parsed.searchParams.get("status"),
+    });
+
+    return jsonResponse({
+      ok: true,
+      items: [
+        {
+          deadletter_id: "rdl_acknowledged",
+          event_id: "evt_acknowledged",
+          status: "escalation_acknowledged",
+          route: "deadletter_escalation_acknowledgement",
+          stable_state: "deadletter_escalation_acknowledged",
+          next_step: "wait_for_explicit_recovery_execution_boundary_after_acknowledgement",
+          source_receipt_kind: "reactor.deadletter.escalation_handoff.receipt",
+          source_receipt_ref: "rdl_acknowledged_escalation_handoff",
+          resolution_decision: "escalation_pending",
+          deadletter_resolved: false,
+          escalation_recorded: true,
+          escalation_handoff_recorded: true,
+          escalation_acknowledged: true,
+          external_escalation_started: false,
+          recovery_started: false,
+          execution_started: false,
+          retry_started: false,
+          escalation_started: false,
+          latest_escalation_acknowledgement_receipt: {
+            kind: "reactor.deadletter.escalation_acknowledgement.receipt",
+            receipt_id: "rdl_acknowledged_escalation_acknowledgement",
+            status: "acknowledged",
+            route: "deadletter_escalation_acknowledgement",
+            resolution_decision: "escalation_pending",
+            escalation_acknowledged: true,
+            external_escalation_started: false,
+            recovery_started: false,
+            execution_started: false,
+            retry_started: false,
+            escalation_started: false,
+            memory_write: false,
+          },
+        },
+      ],
+      total: 1,
+      limit: 6,
+      status: "escalation_acknowledged",
+      governance: {
+        execution_authority: false,
+        retry_authority: false,
+        escalation_authority: false,
+        memory_write: false,
+      },
+    });
+  });
+
+  try {
+    const client = new ReactorClient("http://127.0.0.1:8000");
+    const snapshot = await client.listDeadletters({ status: "escalation_acknowledged", limit: 6 });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/reactor/deadletters/list",
+        method: "GET",
+        limit: "6",
+        status: "escalation_acknowledged",
+      },
+    ]);
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.items[0]?.status, "escalation_acknowledged");
+    assert.equal(snapshot.items[0]?.route, "deadletter_escalation_acknowledgement");
+    assert.equal(snapshot.items[0]?.escalation_recorded, true);
+    assert.equal(snapshot.items[0]?.escalation_handoff_recorded, true);
+    assert.equal(snapshot.items[0]?.escalation_acknowledged, true);
+    assert.equal(snapshot.items[0]?.external_escalation_started, false);
+    assert.equal(snapshot.items[0]?.recovery_started, false);
+    assert.equal(snapshot.items[0]?.execution_started, false);
+    assert.equal(
+      snapshot.items[0]?.latest_escalation_acknowledgement_receipt?.kind,
+      "reactor.deadletter.escalation_acknowledgement.receipt",
+    );
+    assert.equal(snapshot.items[0]?.latest_escalation_acknowledgement_receipt?.external_escalation_started, false);
+    assert.equal(snapshot.items[0]?.latest_escalation_acknowledgement_receipt?.recovery_started, false);
+    assert.equal(snapshot.items[0]?.latest_escalation_acknowledgement_receipt?.memory_write, false);
     assert.equal(snapshot.governance?.execution_authority, false);
     assert.equal(snapshot.governance?.escalation_authority, false);
   } finally {

@@ -2,6 +2,7 @@ export type ReactorReviewRoute =
   | "approval_queue"
   | "deadletter_candidate"
   | "deadletter_escalation"
+  | "deadletter_escalation_acknowledgement"
   | "deadletter_escalation_handoff"
   | "deadletter_resolution"
   | "deadletter_review"
@@ -80,8 +81,10 @@ export type ReactorReceiptSummary = {
   resolution_decision?: string;
   deadletter_resolved?: boolean;
   escalation_recorded?: boolean;
+  escalation_acknowledged?: boolean;
   escalation_handoff_recorded?: boolean;
   external_escalation_started?: boolean;
+  recovery_started?: boolean;
   execution_started?: boolean;
   retry_started?: boolean;
   escalation_started?: boolean;
@@ -105,7 +108,10 @@ export type ReactorDeadletterItem = {
   resolution_decision?: string;
   deadletter_resolved?: boolean;
   escalation_recorded?: boolean;
+  escalation_acknowledged?: boolean;
   escalation_handoff_recorded?: boolean;
+  external_escalation_started?: boolean;
+  recovery_started?: boolean;
   execution_started?: boolean;
   retry_started?: boolean;
   escalation_started?: boolean;
@@ -114,6 +120,7 @@ export type ReactorDeadletterItem = {
   latest_review_receipt?: ReactorReceiptSummary;
   latest_resolution_receipt?: ReactorReceiptSummary;
   latest_escalation_handoff_receipt?: ReactorReceiptSummary;
+  latest_escalation_acknowledgement_receipt?: ReactorReceiptSummary;
 };
 
 export type ReactorDeadletterSnapshot = {
@@ -298,7 +305,10 @@ export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem 
     resolution_decision: optionalString(record.resolution_decision),
     deadletter_resolved: optionalBoolean(record.deadletter_resolved),
     escalation_recorded: optionalBoolean(record.escalation_recorded),
+    escalation_acknowledged: optionalBoolean(record.escalation_acknowledged),
     escalation_handoff_recorded: optionalBoolean(record.escalation_handoff_recorded),
+    external_escalation_started: optionalBoolean(record.external_escalation_started),
+    recovery_started: optionalBoolean(record.recovery_started),
     execution_started: optionalBoolean(record.execution_started),
     retry_started: optionalBoolean(record.retry_started),
     escalation_started: optionalBoolean(record.escalation_started),
@@ -307,6 +317,7 @@ export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem 
     latest_review_receipt: parseReceipt(record.latest_review_receipt),
     latest_resolution_receipt: parseReceipt(record.latest_resolution_receipt),
     latest_escalation_handoff_receipt: parseReceipt(record.latest_escalation_handoff_receipt),
+    latest_escalation_acknowledgement_receipt: parseReceipt(record.latest_escalation_acknowledgement_receipt),
   };
 }
 
@@ -327,8 +338,10 @@ function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
     resolution_decision: optionalString(record.resolution_decision),
     deadletter_resolved: optionalBoolean(record.deadletter_resolved),
     escalation_recorded: optionalBoolean(record.escalation_recorded),
+    escalation_acknowledged: optionalBoolean(record.escalation_acknowledged),
     escalation_handoff_recorded: optionalBoolean(record.escalation_handoff_recorded),
     external_escalation_started: optionalBoolean(record.external_escalation_started),
+    recovery_started: optionalBoolean(record.recovery_started),
     execution_started: optionalBoolean(record.execution_started),
     retry_started: optionalBoolean(record.retry_started),
     escalation_started: optionalBoolean(record.escalation_started),

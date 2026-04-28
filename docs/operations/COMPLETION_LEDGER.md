@@ -773,6 +773,16 @@ work, start external escalation, decide approvals, write memory, promote
 capabilities, or grant execution, retry-execution, approval, memory-write,
 promotion, recovery, or external-escalation authority.
 
+As of `2026-04-28`, the chat UI Reactor readback surface also preserves
+deadletter escalation acknowledgement state. The typed Reactor UI client parses
+`latest_escalation_acknowledgement_receipt`, `escalation_acknowledged`,
+`external_escalation_started`, and `recovery_started`, the review queue can
+filter the backend `deadletter_escalation_acknowledgement` route, and the
+System/ORB deadletter queue shows the acknowledgement receipt as the latest
+receipt when present. This is readback/UI-only; it does not add backend routes,
+write controls, execution authority, retry authority, approval authority,
+memory-write behavior, external-escalation authority, or recovery execution.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9423,6 +9433,14 @@ acknowledgement receipt slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor escalation
+acknowledgement UI readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9458,9 +9476,8 @@ These remain true and should block any "finished" claim:
   existing operation runs, broader execution-failure routing beyond the current
   `operation_run` path, broader operator visibility beyond the route-filtered
   review queue, direct deadletter queue history, escalation handoff readback,
-  and backend escalation acknowledgement readback, plus actual
-  recovery/escalation execution after disposition, handoff, and acknowledgement
-  receipts
+  and escalation acknowledgement readback, plus actual recovery/escalation
+  execution after disposition, handoff, and acknowledgement receipts
 
 ## 6. Update rule
 

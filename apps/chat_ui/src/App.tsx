@@ -198,6 +198,7 @@ const REACTOR_REVIEW_ROUTE_FILTERS: Array<{ label: string; route: ReactorReviewR
   { label: "Reviewed", route: "deadletter_review" },
   { label: "Escalation", route: "deadletter_escalation" },
   { label: "Handoff", route: "deadletter_escalation_handoff" },
+  { label: "Acknowledged", route: "deadletter_escalation_acknowledgement" },
   { label: "Retry", route: "retry_backoff" },
   { label: "Due", route: "retry_due" },
   { label: "Operation", route: "operation_run" },
@@ -6729,15 +6730,18 @@ function SystemPanel(props: {
               const resolutionDecision = safeString(item.resolution_decision).trim();
               const sourceKind = safeString(item.source_receipt_kind).trim();
               const sourceRef = safeString(item.source_receipt_ref).trim();
+              const acknowledgementReceipt = item.latest_escalation_acknowledgement_receipt;
               const handoffReceipt = item.latest_escalation_handoff_receipt;
               const resolutionReceipt = item.latest_resolution_receipt;
               const reviewReceipt = item.latest_review_receipt;
               const latestReceiptId =
+                safeString(acknowledgementReceipt?.receipt_id).trim() ||
                 safeString(handoffReceipt?.receipt_id).trim() ||
                 safeString(resolutionReceipt?.receipt_id).trim() ||
                 safeString(reviewReceipt?.receipt_id).trim() ||
                 sourceRef;
               const latestReceiptKind =
+                safeString(acknowledgementReceipt?.kind).trim() ||
                 safeString(handoffReceipt?.kind).trim() ||
                 safeString(resolutionReceipt?.kind).trim() ||
                 safeString(reviewReceipt?.kind).trim() ||
@@ -6770,6 +6774,7 @@ function SystemPanel(props: {
                     {item.deadletter_resolved ? <span style={badgeStyle("resolved")}>resolved</span> : null}
                     {item.escalation_recorded ? <span style={badgeStyle("escalation_pending")}>escalation pending</span> : null}
                     {item.escalation_handoff_recorded ? <span style={badgeStyle("handoff_recorded")}>handoff recorded</span> : null}
+                    {item.escalation_acknowledged ? <span style={badgeStyle("acknowledged")}>acknowledged</span> : null}
                     {latestReceiptKind ? <span style={badgeStyle("receipt")}>{latestReceiptKind}</span> : null}
                   </div>
 
@@ -6786,7 +6791,9 @@ function SystemPanel(props: {
                   ) : null}
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                     execution=<code>{String(Boolean(item.execution_started))}</code> / retry=<code>{String(Boolean(item.retry_started))}</code> /
-                    escalation=<code>{String(Boolean(item.escalation_started))}</code>
+                    escalation=<code>{String(Boolean(item.escalation_started))}</code> / external=
+                    <code>{String(Boolean(item.external_escalation_started))}</code> / recovery=
+                    <code>{String(Boolean(item.recovery_started))}</code>
                   </div>
                 </div>
               );
