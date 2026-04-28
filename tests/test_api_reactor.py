@@ -1877,6 +1877,42 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
     assert outbox_item["external_network_send"] is False
     assert (data_root / "reactor" / "external_escalation_outbox" / f"{delivery_id}.json").exists()
 
+    delivery_items = client.get("/reactor/deadletters/external_escalation_deliveries/list")
+    assert delivery_items.status_code == 200
+    delivery_items_body = delivery_items.json()
+    assert delivery_items_body["ok"] is True
+    assert delivery_items_body["total"] == 1
+    assert delivery_items_body["items"][0]["delivery_id"] == delivery_id
+    assert delivery_items_body["items"][0]["external_delivery_started"] is False
+    assert delivery_items_body["governance"]["external_delivery_authority"] is False
+    filtered_delivery_items = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/list",
+        params={"status": "queued", "deadletter_id": deadletter_id, "event_id": event_id},
+    )
+    assert filtered_delivery_items.status_code == 200
+    assert [item["delivery_id"] for item in filtered_delivery_items.json()["items"]] == [delivery_id]
+    empty_delivery_items = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/list",
+        params={"status": "sent"},
+    )
+    assert empty_delivery_items.status_code == 200
+    assert empty_delivery_items.json()["items"] == []
+    fetched_delivery = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/get",
+        params={"id": delivery_id},
+    )
+    assert fetched_delivery.status_code == 200
+    assert fetched_delivery.json()["ok"] is True
+    assert fetched_delivery.json()["item"]["delivery_id"] == delivery_id
+    assert fetched_delivery.json()["item"]["external_network_send"] is False
+    assert fetched_delivery.json()["governance"]["external_escalation_authority"] is False
+    missing_delivery = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/get",
+        params={"id": "red_missing"},
+    )
+    assert missing_delivery.status_code == 200
+    assert missing_delivery.json() == {"ok": False, "error": "not_found", "item": None}
+
     delivered_event = delivery_body["event"]
     assert delivered_event["stable_state"] == "deadletter_external_escalation_delivery_queued"
     assert delivered_event["dispatch"]["deadletter_external_escalation_delivery_queued"] is True

@@ -1830,3 +1830,47 @@ def get_deadletter(deadletter_id: str) -> dict[str, Any] | None:
     if path is None or not path.exists() or not path.is_file():
         return None
     return _read(path)
+
+
+def list_external_escalation_deliveries(
+    *,
+    limit: int = 200,
+    status: str | None = None,
+    deadletter_id: str | None = None,
+    event_id: str | None = None,
+) -> list[dict[str, Any]]:
+    root = _external_delivery_root()
+    if not root.exists():
+        return []
+    status_filter = _safe_str(status).strip().lower()
+    deadletter_filter = _safe_str(deadletter_id).strip()
+    event_filter = _safe_str(event_id).strip()
+    items: list[dict[str, Any]] = []
+    for path in sorted(root.glob("*.json")):
+        if not path.is_file():
+            continue
+        item = _read(path)
+        if not item:
+            continue
+        if status_filter and _safe_str(item.get("status")).strip().lower() != status_filter:
+            continue
+        if deadletter_filter and _safe_str(item.get("deadletter_id")).strip() != deadletter_filter:
+            continue
+        if event_filter and _safe_str(item.get("event_id")).strip() != event_filter:
+            continue
+        items.append(item)
+    items.sort(
+        key=lambda item: (
+            _safe_int(item.get("created_ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_str(item.get("delivery_id")),
+        ),
+        reverse=True,
+    )
+    return items[: max(1, min(int(limit), 5000))]
+
+
+def get_external_escalation_delivery(delivery_id: str) -> dict[str, Any] | None:
+    path = _external_delivery_path(delivery_id)
+    if path is None or not path.exists() or not path.is_file():
+        return None
+    return _read(path)

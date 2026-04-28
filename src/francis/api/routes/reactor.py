@@ -10,9 +10,11 @@ from francis.reactor import (
     enqueue_event,
     get_deadletter,
     get_event,
+    get_external_escalation_delivery,
     get_retry_schedule,
     list_deadletters,
     list_events,
+    list_external_escalation_deliveries,
     list_retry_schedules,
     reactor_review_queue,
     reactor_status,
@@ -262,6 +264,61 @@ def deadletters_get(id: str) -> dict[str, Any]:
             "dispatch_authority": False,
             "retry_authority": False,
             "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/external_escalation_deliveries/list")
+def deadletter_external_escalation_deliveries_list(
+    limit: int = Query(200, ge=1, le=5000),
+    status: str | None = None,
+    deadletter_id: str | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    items = list_external_escalation_deliveries(
+        limit=limit,
+        status=status,
+        deadletter_id=deadletter_id,
+        event_id=event_id,
+    )
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "limit": limit,
+        "status": status or "",
+        "deadletter_id": deadletter_id or "",
+        "event_id": event_id or "",
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/external_escalation_deliveries/get")
+def deadletter_external_escalation_deliveries_get(id: str) -> dict[str, Any]:
+    item = get_external_escalation_delivery(id)
+    if item is None:
+        return {"ok": False, "error": "not_found", "item": None}
+    return {
+        "ok": True,
+        "item": item,
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
             "escalation_authority": False,
             "memory_write": False,
         },

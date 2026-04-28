@@ -871,6 +871,19 @@ external delivery, execute work, dispatch work, decide approvals, write memory,
 promote capabilities, or grant external-delivery, external-escalation,
 execution, approval, promotion, retry, or memory-write authority.
 
+As of `2026-04-28`, queued Reactor local outbox external escalation artifacts
+also have direct read-only API readback. `GET
+/reactor/deadletters/external_escalation_deliveries/list` reads the persisted
+local outbox delivery artifact queue and can filter by status, deadletter id,
+and event id; `GET /reactor/deadletters/external_escalation_deliveries/get`
+returns one delivery artifact by delivery id. The readback preserves the same
+no-send/no-execution flags recorded on
+`reactor.deadletter.external_escalation.local_outbox.item` and carries explicit
+readback governance denying external-delivery, external-escalation, execution,
+dispatch, retry, and memory-write authority. This is direct artifact readback
+only: it does not send external messages, start delivery, execute work, change
+deadletter state, decide approvals, write memory, or grant new authority.
+
 As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
 request and recovery-dispatch settlement truth from the existing backend routes.
 The typed Reactor UI client parses `latest_recovery_request_receipt`,
@@ -9734,6 +9747,26 @@ delivery queue slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor local outbox delivery
+artifact readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting tests\unit\test_reactor_event_queue.py with Ruff cache write warnings; passed after formatting`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9780,9 +9813,9 @@ These remain true and should block any "finished" claim:
   granting external escalation or delivery authority. Preflight-ready
   `local_outbox` attempts can now queue one durable local outbox artifact with
   an external-delivery receipt, receipt-kind/review-route filters, review-queue
-  projection, and status counts while still sending no external message,
-  starting no external delivery, and granting no external-delivery or
-  external-escalation authority. Queued `deadletter_recovery` events
+  projection, direct artifact list/get readback, and status counts while still
+  sending no external message, starting no external delivery, and granting no
+  external-delivery or external-escalation authority. Queued `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
   execution, verification, stable-return, and readback receipts, and successful

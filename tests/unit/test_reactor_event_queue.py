@@ -7,7 +7,12 @@ from francis.governance import approvals
 from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
 from francis.reactor import dispatch as reactor_dispatch
-from francis.reactor.deadletters import get_deadletter, list_deadletters
+from francis.reactor.deadletters import (
+    get_deadletter,
+    get_external_escalation_delivery,
+    list_deadletters,
+    list_external_escalation_deliveries,
+)
 from francis.reactor.events import (
     enqueue_event,
     get_event,
@@ -2468,6 +2473,16 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert outbox_item["external_message_sent"] is False
     assert outbox_item["external_network_send"] is False
     assert (data_root / "reactor" / "external_escalation_outbox" / f"{delivery_id}.json").exists()
+    assert get_external_escalation_delivery(delivery_id)["delivery_id"] == delivery_id  # type: ignore[index]
+    assert [item["delivery_id"] for item in list_external_escalation_deliveries()] == [delivery_id]
+    assert [item["delivery_id"] for item in list_external_escalation_deliveries(status="queued")] == [delivery_id]
+    assert [item["delivery_id"] for item in list_external_escalation_deliveries(deadletter_id=deadletter_id)] == [
+        delivery_id
+    ]
+    assert [item["delivery_id"] for item in list_external_escalation_deliveries(event_id=str(created["event_id"]))] == [
+        delivery_id
+    ]
+    assert list_external_escalation_deliveries(status="sent") == []
 
     delivered_event = delivery["event"]
     assert delivered_event["stable_state"] == "deadletter_external_escalation_delivery_queued"
