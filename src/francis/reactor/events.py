@@ -27,7 +27,7 @@ from francis.reactor.deadletters import (
     resolve_deadletter,
     review_deadletter,
 )
-from francis.reactor.dispatch import SUPPORTED_ACTIONS, dispatch_event
+from francis.reactor.dispatch import BOUNDARY_ACTIONS, SUPPORTED_ACTIONS, dispatch_event
 from francis.reactor.retries import (
     get_retry_schedule,
     list_retry_schedules,
@@ -5106,6 +5106,7 @@ def reactor_status() -> dict[str, Any]:
         "stable_return_counts": stable_return_counts,
         "dispatch_engine": "partial",
         "dispatch_engine_supported_actions": list(SUPPORTED_ACTIONS),
+        "dispatch_engine_boundary_actions": list(BOUNDARY_ACTIONS),
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {
             "gate": "reactor_trigger_intake",

@@ -1150,6 +1150,19 @@ is readback/UI-only: it does not add backend routes, write controls, delivery
 attempts, external sends, execution, approval decisions, memory writes,
 promotion, retry execution, or external-delivery authority.
 
+As of `2026-04-28`, Stage 5/Reactor also has an explicit plugin-run dispatch
+boundary. `action_class=plugin_run` Reactor events now produce a blocked
+`reactor.dispatch.execution.receipt` with `route=plugin_run`, stable
+`plugin_run_dispatch_not_enabled` state, verification and stable-return
+receipts, operator-review projection, and `/reactor/status`
+`dispatch_engine_boundary_actions` readback. This replaces a generic
+not-implemented deferment for plugin-run attempts with a typed, reviewable
+boundary while keeping plugin execution disabled. It does not execute plugins,
+load plugin code, dispatch plugin work, decide approvals, write memory, promote
+capabilities, send external messages, start retries, or grant plugin-run,
+execution, dispatch, approval, promotion, external-delivery, or memory-write
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -10276,6 +10289,23 @@ Latest checkpoint validation for the `2026-04-28` Stage 5/Reactor audit:
 - `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor plugin-run boundary
+slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_plugin_run_boundary_without_execution tests\test_api_reactor.py::test_reactor_plugin_run_dispatch_route_blocks_without_execution -q`
+  Result: `failed before aligning review-queue receipt-kind assertions with the
+  existing blocker projection contract; passed after correction`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10357,11 +10387,14 @@ These remain true and should block any "finished" claim:
   `observer_anomaly` triggers with receipts and stable-return proof, and
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
-  approval-resume history readback. Remaining Stage 5 gaps still include
-  broader dispatch action coverage beyond existing
+  approval-resume history readback. Reactor also has an explicit no-execution
+  plugin-run dispatch boundary with operator-review readback, so plugin-run
+  attempts are blocked by typed receipt instead of generic not-implemented
+  deferment. Remaining Stage 5 gaps still include broader dispatch action
+  coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
-  read-only telemetry/observer classification, and read-only approval-decision
-  resume receipts, broader
+  read-only telemetry/observer classification, read-only approval-decision
+  resume receipts, and the blocked plugin-run boundary; broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review
