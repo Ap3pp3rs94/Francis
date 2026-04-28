@@ -11362,6 +11362,45 @@ preflight baseline:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens overlay window preflight baseline
+
+Stage 6/Lens now has a disabled overlay/window preflight baseline for the future
+resident Lens HUD surface.
+`config/runtime/lens/overlay.json` declares the intended overlay name,
+user-session scope, host/summon/tray preflight dependencies, status routes, and
+the explicit disabled/no-authority flags that must remain false until a
+resident host process, tray presence, overlay window, always-on-top policy,
+global hotkey binding, and summon binding are real.
+`scripts/lens-overlay-preflight.ps1` returns `kind: lens.overlay.preflight` in
+status mode with a blocked readiness payload and refuses `Open` or `Focus`
+intent with exit `2`.
+
+This is diagnostic/preflight-only. It does not create an overlay window; make a
+window always-on-top; focus, dock, or manage windows; capture screen content;
+launch Lens; start, install, or supervise a resident host; register a global
+hotkey; create tray presence; write memory; decide approvals; execute actions;
+or grant overlay-control, window-management, summon, capture, sensing,
+telemetry, promotion, policy, tray-registration, or local-process-launch
+authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens overlay window
+preflight baseline:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-preflight.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-overlay-preflight.ps1 -Mode Open; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m pytest tests\test_lens_overlay_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_overlay_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_overlay_preflight_script.py`
+  Result: `passed`
+- `python -m json.tool config\runtime\lens\overlay.json`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11374,10 +11413,11 @@ These remain true and should block any "finished" claim:
   `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
   non-starting process readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
-  preflight baseline plus a disabled tray/presence preflight baseline, but no
-  OS-wide summon, resident host process, installed/started service, resident
-  overlay/HUD runtime, OS-level command palette, tray presence, hotkey binding,
-  or live Pilot takeover surface yet
+  preflight baseline plus a disabled tray/presence preflight baseline and
+  disabled overlay/window preflight baseline, but no OS-wide summon, resident
+  host process, installed/started service, resident overlay/HUD runtime,
+  OS-level command palette, tray presence, hotkey binding, or live Pilot takeover
+  surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
