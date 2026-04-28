@@ -4,6 +4,8 @@ export type ReactorReviewRoute =
   | "deadletter_escalation"
   | "deadletter_escalation_acknowledgement"
   | "deadletter_escalation_handoff"
+  | "deadletter_recovery_dispatch"
+  | "deadletter_recovery_request"
   | "deadletter_resolution"
   | "deadletter_review"
   | "operation_run"
@@ -84,6 +86,10 @@ export type ReactorReceiptSummary = {
   escalation_acknowledged?: boolean;
   escalation_handoff_recorded?: boolean;
   external_escalation_started?: boolean;
+  recovery_requested?: boolean;
+  recovery_dispatched?: boolean;
+  recovery_event_id?: string;
+  recovery_request_receipt_id?: string;
   recovery_started?: boolean;
   execution_started?: boolean;
   retry_started?: boolean;
@@ -111,6 +117,8 @@ export type ReactorDeadletterItem = {
   escalation_acknowledged?: boolean;
   escalation_handoff_recorded?: boolean;
   external_escalation_started?: boolean;
+  recovery_requested?: boolean;
+  recovery_dispatched?: boolean;
   recovery_started?: boolean;
   execution_started?: boolean;
   retry_started?: boolean;
@@ -121,6 +129,8 @@ export type ReactorDeadletterItem = {
   latest_resolution_receipt?: ReactorReceiptSummary;
   latest_escalation_handoff_receipt?: ReactorReceiptSummary;
   latest_escalation_acknowledgement_receipt?: ReactorReceiptSummary;
+  latest_recovery_request_receipt?: ReactorReceiptSummary;
+  latest_recovery_dispatch_receipt?: ReactorReceiptSummary;
 };
 
 export type ReactorDeadletterSnapshot = {
@@ -308,6 +318,8 @@ export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem 
     escalation_acknowledged: optionalBoolean(record.escalation_acknowledged),
     escalation_handoff_recorded: optionalBoolean(record.escalation_handoff_recorded),
     external_escalation_started: optionalBoolean(record.external_escalation_started),
+    recovery_requested: optionalBoolean(record.recovery_requested),
+    recovery_dispatched: optionalBoolean(record.recovery_dispatched),
     recovery_started: optionalBoolean(record.recovery_started),
     execution_started: optionalBoolean(record.execution_started),
     retry_started: optionalBoolean(record.retry_started),
@@ -318,6 +330,8 @@ export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem 
     latest_resolution_receipt: parseReceipt(record.latest_resolution_receipt),
     latest_escalation_handoff_receipt: parseReceipt(record.latest_escalation_handoff_receipt),
     latest_escalation_acknowledgement_receipt: parseReceipt(record.latest_escalation_acknowledgement_receipt),
+    latest_recovery_request_receipt: parseReceipt(record.latest_recovery_request_receipt),
+    latest_recovery_dispatch_receipt: parseReceipt(record.latest_recovery_dispatch_receipt),
   };
 }
 
@@ -341,6 +355,10 @@ function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
     escalation_acknowledged: optionalBoolean(record.escalation_acknowledged),
     escalation_handoff_recorded: optionalBoolean(record.escalation_handoff_recorded),
     external_escalation_started: optionalBoolean(record.external_escalation_started),
+    recovery_requested: optionalBoolean(record.recovery_requested),
+    recovery_dispatched: optionalBoolean(record.recovery_dispatched),
+    recovery_event_id: optionalString(record.recovery_event_id),
+    recovery_request_receipt_id: optionalString(record.recovery_request_receipt_id),
     recovery_started: optionalBoolean(record.recovery_started),
     execution_started: optionalBoolean(record.execution_started),
     retry_started: optionalBoolean(record.retry_started),

@@ -827,6 +827,17 @@ for a successful existing dispatch only: it adds no new route, no new dispatch
 engine, no automatic retry loop, no approval authority, no promotion authority,
 no memory-write behavior, and no external-escalation execution.
 
+As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
+request and recovery-dispatch settlement truth from the existing backend routes.
+The typed Reactor UI client parses `latest_recovery_request_receipt`,
+`latest_recovery_dispatch_receipt`, `recovery_requested`, and
+`recovery_dispatched`; the review queue can filter
+`deadletter_recovery_request` and `deadletter_recovery_dispatch`; and the
+System/ORB deadletter queue prioritizes the recovery receipt as the latest
+receipt when present. This is readback/UI-only; it does not add backend routes,
+write controls, execution authority, retry authority, approval authority,
+memory-write behavior, external-escalation authority, or recovery execution.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9545,6 +9556,14 @@ settlement slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor recovery settlement UI
+readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9583,7 +9602,9 @@ These remain true and should block any "finished" claim:
   `operations.run` scope with execution, verification, stable-return, and
   readback receipts, and successful recovery dispatches now settle the original
   `recovery_requested` deadletter into `recovery_dispatched` with a dedicated
-  recovery-dispatch receipt and parent-event readback.
+  recovery-dispatch receipt and parent-event readback. Chat UI Reactor readback
+  now preserves recovery-request and recovery-dispatch filters, badges, and
+  latest receipt handles from the existing read routes.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, broader execution-failure routing beyond the current
   `operation_run` path, broader operator visibility beyond the current

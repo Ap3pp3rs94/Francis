@@ -199,6 +199,8 @@ const REACTOR_REVIEW_ROUTE_FILTERS: Array<{ label: string; route: ReactorReviewR
   { label: "Escalation", route: "deadletter_escalation" },
   { label: "Handoff", route: "deadletter_escalation_handoff" },
   { label: "Acknowledged", route: "deadletter_escalation_acknowledgement" },
+  { label: "Recovery", route: "deadletter_recovery_request" },
+  { label: "Recovered", route: "deadletter_recovery_dispatch" },
   { label: "Retry", route: "retry_backoff" },
   { label: "Due", route: "retry_due" },
   { label: "Operation", route: "operation_run" },
@@ -6730,17 +6732,23 @@ function SystemPanel(props: {
               const resolutionDecision = safeString(item.resolution_decision).trim();
               const sourceKind = safeString(item.source_receipt_kind).trim();
               const sourceRef = safeString(item.source_receipt_ref).trim();
+              const recoveryDispatchReceipt = item.latest_recovery_dispatch_receipt;
+              const recoveryRequestReceipt = item.latest_recovery_request_receipt;
               const acknowledgementReceipt = item.latest_escalation_acknowledgement_receipt;
               const handoffReceipt = item.latest_escalation_handoff_receipt;
               const resolutionReceipt = item.latest_resolution_receipt;
               const reviewReceipt = item.latest_review_receipt;
               const latestReceiptId =
+                safeString(recoveryDispatchReceipt?.receipt_id).trim() ||
+                safeString(recoveryRequestReceipt?.receipt_id).trim() ||
                 safeString(acknowledgementReceipt?.receipt_id).trim() ||
                 safeString(handoffReceipt?.receipt_id).trim() ||
                 safeString(resolutionReceipt?.receipt_id).trim() ||
                 safeString(reviewReceipt?.receipt_id).trim() ||
                 sourceRef;
               const latestReceiptKind =
+                safeString(recoveryDispatchReceipt?.kind).trim() ||
+                safeString(recoveryRequestReceipt?.kind).trim() ||
                 safeString(acknowledgementReceipt?.kind).trim() ||
                 safeString(handoffReceipt?.kind).trim() ||
                 safeString(resolutionReceipt?.kind).trim() ||
@@ -6775,6 +6783,8 @@ function SystemPanel(props: {
                     {item.escalation_recorded ? <span style={badgeStyle("escalation_pending")}>escalation pending</span> : null}
                     {item.escalation_handoff_recorded ? <span style={badgeStyle("handoff_recorded")}>handoff recorded</span> : null}
                     {item.escalation_acknowledged ? <span style={badgeStyle("acknowledged")}>acknowledged</span> : null}
+                    {item.recovery_requested ? <span style={badgeStyle("recovery_requested")}>recovery requested</span> : null}
+                    {item.recovery_dispatched ? <span style={badgeStyle("recovery_dispatched")}>recovery dispatched</span> : null}
                     {latestReceiptKind ? <span style={badgeStyle("receipt")}>{latestReceiptKind}</span> : null}
                   </div>
 

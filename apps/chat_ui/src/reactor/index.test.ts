@@ -545,6 +545,125 @@ test("ReactorClient.listDeadletters preserves escalation acknowledgement receipt
   }
 });
 
+test("ReactorClient.listDeadletters preserves recovery request and dispatch receipts without authority claims", async () => {
+  const requests: Array<{ path: string; method: string; limit: string | null; status: string | null }> = [];
+  const restoreFetch = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      limit: parsed.searchParams.get("limit"),
+      status: parsed.searchParams.get("status"),
+    });
+
+    return jsonResponse({
+      ok: true,
+      items: [
+        {
+          deadletter_id: "rdl_recovery_requested",
+          event_id: "evt_recovery_requested",
+          status: "recovery_requested",
+          route: "deadletter_recovery_request",
+          stable_state: "deadletter_recovery_requested",
+          next_step: "wait_for_explicit_recovery_dispatch_attempt",
+          source_receipt_kind: "reactor.deadletter.escalation_acknowledgement.receipt",
+          source_receipt_ref: "rdl_recovery_requested_escalation_acknowledgement",
+          resolution_decision: "escalation_pending",
+          escalation_recorded: true,
+          escalation_handoff_recorded: true,
+          escalation_acknowledged: true,
+          recovery_requested: true,
+          recovery_dispatched: false,
+          recovery_started: false,
+          execution_started: false,
+          latest_recovery_request_receipt: {
+            kind: "reactor.deadletter.recovery_request.receipt",
+            receipt_id: "rdl_recovery_requested_recovery_request",
+            status: "recovery_requested",
+            route: "deadletter_recovery_request",
+            stable_state: "deadletter_recovery_requested",
+            recovery_requested: true,
+            recovery_event_id: "evt_recovery_dispatch",
+            recovery_started: false,
+            execution_started: false,
+            memory_write: false,
+          },
+        },
+        {
+          deadletter_id: "rdl_recovery_dispatched",
+          event_id: "evt_recovery_dispatched",
+          status: "recovery_dispatched",
+          route: "deadletter_recovery_dispatch",
+          stable_state: "deadletter_recovery_dispatched",
+          next_step: "keep_recovery_dispatch_receipt_for_audit",
+          source_receipt_kind: "reactor.deadletter.recovery_request.receipt",
+          source_receipt_ref: "rdl_recovery_dispatched_recovery_request",
+          recovery_requested: true,
+          recovery_dispatched: true,
+          recovery_started: true,
+          execution_started: true,
+          latest_recovery_dispatch_receipt: {
+            kind: "reactor.deadletter.recovery_dispatch.receipt",
+            receipt_id: "rdl_recovery_dispatched_recovery_dispatch",
+            status: "recovery_dispatched",
+            route: "deadletter_recovery_dispatch",
+            stable_state: "deadletter_recovery_dispatched",
+            recovery_requested: true,
+            recovery_dispatched: true,
+            recovery_request_receipt_id: "rdl_recovery_dispatched_recovery_request",
+            recovery_started: true,
+            execution_started: true,
+            memory_write: false,
+          },
+        },
+      ],
+      total: 2,
+      limit: 6,
+      status: "recovery_dispatched",
+      governance: {
+        execution_authority: false,
+        retry_authority: false,
+        escalation_authority: false,
+        memory_write: false,
+      },
+    });
+  });
+
+  try {
+    const client = new ReactorClient("http://127.0.0.1:8000");
+    const snapshot = await client.listDeadletters({ status: "recovery_dispatched", limit: 6 });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/reactor/deadletters/list",
+        method: "GET",
+        limit: "6",
+        status: "recovery_dispatched",
+      },
+    ]);
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.items[0]?.status, "recovery_requested");
+    assert.equal(snapshot.items[0]?.recovery_requested, true);
+    assert.equal(snapshot.items[0]?.recovery_dispatched, false);
+    assert.equal(snapshot.items[0]?.latest_recovery_request_receipt?.kind, "reactor.deadletter.recovery_request.receipt");
+    assert.equal(snapshot.items[0]?.latest_recovery_request_receipt?.recovery_event_id, "evt_recovery_dispatch");
+    assert.equal(snapshot.items[0]?.latest_recovery_request_receipt?.memory_write, false);
+    assert.equal(snapshot.items[1]?.status, "recovery_dispatched");
+    assert.equal(snapshot.items[1]?.route, "deadletter_recovery_dispatch");
+    assert.equal(snapshot.items[1]?.recovery_requested, true);
+    assert.equal(snapshot.items[1]?.recovery_dispatched, true);
+    assert.equal(snapshot.items[1]?.latest_recovery_dispatch_receipt?.kind, "reactor.deadletter.recovery_dispatch.receipt");
+    assert.equal(
+      snapshot.items[1]?.latest_recovery_dispatch_receipt?.recovery_request_receipt_id,
+      "rdl_recovery_dispatched_recovery_request",
+    );
+    assert.equal(snapshot.items[1]?.latest_recovery_dispatch_receipt?.execution_started, true);
+    assert.equal(snapshot.governance?.execution_authority, false);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("parseReactorReviewQueueSnapshot drops malformed items and preserves route errors", () => {
   const snapshot = parseReactorReviewQueueSnapshot({
     ok: false,
