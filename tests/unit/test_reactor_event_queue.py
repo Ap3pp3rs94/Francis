@@ -229,6 +229,7 @@ def test_reactor_event_queue_records_bounded_trigger_without_dispatch(monkeypatc
             "max_runtime_seconds": 120,
             "max_retries": 2,
             "backoff_seconds": 30,
+            "resource_budget": "ci-classification-budget",
             "stop_conditions": ["classified", "approval_required", "budget_exhausted"],
             "metadata": {"token": raw_secret, "workflow": "ci"},
         }
@@ -245,6 +246,7 @@ def test_reactor_event_queue_records_bounded_trigger_without_dispatch(monkeypatc
     assert event["classification"]["dispatch_allowed"] is True
     assert event["bounds"]["max_actions"] == 3
     assert event["bounds"]["max_retries"] == 2
+    assert event["bounds"]["resource_budget"] == "ci-classification-budget"
     assert event["dispatch"] == {
         "status": "not_started",
         "allowed": True,
@@ -255,15 +257,56 @@ def test_reactor_event_queue_records_bounded_trigger_without_dispatch(monkeypatc
     assert event["governance"]["approval_authority"] is False
     assert event["governance"]["dispatch_authority"] is False
     assert event["governance"]["memory_write"] is False
+    bounded_plan = event["latest_bounded_plan_receipt"]
+    assert bounded_plan["kind"] == "reactor.bounded_plan.receipt"
+    assert bounded_plan["status"] == "planned"
+    assert bounded_plan["route"] == "bounded_plan"
+    assert bounded_plan["gate"] == "reactor_bounded_planning"
+    assert bounded_plan["stable_state"] == "awaiting_dispatch"
+    assert bounded_plan["next_step"] == "dispatch_with_explicit_budget_and_receipt"
+    assert bounded_plan["action_class"] == "classify"
+    assert bounded_plan["mode"] == "assist"
+    assert bounded_plan["risk_tier"] == "normal"
+    assert bounded_plan["approval_required"] is False
+    assert bounded_plan["dispatch_allowed"] is True
+    assert bounded_plan["max_actions"] == 3
+    assert bounded_plan["max_runtime_seconds"] == 120
+    assert bounded_plan["max_retries"] == 2
+    assert bounded_plan["backoff_seconds"] == 30
+    assert bounded_plan["resource_budget"] == "ci-classification-budget"
+    assert bounded_plan["stop_conditions"] == ["classified", "approval_required", "budget_exhausted"]
+    assert bounded_plan["bounded_plan_recorded"] is True
+    assert bounded_plan["execution_started"] is False
+    assert bounded_plan["dispatch_applied"] is False
+    assert bounded_plan["memory_write"] is False
+    assert bounded_plan["readback_only"] is True
+    assert bounded_plan["governance"]["execution_authority"] is False
+    assert bounded_plan["governance"]["dispatch_authority"] is False
+    assert bounded_plan["governance"]["approval_authority"] is False
+    assert bounded_plan["governance"]["retry_authority"] is False
+    assert bounded_plan["governance"]["memory_write"] is False
+    assert event["bounded_plan"]["receipt_id"] == bounded_plan["receipt_id"]
+    assert event["latest_receipt"]["receipt_id"] == bounded_plan["receipt_id"]
+    assert [receipt["kind"] for receipt in event["receipts"]] == [
+        "reactor.intake.receipt",
+        "reactor.bounded_plan.receipt",
+    ]
+    assert event["decision_journal"][1]["kind"] == "reactor.bounded_plan.recorded"
+    assert event["decision_journal"][1]["max_actions"] == 3
 
     stored_path = Path(str(event["path"]))
     stored_text = stored_path.read_text(encoding="utf-8")
     assert raw_secret not in stored_text
     stored = json.loads(stored_text)
     assert stored["event_id"] == event["event_id"]
+    assert stored["latest_bounded_plan_receipt"]["receipt_id"] == bounded_plan["receipt_id"]
 
     assert get_event(str(event["event_id"]))["event_id"] == event["event_id"]  # type: ignore[index]
     assert [item["event_id"] for item in list_events(trigger_source="telemetry_event")] == [event["event_id"]]
+    assert [item["event_id"] for item in list_events(receipt_kind="reactor.bounded_plan.receipt")] == [
+        event["event_id"]
+    ]
+    assert [item["event_id"] for item in list_events(review_route="bounded_plan")] == [event["event_id"]]
     status = reactor_status()
     assert status["total"] == 1
     assert status["trigger_source_counts"] == {"telemetry_event": 1}

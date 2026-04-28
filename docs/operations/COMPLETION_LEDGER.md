@@ -10674,6 +10674,32 @@ session trigger slice:
 - `python -m mypy src\francis\reactor\events.py src\francis\reactor\dispatch.py`
   Result: `passed`
 
+As of `2026-04-28`, Reactor trigger intake now records an explicit
+readback-only bounded-plan receipt before any dispatch attempt. A queued event
+persists `reactor.bounded_plan.receipt` alongside the existing intake receipt,
+mirrors it through `latest_bounded_plan_receipt`, includes the action class,
+mode, risk tier, action/time/retry/resource budgets, stop conditions, stable
+state, and next step, and exposes it through existing receipt-kind and
+`bounded_plan` route filters. This closes the implicit bounded-planning readback
+gap at intake only: it does not start execution, approve work, retry work,
+write memory, promote capabilities, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor bounded-plan receipt
+slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_event_queue_records_bounded_trigger_without_dispatch tests\test_api_reactor.py::test_reactor_event_routes_enqueue_and_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\events.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10685,7 +10711,8 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
-- Stage 5/Reactor currently has trigger intake, readback, dispatch-attempt
+- Stage 5/Reactor currently has trigger intake, readback, bounded-plan receipts,
+  dispatch-attempt
   receipts, blocked-dispatch blocker records, and deadletter-candidate,
   retry-candidate, retry-exhausted, and review-filter readback plus a read-only
   review-queue projection with chat UI readback only. Reactor dispatch attempts

@@ -50,6 +50,7 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
             "action_class": "classify",
             "max_actions": 2,
             "max_runtime_seconds": 90,
+            "resource_budget": "mission_queue_readback",
             "stop_conditions": ["advanced_once", "approval_required", "budget_exhausted"],
             "metadata": {"queue": "mission"},
         },
@@ -64,19 +65,56 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert event["classification"]["mode"] == "pilot"
     assert event["classification"]["stable_state"] == "awaiting_dispatch"
     assert event["bounds"]["max_actions"] == 2
+    assert event["bounds"]["resource_budget"] == "mission_queue_readback"
     assert event["dispatch"]["applied"] is False
     assert event["governance"]["dispatch_authority"] is False
+    bounded_plan = event["latest_bounded_plan_receipt"]
+    assert bounded_plan["kind"] == "reactor.bounded_plan.receipt"
+    assert bounded_plan["status"] == "planned"
+    assert bounded_plan["route"] == "bounded_plan"
+    assert bounded_plan["stable_state"] == "awaiting_dispatch"
+    assert bounded_plan["action_class"] == "classify"
+    assert bounded_plan["max_actions"] == 2
+    assert bounded_plan["max_runtime_seconds"] == 90
+    assert bounded_plan["resource_budget"] == "mission_queue_readback"
+    assert bounded_plan["stop_conditions"] == ["advanced_once", "approval_required", "budget_exhausted"]
+    assert bounded_plan["execution_started"] is False
+    assert bounded_plan["dispatch_applied"] is False
+    assert bounded_plan["memory_write"] is False
+    assert bounded_plan["readback_only"] is True
+    assert bounded_plan["governance"]["execution_authority"] is False
+    assert bounded_plan["governance"]["dispatch_authority"] is False
+    assert bounded_plan["governance"]["approval_authority"] is False
+    assert event["bounded_plan"]["receipt_id"] == bounded_plan["receipt_id"]
+    assert event["latest_receipt"]["receipt_id"] == bounded_plan["receipt_id"]
+    assert [receipt["kind"] for receipt in event["receipts"]] == [
+        "reactor.intake.receipt",
+        "reactor.bounded_plan.receipt",
+    ]
 
     listed = client.get("/reactor/events/list", params={"trigger_source": "mission_queue"})
     assert listed.status_code == 200
     listed_body = listed.json()
     assert listed_body["total"] == 1
     assert listed_body["items"][0]["event_id"] == event_id
+    bounded_plan_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.bounded_plan.receipt"},
+    )
+    assert bounded_plan_list.status_code == 200
+    assert {item["event_id"] for item in bounded_plan_list.json()["items"]} == {event_id}
+    bounded_plan_route = client.get(
+        "/reactor/events/list",
+        params={"review_route": "bounded_plan"},
+    )
+    assert bounded_plan_route.status_code == 200
+    assert {item["event_id"] for item in bounded_plan_route.json()["items"]} == {event_id}
 
     fetched = client.get("/reactor/events/get", params={"id": event_id})
     assert fetched.status_code == 200
     assert fetched.json()["ok"] is True
     assert fetched.json()["item"]["event_id"] == event_id
+    assert fetched.json()["item"]["latest_bounded_plan_receipt"]["receipt_id"] == bounded_plan["receipt_id"]
 
     dispatch_attempt = client.post(
         "/reactor/events/dispatch_attempt",

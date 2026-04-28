@@ -198,6 +198,58 @@ def _validation_error(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _bounded_plan_receipt(
+    *,
+    event_id: str,
+    trigger: dict[str, Any],
+    classification: dict[str, Any],
+    bounds: dict[str, Any],
+    created_ts: int,
+) -> dict[str, Any]:
+    return _filtered_receipt(
+        {
+            "kind": "reactor.bounded_plan.receipt",
+            "receipt_id": f"{event_id}_bounded_plan",
+            "event_id": event_id,
+            "status": "planned",
+            "route": "bounded_plan",
+            "gate": "reactor_bounded_planning",
+            "ts": created_ts,
+            "trigger_source": trigger.get("source"),
+            "trigger_type": trigger.get("type"),
+            "action_class": classification.get("action_class"),
+            "mode": classification.get("mode"),
+            "risk_tier": classification.get("risk_tier"),
+            "approval_required": bool(classification.get("approval_required")),
+            "dispatch_allowed": bool(classification.get("dispatch_allowed")),
+            "stable_state": classification.get("stable_state"),
+            "next_step": classification.get("next_step"),
+            "max_actions": bounds.get("max_actions"),
+            "max_runtime_seconds": bounds.get("max_runtime_seconds"),
+            "max_retries": bounds.get("max_retries"),
+            "backoff_seconds": bounds.get("backoff_seconds"),
+            "resource_budget": bounds.get("resource_budget"),
+            "stop_conditions": bounds.get("stop_conditions"),
+            "bounded_plan_recorded": True,
+            "execution_started": False,
+            "dispatch_applied": False,
+            "memory_write": False,
+            "readback_only": True,
+            "governance": {
+                "plane": "P4_COGNITION",
+                "gate": "reactor_bounded_planning",
+                "execution_authority": False,
+                "dispatch_authority": False,
+                "approval_authority": False,
+                "retry_authority": False,
+                "promotion_authority": False,
+                "memory_write": False,
+                "readback_only": True,
+            },
+        }
+    )
+
+
 def enqueue_event(payload: dict[str, Any]) -> dict[str, Any]:
     redacted_payload = redact_governed_value(payload)
     data = redacted_payload if isinstance(redacted_payload, dict) else {}
@@ -228,6 +280,21 @@ def enqueue_event(payload: dict[str, Any]) -> dict[str, Any]:
         "run_id": _safe_str(data.get("run_id")).strip(),
         "metadata": data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
     }
+    intake_receipt = {
+        "kind": "reactor.intake.receipt",
+        "event_id": event_id,
+        "status": status,
+        "trigger_source": trigger_source,
+        "stable_state": classification["stable_state"],
+        "next_step": classification["next_step"],
+    }
+    bounded_plan = _bounded_plan_receipt(
+        event_id=event_id,
+        trigger=trigger,
+        classification=classification,
+        bounds=bounds,
+        created_ts=created_ts,
+    )
     record = {
         "kind": "reactor.event",
         "event_id": event_id,
@@ -252,16 +319,24 @@ def enqueue_event(payload: dict[str, Any]) -> dict[str, Any]:
                 "decision": status,
                 "stable_state": classification["stable_state"],
                 "next_step": classification["next_step"],
-            }
+            },
+            {
+                "kind": "reactor.bounded_plan.recorded",
+                "ts": created_ts,
+                "decision": "planned",
+                "stable_state": classification["stable_state"],
+                "next_step": classification["next_step"],
+                "max_actions": bounds["max_actions"],
+                "max_runtime_seconds": bounds["max_runtime_seconds"],
+                "max_retries": bounds["max_retries"],
+                "stop_conditions": bounds["stop_conditions"],
+            },
         ],
-        "receipt": {
-            "kind": "reactor.intake.receipt",
-            "event_id": event_id,
-            "status": status,
-            "trigger_source": trigger_source,
-            "stable_state": classification["stable_state"],
-            "next_step": classification["next_step"],
-        },
+        "receipt": intake_receipt,
+        "bounded_plan": bounded_plan,
+        "latest_bounded_plan_receipt": bounded_plan,
+        "latest_receipt": bounded_plan,
+        "receipts": [intake_receipt, bounded_plan],
         "governance": {
             "plane": "P4_COGNITION",
             "gate": "reactor_trigger_intake",
@@ -4332,6 +4407,8 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
     routes.add(_safe_str(retry_schedule.get("route")).strip().lower())
     for key in (
         "latest_blocker",
+        "bounded_plan",
+        "latest_bounded_plan_receipt",
         "latest_dispatch_execution_receipt",
         "latest_deadletter_candidate",
         "latest_deadletter_review_receipt",
@@ -4368,6 +4445,8 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
     kinds = set()
     for key in (
         "receipt",
+        "bounded_plan",
+        "latest_bounded_plan_receipt",
         "latest_receipt",
         "latest_dispatch_attempt_receipt",
         "latest_dispatch_execution_receipt",
