@@ -11252,6 +11252,43 @@ readback boundary:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
   Result: `passed`
 
+As of `2026-04-28`, Stage 6/Lens has a separate read-only host lifecycle
+preflight.
+`scripts/lens-host-preflight.ps1` returns `kind:
+lens.host.lifecycle_preflight` and checks the declared service config,
+entrypoint, service-status-readback declaration, Windows service installation
+state when available, install/start policy, process-supervision state, runtime
+state/PID presence, tray presence, global hotkey binding, overlay window, and
+summon binding. `-Mode Status` exits `0` with a blocked readiness payload, while
+`-Mode Install`, `-Mode Start`, and `-Mode Launch` refuse with exit `2` and a
+durable JSON reason. This makes the lifecycle gate inspectable before any
+service install/start work exists.
+
+This is diagnostic/preflight-only. It does not install, start, stop, restart, or
+supervise a Windows service; create a resident host process; write PID/state
+files; register a hotkey; open an overlay; change UI behavior; write memory;
+decide approvals; execute actions; or grant overlay-control, summon, capture,
+sensing, telemetry, promotion, policy, service-install, service-control,
+supervision, restart, stop, or local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host lifecycle
+preflight:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-preflight.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-host-preflight.ps1 -Mode Start; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_preflight_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11263,9 +11300,10 @@ These remain true and should block any "finished" claim:
   disabled `/lens/host/manifest` launch-manifest contract plus a status-only
   `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
   non-starting process readback boundary plus read-only Windows service status
-  readback, but no OS-wide summon, resident host process, installed/started
-  service, resident overlay/HUD runtime, OS-level command palette, tray presence,
-  hotkey binding, or live Pilot takeover surface yet
+  readback plus a read-only host lifecycle preflight, but no OS-wide summon,
+  resident host process, installed/started service, resident overlay/HUD runtime,
+  OS-level command palette, tray presence, hotkey binding, or live Pilot takeover
+  surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

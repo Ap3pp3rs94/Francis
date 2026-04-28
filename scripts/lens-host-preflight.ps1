@@ -1,0 +1,211 @@
+[CmdletBinding()]
+param(
+  [ValidateSet('Status', 'Install', 'Start', 'Launch')]
+  [string]$Mode = 'Status'
+)
+
+Set-StrictMode -Version 2
+$ErrorActionPreference = 'Stop'
+
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+& (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
+
+function Add-Check {
+  param(
+    [System.Collections.ArrayList]$Target,
+    [string]$Id,
+    [string]$Status,
+    [string]$Reason,
+    [string]$Evidence = ''
+  )
+
+  [void]$Target.Add([ordered]@{
+      id = $Id
+      status = $Status
+      reason = $Reason
+      evidence = $Evidence
+    })
+}
+
+function Get-BoolProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [bool]$Default = $false
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property) {
+    return $Default
+  }
+  if ($Property.Value -is [bool]) {
+    return [bool]$Property.Value
+  }
+  $Value = [string]$Property.Value
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+  return $Value.ToLowerInvariant() -eq 'true'
+}
+
+function Get-StringProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [string]$Default = ''
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  $Value = [string]$Property.Value
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+  return $Value
+}
+
+function Get-WindowsServiceSupported {
+  try {
+    return [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+      [System.Runtime.InteropServices.OSPlatform]::Windows
+    )
+  } catch {
+    return $false
+  }
+}
+
+$ModeName = $Mode.ToLowerInvariant()
+$ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
+$ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
+$ServiceConfig = $null
+$ConfigError = ''
+if ($ServiceConfigExists) {
+  try {
+    $ServiceConfig = Get-Content -LiteralPath $ServiceConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $ConfigError = [string]$_.Exception.Message
+  }
+}
+
+$Entrypoint = Get-StringProperty -Payload $ServiceConfig -Name 'entrypoint' -Default 'scripts/lens-host.ps1'
+$EntrypointPath = Join-Path $RepoRoot $Entrypoint
+$EntrypointExists = Test-Path -LiteralPath $EntrypointPath -PathType Leaf
+$ServiceName = Get-StringProperty -Payload $ServiceConfig -Name 'service_name' -Default 'Francis-LensHost'
+$BlockedReason = Get-StringProperty -Payload $ServiceConfig -Name 'blocked_reason' -Default 'lens_host_runtime_not_implemented'
+$Installable = Get-BoolProperty -Payload $ServiceConfig -Name 'installable' -Default $false
+$InstallAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'install_authority' -Default $false
+$ServiceInstallAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'service_install_authority' -Default $false
+$ServiceControlAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'service_control_authority' -Default $false
+$AutoStart = Get-BoolProperty -Payload $ServiceConfig -Name 'auto_start' -Default $false
+$StartAfterInstall = Get-BoolProperty -Payload $ServiceConfig -Name 'start_after_install' -Default $false
+$ProcessSupervisionEnabled = Get-BoolProperty -Payload $ServiceConfig -Name 'process_supervision_enabled' -Default $false
+$ServiceStatusReadback = Get-BoolProperty -Payload $ServiceConfig -Name 'service_status_readback' -Default $false
+
+$WindowsServiceSupported = Get-WindowsServiceSupported
+$ServiceInstalled = $false
+$ServiceStatus = if ($WindowsServiceSupported) { 'not_installed' } else { 'unsupported_platform' }
+if ($WindowsServiceSupported) {
+  try {
+    $Service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($null -ne $Service) {
+      $ServiceInstalled = $true
+      $ServiceStatus = ([string]$Service.Status).ToLowerInvariant()
+    }
+  } catch {
+    $ServiceStatus = 'unavailable'
+  }
+}
+
+$RuntimeStatePath = Join-Path $RepoRoot 'data\runtime\lens-host\status.json'
+$PidPath = Join-Path $RepoRoot 'data\runtime\lens-host\lens-host.pid'
+$RuntimeStateExists = Test-Path -LiteralPath $RuntimeStatePath -PathType Leaf
+$PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+
+$Checks = [System.Collections.ArrayList]::new()
+Add-Check -Target $Checks -Id 'runtime_root' -Status 'ready' -Reason 'runtime root accepted' -Evidence $RepoRoot
+Add-Check -Target $Checks -Id 'service_config' -Status $(if ($ServiceConfigExists -and -not $ConfigError) { 'present_disabled' } elseif ($ServiceConfigExists) { 'invalid' } else { 'missing' }) -Reason $(if ($ConfigError) { $ConfigError } elseif ($ServiceConfigExists) { 'disabled readiness config is present' } else { 'lens host service config is missing' }) -Evidence 'config/runtime/services/lens-host.json'
+Add-Check -Target $Checks -Id 'host_entrypoint' -Status $(if ($EntrypointExists) { 'present' } else { 'missing' }) -Reason $(if ($EntrypointExists) { 'status runner is present' } else { 'status runner is missing' }) -Evidence $Entrypoint
+Add-Check -Target $Checks -Id 'service_status_readback' -Status $(if ($ServiceStatusReadback) { 'ready' } else { 'missing' }) -Reason $(if ($ServiceStatusReadback) { 'service status readback is declared' } else { 'service status readback is not declared' }) -Evidence $ServiceName
+Add-Check -Target $Checks -Id 'windows_service' -Status $ServiceStatus -Reason $(if ($ServiceInstalled) { 'declared service is installed' } else { 'declared service is not installed or cannot be queried here' }) -Evidence $ServiceName
+Add-Check -Target $Checks -Id 'install_authority' -Status $(if ($Installable -and $InstallAuthority -and $ServiceInstallAuthority) { 'allowed' } else { 'blocked' }) -Reason 'service install authority is not granted by this Stage 6 preflight' -Evidence 'installable/install_authority/service_install_authority'
+Add-Check -Target $Checks -Id 'service_control_authority' -Status $(if ($ServiceControlAuthority) { 'allowed' } else { 'blocked' }) -Reason 'service start/stop/restart authority is not granted by this Stage 6 preflight' -Evidence 'service_control_authority'
+Add-Check -Target $Checks -Id 'startup_policy' -Status $(if ($AutoStart -or $StartAfterInstall) { 'would_start' } else { 'disabled' }) -Reason 'startup remains disabled until resident host runtime exists' -Evidence 'auto_start/start_after_install'
+Add-Check -Target $Checks -Id 'process_supervision' -Status $(if ($ProcessSupervisionEnabled) { 'enabled' } else { 'blocked' }) -Reason 'process supervision remains disabled' -Evidence 'process_supervision_enabled'
+Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($RuntimeStateExists -or $PidPresent) { 'state_present' } else { 'missing' }) -Reason 'resident host runtime state is not present' -Evidence 'data/runtime/lens-host'
+Add-Check -Target $Checks -Id 'tray_presence' -Status 'missing' -Reason 'tray or equivalent presence host is not implemented' -Evidence 'required_before_enable'
+Add-Check -Target $Checks -Id 'global_hotkey_binding' -Status 'missing' -Reason 'global summon hotkey is not implemented' -Evidence 'required_before_enable'
+Add-Check -Target $Checks -Id 'overlay_window' -Status 'missing' -Reason 'always-on-top Lens overlay is not implemented' -Evidence 'required_before_enable'
+Add-Check -Target $Checks -Id 'summon_binding' -Status 'missing' -Reason 'OS-wide summon binding is not implemented' -Evidence 'required_before_enable'
+
+$Blockers = [System.Collections.ArrayList]::new()
+if (-not $ServiceConfigExists) { [void]$Blockers.Add('lens_host_service_config_missing') }
+if ($ConfigError) { [void]$Blockers.Add('lens_host_service_config_invalid') }
+if (-not $EntrypointExists) { [void]$Blockers.Add('lens_host_entrypoint_missing') }
+if (-not $Installable -or -not $InstallAuthority -or -not $ServiceInstallAuthority) { [void]$Blockers.Add('lens_host_install_not_authorized') }
+if (-not $ServiceControlAuthority) { [void]$Blockers.Add('lens_host_service_control_not_authorized') }
+if (-not $ServiceInstalled) { [void]$Blockers.Add('lens_host_service_not_installed') }
+if (-not $ProcessSupervisionEnabled) { [void]$Blockers.Add('resident_host_process_supervision_disabled') }
+if (-not $RuntimeStateExists -and -not $PidPresent) { [void]$Blockers.Add('resident_host_process_missing') }
+[void]$Blockers.Add('tray_host_missing')
+[void]$Blockers.Add('global_hotkey_binding_missing')
+[void]$Blockers.Add('overlay_window_missing')
+[void]$Blockers.Add('summon_binding_missing')
+if ($BlockedReason) { [void]$Blockers.Insert(0, $BlockedReason) }
+
+$Ready = $Blockers.Count -eq 0
+$Payload = [ordered]@{
+  ok = $true
+  kind = 'lens.host.lifecycle_preflight'
+  status = if ($Ready) { 'ready' } else { 'blocked' }
+  mode = $ModeName
+  ready = $Ready
+  repo_root = $RepoRoot
+  service_name = $ServiceName
+  service_config_path = 'config/runtime/services/lens-host.json'
+  entrypoint = $Entrypoint
+  checks = $Checks
+  blockers = $Blockers
+  service = [ordered]@{
+    status = $ServiceStatus
+    installed = $ServiceInstalled
+    windows_service = $WindowsServiceSupported
+    installable = $Installable
+    auto_start = $AutoStart
+    start_after_install = $StartAfterInstall
+  }
+  governance = [ordered]@{
+    read_only_contract = $true
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    capture_authority = $false
+    new_sensing_authority = $false
+    local_process_launch_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    mutation_authority_granted = $false
+  }
+  message = 'Lens host lifecycle preflight is read-only; install/start/launch remain blocked until resident host runtime prerequisites exist.'
+}
+
+if ($Mode -eq 'Status') {
+  $Payload | ConvertTo-Json -Depth 8
+  exit 0
+}
+
+$Payload.ok = $false
+$Payload.status = 'refused'
+$Payload.error = 'lens_host_lifecycle_action_not_authorized'
+$Payload.message = 'Lens host lifecycle actions are not authorized by this preflight; use Status for read-only inspection.'
+$Payload | ConvertTo-Json -Depth 8
+exit 2
