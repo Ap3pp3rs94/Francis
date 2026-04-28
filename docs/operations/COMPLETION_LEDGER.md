@@ -677,6 +677,20 @@ retry-execution authority outside explicit due retry handoffs, deadletter
 resolution/escalation, memory-write authority, promotion authority, or UI
 controls.
 
+As of `2026-04-28`, the Stage 5/Reactor retry handoff also has explicit
+successful due-retry proof for `operation_run`. A focused contract test proves a
+failed linked operation can schedule an immediate retry, mark that retry due,
+dispatch the due retry through the same `operations.run`-gated `operation_run`
+path, and settle back to `dispatch_completed` / `dispatch_succeeded` when the
+retry execution succeeds. The resulting event readback preserves the retry
+dispatch-attempt receipt, marks the retry schedule as `attempted`, records the
+successful dispatch-execution receipt with trace/run handles, marks
+verification as passed, and returns stable-state readback to `operation_run`
+without leaving stale retry-backoff or deadletter review items active. This is
+proof/readback only; no runtime code, UI, approval authority, memory-write
+authority, promotion authority, deadletter resolution/escalation, or new
+dispatch action class changed in this slice.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9229,6 +9243,22 @@ retry/deadletter routing slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor successful due-retry
+proof/readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_due_retry_dispatch_can_return_to_successful_stable_state -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9254,8 +9284,9 @@ These remain true and should block any "finished" claim:
   and operator posture, with execution, verification, stable-return, and status
   readback. Failed `operation_run` dispatches can now schedule bounded retries
   and deadletter after retry exhaustion through the same governed retry handoff
-  path. Remaining Stage 5 gaps still include broader dispatch action coverage
-  beyond existing operation runs, explicit successful due-retry proof/readback,
+  path, and successful due retry can settle back into operation success readback
+  without active retry/deadletter review leftovers. Remaining Stage 5 gaps still
+  include broader dispatch action coverage beyond existing operation runs,
   deadletter resolution/escalation beyond non-authoritative review receipts,
   broader execution-failure routing beyond the current `operation_run` path, and
   broader operator visibility
