@@ -18,6 +18,7 @@ _OPERATIONS_RUN_SCOPE = "operations.run"
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _CLASSIFICATION_SOURCES = frozenset(
     {
+        "apprenticeship_teaching_session",
         "build_failure",
         "deadletter_recovery",
         "federated_handoff",

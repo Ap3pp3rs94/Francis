@@ -805,6 +805,12 @@ def test_reactor_dispatch_engine_classifies_roadmap_signal_triggers_without_exec
     secret = "sk-" + ("s" * 24)
     cases = (
         (
+            "apprenticeship_teaching_session",
+            "workflow_teaching",
+            "Teaching session ended and needs bounded Reactor classification",
+            "apprenticeship_teaching_session_classified",
+        ),
+        (
             "build_failure",
             "ci_failure",
             "Build failed and needs Reactor classification",
@@ -899,10 +905,11 @@ def test_reactor_dispatch_engine_classifies_roadmap_signal_triggers_without_exec
 
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == event_ids
     status = reactor_status()
-    assert status["status_counts"] == {"dispatch_completed": 4}
-    assert status["dispatch_execution_counts"] == {"completed": 4}
-    assert status["verification_counts"] == {"passed": 4}
+    assert status["status_counts"] == {"dispatch_completed": 5}
+    assert status["dispatch_execution_counts"] == {"completed": 5}
+    assert status["verification_counts"] == {"passed": 5}
     assert status["verification_outcome_counts"] == {
+        "apprenticeship_teaching_session_classified": 1,
         "build_failure_classified": 1,
         "federated_handoff_classified": 1,
         "schedule_window_classified": 1,

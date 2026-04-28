@@ -10650,6 +10650,30 @@ readback slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+As of `2026-04-28`, Reactor trigger intake and read-only classification
+dispatch also covers `apprenticeship_teaching_session`, matching the roadmap's
+apprenticeship teaching-session stimulus as a valid event source. A dispatched
+teaching-session event now records a `reactor.dispatch.execution.receipt`,
+verification receipt, stable-return receipt, and
+`apprenticeship_teaching_session_classified` outcome through the existing
+classification route. This is readback/classification only: it does not start
+apprenticeship observation, capture workflows, execute actions, decide
+approvals, write memory, promote capabilities, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor apprenticeship teaching
+session trigger slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_classifies_roadmap_signal_triggers_without_execution tests\test_api_reactor.py::test_reactor_classification_dispatch_accepts_roadmap_signal_triggers -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py src\francis\reactor\dispatch.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py src\francis\reactor\dispatch.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\events.py src\francis\reactor\dispatch.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10731,8 +10755,9 @@ These remain true and should block any "finished" claim:
   count badges as read-only operator visibility.
   Read-only classification dispatch now covers `telemetry_event`,
   `observer_anomaly`, `schedule_window`, `federated_handoff`, `build_failure`,
-  `validation_completion`, bare `user_request`, and bare `deadletter_recovery`
-  triggers with receipts and stable-return proof, and
+  `validation_completion`, `apprenticeship_teaching_session`, bare
+  `user_request`, and bare `deadletter_recovery` triggers with receipts and
+  stable-return proof, and
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
   approval-resume history readback. Reactor also has explicit no-execution

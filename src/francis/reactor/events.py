@@ -38,6 +38,7 @@ from francis.reactor.retries import (
 
 VALID_TRIGGER_SOURCES = frozenset(
     {
+        "apprenticeship_teaching_session",
         "approval_decision",
         "build_failure",
         "deadletter_recovery",

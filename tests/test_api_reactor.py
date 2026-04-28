@@ -697,6 +697,11 @@ def test_reactor_classification_dispatch_accepts_roadmap_signal_triggers(
     client = TestClient(create_app())
     event_ids: set[str] = set()
     cases = (
+        (
+            "apprenticeship_teaching_session",
+            "workflow_teaching",
+            "apprenticeship_teaching_session_classified",
+        ),
         ("build_failure", "ci_failure", "build_failure_classified"),
         ("schedule_window", "maintenance_window", "schedule_window_classified"),
         ("federated_handoff", "node_handoff", "federated_handoff_classified"),
@@ -775,10 +780,11 @@ def test_reactor_classification_dispatch_accepts_roadmap_signal_triggers(
     status = client.get("/reactor/status")
     assert status.status_code == 200
     status_body = status.json()
-    assert status_body["status_counts"] == {"dispatch_completed": 4}
-    assert status_body["dispatch_execution_counts"] == {"completed": 4}
-    assert status_body["verification_counts"] == {"passed": 4}
+    assert status_body["status_counts"] == {"dispatch_completed": 5}
+    assert status_body["dispatch_execution_counts"] == {"completed": 5}
+    assert status_body["verification_counts"] == {"passed": 5}
     assert status_body["verification_outcome_counts"] == {
+        "apprenticeship_teaching_session_classified": 1,
         "build_failure_classified": 1,
         "federated_handoff_classified": 1,
         "schedule_window_classified": 1,
