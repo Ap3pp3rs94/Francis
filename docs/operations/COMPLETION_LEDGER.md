@@ -10854,6 +10854,45 @@ matrix audit:
 - `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
   Result: `passed`
 
+As of `2026-04-28`, the Stage 5/Reactor completion audit supports a truthful
+closure claim for the current repo posture. The implemented and validated
+Reactor model is event-driven rather than loop-shaped: no generic polling,
+daemon, sleep, or infinite-loop pattern exists in `src/francis/reactor` or the
+Reactor API route, and all Reactor mutation entrypoints are explicit routes
+guarded by `reactor.write`. Dispatches are bounded and traceable through intake
+records, bounded-plan receipts, decision-journal entries, dispatch-attempt
+receipts linked back to the bounded plan, verification receipts, reflection
+receipts, stable-return receipts, status counts, route filters, review queues,
+and operator-visibility summary readback. Blocked actions queue or stop
+truthfully through approval requests, approval decisions, operator-review
+blockers, retry schedules, retry exhaustion, durable deadletters, bounded
+deadletter review/resolution/escalation/recovery receipts, and explicit
+no-execution boundaries for generic `dispatch`, `execute`, `mutate`, and
+`plugin_run` action classes. The current dispatch matrix is sufficient for
+Stage 5 closure: supported actions are `classify`, `mission_tick`,
+`operation_run`, `proposal_review`, and `resume`; boundary actions remain typed
+and blocked until a later stage or explicit governed capability expands them.
+The system is composed rather than constantly churning because retries,
+deadletter handling, external-escalation local outbox handoffs, processor
+handoffs, sender attempts, and recovery dispatches all require explicit
+permission-gated routes or due/review state instead of background self-starting
+continuation. This closure does not start Stage 6/Lens and does not grant new
+execution, approval, memory-write, promotion, external-delivery, external-send,
+telemetry, UI, or policy authority. Real external sending remains intentionally
+outside the Stage 5 closure claim; the current local-outbox and blocked-sender
+surfaces are truthful no-send handoff/readback boundaries, not delivery
+capability.
+
+Latest completion-audit validation for the `2026-04-28` Stage 5/Reactor
+closure:
+
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10945,18 +10984,14 @@ These remain true and should block any "finished" claim:
   `dispatch`, `execute`, `mutate`, and `plugin_run` dispatch boundaries with
   operator-review readback, so those attempts are blocked by typed receipts
   instead of generic
-  not-implemented deferment. Remaining Stage 5 gaps still include a stage-level
-  closure decision about whether the current validated dispatch matrix is
-  sufficient or whether additional action classes are required; broader
-  execution-failure routing/deadletter proof beyond the currently tested
-  `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
-  visibility beyond the current read-only Reactor summary, route-filtered review
-  queue, deadletter queue, recovery receipt, and proposal-review readbacks,
-  and actual external escalation send/execution beyond the current non-sending
-  local outbox queue, artifact readback, processor-readiness readback, local
-  processor-handoff/completion receipt readback, and blocked sender-attempt
-  receipt/readback plus sender-readiness, sender-contract, and operator-summary
-  sender-contract readback
+  not-implemented deferment. Stage 5/Reactor is closed for the current repo
+  posture by the `2026-04-28` completion audit above. Downstream gaps that do not
+  reopen Stage 5 include broader post-Reactor execution surfaces beyond the
+  current validated action matrix, broader Lens/UI experience beyond the current
+  read-only Reactor summaries and review queues, and actual external escalation
+  send/execution beyond the current truthful no-send local outbox, processor
+  handoff/completion, blocked sender-attempt, sender-readiness, sender-contract,
+  and operator-summary sender-contract readbacks.
 
 ## 6. Update rule
 
