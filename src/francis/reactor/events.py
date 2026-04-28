@@ -11,7 +11,7 @@ from francis.governance import approvals
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
 from francis.reactor.deadletters import list_deadletters, queue_deadletter
-from francis.reactor.retries import list_retry_schedules, schedule_retry
+from francis.reactor.retries import list_retry_schedules, mark_retry_due, schedule_retry
 
 VALID_TRIGGER_SOURCES = frozenset(
     {
@@ -1445,6 +1445,155 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     }
 
 
+def record_retry_due(retry_schedule_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    redacted_payload = redact_governed_value(payload or {})
+    data = redacted_payload if isinstance(redacted_payload, dict) else {}
+    actor = _safe_str(data.get("actor")).strip()
+    reason = _safe_str(data.get("reason") or data.get("summary")).strip()
+    ts = _now_s()
+    due_result = mark_retry_due(
+        retry_schedule_id=retry_schedule_id,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+    )
+    if not due_result.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": due_result.get("error") or "retry_due_failed",
+            "receipt": _as_dict(due_result.get("receipt")),
+            "event": None,
+        }
+
+    retry_schedule = _as_dict(due_result.get("item"))
+    due_receipt = _as_dict(due_result.get("receipt"))
+    event_id = _safe_str(retry_schedule.get("event_id") or due_receipt.get("event_id")).strip()
+    path = _event_path(event_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "event_not_found",
+            "receipt": due_receipt,
+            "event": None,
+        }
+
+    record = _read_raw_event(path)
+    if record is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_event",
+            "receipt": due_receipt,
+            "event": None,
+        }
+
+    if due_result.get("status") == "not_due":
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "not_due",
+            "receipt": _display(due_receipt),
+            "event": _display(record),
+        }
+
+    retry_schedule_key = _safe_str(retry_schedule.get("retry_schedule_id")).strip()
+    latest_due = _as_dict(record.get("latest_retry_due_receipt"))
+    if _safe_str(latest_due.get("retry_schedule_id")).strip() == retry_schedule_key:
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_due",
+            "receipt": _display(due_receipt),
+            "event": _display(record),
+        }
+
+    raw_dispatch = record.get("dispatch")
+    dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+    updated_dispatch = {
+        **dispatch,
+        "retry_schedule": retry_schedule,
+        "retry_due_receipt": due_receipt,
+        "retry_due": True,
+        "retry_due_ts": ts,
+        "next_step": "record_bounded_dispatch_attempt_for_due_retry",
+    }
+    raw_journal = record.get("decision_journal")
+    decision_journal = raw_journal if isinstance(raw_journal, list) else []
+    decision_journal.append(
+        {
+            "kind": "reactor.retry.due_handoff",
+            "ts": ts,
+            "decision": "retry_due",
+            "retry_schedule_id": retry_schedule.get("retry_schedule_id"),
+            "candidate_id": retry_schedule.get("candidate_id"),
+            "stable_state": "retry_due",
+            "next_step": "record_bounded_dispatch_attempt_for_due_retry",
+            "applied": False,
+            "retry_started": False,
+            "execution_started": False,
+            "dispatch_applied": False,
+        }
+    )
+    raw_receipts = record.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    if not receipts and isinstance(record.get("receipt"), dict):
+        receipts.append(record["receipt"])
+    receipts.append(due_receipt)
+    raw_retry_schedules = record.get("retry_schedules")
+    retry_schedules = raw_retry_schedules if isinstance(raw_retry_schedules, list) else []
+    if retry_schedule_key:
+        retry_schedules = [
+            item
+            for item in retry_schedules
+            if _safe_str(_as_dict(item).get("retry_schedule_id")).strip() != retry_schedule_key
+        ]
+    retry_schedules.append(retry_schedule)
+    raw_retry_due_receipts = record.get("retry_due_receipts")
+    retry_due_receipts = raw_retry_due_receipts if isinstance(raw_retry_due_receipts, list) else []
+    retry_due_receipts.append(due_receipt)
+
+    record["updated_ts"] = ts
+    record["stable_state"] = "retry_due"
+    record["dispatch"] = updated_dispatch
+    record["decision_journal"] = decision_journal
+    record["receipts"] = receipts
+    record["retry_schedules"] = retry_schedules
+    record["latest_retry_schedule"] = retry_schedule
+    record["retry_due_receipts"] = retry_due_receipts
+    record["latest_retry_due_receipt"] = due_receipt
+    record["latest_receipt"] = due_receipt
+    raw_governance = record.get("governance")
+    governance = raw_governance if isinstance(raw_governance, dict) else {}
+    governance.update(
+        {
+            "gate": "reactor_retry_due_handoff",
+            "execution_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+            "dispatch_authority": False,
+            "retry_due": True,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_resolution_authority": False,
+            "next_step": "record_bounded_dispatch_attempt_for_due_retry",
+        }
+    )
+    record["governance"] = governance
+
+    _atomic_write_json(path, record)
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "retry_due",
+        "event_id": record.get("event_id") or record.get("id"),
+        "receipt": _display(due_receipt),
+        "event": _display(record),
+    }
+
+
 def list_events(
     *,
     limit: int = 200,
@@ -1507,12 +1656,18 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
     dispatch = _as_dict(item.get("dispatch"))
     routes = set(_blocker_routes(dispatch))
     routes.add(_safe_str(dispatch.get("retry_exhausted_route")).strip().lower())
-    for key in ("deadletter_candidate", "retry_candidate", "retry_exhausted"):
+    for key in ("deadletter_candidate", "retry_candidate", "retry_exhausted", "retry_due_receipt"):
         candidate = _as_dict(dispatch.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
     retry_schedule = _as_dict(dispatch.get("retry_schedule")) or _as_dict(dispatch.get("retry_schedule_receipt"))
     routes.add(_safe_str(retry_schedule.get("route")).strip().lower())
-    for key in ("latest_blocker", "latest_deadletter_candidate", "latest_retry_candidate", "latest_retry_exhausted"):
+    for key in (
+        "latest_blocker",
+        "latest_deadletter_candidate",
+        "latest_retry_candidate",
+        "latest_retry_due_receipt",
+        "latest_retry_exhausted",
+    ):
         candidate = _as_dict(item.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
     latest_retry_schedule = _as_dict(item.get("latest_retry_schedule")) or _as_dict(
@@ -1540,6 +1695,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_candidate",
         "latest_retry_candidate",
         "latest_retry_schedule_receipt",
+        "latest_retry_due_receipt",
         "latest_retry_exhausted",
     ):
         receipt = _as_dict(item.get(key))
@@ -1563,6 +1719,8 @@ def _review_action(route: str, status: str, gate: str) -> str:
         return "review_deadletter_candidate_before_escalation"
     if route == "retry_backoff":
         return "review_retry_candidate_before_scheduler_exists"
+    if route == "retry_due":
+        return "record_dispatch_attempt_for_due_retry"
     return f"review_{status or 'pending'}"
 
 
@@ -1642,8 +1800,18 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
     retry_schedule = _as_dict(dispatch.get("retry_schedule_receipt")) or _as_dict(
         item.get("latest_retry_schedule_receipt")
     )
+    retry_due = _as_dict(dispatch.get("retry_due_receipt")) or _as_dict(item.get("latest_retry_due_receipt"))
     retry_exhausted = _as_dict(dispatch.get("retry_exhausted")) or _as_dict(item.get("latest_retry_exhausted"))
 
+    if stable_state == "retry_due" and retry_due:
+        return _review_projection(
+            item=item,
+            route="retry_due",
+            status=_safe_str(retry_due.get("status")).strip() or "due",
+            gate=_safe_str(retry_due.get("gate")).strip() or "dispatch_engine_not_implemented",
+            receipt=retry_due,
+            blocker=blocker,
+        )
     if stable_state == "retry_budget_exhausted" and retry_exhausted:
         return _review_projection(
             item=item,
@@ -1754,6 +1922,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_queue_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_schedule_counts: dict[str, int] = {}
+    retry_due_counts: dict[str, int] = {}
     retry_exhausted_counts: dict[str, int] = {}
     verification_counts: dict[str, int] = {}
     verification_outcome_counts: dict[str, int] = {}
@@ -1811,6 +1980,11 @@ def reactor_status() -> dict[str, Any]:
         retry_exhausted_status = _safe_str(retry_exhausted.get("status")).strip()
         if retry_exhausted_status:
             retry_exhausted_counts[retry_exhausted_status] = retry_exhausted_counts.get(retry_exhausted_status, 0) + 1
+        raw_retry_due = dispatch.get("retry_due_receipt") or item.get("latest_retry_due_receipt")
+        retry_due = raw_retry_due if isinstance(raw_retry_due, dict) else {}
+        retry_due_status = _safe_str(retry_due.get("status")).strip()
+        if retry_due_status:
+            retry_due_counts[retry_due_status] = retry_due_counts.get(retry_due_status, 0) + 1
         raw_stable_return = item.get("latest_stable_return")
         stable_return = raw_stable_return if isinstance(raw_stable_return, dict) else {}
         stable_return_status = _safe_str(stable_return.get("status")).strip()
@@ -1842,6 +2016,7 @@ def reactor_status() -> dict[str, Any]:
         "retry_candidate_counts": retry_candidate_counts,
         "retry_schedule_counts": retry_schedule_counts,
         "retry_schedule_total": len(retry_schedules),
+        "retry_due_counts": retry_due_counts,
         "retry_exhausted_counts": retry_exhausted_counts,
         "verification_counts": verification_counts,
         "verification_outcome_counts": verification_outcome_counts,

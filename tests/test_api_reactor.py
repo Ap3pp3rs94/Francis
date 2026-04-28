@@ -379,6 +379,93 @@ def test_reactor_retry_schedule_readback_routes(monkeypatch, tmp_path: Path) -> 
     assert status.json()["retry_schedule_total"] == 1
 
 
+def test_reactor_retry_due_handoff_route_records_readback_without_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Deferred Reactor dispatch retry can become due",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 2,
+            "backoff_seconds": 0,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": event_id, "actor": _REACTOR_ACTOR},
+    )
+    assert attempted.status_code == 200
+    retry_schedule_id = str(attempted.json()["event"]["dispatch"]["retry_schedule"]["retry_schedule_id"])
+
+    due = client.post(
+        "/reactor/retries/mark_due",
+        json={
+            "retry_schedule_id": retry_schedule_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "mark retry due without automatic dispatch",
+        },
+    )
+    assert due.status_code == 200
+    due_body = due.json()
+    assert due_body["ok"] is True
+    assert due_body["applied"] is True
+    assert due_body["status"] == "retry_due"
+    event = due_body["event"]
+    due_receipt = due_body["receipt"]
+    assert event["stable_state"] == "retry_due"
+    assert event["status"] == "dispatch_deferred"
+    assert due_receipt["kind"] == "reactor.retry.due.receipt"
+    assert due_receipt["retry_schedule_id"] == retry_schedule_id
+    assert due_receipt["retry_started"] is False
+    assert due_receipt["execution_started"] is False
+    assert due_receipt["dispatch_applied"] is False
+    assert due_receipt["governance"]["retry_execution_authority"] is False
+    assert event["dispatch"]["retry_schedule"]["status"] == "due"
+    assert event["dispatch"]["retry_due"] is True
+    assert event["latest_retry_due_receipt"]["retry_schedule_id"] == retry_schedule_id
+    assert event["latest_receipt"]["kind"] == "reactor.retry.due.receipt"
+
+    due_list = client.get("/reactor/retries/list", params={"status": "due"})
+    assert due_list.status_code == 200
+    assert {item["retry_schedule_id"] for item in due_list.json()["items"]} == {retry_schedule_id}
+
+    fetched = client.get("/reactor/retries/get", params={"id": retry_schedule_id})
+    assert fetched.status_code == 200
+    assert fetched.json()["item"]["status"] == "due"
+
+    due_events = client.get("/reactor/events/list", params={"receipt_kind": "reactor.retry.due.receipt"})
+    assert due_events.status_code == 200
+    assert {item["event_id"] for item in due_events.json()["items"]} == {event_id}
+
+    retry_due_review = client.get("/reactor/review_queue", params={"route": "retry_due"})
+    assert retry_due_review.status_code == 200
+    review_body = retry_due_review.json()
+    assert review_body["available_total"] == 1
+    assert review_body["items"][0]["review"]["receipt_kind"] == "reactor.retry.due.receipt"
+    assert review_body["items"][0]["governance"]["retry_authority"] is False
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["stable_state_counts"] == {"retry_due": 1}
+    assert status.json()["retry_schedule_counts"] == {"due": 1}
+    assert status.json()["retry_due_counts"] == {"due": 1}
+
+
 def test_reactor_deadletter_queue_readback_routes(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

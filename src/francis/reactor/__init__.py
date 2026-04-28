@@ -7,10 +7,11 @@ from francis.reactor.events import (
     get_event,
     list_events,
     reactor_review_queue,
+    record_retry_due,
     record_dispatch_attempt,
     reactor_status,
 )
-from francis.reactor.retries import get_retry_schedule, list_retry_schedules, schedule_retry
+from francis.reactor.retries import get_retry_schedule, list_retry_schedules, mark_retry_due, schedule_retry
 
 __all__ = [
     "VALID_TRIGGER_SOURCES",
@@ -23,7 +24,9 @@ __all__ = [
     "list_retry_schedules",
     "queue_deadletter",
     "reactor_review_queue",
+    "record_retry_due",
     "record_dispatch_attempt",
     "reactor_status",
+    "mark_retry_due",
     "schedule_retry",
 ]

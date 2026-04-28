@@ -12,6 +12,7 @@ from francis.reactor.events import (
     reactor_review_queue,
     reactor_status,
     record_dispatch_attempt,
+    record_retry_due,
 )
 from francis.reactor.retries import get_retry_schedule, list_retry_schedules
 
@@ -355,6 +356,108 @@ def test_reactor_dispatch_attempt_records_retry_schedule_without_starting_retry(
     assert status["verification_counts"] == {"not_run": 1}
     assert status["verification_outcome_counts"] == {"retry_scheduled": 1}
     assert status["stable_return_counts"] == {"settled": 1}
+
+
+def test_reactor_retry_schedule_due_handoff_records_receipt_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Mission queue item retry can become due",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "max_actions": 2,
+            "max_runtime_seconds": 90,
+            "max_retries": 2,
+            "backoff_seconds": 0,
+        }
+    )
+    event_id = str(created["event_id"])
+    attempted = record_dispatch_attempt(
+        event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "schedule immediate retry handoff",
+        },
+    )
+    retry_schedule_id = str(attempted["event"]["dispatch"]["retry_schedule"]["retry_schedule_id"])
+
+    handed = record_retry_due(
+        retry_schedule_id,
+        {
+            "actor": "reactor.test",
+            "reason": "mark retry due without dispatching it",
+        },
+    )
+
+    assert handed["ok"] is True
+    assert handed["applied"] is True
+    assert handed["status"] == "retry_due"
+    event = handed["event"]
+    assert event["status"] == "dispatch_deferred"
+    assert event["stable_state"] == "retry_due"
+    due_receipt = event["latest_retry_due_receipt"]
+    assert due_receipt["kind"] == "reactor.retry.due.receipt"
+    assert due_receipt["retry_schedule_id"] == retry_schedule_id
+    assert due_receipt["status"] == "due"
+    assert due_receipt["route"] == "retry_due"
+    assert due_receipt["stable_state"] == "retry_due"
+    assert due_receipt["next_step"] == "record_bounded_dispatch_attempt_for_due_retry"
+    assert due_receipt["retry_due"] is True
+    assert due_receipt["retry_started"] is False
+    assert due_receipt["execution_started"] is False
+    assert due_receipt["dispatch_applied"] is False
+    assert due_receipt["applied"] is True
+    assert due_receipt["governance"]["execution_authority"] is False
+    assert due_receipt["governance"]["dispatch_authority"] is False
+    assert due_receipt["governance"]["retry_execution_authority"] is False
+    assert event["dispatch"]["retry_schedule"]["status"] == "due"
+    assert event["dispatch"]["retry_schedule"]["retry_started"] is False
+    assert event["dispatch"]["retry_due"] is True
+    assert event["dispatch"]["retry_due_receipt"]["retry_schedule_id"] == retry_schedule_id
+    assert event["latest_receipt"]["retry_schedule_id"] == retry_schedule_id
+    assert event["decision_journal"][-1]["kind"] == "reactor.retry.due_handoff"
+    assert event["decision_journal"][-1]["retry_schedule_id"] == retry_schedule_id
+    assert event["decision_journal"][-1]["retry_started"] is False
+    assert event["governance"]["retry_due"] is True
+    assert event["governance"]["retry_execution_authority"] is False
+
+    stored_schedule = get_retry_schedule(retry_schedule_id)
+    assert stored_schedule is not None
+    assert stored_schedule["status"] == "due"
+    assert stored_schedule["retry_started"] is False
+    assert [item["retry_schedule_id"] for item in list_retry_schedules(status="due")] == [retry_schedule_id]
+    assert {item["event_id"] for item in list_events(stable_state="retry_due")} == {event_id}
+    assert {item["event_id"] for item in list_events(review_route="retry_due")} == {event_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.retry.due.receipt")} == {event_id}
+
+    review_queue = reactor_review_queue(route="retry_due")
+    assert review_queue["available_total"] == 1
+    assert review_queue["items"][0]["review"]["receipt_kind"] == "reactor.retry.due.receipt"
+    assert review_queue["items"][0]["review"]["action"] == "record_dispatch_attempt_for_due_retry"
+    status = reactor_status()
+    assert status["stable_state_counts"] == {"retry_due": 1}
+    assert status["retry_schedule_counts"] == {"due": 1}
+    assert status["retry_schedule_total"] == 1
+    assert status["retry_due_counts"] == {"due": 1}
+
+    second_handoff = record_retry_due(
+        retry_schedule_id,
+        {
+            "actor": "reactor.test",
+            "reason": "mark retry due again",
+        },
+    )
+
+    assert second_handoff["ok"] is True
+    assert second_handoff["applied"] is False
+    assert second_handoff["status"] == "already_due"
+    assert len(second_handoff["event"]["retry_due_receipts"]) == 1
 
 
 def test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter(
