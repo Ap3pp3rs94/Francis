@@ -975,6 +975,19 @@ external-escalation, execution, approval, promotion, retry, or memory-write
 authority. The next truthful gap remains a real configured external sender
 contract before any record may claim a sent external message.
 
+As of `2026-04-28`, Reactor local outbox external escalation artifacts also
+have read-only sender-readiness readback. `GET
+/reactor/deadletters/external_escalation_deliveries/sender_readiness/list` and
+`/reactor/deadletters/external_escalation_deliveries/sender_readiness/get`
+derive whether a persisted local outbox item has a configured external sender
+after processor completion, including sender status, blocker list,
+processor-completion evidence, no-send flags, and readback governance. This is
+readback only: it does not attempt, claim, send, deliver, start execution,
+change deadletter state, decide approvals, write memory, or grant
+external-delivery or external-escalation authority. The current readiness
+projection remains blocked until a real configured external sender contract
+exists.
+
 As of `2026-04-28`, Reactor deadletters have direct read-only history
 readback. `GET /reactor/deadletters/history/get` derives a chronological
 history for one persisted deadletter from the durable deadletter item,
@@ -10194,6 +10207,22 @@ sender-boundary slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor external delivery
+sender-readiness readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10244,9 +10273,9 @@ These remain true and should block any "finished" claim:
   explicit local processor-handoff receipt/readback, deadletter-history linkage,
   explicit local processor-completion receipt/readback, local processor output
   artifact persistence, explicit blocked sender-attempt receipt/readback after
-  processor completion, and status counts while still sending no external
-  message, starting no external delivery, and granting no external-delivery or
-  external-escalation authority. Queued
+  processor completion, direct sender-readiness readback, and status counts
+  while still sending no external message, starting no external delivery, and
+  granting no external-delivery or external-escalation authority. Queued
   `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
@@ -10287,7 +10316,7 @@ These remain true and should block any "finished" claim:
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, processor-readiness readback, local
   processor-handoff/completion receipt readback, and blocked sender-attempt
-  receipt/readback
+  receipt/readback plus sender-readiness readback
 
 ## 6. Update rule
 

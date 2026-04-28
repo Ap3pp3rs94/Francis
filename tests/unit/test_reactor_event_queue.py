@@ -13,10 +13,12 @@ from francis.reactor.deadletters import (
     get_deadletter_recovery_receipt,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
+    get_external_escalation_delivery_sender_readiness,
     list_deadletters,
     list_deadletter_recovery_receipts,
     list_external_escalation_deliveries,
     list_external_escalation_delivery_processor_readiness,
+    list_external_escalation_delivery_sender_readiness,
 )
 from francis.reactor.events import (
     enqueue_event,
@@ -3177,6 +3179,34 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
         "processor_completed": 1
     }
 
+    sender_readiness = get_external_escalation_delivery_sender_readiness(delivery_id)
+    assert sender_readiness is not None
+    assert sender_readiness["kind"] == "reactor.deadletter.external_escalation.delivery_sender_readiness"
+    assert sender_readiness["delivery_id"] == delivery_id
+    assert sender_readiness["status"] == "blocked"
+    assert sender_readiness["delivery_status"] == "processor_completed"
+    assert sender_readiness["external_delivery_sender_ready"] is False
+    assert sender_readiness["external_delivery_sender_status"] == "blocked"
+    assert sender_readiness["external_delivery_sender_blockers"] == ["external_sender_adapter"]
+    assert sender_readiness["external_sender_status"] == "not_configured"
+    assert sender_readiness["external_sender_blocker"] == "external_sender_adapter_required"
+    assert sender_readiness["delivery_processor_completed"] is True
+    assert sender_readiness["local_outbox_processor_completed"] is True
+    assert sender_readiness["external_delivery_started"] is False
+    assert sender_readiness["external_message_sent"] is False
+    assert sender_readiness["external_network_send"] is False
+    assert sender_readiness["execution_started"] is False
+    assert sender_readiness["completion_claim_allowed"] is False
+    assert sender_readiness["governance"]["external_delivery_sender_attempt_authority"] is False
+    assert sender_readiness["governance"]["external_delivery_authority"] is False
+    assert sender_readiness["governance"]["external_escalation_authority"] is False
+    assert [item["delivery_id"] for item in list_external_escalation_delivery_sender_readiness()] == [delivery_id]
+    assert [
+        item["delivery_id"] for item in list_external_escalation_delivery_sender_readiness(sender_status="blocked")
+    ] == [delivery_id]
+    assert list_external_escalation_delivery_sender_readiness(sender_status="ready") == []
+    assert get_external_escalation_delivery_sender_readiness("red_missing") is None
+
     second_completion = record_deadletter_external_escalation_delivery_processor_completion(
         delivery_id,
         {
@@ -3296,6 +3326,14 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
         "processor_completed": 1
     }
     assert sender_status["deadletter_external_escalation_delivery_sender_attempt_counts"] == {"sender_blocked": 1}
+    post_attempt_readiness = get_external_escalation_delivery_sender_readiness(delivery_id)
+    assert post_attempt_readiness is not None
+    assert post_attempt_readiness["delivery_status"] == "sender_blocked"
+    assert post_attempt_readiness["external_delivery_sender_attempted"] is True
+    assert post_attempt_readiness["external_delivery_sender_ready"] is False
+    assert post_attempt_readiness["external_delivery_sender_blockers"] == ["external_sender_adapter"]
+    assert post_attempt_readiness["external_delivery_started"] is False
+    assert post_attempt_readiness["external_network_send"] is False
 
     second_sender_attempt = record_deadletter_external_escalation_delivery_sender_attempt(
         delivery_id,

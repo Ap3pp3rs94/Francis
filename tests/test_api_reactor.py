@@ -2532,6 +2532,47 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
         "processor_completed": 1
     }
 
+    sender_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
+        params={"sender_status": "blocked"},
+    )
+    assert sender_readiness.status_code == 200
+    sender_readiness_body = sender_readiness.json()
+    assert sender_readiness_body["ok"] is True
+    assert sender_readiness_body["total"] == 1
+    assert sender_readiness_body["ready_total"] == 0
+    assert sender_readiness_body["blocked_total"] == 1
+    assert sender_readiness_body["items"][0]["delivery_id"] == delivery_id
+    assert sender_readiness_body["items"][0]["delivery_status"] == "processor_completed"
+    assert sender_readiness_body["items"][0]["external_delivery_sender_ready"] is False
+    assert sender_readiness_body["items"][0]["external_delivery_sender_blockers"] == ["external_sender_adapter"]
+    assert sender_readiness_body["items"][0]["external_sender_status"] == "not_configured"
+    assert sender_readiness_body["items"][0]["external_delivery_started"] is False
+    assert sender_readiness_body["items"][0]["external_network_send"] is False
+    assert sender_readiness_body["governance"]["external_delivery_sender_attempt_authority"] is False
+    assert sender_readiness_body["governance"]["external_delivery_authority"] is False
+    fetched_sender_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/sender_readiness/get",
+        params={"id": delivery_id},
+    )
+    assert fetched_sender_readiness.status_code == 200
+    assert fetched_sender_readiness.json()["ok"] is True
+    assert fetched_sender_readiness.json()["item"]["delivery_id"] == delivery_id
+    assert fetched_sender_readiness.json()["item"]["external_delivery_sender_ready"] is False
+    assert fetched_sender_readiness.json()["item"]["governance"]["external_escalation_authority"] is False
+    ready_sender_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
+        params={"sender_status": "ready"},
+    )
+    assert ready_sender_readiness.status_code == 200
+    assert ready_sender_readiness.json()["items"] == []
+    missing_sender_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/sender_readiness/get",
+        params={"id": "red_missing"},
+    )
+    assert missing_sender_readiness.status_code == 200
+    assert missing_sender_readiness.json() == {"ok": False, "error": "not_found", "item": None}
+
     second_completion = client.post(
         "/reactor/deadletters/external_escalation_delivery_processor_completion",
         json={"delivery_id": delivery_id, "actor": _REACTOR_ACTOR},
@@ -2659,6 +2700,16 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
     assert sender_status.json()["deadletter_external_escalation_delivery_sender_attempt_counts"] == {
         "sender_blocked": 1
     }
+    post_attempt_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/sender_readiness/get",
+        params={"id": delivery_id},
+    )
+    assert post_attempt_readiness.status_code == 200
+    assert post_attempt_readiness.json()["item"]["delivery_status"] == "sender_blocked"
+    assert post_attempt_readiness.json()["item"]["external_delivery_sender_attempted"] is True
+    assert post_attempt_readiness.json()["item"]["external_delivery_sender_ready"] is False
+    assert post_attempt_readiness.json()["item"]["external_delivery_started"] is False
+    assert post_attempt_readiness.json()["item"]["external_network_send"] is False
 
     second_sender_attempt = client.post(
         "/reactor/deadletters/external_escalation_delivery_sender_attempt",

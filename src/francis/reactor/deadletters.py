@@ -908,6 +908,109 @@ def _external_delivery_processor_readiness(item: dict[str, Any]) -> dict[str, An
     return _display(redacted if isinstance(redacted, dict) else {})
 
 
+def _external_delivery_sender_readiness(item: dict[str, Any]) -> dict[str, Any]:
+    status = _safe_str(item.get("status")).strip().lower()
+    processor_completed = bool(item.get("delivery_processor_completed")) or bool(
+        item.get("local_outbox_processor_completed")
+    )
+    if status in {"processor_completed", "sender_blocked"}:
+        processor_completed = True
+
+    sender_adapter = _safe_str(item.get("external_sender_adapter")).strip()
+    sender_channel = _safe_str(item.get("external_sender_channel") or item.get("external_channel")).strip()
+    sender_target = _safe_str(item.get("external_sender_target") or item.get("external_target")).strip()
+    sender_preflight = external_delivery_sender_preflight(
+        sender_adapter,
+        channel=sender_channel,
+        target=sender_target,
+        processor_completed=processor_completed,
+    )
+    blockers = [
+        _safe_str(blocker).strip()
+        for blocker in (sender_preflight.get("missing_requirements") or [])
+        if _safe_str(blocker).strip()
+    ]
+    if bool(item.get("external_delivery_started")):
+        blockers.append("external_delivery_already_started")
+    if bool(item.get("external_message_sent")) or bool(item.get("external_network_send")):
+        blockers.append("external_message_already_sent")
+    if not _safe_str(item.get("delivery_id")).strip():
+        blockers.append("delivery_id_required")
+    if not _safe_str(item.get("deadletter_id")).strip():
+        blockers.append("deadletter_id_required")
+    if not _safe_str(item.get("event_id")).strip():
+        blockers.append("event_id_required")
+
+    ready = bool(sender_preflight.get("external_sender_ready")) and not blockers
+    sender_status = "ready" if ready else "blocked"
+    next_step = (
+        "execute_explicit_external_delivery_sender"
+        if ready
+        else "configure_explicit_external_delivery_sender_before_marking_sent"
+    )
+    readiness = {
+        "kind": "reactor.deadletter.external_escalation.delivery_sender_readiness",
+        "delivery_id": item.get("delivery_id"),
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": sender_status,
+        "delivery_status": item.get("status"),
+        "route": "deadletter_external_escalation_delivery_sender_readiness",
+        "gate": "reactor_external_escalation_delivery_sender_readiness",
+        "stable_state": item.get("stable_state"),
+        "next_step": next_step,
+        "external_delivery_sender_ready": ready,
+        "external_delivery_sender_status": sender_status,
+        "external_delivery_sender_blockers": blockers,
+        "external_delivery_sender_attempted": bool(item.get("external_delivery_sender_attempted")),
+        "external_sender_adapter": sender_preflight.get("external_sender_adapter"),
+        "external_sender_declared": bool(sender_preflight.get("external_sender_declared")),
+        "external_sender_known": bool(sender_preflight.get("external_sender_known")),
+        "external_sender_configured": bool(sender_preflight.get("external_sender_configured")),
+        "external_sender_ready": bool(sender_preflight.get("external_sender_ready")),
+        "external_sender_status": sender_preflight.get("external_sender_status"),
+        "external_sender_blocker": sender_preflight.get("external_sender_blocker"),
+        "external_sender_channel": sender_preflight.get("external_sender_channel"),
+        "external_sender_target": sender_preflight.get("external_sender_target"),
+        "external_adapter": item.get("external_adapter"),
+        "external_channel": item.get("external_channel"),
+        "external_target": item.get("external_target"),
+        "external_delivery_mode": item.get("external_delivery_mode"),
+        "external_delivery_queued": bool(item.get("external_delivery_queued")),
+        "delivery_processor_handoff_recorded": bool(item.get("delivery_processor_handoff_recorded")),
+        "delivery_processor_completed": processor_completed,
+        "local_outbox_processor_completed": bool(item.get("local_outbox_processor_completed")),
+        "external_delivery_started": bool(item.get("external_delivery_started")),
+        "external_message_sent": bool(item.get("external_message_sent")),
+        "external_network_send": bool(item.get("external_network_send")),
+        "external_escalation_started": bool(item.get("external_escalation_started")),
+        "execution_started": bool(item.get("execution_started")),
+        "dispatch_applied": bool(item.get("dispatch_applied")),
+        "memory_write": bool(item.get("memory_write")),
+        "completion_claim_allowed": False,
+        "created_ts": item.get("created_ts"),
+        "updated_ts": item.get("updated_ts"),
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_sender_readiness",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_delivery_sender_attempt_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "delivery_processor_claim_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(readiness)
+    return _display(redacted if isinstance(redacted, dict) else {})
+
+
 def _external_escalation_delivery_processor_handoff_next_step() -> str:
     return "await_explicit_external_delivery_sender_before_marking_sent"
 
@@ -3391,3 +3494,38 @@ def get_external_escalation_delivery_processor_readiness(delivery_id: str) -> di
     if item is None:
         return None
     return _external_delivery_processor_readiness(item)
+
+
+def list_external_escalation_delivery_sender_readiness(
+    *,
+    limit: int = 200,
+    status: str | None = None,
+    deadletter_id: str | None = None,
+    event_id: str | None = None,
+    sender_status: str | None = None,
+) -> list[dict[str, Any]]:
+    sender_filter = _safe_str(sender_status).strip().lower()
+    items = [
+        _external_delivery_sender_readiness(item)
+        for item in list_external_escalation_deliveries(
+            limit=limit,
+            status=status,
+            deadletter_id=deadletter_id,
+            event_id=event_id,
+        )
+    ]
+    if sender_filter:
+        items = [
+            item
+            for item in items
+            if _safe_str(item.get("external_delivery_sender_status") or item.get("status")).strip().lower()
+            == sender_filter
+        ]
+    return items
+
+
+def get_external_escalation_delivery_sender_readiness(delivery_id: str) -> dict[str, Any] | None:
+    item = get_external_escalation_delivery(delivery_id)
+    if item is None:
+        return None
+    return _external_delivery_sender_readiness(item)
