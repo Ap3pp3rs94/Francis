@@ -10,6 +10,7 @@ from typing import Any
 from francis.governance import approvals
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
+from francis.reactor.deadletters import list_deadletters, queue_deadletter
 
 VALID_TRIGGER_SOURCES = frozenset(
     {
@@ -783,6 +784,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         ts=ts,
     )
     deadletter_candidate = None
+    deadletter_item = None
+    deadletter_enqueue = None
     if blocker is not None and blocker.get("route") == "deadletter_candidate":
         deadletter_candidate = _deadletter_candidate_receipt(
             event_id=event_key,
@@ -814,6 +817,22 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         if retry_exhausted is not None:
             stable_state = _safe_str(retry_exhausted.get("stable_state")).strip() or stable_state
             next_step = _safe_str(retry_exhausted.get("next_step")).strip() or next_step
+    deadletter_source = retry_exhausted or deadletter_candidate
+    if deadletter_source is not None:
+        queued_deadletter = queue_deadletter(
+            event=record,
+            source_receipt=deadletter_source,
+            actor=actor,
+            reason=reason,
+            ts=ts,
+        )
+        deadletter_item = _as_dict(queued_deadletter.get("item"))
+        deadletter_enqueue = _as_dict(queued_deadletter.get("receipt"))
+        deadletter_id = _safe_str(deadletter_item.get("deadletter_id") or deadletter_enqueue.get("deadletter_id"))
+        if deadletter_id:
+            deadletter_source["deadletter_id"] = deadletter_id
+            deadletter_source["deadletter_enqueued"] = True
+            deadletter_source["deadletter_enqueue_receipt_id"] = deadletter_id
 
     receipt = _dispatch_attempt_receipt(
         event_id=event_key,
@@ -847,6 +866,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         updated_dispatch.pop("blocked_route", None)
     if deadletter_candidate is not None:
         updated_dispatch["deadletter_candidate"] = deadletter_candidate
+    if deadletter_item:
+        updated_dispatch["deadletter_item"] = deadletter_item
+    if deadletter_enqueue:
+        updated_dispatch["deadletter_enqueue"] = deadletter_enqueue
     if approval_decision is not None:
         updated_dispatch["approval_decision"] = approval_decision
     if approval_request is not None:
@@ -879,6 +902,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         journal_entry["blocked_route"] = blocker.get("route")
     if deadletter_candidate is not None:
         journal_entry["deadletter_candidate_id"] = deadletter_candidate.get("candidate_id")
+    if deadletter_enqueue:
+        journal_entry["deadletter_id"] = deadletter_enqueue.get("deadletter_id")
+        journal_entry["deadletter_enqueued"] = True
+        journal_entry["deadletter_enqueue_status"] = deadletter_enqueue.get("status")
     if approval_decision is not None:
         journal_entry["approval_id"] = approval_decision.get("approval_id")
         journal_entry["approval_status"] = approval_decision.get("status")
@@ -908,6 +935,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         receipts.append(retry_candidate)
     if retry_exhausted is not None:
         receipts.append(retry_exhausted)
+    if deadletter_enqueue:
+        receipts.append(deadletter_enqueue)
     raw_blockers = record.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
     if blocker is not None:
@@ -922,7 +951,13 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["receipts"] = receipts
     record["latest_dispatch_attempt_receipt"] = receipt
     record["latest_receipt"] = (
-        approval_request or approval_decision or deadletter_candidate or retry_exhausted or retry_candidate or receipt
+        approval_request
+        or approval_decision
+        or deadletter_enqueue
+        or deadletter_candidate
+        or retry_exhausted
+        or retry_candidate
+        or receipt
     )
     if blocker is not None:
         record["blockers"] = blockers
@@ -935,6 +970,22 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         deadletter_candidates.append(deadletter_candidate)
         record["deadletter_candidates"] = deadletter_candidates
         record["latest_deadletter_candidate"] = deadletter_candidate
+    if deadletter_item:
+        raw_deadletter_items = record.get("deadletter_items")
+        deadletter_items = raw_deadletter_items if isinstance(raw_deadletter_items, list) else []
+        deadletter_item_id = _safe_str(deadletter_item.get("deadletter_id")).strip()
+        if deadletter_item_id and all(
+            _safe_str(_as_dict(item).get("deadletter_id")).strip() != deadletter_item_id for item in deadletter_items
+        ):
+            deadletter_items.append(deadletter_item)
+        record["deadletter_items"] = deadletter_items
+        record["latest_deadletter_item"] = deadletter_item
+    if deadletter_enqueue:
+        raw_deadletter_enqueues = record.get("deadletter_enqueues")
+        deadletter_enqueues = raw_deadletter_enqueues if isinstance(raw_deadletter_enqueues, list) else []
+        deadletter_enqueues.append(deadletter_enqueue)
+        record["deadletter_enqueues"] = deadletter_enqueues
+        record["latest_deadletter_enqueue"] = deadletter_enqueue
     if approval_request is not None:
         raw_approval_requests = record.get("approval_requests")
         approval_requests = raw_approval_requests if isinstance(raw_approval_requests, list) else []
@@ -973,6 +1024,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             "approval_request_queued": approval_request is not None,
             "approval_status": approval_status,
             "approval_allows_dispatch": approval_allows_dispatch,
+            "deadletter_enqueued": bool(deadletter_enqueue),
+            "deadletter_resolution_authority": False,
             "next_step": next_step,
         }
     )
@@ -1071,6 +1124,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_receipt",
         "latest_dispatch_attempt_receipt",
         "latest_approval_decision",
+        "latest_deadletter_enqueue",
         "latest_deadletter_candidate",
         "latest_retry_candidate",
         "latest_retry_exhausted",
@@ -1280,8 +1334,13 @@ def reactor_status() -> dict[str, Any]:
     approval_request_counts: dict[str, int] = {}
     approval_decision_counts: dict[str, int] = {}
     deadletter_candidate_counts: dict[str, int] = {}
+    deadletter_queue_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_exhausted_counts: dict[str, int] = {}
+    deadletters = list_deadletters(limit=5000)
+    for deadletter in deadletters:
+        deadletter_status = _safe_str(deadletter.get("status")).strip() or "unknown"
+        deadletter_queue_counts[deadletter_status] = deadletter_queue_counts.get(deadletter_status, 0) + 1
     for item in items:
         status = _safe_str(item.get("status")).strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -1338,6 +1397,8 @@ def reactor_status() -> dict[str, Any]:
         "approval_request_counts": approval_request_counts,
         "approval_decision_counts": approval_decision_counts,
         "deadletter_candidate_counts": deadletter_candidate_counts,
+        "deadletter_queue_counts": deadletter_queue_counts,
+        "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,
         "retry_exhausted_counts": retry_exhausted_counts,
         "dispatch_engine": "not_implemented",

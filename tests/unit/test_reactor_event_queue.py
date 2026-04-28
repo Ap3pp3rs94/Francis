@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from francis.governance import approvals
+from francis.reactor.deadletters import get_deadletter, list_deadletters
 from francis.reactor.events import (
     enqueue_event,
     get_event,
@@ -204,7 +205,7 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
     assert status["retry_candidate_counts"] == {"candidate": 1}
 
 
-def test_reactor_dispatch_attempt_records_retry_exhaustion_without_deadlettering(
+def test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -258,33 +259,59 @@ def test_reactor_dispatch_attempt_records_retry_exhaustion_without_deadlettering
     assert retry_exhausted["max_retries"] == 1
     assert retry_exhausted["remaining_retries"] == 0
     assert retry_exhausted["backoff_seconds"] == 15
-    assert retry_exhausted["deadletter_enqueued"] is False
+    assert retry_exhausted["deadletter_enqueued"] is True
     assert retry_exhausted["retry_scheduled"] is False
     assert retry_exhausted["retry_started"] is False
     assert retry_exhausted["execution_started"] is False
     assert retry_exhausted["applied"] is False
+    deadletter_item = event["dispatch"]["deadletter_item"]
+    assert deadletter_item["kind"] == "reactor.deadletter.item"
+    assert deadletter_item["event_id"] == event_id
+    assert deadletter_item["status"] == "queued"
+    assert deadletter_item["route"] == "deadletter"
+    assert deadletter_item["gate"] == "retry_budget_exhausted"
+    assert deadletter_item["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert deadletter_item["execution_started"] is False
+    assert deadletter_item["retry_started"] is False
+    assert deadletter_item["escalation_started"] is False
+    deadletter_enqueue = event["dispatch"]["deadletter_enqueue"]
+    assert deadletter_enqueue["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert deadletter_enqueue["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert deadletter_enqueue["status"] == "queued"
+    assert deadletter_enqueue["deadletter_enqueued"] is True
     assert event["latest_retry_exhausted"]["exhaustion_id"] == retry_exhausted["exhaustion_id"]
-    assert event["latest_receipt"]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["latest_deadletter_item"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["latest_deadletter_enqueue"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.enqueue.receipt"
     assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
     assert event["latest_dispatch_attempt_receipt"]["stable_state"] == "retry_budget_exhausted"
     assert (
         event["latest_dispatch_attempt_receipt"]["next_step"]
         == "review_retry_exhaustion_before_deadletter_or_dispatch_engine"
     )
-    assert event["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-1]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["receipts"][-1]["kind"] == "reactor.deadletter.enqueue.receipt"
     assert event["decision_journal"][-1]["retry_exhausted_id"] == retry_exhausted["exhaustion_id"]
+    assert event["decision_journal"][-1]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["decision_journal"][-1]["deadletter_enqueued"] is True
     assert event["governance"]["dispatch_authority"] is False
     assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["deadletter_enqueued"] is True
+    assert event["governance"]["deadletter_resolution_authority"] is False
 
     stored = get_event(event_id)
     assert stored is not None
     assert stored["latest_retry_exhausted"]["exhaustion_id"] == retry_exhausted["exhaustion_id"]
+    assert get_deadletter(str(deadletter_item["deadletter_id"]))["event_id"] == event_id  # type: ignore[index]
+    assert [item["deadletter_id"] for item in list_deadletters()] == [deadletter_item["deadletter_id"]]
     status = reactor_status()
     assert status["status_counts"] == {"dispatch_deferred": 1}
     assert status["stable_state_counts"] == {"retry_budget_exhausted": 1}
     assert status["retry_candidate_counts"] == {}
     assert status["retry_exhausted_counts"] == {"exhausted": 1}
+    assert status["deadletter_queue_counts"] == {"queued": 1}
+    assert status["deadletter_total"] == 1
 
 
 def test_reactor_event_list_filters_review_routes_and_receipt_kinds(monkeypatch, tmp_path: Path) -> None:
@@ -711,7 +738,7 @@ def test_reactor_dispatch_attempt_routes_mode_blocker_to_operator_review(monkeyp
     assert reactor_status()["blocker_route_counts"] == {"operator_review": 1}
 
 
-def test_reactor_dispatch_attempt_records_deadletter_candidate_for_exhausted_budget(
+def test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -742,30 +769,63 @@ def test_reactor_dispatch_attempt_records_deadletter_candidate_for_exhausted_bud
     assert event["dispatch"]["blocker"]["deadletter_candidate"] is True
     assert event["dispatch"]["deadletter_candidate"]["kind"] == "reactor.deadletter_candidate.receipt"
     assert event["dispatch"]["deadletter_candidate"]["status"] == "candidate"
-    assert event["dispatch"]["deadletter_candidate"]["deadletter_enqueued"] is False
+    assert event["dispatch"]["deadletter_candidate"]["deadletter_enqueued"] is True
     assert event["dispatch"]["deadletter_candidate"]["retry_started"] is False
     assert "retry_candidate" not in event["dispatch"]
     assert event["dispatch"]["deadletter_candidate"]["max_actions"] == 0
     assert event["dispatch"]["deadletter_candidate"]["max_retries"] == 1
+    deadletter_item = event["dispatch"]["deadletter_item"]
+    assert deadletter_item["kind"] == "reactor.deadletter.item"
+    assert deadletter_item["event_id"] == str(created["event_id"])
+    assert deadletter_item["status"] == "queued"
+    assert deadletter_item["route"] == "deadletter"
+    assert deadletter_item["gate"] == "budget_exhausted"
+    assert deadletter_item["source_receipt_kind"] == "reactor.deadletter_candidate.receipt"
+    assert deadletter_item["source_receipt_ref"] == event["dispatch"]["deadletter_candidate"]["candidate_id"]
+    assert deadletter_item["execution_started"] is False
+    assert deadletter_item["retry_started"] is False
+    assert deadletter_item["escalation_started"] is False
+    deadletter_enqueue = event["dispatch"]["deadletter_enqueue"]
+    assert deadletter_enqueue["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert deadletter_enqueue["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert deadletter_enqueue["status"] == "queued"
+    assert deadletter_enqueue["deadletter_enqueued"] is True
     assert (
         event["latest_deadletter_candidate"]["candidate_id"]
         == event["dispatch"]["deadletter_candidate"]["candidate_id"]
     )
-    assert event["latest_receipt"]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["latest_deadletter_item"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["latest_deadletter_enqueue"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.enqueue.receipt"
     assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
     assert (
         event["latest_dispatch_attempt_receipt"]["blocker"]["deadletter_candidate_receipt_id"]
         == event["latest_deadletter_candidate"]["candidate_id"]
     )
-    assert event["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-1]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["receipts"][-1]["kind"] == "reactor.deadletter.enqueue.receipt"
     assert (
         event["decision_journal"][-1]["deadletter_candidate_id"] == event["latest_deadletter_candidate"]["candidate_id"]
     )
+    assert event["decision_journal"][-1]["deadletter_id"] == deadletter_item["deadletter_id"]
+    assert event["decision_journal"][-1]["deadletter_enqueued"] is True
+    assert event["governance"]["deadletter_enqueued"] is True
+    assert event["governance"]["deadletter_resolution_authority"] is False
+    assert get_deadletter(str(deadletter_item["deadletter_id"]))["event_id"] == str(created["event_id"])  # type: ignore[index]
+    assert [item["deadletter_id"] for item in list_deadletters()] == [deadletter_item["deadletter_id"]]
 
     status = reactor_status()
     assert status["blocker_route_counts"] == {"deadletter_candidate": 1}
     assert status["deadletter_candidate_counts"] == {"candidate": 1}
+    assert status["deadletter_queue_counts"] == {"queued": 1}
+    assert status["deadletter_total"] == 1
+
+    second_attempt = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+
+    assert second_attempt["event"]["dispatch"]["deadletter_enqueue"]["status"] == "already_queued"
+    assert len(second_attempt["event"]["deadletter_items"]) == 1
+    assert len(list_deadletters()) == 1
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:

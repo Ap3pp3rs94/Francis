@@ -251,6 +251,69 @@ def test_reactor_review_queue_route_projects_readonly_items(monkeypatch, tmp_pat
     assert retry_only.json()["items"][0]["event_id"] == retry_id
 
 
+def test_reactor_deadletter_queue_readback_routes(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted Reactor event needs real deadletter queueing",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": event_id, "actor": _REACTOR_ACTOR},
+    )
+    assert attempted.status_code == 200
+    event = attempted.json()["event"]
+    deadletter_item = event["dispatch"]["deadletter_item"]
+    deadletter_id = deadletter_item["deadletter_id"]
+    assert deadletter_item["kind"] == "reactor.deadletter.item"
+    assert deadletter_item["event_id"] == event_id
+    assert event["dispatch"]["deadletter_enqueue"]["status"] == "queued"
+    assert event["dispatch"]["deadletter_candidate"]["deadletter_enqueued"] is True
+    assert event["governance"]["deadletter_resolution_authority"] is False
+
+    listed = client.get("/reactor/deadletters/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["ok"] is True
+    assert listed_body["total"] == 1
+    assert listed_body["items"][0]["deadletter_id"] == deadletter_id
+    assert listed_body["items"][0]["source_receipt_kind"] == "reactor.deadletter_candidate.receipt"
+    assert listed_body["governance"]["deadletter_resolution_authority"] is False
+
+    fetched = client.get("/reactor/deadletters/get", params={"id": deadletter_id})
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["item"]["deadletter_id"] == deadletter_id
+    assert fetched_body["item"]["execution_started"] is False
+    assert fetched_body["item"]["retry_started"] is False
+    assert fetched_body["item"]["escalation_started"] is False
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["deadletter_queue_counts"] == {"queued": 1}
+    assert status.json()["deadletter_total"] == 1
+
+
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     monkeypatch,
     tmp_path: Path,

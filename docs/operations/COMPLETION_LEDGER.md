@@ -549,6 +549,18 @@ dispatch gating only: it does not decide approvals, execute work, write memory,
 schedule retries, enqueue deadletters, or grant approval, dispatch, or execution
 authority.
 
+As of `2026-04-27`, Reactor deadletter candidates can now create a real durable
+deadletter queue item. Budget-exhausted dispatch blockers and retry-exhausted
+dispatch attempts write one idempotent `reactor.deadletter.item` under the
+Reactor deadletter queue, record a `reactor.deadletter.enqueue.receipt`, link
+the deadletter id back into the event dispatch state, decision journal, receipt
+history, and latest receipt, and expose read-only `/reactor/deadletters/list`
+and `/reactor/deadletters/get` routes plus `/reactor/status`
+`deadletter_queue_counts`. This is queue persistence and readback only: it does
+not retry work, escalate work, resolve deadletters, execute dispatches, write
+memory, or grant retry, escalation, dispatch, execution, or deadletter
+resolution authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4422,6 +4434,26 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+deadletter queue baseline slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: failed once during collection because the new unit test imported
+  deadletter helpers from `events.py`; failed once on Windows path length for
+  verbose deadletter filenames; passed after importing from
+  `francis.reactor.deadletters` and shortening persisted deadletter ids
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\deadletters.py; passed
+  after formatting`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 approval-decision reconciliation slice:
@@ -8961,10 +8993,11 @@ These remain true and should block any "finished" claim:
   readback plus a read-only review-queue projection with chat UI readback only.
   Reactor dispatch attempts can create a pending approval request when missing,
   and reconcile terminal approval decisions back into deferred dispatch or
-  operator-review-blocked state, but bounded dispatch execution, real deadletter
-  queue integration, verification, real retry scheduling/backoff execution,
-  deadletter/escalation, stable-return receipts, and broader operator visibility
-  are still remaining work
+  operator-review-blocked state, and deadletter candidates now persist real
+  Reactor deadletter queue items, but bounded dispatch execution, verification,
+  real retry scheduling/backoff execution, deadletter resolution/escalation,
+  stable-return receipts, and broader operator visibility are still remaining
+  work
 
 ## 6. Update rule
 
