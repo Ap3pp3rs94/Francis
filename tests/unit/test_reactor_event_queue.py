@@ -2400,17 +2400,58 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert recovery_stable_return["operation_id"] == operation_id
     assert recovery_stable_return["dispatch_applied"] is True
     assert recovery_stable_return["execution_started"] is True
+    recovery_settlement = recovery_dispatch["deadletter_recovery_dispatch"]
+    recovery_settlement_receipt = recovery_settlement["receipt"]
+    assert recovery_settlement_receipt["kind"] == "reactor.deadletter.recovery_dispatch.receipt"
+    assert recovery_settlement_receipt["deadletter_id"] == deadletter_id
+    assert recovery_settlement_receipt["status"] == "recovery_dispatched"
+    assert recovery_settlement_receipt["route"] == "deadletter_recovery_dispatch"
+    assert recovery_settlement_receipt["stable_state"] == "deadletter_recovery_dispatched"
+    assert recovery_settlement_receipt["recovery_event_id"] == recovery_event_id
+    assert recovery_settlement_receipt["operation_id"] == operation_id
+    assert recovery_settlement_receipt["operation_status"] == "succeeded"
+    assert recovery_settlement_receipt["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_settlement_receipt["recovery_dispatched"] is True
+    assert recovery_settlement_receipt["deadletter_settled"] is True
+    assert recovery_settlement_receipt["execution_started"] is True
+    assert recovery_settlement_receipt["dispatch_applied"] is True
+    assert recovery_settlement_receipt["governance"]["authority_source"] == "operations.run"
+    assert recovery_settlement_receipt["governance"]["deadletter_settlement_authority"] is True
+    assert recovery_settlement_receipt["governance"]["approval_authority"] is False
+    assert recovery_settlement_receipt["governance"]["promotion_authority"] is False
+    assert recovery_settlement["item"]["status"] == "recovery_dispatched"
+    assert recovery_settlement["source_event"]["stable_state"] == "deadletter_recovery_dispatched"
+    assert (
+        recovery_settlement["source_event"]["latest_deadletter_recovery_dispatch_receipt"]["deadletter_id"]
+        == deadletter_id
+    )
     assert {item["event_id"] for item in list_events(stable_state="dispatch_succeeded")} == {recovery_event_id}
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == {
         recovery_event_id
     }
+    assert {item["event_id"] for item in list_events(stable_state="deadletter_recovery_dispatched")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.recovery_dispatch.receipt")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(review_route="deadletter_recovery_dispatch")} == {
+        str(created["event_id"])
+    }
+    assert reactor_review_queue(route="deadletter_recovery_request")["available_total"] == 0
     recovered_deadletter = get_deadletter(deadletter_id)
     assert recovered_deadletter is not None
-    assert recovered_deadletter["status"] == "recovery_requested"
+    assert recovered_deadletter["status"] == "recovery_dispatched"
     assert recovered_deadletter["recovery_event_id"] == recovery_event_id
+    assert (
+        recovered_deadletter["latest_recovery_dispatch_receipt"]["receipt_id"]
+        == recovery_settlement_receipt["receipt_id"]
+    )
+    assert [item["deadletter_id"] for item in list_deadletters(status="recovery_requested")] == []
+    assert [item["deadletter_id"] for item in list_deadletters(status="recovery_dispatched")] == [deadletter_id]
     recovery_dispatch_status = reactor_status()
     assert recovery_dispatch_status["stable_state_counts"] == {
-        "deadletter_recovery_requested": 1,
+        "deadletter_recovery_dispatched": 1,
         "dispatch_succeeded": 1,
     }
     assert recovery_dispatch_status["dispatch_execution_counts"] == {"completed": 1}
@@ -2419,7 +2460,9 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
         "deadletter_queued_for_review": 1,
         "operation_succeeded": 1,
     }
-    assert recovery_dispatch_status["deadletter_queue_counts"] == {"recovery_requested": 1}
+    assert recovery_dispatch_status["deadletter_queue_counts"] == {"recovery_dispatched": 1}
+    assert recovery_dispatch_status["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
+    assert recovery_dispatch_status["deadletter_recovery_dispatch_counts"] == {"recovery_dispatched": 1}
 
     operation_detail = operations_runtime.get_operation_detail(operation_id)
     assert operation_detail["operation"]["status"] == "succeeded"

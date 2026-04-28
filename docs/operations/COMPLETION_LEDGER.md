@@ -812,6 +812,21 @@ authority, and no external-escalation execution; the original deadletter remains
 durably visible as `recovery_requested` until a later settlement/closure path
 exists.
 
+As of `2026-04-28`, successful queued Reactor `deadletter_recovery` dispatches
+now settle the original recovery-requested deadletter with an explicit receipt.
+When a `deadletter_recovery` event runs the linked operation successfully
+through the existing `operation_run` engine and `operations.run` gate, the
+runtime records `reactor.deadletter.recovery_dispatch.receipt`, moves the
+durable deadletter item from `recovery_requested` to `recovery_dispatched`,
+updates the original parent Reactor event to
+`deadletter_recovery_dispatched`, removes it from the active recovery-request
+review queue, and exposes the settlement through receipt-kind filters,
+review-route filters, `/reactor/deadletters/list`, and `/reactor/status`
+`deadletter_recovery_dispatch_counts`. This is a settlement/readback boundary
+for a successful existing dispatch only: it adds no new route, no new dispatch
+engine, no automatic retry loop, no approval authority, no promotion authority,
+no memory-write behavior, and no external-escalation execution.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9508,6 +9523,28 @@ dispatch proof slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor recovery dispatch
+settlement slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff format src\francis\reactor\deadletters.py src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `3 files reformatted, 1 file left unchanged`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9544,14 +9581,15 @@ These remain true and should block any "finished" claim:
   Queued `deadletter_recovery` events now have focused unit and API proof that
   explicit dispatch attempts run through the existing `operation_run` engine and
   `operations.run` scope with execution, verification, stable-return, and
-  readback receipts.
+  readback receipts, and successful recovery dispatches now settle the original
+  `recovery_requested` deadletter into `recovery_dispatched` with a dedicated
+  recovery-dispatch receipt and parent-event readback.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, broader execution-failure routing beyond the current
   `operation_run` path, broader operator visibility beyond the current
-  route-filtered review queue and direct deadletter history, explicit
-  settlement/closure of `recovery_requested` deadletters after a recovery event
-  dispatches, and external escalation execution after disposition, handoff,
-  acknowledgement, and recovery request receipts
+  route-filtered review queue and direct deadletter history, and external
+  escalation execution after disposition, handoff, acknowledgement, and recovery
+  request receipts
 
 ## 6. Update rule
 

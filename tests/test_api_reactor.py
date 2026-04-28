@@ -1231,6 +1231,26 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert recovery_stable_return["stable_state"] == "dispatch_succeeded"
     assert recovery_stable_return["operation_id"] == operation_id
     assert recovery_stable_return["dispatch_applied"] is True
+    recovery_settlement = recovery_dispatch_body["deadletter_recovery_dispatch"]
+    recovery_settlement_receipt = recovery_settlement["receipt"]
+    assert recovery_settlement_receipt["kind"] == "reactor.deadletter.recovery_dispatch.receipt"
+    assert recovery_settlement_receipt["deadletter_id"] == deadletter_id
+    assert recovery_settlement_receipt["status"] == "recovery_dispatched"
+    assert recovery_settlement_receipt["route"] == "deadletter_recovery_dispatch"
+    assert recovery_settlement_receipt["stable_state"] == "deadletter_recovery_dispatched"
+    assert recovery_settlement_receipt["recovery_event_id"] == recovery_event_id
+    assert recovery_settlement_receipt["operation_id"] == operation_id
+    assert recovery_settlement_receipt["operation_status"] == "succeeded"
+    assert recovery_settlement_receipt["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert recovery_settlement_receipt["recovery_dispatched"] is True
+    assert recovery_settlement_receipt["deadletter_settled"] is True
+    assert recovery_settlement_receipt["execution_started"] is True
+    assert recovery_settlement_receipt["dispatch_applied"] is True
+    assert recovery_settlement_receipt["governance"]["authority_source"] == "operations.run"
+    assert recovery_settlement_receipt["governance"]["deadletter_settlement_authority"] is True
+    assert recovery_settlement_receipt["governance"]["approval_authority"] is False
+    assert recovery_settlement["item"]["status"] == "recovery_dispatched"
+    assert recovery_settlement["source_event"]["stable_state"] == "deadletter_recovery_dispatched"
 
     recovery_execution_list = client.get(
         "/reactor/events/list",
@@ -1238,13 +1258,37 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     )
     assert recovery_execution_list.status_code == 200
     assert {item["event_id"] for item in recovery_execution_list.json()["items"]} == {recovery_event_id}
+    recovery_settlement_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.recovery_dispatch.receipt"},
+    )
+    assert recovery_settlement_list.status_code == 200
+    assert {item["event_id"] for item in recovery_settlement_list.json()["items"]} == {event_id}
+    recovery_settlement_route = client.get(
+        "/reactor/events/list",
+        params={"review_route": "deadletter_recovery_dispatch"},
+    )
+    assert recovery_settlement_route.status_code == 200
+    assert {item["event_id"] for item in recovery_settlement_route.json()["items"]} == {event_id}
+    recovery_request_review_after_dispatch = client.get(
+        "/reactor/review_queue",
+        params={"route": "deadletter_recovery_request"},
+    )
+    assert recovery_request_review_after_dispatch.status_code == 200
+    assert recovery_request_review_after_dispatch.json()["available_total"] == 0
     recovered_deadletters = client.get("/reactor/deadletters/list", params={"status": "recovery_requested"})
     assert recovered_deadletters.status_code == 200
-    assert {item["deadletter_id"] for item in recovered_deadletters.json()["items"]} == {deadletter_id}
+    assert recovered_deadletters.json()["items"] == []
+    recovery_dispatched_deadletters = client.get(
+        "/reactor/deadletters/list",
+        params={"status": "recovery_dispatched"},
+    )
+    assert recovery_dispatched_deadletters.status_code == 200
+    assert {item["deadletter_id"] for item in recovery_dispatched_deadletters.json()["items"]} == {deadletter_id}
     recovery_dispatch_status = client.get("/reactor/status")
     assert recovery_dispatch_status.status_code == 200
     assert recovery_dispatch_status.json()["stable_state_counts"] == {
-        "deadletter_recovery_requested": 1,
+        "deadletter_recovery_dispatched": 1,
         "dispatch_succeeded": 1,
     }
     assert recovery_dispatch_status.json()["dispatch_execution_counts"] == {"completed": 1}
@@ -1253,6 +1297,9 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
         "deadletter_queued_for_review": 1,
         "operation_succeeded": 1,
     }
+    assert recovery_dispatch_status.json()["deadletter_queue_counts"] == {"recovery_dispatched": 1}
+    assert recovery_dispatch_status.json()["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
+    assert recovery_dispatch_status.json()["deadletter_recovery_dispatch_counts"] == {"recovery_dispatched": 1}
 
     operation_detail = operations_runtime.get_operation_detail(operation_id)
     assert operation_detail["operation"]["status"] == "succeeded"
