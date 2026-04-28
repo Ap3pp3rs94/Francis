@@ -702,10 +702,11 @@ def _verification_state(
 ) -> tuple[str, str, str]:
     if dispatch_execution:
         execution_outcome = _safe_str(dispatch_execution.get("outcome")).strip() or outcome
+        execution_route = _safe_str(dispatch_execution.get("route")).strip() or "dispatch_execution"
         if dispatch_execution.get("verified"):
-            return ("passed", execution_outcome, "operation_run_completed_with_execution_receipts")
+            return ("passed", execution_outcome, f"{execution_route}_completed_with_execution_receipts")
         if dispatch_execution.get("execution_started"):
-            return ("failed", execution_outcome, "operation_run_finished_without_success")
+            return ("failed", execution_outcome, f"{execution_route}_finished_without_success")
         return ("not_run", execution_outcome, "dispatch_execution_blocked_before_operation_start")
     if deadletter_enqueue:
         return (
@@ -1366,10 +1367,11 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         retry_execution_started = False
         if dispatch_execution_failed and dispatch_execution is not None:
             retry_outcome = _safe_str(dispatch_execution.get("outcome")).strip() or outcome
-            retry_candidate_gate = "operation_run_failed"
+            dispatch_execution_route = _safe_str(dispatch_execution.get("route")).strip() or "dispatch_execution"
+            retry_candidate_gate = f"{dispatch_execution_route}_failed"
             retry_candidate_state = "awaiting_retry"
-            retry_candidate_next_step = "wait_until_retry_due_before_reactor_operation_retry"
-            retry_exhausted_next_step = "review_failed_operation_retry_exhaustion_before_deadletter"
+            retry_candidate_next_step = f"wait_until_retry_due_before_reactor_{dispatch_execution_route}_retry"
+            retry_exhausted_next_step = f"review_failed_{dispatch_execution_route}_retry_exhaustion_before_deadletter"
             retry_execution_started = True
         retry_candidate = _retry_candidate_receipt(
             event_id=event_key,
@@ -3616,7 +3618,7 @@ def reactor_status() -> dict[str, Any]:
         "verification_outcome_counts": verification_outcome_counts,
         "stable_return_counts": stable_return_counts,
         "dispatch_engine": "partial",
-        "dispatch_engine_supported_actions": ["operation_run"],
+        "dispatch_engine_supported_actions": ["mission_tick", "operation_run"],
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {
             "gate": "reactor_trigger_intake",

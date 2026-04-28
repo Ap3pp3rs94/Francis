@@ -9564,6 +9564,26 @@ readback slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor mission tick dispatch
+slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_runs_mission_tick_with_receipts tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_mission_tick_without_missions_scope tests\test_api_reactor.py::test_reactor_mission_tick_dispatch_route_runs_bounded_queue -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_failed_mission_tick_dispatch_schedules_retry -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed after formatting src\francis\reactor\dispatch.py`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9584,30 +9604,36 @@ These remain true and should block any "finished" claim:
   state, persist real Reactor deadletter queue items with bounded review
   receipts, record verification-state and stable-return receipts, persist retry
   schedule queue items, mark retry schedules due, and feed one bounded retry
-  dispatch-attempt receipt. Reactor now has a first partial dispatch engine for
+  dispatch-attempt receipt. Reactor now has a partial dispatch engine for
   existing `operation_run` events guarded by the existing `operations.run` scope
   and operator posture, with execution, verification, stable-return, and status
-  readback. Failed `operation_run` dispatches can now schedule bounded retries
-  and deadletter after retry exhaustion through the same governed retry handoff
-  path, and successful due retry can settle back into operation success readback
-  without active retry/deadletter review leftovers. Deadletter items can now
-  record bounded resolved/no-action or escalation-pending disposition receipts
-  without starting recovery, retry, execution, memory writes, approval decisions,
-  or external escalation, and escalation-pending deadletters can now record a
-  durable non-executing escalation handoff receipt, acknowledgement receipt, and
-  recovery request receipt that queues a separate `deadletter_recovery`
-  `operation_run` event for the same source operation id without dispatching it.
-  Queued `deadletter_recovery` events now have focused unit and API proof that
-  explicit dispatch attempts run through the existing `operation_run` engine and
-  `operations.run` scope with execution, verification, stable-return, and
-  readback receipts, and successful recovery dispatches now settle the original
-  `recovery_requested` deadletter into `recovery_dispatched` with a dedicated
-  recovery-dispatch receipt and parent-event readback. Chat UI Reactor readback
-  now preserves recovery-request and recovery-dispatch filters, badges, and
-  latest receipt handles from the existing read routes.
+  readback. It also supports one bounded `mission_tick` dispatch through the
+  existing mission queue runtime guarded by `missions.write` and operator
+  posture, with execution, verification, stable-return, status readback,
+  permission-denial proof, and failure retry scheduling through a
+  `mission_tick_failed` gate. Failed `operation_run` dispatches can now schedule
+  bounded retries and deadletter after retry exhaustion through the same governed
+  retry handoff path, and successful due retry can settle back into operation
+  success readback without active retry/deadletter review leftovers. Deadletter
+  items can now record bounded resolved/no-action or escalation-pending
+  disposition receipts without starting recovery, retry, execution, memory
+  writes, approval decisions, or external escalation, and escalation-pending
+  deadletters can now record a durable non-executing escalation handoff receipt,
+  acknowledgement receipt, and recovery request receipt that queues a separate
+  `deadletter_recovery` `operation_run` event for the same source operation id
+  without dispatching it. Queued `deadletter_recovery` events now have focused
+  unit and API proof that explicit dispatch attempts run through the existing
+  `operation_run` engine and `operations.run` scope with execution,
+  verification, stable-return, and readback receipts, and successful recovery
+  dispatches now settle the original `recovery_requested` deadletter into
+  `recovery_dispatched` with a dedicated recovery-dispatch receipt and
+  parent-event readback. Chat UI Reactor readback now preserves recovery-request
+  and recovery-dispatch filters, badges, and latest receipt handles from the
+  existing read routes.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
-  existing operation runs, broader execution-failure routing beyond the current
-  `operation_run` path, broader operator visibility beyond the current
+  existing operation runs and bounded mission queue ticks, broader
+  execution-failure routing/deadletter proof beyond the currently tested
+  dispatch-engine paths, broader operator visibility beyond the current
   route-filtered review queue and direct deadletter history, and external
   escalation execution after disposition, handoff, acknowledgement, and recovery
   request receipts

@@ -4,9 +4,11 @@ from typing import Any
 
 from francis.governance.api_permission_gate import ApiPermissionGate
 from francis.governance.redaction import redact_governed_value
+from francis.missions import runtime as mission_runtime
 from francis.operations import runtime as operations_runtime
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
+_MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
 
 
@@ -28,14 +30,32 @@ def _redacted_dict(value: dict[str, Any]) -> dict[str, Any]:
     return redacted if isinstance(redacted, dict) else {}
 
 
-def _operation_run_permission(actor: str) -> tuple[bool, dict[str, Any]]:
+def _safe_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _scope_permission(actor: str, scope: str) -> tuple[bool, dict[str, Any]]:
     decision = ApiPermissionGate.from_env().check(
         actor_id=actor,
-        required_scopes=[_OPERATIONS_RUN_SCOPE],
+        required_scopes=[scope],
         route="/reactor/events/dispatch_attempt",
         method="POST",
     )
     return decision.allowed, {"reason": decision.reason, "evidence": decision.evidence}
+
+
+def _operation_run_permission(actor: str) -> tuple[bool, dict[str, Any]]:
+    return _scope_permission(actor, _OPERATIONS_RUN_SCOPE)
+
+
+def _mission_write_permission(actor: str) -> tuple[bool, dict[str, Any]]:
+    return _scope_permission(actor, _MISSIONS_WRITE_SCOPE)
 
 
 def _posture_block(action_label: str) -> str:
@@ -74,6 +94,45 @@ def _operation_identity(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _mission_queue_identity(result: dict[str, Any]) -> dict[str, Any]:
+    raw_results = result.get("results")
+    results = raw_results if isinstance(raw_results, list) else []
+    mission_ids: list[str] = []
+    operation_ids: list[str] = []
+    trace_ids: list[str] = []
+    run_ids: list[str] = []
+    memory_receipt_ids: list[str] = []
+    memory_write = False
+    for item in results[:10]:
+        entry = _as_dict(item)
+        mission_id = _safe_str(entry.get("mission_id")).strip()
+        if mission_id:
+            mission_ids.append(mission_id)
+        operation_id = _safe_str(entry.get("operation_id")).strip()
+        if operation_id:
+            operation_ids.append(operation_id)
+        trace_id = _safe_str(entry.get("trace_id")).strip()
+        if trace_id:
+            trace_ids.append(trace_id)
+        run_id = _safe_str(entry.get("run_id")).strip()
+        if run_id:
+            run_ids.append(run_id)
+        memory_receipt = _as_dict(entry.get("memory_receipt"))
+        memory_receipt_id = _safe_str(memory_receipt.get("receipt_id") or memory_receipt.get("id")).strip()
+        if memory_receipt_id:
+            memory_receipt_ids.append(memory_receipt_id)
+        if memory_receipt:
+            memory_write = True
+    return {
+        "mission_ids": mission_ids,
+        "operation_ids": operation_ids,
+        "trace_ids": trace_ids,
+        "run_ids": run_ids,
+        "memory_receipt_ids": memory_receipt_ids,
+        "memory_write": memory_write,
+    }
+
+
 def _blocked_receipt(
     *,
     event_id: str,
@@ -84,6 +143,7 @@ def _blocked_receipt(
     gate: str,
     outcome: str,
     next_step: str,
+    route: str = "operation_run",
     operation_id: str = "",
     permission: dict[str, Any] | None = None,
     message: str = "",
@@ -95,7 +155,7 @@ def _blocked_receipt(
             "event_id": event_id,
             "status": "blocked",
             "outcome": outcome,
-            "route": "operation_run",
+            "route": route,
             "gate": gate,
             "stable_state": outcome,
             "next_step": next_step,
@@ -130,19 +190,147 @@ def dispatch_event(
     attempt_count: int,
     ts: int,
 ) -> dict[str, Any]:
-    """Run the first bounded Reactor dispatch engine path.
+    """Run bounded Reactor dispatch engine paths.
 
-    Only `operation_run` events are handled here. Unsupported action classes
-    deliberately fall back to the existing non-executing dispatch-attempt path.
+    Supported actions are explicitly bounded and permission checked. Unsupported
+    action classes deliberately fall back to the existing non-executing
+    dispatch-attempt path.
     """
 
     classification = _as_dict(event.get("classification"))
     action_class = _safe_str(classification.get("action_class")).strip().lower()
-    if action_class != "operation_run":
+    if action_class not in {"mission_tick", "operation_run"}:
         return {"handled": False}
 
     event_id = _safe_str(event.get("event_id") or event.get("id")).strip()
     trigger = _as_dict(event.get("trigger"))
+    bounds = _as_dict(event.get("bounds"))
+    if action_class == "mission_tick":
+        allowed, permission = _mission_write_permission(actor)
+        if not allowed:
+            receipt = _blocked_receipt(
+                event_id=event_id,
+                actor=actor,
+                reason=reason,
+                attempt_count=attempt_count,
+                ts=ts,
+                gate="missions_write_permission_gate",
+                outcome="mission_tick_permission_denied",
+                next_step="configure_missions_write_scope_before_reactor_dispatch",
+                route="mission_tick",
+                permission=permission,
+            )
+            return {
+                "handled": True,
+                "applied": False,
+                "blocked": True,
+                "status": "dispatch_blocked",
+                "outcome": "mission_tick_permission_denied",
+                "stable_state": "mission_tick_permission_denied",
+                "next_step": "configure_missions_write_scope_before_reactor_dispatch",
+                "receipt": receipt,
+            }
+
+        posture_block = _posture_block("reactor mission queue dispatch")
+        if posture_block:
+            receipt = _blocked_receipt(
+                event_id=event_id,
+                actor=actor,
+                reason=reason,
+                attempt_count=attempt_count,
+                ts=ts,
+                gate="operator_posture",
+                outcome="operator_posture_blocks_execution",
+                next_step="switch_operator_posture_before_reactor_dispatch",
+                route="mission_tick",
+                message=posture_block,
+            )
+            return {
+                "handled": True,
+                "applied": False,
+                "blocked": True,
+                "status": "dispatch_blocked",
+                "outcome": "operator_posture_blocks_execution",
+                "stable_state": "operator_posture_blocks_execution",
+                "next_step": "switch_operator_posture_before_reactor_dispatch",
+                "receipt": receipt,
+            }
+
+        mission_queue_limit = _safe_int(bounds.get("max_actions"), default=1, minimum=1, maximum=50)
+        result = mission_runtime.run_queue_once(
+            limit=mission_queue_limit,
+            actor=actor or "reactor.dispatch",
+            note=reason or "reactor_mission_tick",
+        )
+        result_data = result if isinstance(result, dict) else {"ok": False, "error": "unexpected_mission_tick_result"}
+        identity = _mission_queue_identity(result_data)
+        ok = bool(result_data.get("ok"))
+        status = "dispatch_completed" if ok else "dispatch_failed"
+        outcome = "mission_tick_succeeded" if ok else "mission_tick_failed"
+        stable_state = "dispatch_succeeded" if ok else "dispatch_failed"
+        raw_errors = result_data.get("errors")
+        mission_queue_errors = raw_errors if isinstance(raw_errors, list) else []
+        next_step = (
+            "return_to_stable_state_with_mission_queue_receipts"
+            if ok
+            else "review_failed_mission_tick_before_retry_or_deadletter"
+        )
+        receipt = _redacted_dict(
+            {
+                "kind": "reactor.dispatch.execution.receipt",
+                "receipt_id": f"{event_id}_dispatch_execution_{attempt_count}",
+                "event_id": event_id,
+                "status": "completed" if ok else "failed",
+                "outcome": outcome,
+                "route": "mission_tick",
+                "gate": "reactor_dispatch_engine",
+                "stable_state": stable_state,
+                "next_step": next_step,
+                "actor": actor,
+                "reason": reason,
+                "mission_queue_limit": mission_queue_limit,
+                "mission_queue_total": _safe_int(result_data.get("total"), default=0, minimum=0, maximum=10_000),
+                "mission_queue_processed": _safe_int(
+                    result_data.get("processed"), default=0, minimum=0, maximum=10_000
+                ),
+                "mission_queue_applied": _safe_int(result_data.get("applied"), default=0, minimum=0, maximum=10_000),
+                "mission_queue_advanced": _safe_int(result_data.get("advanced"), default=0, minimum=0, maximum=10_000),
+                "mission_queue_error_count": len(mission_queue_errors),
+                "mission_queue_counts": _as_dict(result_data.get("counts")),
+                "mission_ids": identity.get("mission_ids"),
+                "operation_ids": identity.get("operation_ids"),
+                "trace_ids": identity.get("trace_ids"),
+                "run_ids": identity.get("run_ids"),
+                "memory_receipt_ids": identity.get("memory_receipt_ids"),
+                "attempt_count": attempt_count,
+                "ts": ts,
+                "execution_started": True,
+                "dispatch_applied": True,
+                "verified": ok,
+                "completion_claim_allowed": ok,
+                "memory_write": identity.get("memory_write"),
+                "governance": {
+                    "gate": "reactor_dispatch_engine",
+                    "execution_authority": True,
+                    "dispatch_authority": True,
+                    "approval_authority": False,
+                    "memory_write": bool(identity.get("memory_write")),
+                    "authority_source": "missions.write",
+                },
+            }
+        )
+        return {
+            "handled": True,
+            "applied": True,
+            "blocked": False,
+            "status": status,
+            "outcome": outcome,
+            "stable_state": stable_state,
+            "next_step": next_step,
+            "receipt": receipt,
+            "mission_queue_result": result_data,
+        }
+
     operation_id = _safe_str(trigger.get("operation_id")).strip()
     if not operation_id:
         receipt = _blocked_receipt(

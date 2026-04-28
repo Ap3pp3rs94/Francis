@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
 
 _REACTOR_ACTOR = "test.reactor.write"
@@ -25,7 +26,7 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert empty_status.json()["ok"] is True
     assert empty_status.json()["total"] == 0
     assert empty_status.json()["dispatch_engine"] == "partial"
-    assert empty_status.json()["dispatch_engine_supported_actions"] == ["operation_run"]
+    assert empty_status.json()["dispatch_engine_supported_actions"] == ["mission_tick", "operation_run"]
 
     queued = client.post(
         "/reactor/events/enqueue",
@@ -38,7 +39,7 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
             "mission_id": "msn_reactor_ready",
             "operation_id": "tsk_reactor_ready",
             "risk_tier": "normal",
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 2,
             "max_runtime_seconds": 90,
             "stop_conditions": ["advanced_once", "approval_required", "budget_exhausted"],
@@ -216,6 +217,100 @@ def test_reactor_operation_dispatch_route_runs_existing_operation(monkeypatch, t
     assert status.json()["verification_counts"] == {"passed": 1}
 
 
+def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write", "missions.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    mission, error = mission_store.create_mission(
+        mission_store.MissionCreateRequest(
+            objective="advance one mission through the reactor API mission tick",
+            requester_id=_REACTOR_ACTOR,
+            summary="API mission tick dispatch proof",
+        )
+    )
+    assert error is None
+    assert mission is not None
+
+    client = TestClient(create_app())
+    enqueued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Dispatch one mission queue tick through Reactor.",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "actor": _REACTOR_ACTOR,
+            "max_actions": 1,
+        },
+    )
+    assert enqueued.status_code == 200
+    event_id = str(enqueued.json()["event_id"])
+
+    dispatched = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "run one mission queue tick through reactor dispatch",
+        },
+    )
+
+    assert dispatched.status_code == 200
+    body = dispatched.json()
+    assert body["ok"] is True
+    assert body["applied"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "dispatch_succeeded"
+    assert event["dispatch"]["engine"] == "mission_tick"
+    assert event["dispatch"]["applied"] is True
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["route"] == "mission_tick"
+    assert execution["status"] == "completed"
+    assert execution["outcome"] == "mission_tick_succeeded"
+    assert execution["mission_queue_limit"] == 1
+    assert execution["mission_queue_processed"] >= 1
+    assert execution["mission_queue_applied"] >= 1
+    assert execution["mission_queue_advanced"] >= 1
+    assert execution["mission_queue_error_count"] == 0
+    assert mission.mission_id in execution["mission_ids"]
+    assert execution["operation_ids"]
+    assert execution["governance"]["authority_source"] == "missions.write"
+    assert execution["governance"]["approval_authority"] is False
+    assert execution["memory_write"] is False
+    verification = event["latest_verification_receipt"]
+    assert verification["route"] == "mission_tick"
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "mission_tick_succeeded"
+    assert verification["verified"] is True
+    assert verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "mission_tick"
+    assert stable_return["dispatch_applied"] is True
+
+    execution_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.dispatch.execution.receipt"},
+    )
+    assert execution_list.status_code == 200
+    assert {item["event_id"] for item in execution_list.json()["items"]} == {event_id}
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["dispatch_engine_supported_actions"] == ["mission_tick", "operation_run"]
+    assert status.json()["status_counts"] == {"dispatch_completed": 1}
+    assert status.json()["dispatch_execution_counts"] == {"completed": 1}
+    assert status.json()["verification_counts"] == {"passed": 1}
+
+
 def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -251,7 +346,7 @@ def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Pat
             "trigger_source": "mission_queue",
             "summary": "Budget-exhausted event needs deadletter review",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 0,
         },
     ).json()
@@ -267,7 +362,7 @@ def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Pat
             "trigger_source": "mission_queue",
             "summary": "Retry-exhausted event needs review",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 1,
             "max_retries": 1,
         },
@@ -341,7 +436,7 @@ def test_reactor_review_queue_route_projects_readonly_items(monkeypatch, tmp_pat
             "trigger_source": "mission_queue",
             "summary": "Retry candidate needs scheduler review",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 1,
             "max_retries": 2,
         },
@@ -393,7 +488,7 @@ def test_reactor_retry_schedule_readback_routes(monkeypatch, tmp_path: Path) -> 
             "trigger_source": "mission_queue",
             "summary": "Deferred Reactor dispatch needs a durable retry schedule",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 1,
             "max_retries": 2,
             "backoff_seconds": 45,
@@ -482,7 +577,7 @@ def test_reactor_retry_due_handoff_route_records_readback_without_execution(monk
             "trigger_source": "mission_queue",
             "summary": "Deferred Reactor dispatch retry can become due",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 1,
             "max_retries": 2,
             "backoff_seconds": 0,
@@ -572,7 +667,7 @@ def test_reactor_due_retry_dispatch_attempt_route_records_source_receipt_without
             "trigger_source": "mission_queue",
             "summary": "Deferred Reactor dispatch due retry can attempt again",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 1,
             "max_retries": 2,
             "backoff_seconds": 0,
@@ -686,7 +781,7 @@ def test_reactor_deadletter_queue_readback_routes(monkeypatch, tmp_path: Path) -
             "trigger_source": "mission_queue",
             "summary": "Budget-exhausted Reactor event needs real deadletter queueing",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 0,
             "max_retries": 1,
         },
@@ -752,7 +847,7 @@ def test_reactor_deadletter_review_route_records_receipt_without_resolution(
             "trigger_source": "mission_queue",
             "summary": "Budget-exhausted Reactor item can be reviewed",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "max_actions": 0,
             "max_retries": 1,
         },
@@ -864,7 +959,7 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
             "trigger_source": "mission_queue",
             "summary": "Budget-exhausted Reactor item can be escalated",
             "actor": _REACTOR_ACTOR,
-            "action_class": "mission_tick",
+            "action_class": "classify",
             "operation_id": operation_id,
             "max_actions": 0,
             "max_retries": 1,
