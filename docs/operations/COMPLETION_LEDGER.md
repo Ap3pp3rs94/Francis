@@ -1092,7 +1092,9 @@ As of `2026-04-28`, Stage 5/Reactor also has a bounded read-only classification
 dispatch path for classifiable Reactor triggers. The dispatch engine now
 supports `action_class=classify` for `telemetry_event`, `observer_anomaly`,
 `schedule_window`, `federated_handoff`, `build_failure`, and
-`validation_completion` Reactor events, producing a
+`validation_completion` Reactor events, and for bare `user_request` and
+`deadletter_recovery` Reactor events that do not supply a more specific action
+class, producing a
 `reactor.dispatch.execution.receipt`, verification receipt, and stable-return
 receipt with `route=classification` and `stable_state=classification_recorded`.
 This broadens dispatch coverage beyond operation runs, mission queue ticks, and
@@ -10472,6 +10474,35 @@ classification dispatch slice:
 - `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
   Result: `passed`
 
+As of `2026-04-28`, bare `user_request` and bare `deadletter_recovery` Reactor
+events that default to `action_class=classify` no longer fall through generic
+`dispatch_engine_not_implemented` deferment. They now produce read-only
+classification dispatch receipts, verification receipts, and stable-return
+receipts with `route=classification` and source-specific outcomes
+(`user_request_classified` / `deadletter_recovery_classified`). Generated
+deadletter recovery events created by the recovery request workflow still set
+`action_class=operation_run` explicitly and continue through the existing
+`operations.run`-guarded recovery dispatch path. This is classification/readback
+only and does not start execution, decide approvals, resolve deadletters,
+perform retries, send external messages, promote capabilities, execute plugins,
+write memory, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor default-trigger
+classification dispatch slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_classifies_remaining_default_triggers_without_generic_deferment tests\test_api_reactor.py::test_reactor_classification_dispatch_accepts_remaining_default_triggers -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10551,8 +10582,8 @@ These remain true and should block any "finished" claim:
   System/ORB panel now renders that summary as read-only operator visibility.
   Read-only classification dispatch now covers `telemetry_event`,
   `observer_anomaly`, `schedule_window`, `federated_handoff`, `build_failure`,
-  and `validation_completion` triggers with receipts and stable-return proof,
-  and
+  `validation_completion`, bare `user_request`, and bare `deadletter_recovery`
+  triggers with receipts and stable-return proof, and
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
   approval-resume history readback. Reactor also has explicit no-execution
@@ -10563,9 +10594,10 @@ These remain true and should block any "finished" claim:
   coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
   read-only `telemetry_event` / `observer_anomaly` / `schedule_window` /
-  `federated_handoff` / `build_failure` / `validation_completion`
-  classification, read-only approval-decision resume receipts, and the blocked
-  generic execution boundaries; broader
+  `federated_handoff` / `build_failure` / `validation_completion` /
+  `user_request` / bare `deadletter_recovery` classification, read-only
+  approval-decision resume receipts, and the blocked generic execution
+  boundaries; broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review

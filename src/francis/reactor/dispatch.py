@@ -19,10 +19,12 @@ _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _CLASSIFICATION_SOURCES = frozenset(
     {
         "build_failure",
+        "deadletter_recovery",
         "federated_handoff",
         "observer_anomaly",
         "schedule_window",
         "telemetry_event",
+        "user_request",
         "validation_completion",
     }
 )

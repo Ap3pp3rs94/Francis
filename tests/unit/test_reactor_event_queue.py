@@ -886,6 +886,90 @@ def test_reactor_dispatch_engine_classifies_roadmap_signal_triggers_without_exec
     }
 
 
+def test_reactor_dispatch_engine_classifies_remaining_default_triggers_without_generic_deferment(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    cases = (
+        ("user_request", "operator_request", "user_request_classified"),
+        ("deadletter_recovery", "deadletter_recovery_request", "deadletter_recovery_classified"),
+    )
+    event_ids: set[str] = set()
+
+    for trigger_source, trigger_type, outcome in cases:
+        created = enqueue_event(
+            {
+                "trigger_source": trigger_source,
+                "trigger_type": trigger_type,
+                "summary": f"{trigger_source} needs read-only classification",
+                "mode": "assist",
+                "risk_tier": "normal",
+                "max_actions": 1,
+            }
+        )
+        event_id = str(created["event_id"])
+        event_ids.add(event_id)
+        assert created["event"]["classification"]["action_class"] == "classify"
+
+        attempted = record_dispatch_attempt(
+            event_id,
+            {
+                "actor": "reactor.test",
+                "reason": f"classify {trigger_source} without generic deferment",
+            },
+        )
+
+        assert attempted["ok"] is True
+        assert attempted["applied"] is True
+        event = attempted["event"]
+        assert event["status"] == "dispatch_completed"
+        assert event["stable_state"] == "classification_recorded"
+        assert event["dispatch"]["engine"] == "classification"
+        assert event["dispatch"]["applied"] is True
+        assert event["dispatch"]["execution_started"] is False
+        assert "retry_candidate" not in event["dispatch"]
+        assert "deadletter_candidate" not in event["dispatch"]
+
+        execution = event["latest_dispatch_execution_receipt"]
+        assert execution["route"] == "classification"
+        assert execution["outcome"] == outcome
+        assert execution["trigger_source"] == trigger_source
+        assert execution["trigger_type"] == trigger_type
+        assert execution["execution_started"] is False
+        assert execution["dispatch_applied"] is True
+        assert execution["readback_only"] is True
+        assert execution["memory_write"] is False
+        assert execution["governance"]["classification_authority"] is True
+        assert execution["governance"]["execution_authority"] is False
+
+        verification = event["latest_verification_receipt"]
+        assert verification["verification_status"] == "passed"
+        assert verification["verification_outcome"] == outcome
+        assert verification["route"] == "classification"
+        assert verification["execution_started"] is False
+        assert verification["dispatch_applied"] is True
+        assert verification["governance"]["execution_authority"] is False
+
+        stable_return = event["latest_stable_return"]
+        assert stable_return["route"] == "classification"
+        assert stable_return["stable_state"] == "classification_recorded"
+        assert stable_return["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+        assert stable_return["execution_started"] is False
+        assert stable_return["dispatch_applied"] is True
+
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == event_ids
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_completed": 2}
+    assert status["dispatch_execution_counts"] == {"completed": 2}
+    assert status["verification_counts"] == {"passed": 2}
+    assert status["verification_outcome_counts"] == {
+        "deadletter_recovery_classified": 1,
+        "user_request_classified": 1,
+    }
+
+
 def test_reactor_dispatch_engine_records_approval_resume_without_execution(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

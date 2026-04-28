@@ -747,6 +747,106 @@ def test_reactor_classification_dispatch_accepts_roadmap_signal_triggers(
     assert status_body["governance"]["execution_authority"] is False
 
 
+def test_reactor_classification_dispatch_accepts_remaining_default_triggers(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    event_ids: set[str] = set()
+    cases = (
+        ("user_request", "operator_request", "user_request_classified"),
+        ("deadletter_recovery", "deadletter_recovery_request", "deadletter_recovery_classified"),
+    )
+
+    for trigger_source, trigger_type, outcome in cases:
+        queued = client.post(
+            "/reactor/events/enqueue",
+            json={
+                "trigger_source": trigger_source,
+                "trigger_type": trigger_type,
+                "summary": f"{trigger_source} needs read-only classification",
+                "actor": _REACTOR_ACTOR,
+                "mode": "assist",
+                "risk_tier": "normal",
+                "max_actions": 1,
+            },
+        )
+        assert queued.status_code == 200
+        event_id = str(queued.json()["event_id"])
+        event_ids.add(event_id)
+        assert queued.json()["event"]["classification"]["action_class"] == "classify"
+
+        dispatched = client.post(
+            "/reactor/events/dispatch_attempt",
+            json={
+                "event_id": event_id,
+                "actor": _REACTOR_ACTOR,
+                "reason": f"classify {trigger_source} without generic deferment",
+            },
+        )
+        assert dispatched.status_code == 200
+        event = dispatched.json()["event"]
+        assert event["status"] == "dispatch_completed"
+        assert event["stable_state"] == "classification_recorded"
+        assert event["dispatch"]["engine"] == "classification"
+        assert event["dispatch"]["applied"] is True
+        assert event["dispatch"]["execution_started"] is False
+        assert "retry_candidate" not in event["dispatch"]
+        assert "deadletter_candidate" not in event["dispatch"]
+
+        execution = event["latest_dispatch_execution_receipt"]
+        assert execution["route"] == "classification"
+        assert execution["outcome"] == outcome
+        assert execution["trigger_source"] == trigger_source
+        assert execution["trigger_type"] == trigger_type
+        assert execution["execution_started"] is False
+        assert execution["dispatch_applied"] is True
+        assert execution["readback_only"] is True
+        assert execution["memory_write"] is False
+        assert execution["governance"]["classification_authority"] is True
+        assert execution["governance"]["execution_authority"] is False
+
+        verification = event["latest_verification_receipt"]
+        assert verification["verification_status"] == "passed"
+        assert verification["verification_outcome"] == outcome
+        assert verification["route"] == "classification"
+        assert verification["execution_started"] is False
+        assert verification["dispatch_applied"] is True
+
+        stable_return = event["latest_stable_return"]
+        assert stable_return["route"] == "classification"
+        assert stable_return["stable_state"] == "classification_recorded"
+        assert stable_return["execution_started"] is False
+        assert stable_return["dispatch_applied"] is True
+
+    listed = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.dispatch.execution.receipt"},
+    )
+    assert listed.status_code == 200
+    assert {item["event_id"] for item in listed.json()["items"]} == event_ids
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["status_counts"] == {"dispatch_completed": 2}
+    assert status_body["dispatch_execution_counts"] == {"completed": 2}
+    assert status_body["verification_counts"] == {"passed": 2}
+    assert status_body["verification_outcome_counts"] == {
+        "deadletter_recovery_classified": 1,
+        "user_request_classified": 1,
+    }
+    assert status_body["governance"]["execution_authority"] is False
+
+
 def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
     monkeypatch,
     tmp_path: Path,
