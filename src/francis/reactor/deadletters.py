@@ -894,6 +894,91 @@ def _external_delivery_processor_readiness(item: dict[str, Any]) -> dict[str, An
     return _display(redacted if isinstance(redacted, dict) else {})
 
 
+def _external_escalation_delivery_processor_handoff_next_step() -> str:
+    return "await_explicit_external_delivery_sender_before_marking_sent"
+
+
+def _external_escalation_delivery_processor_handoff_receipt(
+    *,
+    item: dict[str, Any],
+    delivery_item: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    delivery_id = _safe_str(delivery_item.get("delivery_id")).strip()
+    latest_delivery = _as_dict(item.get("latest_external_escalation_delivery_receipt"))
+    source_ref = (
+        _safe_str(latest_delivery.get("receipt_id")).strip()
+        or _safe_str(delivery_item.get("source_receipt_ref")).strip()
+        or delivery_id
+    )
+    receipt = {
+        "kind": "reactor.deadletter.external_escalation_delivery_processor_handoff.receipt",
+        "receipt_id": f"{delivery_id}_processor_handoff",
+        "delivery_id": delivery_id,
+        "outbox_item_kind": delivery_item.get("kind"),
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_external_escalation_delivery_processor_handoff",
+        "gate": "reactor_deadletter_external_escalation_delivery_processor_handoff",
+        "stable_state": "deadletter_external_escalation_delivery_processor_handoff_recorded",
+        "next_step": _external_escalation_delivery_processor_handoff_next_step(),
+        "source_receipt_kind": "reactor.deadletter.external_escalation_delivery.receipt",
+        "source_receipt_ref": source_ref,
+        "source_gate": _safe_str(delivery_item.get("gate") or item.get("gate")).strip(),
+        "external_escalation_attempt_receipt_id": delivery_item.get("external_escalation_attempt_receipt_id"),
+        "external_channel": delivery_item.get("external_channel"),
+        "external_target": delivery_item.get("external_target"),
+        "external_adapter": delivery_item.get("external_adapter"),
+        "external_adapter_status": delivery_item.get("external_adapter_status"),
+        "external_delivery_mode": delivery_item.get("external_delivery_mode"),
+        "external_delivery_ready": bool(delivery_item.get("external_delivery_ready")),
+        "external_delivery_queued": bool(delivery_item.get("external_delivery_queued")),
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "external_escalation_started": False,
+        "delivery_processor_handoff_recorded": applied,
+        "delivery_processor_completed": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "completion_claimed": False,
+        "completion_claim_allowed": False,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_external_escalation_delivery_processor_handoff",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "delivery_processor_handoff_authority": applied,
+            "delivery_processor_completion_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
 def _history_entry(
     *,
     item: dict[str, Any],
@@ -958,6 +1043,7 @@ _DEADLETTER_HISTORY_RECEIPT_FIELDS: tuple[tuple[str, str], ...] = (
     ("escalation_acknowledgement_receipts", "escalation_acknowledgement"),
     ("external_escalation_attempt_receipts", "external_escalation_attempt"),
     ("external_escalation_delivery_receipts", "external_escalation_delivery"),
+    ("external_escalation_delivery_processor_handoff_receipts", "external_escalation_delivery_processor_handoff"),
     ("recovery_request_receipts", "recovery_request"),
     ("recovery_dispatch_receipts", "recovery_dispatch"),
 )
@@ -1854,6 +1940,217 @@ def record_external_escalation_delivery(
         "item": _display(updated),
         "receipt": _display(receipt),
         "delivery_item": _display(persisted_delivery),
+    }
+
+
+def record_external_escalation_delivery_processor_handoff(
+    *,
+    delivery_id: str,
+    actor: str = "",
+    reason: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    delivery_path = _external_delivery_path(delivery_id)
+    if delivery_path is None or not delivery_path.exists() or not delivery_path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "not_found",
+            "item": {},
+            "receipt": {},
+            "delivery_item": {},
+            "processor_readiness": {},
+        }
+
+    delivery_item = _read_raw(delivery_path)
+    if delivery_item is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_delivery",
+            "item": {},
+            "receipt": {},
+            "delivery_item": {},
+            "processor_readiness": {},
+        }
+
+    deadletter_id = _safe_str(delivery_item.get("deadletter_id")).strip()
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_not_found",
+            "item": {},
+            "receipt": {},
+            "delivery_item": _display(delivery_item),
+            "processor_readiness": {},
+        }
+
+    item = _read_raw(path)
+    if item is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_deadletter",
+            "item": {},
+            "receipt": {},
+            "delivery_item": _display(delivery_item),
+            "processor_readiness": {},
+        }
+
+    latest_handoff = _as_dict(item.get("latest_external_escalation_delivery_processor_handoff_receipt"))
+    if (
+        _safe_str(item.get("status")).strip() == "external_escalation_delivery_processor_handoff_recorded"
+        and latest_handoff
+    ):
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_external_escalation_delivery_processor_handoff_recorded",
+            "item": _display(item),
+            "receipt": _display(latest_handoff),
+            "delivery_item": _display(delivery_item),
+            "processor_readiness": _external_delivery_processor_readiness(delivery_item),
+        }
+
+    readiness = _external_delivery_processor_readiness(delivery_item)
+    if not bool(readiness.get("delivery_processor_ready")):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "external_escalation_delivery_processor_not_ready",
+            "item": _display(item),
+            "receipt": {},
+            "delivery_item": _display(delivery_item),
+            "processor_readiness": readiness,
+        }
+
+    if _safe_str(item.get("status")).strip() != "external_escalation_delivery_queued":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "external_escalation_delivery_queue_required",
+            "item": _display(item),
+            "receipt": {},
+            "delivery_item": _display(delivery_item),
+            "processor_readiness": readiness,
+        }
+
+    receipt = _external_escalation_delivery_processor_handoff_receipt(
+        item=item,
+        delivery_item=delivery_item,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        status="processor_handoff_recorded",
+        applied=True,
+    )
+    processor_receipts_raw = item.get("external_escalation_delivery_processor_handoff_receipts")
+    processor_receipts = processor_receipts_raw if isinstance(processor_receipts_raw, list) else []
+    processor_receipts.append(receipt)
+
+    updated_delivery_item = {
+        **delivery_item,
+        "status": "processor_handoff_recorded",
+        "route": "deadletter_external_escalation_delivery_processor_handoff",
+        "gate": "reactor_deadletter_external_escalation_delivery_processor_handoff",
+        "stable_state": "deadletter_external_escalation_delivery_processor_handoff_recorded",
+        "next_step": _external_escalation_delivery_processor_handoff_next_step(),
+        "delivery_processor_handoff_recorded": True,
+        "delivery_processor_handoff_ts": ts,
+        "delivery_processor_completed": False,
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "completion_claimed": False,
+        "completion_claim_allowed": False,
+        "updated_ts": ts,
+        "processor_handoff_receipts": processor_receipts,
+        "latest_processor_handoff_receipt": receipt,
+        "governance": {
+            **_as_dict(delivery_item.get("governance")),
+            "gate": "reactor_deadletter_external_escalation_delivery_processor_handoff",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "delivery_processor_handoff_authority": True,
+            "delivery_processor_completion_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(delivery_path, _filtered_record(updated_delivery_item))
+
+    updated = {
+        **item,
+        "status": "external_escalation_delivery_processor_handoff_recorded",
+        "route": "deadletter_external_escalation_delivery_processor_handoff",
+        "stable_state": "deadletter_external_escalation_delivery_processor_handoff_recorded",
+        "next_step": _external_escalation_delivery_processor_handoff_next_step(),
+        "external_escalation_delivery_processor_handoff_recorded": True,
+        "external_escalation_delivery_processor_handoff_ts": ts,
+        "external_escalation_delivery_item": updated_delivery_item,
+        "external_delivery_id": delivery_item.get("delivery_id"),
+        "external_delivery_queued": bool(delivery_item.get("external_delivery_queued")),
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "updated_ts": ts,
+        "external_escalation_delivery_processor_handoff_receipts": processor_receipts,
+        "latest_external_escalation_delivery_processor_handoff_receipt": receipt,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_external_escalation_delivery_processor_handoff",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "delivery_processor_handoff_authority": True,
+            "delivery_processor_completion_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "deadletter_external_escalation_delivery_processor_handoff_recorded",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+        "delivery_item": _display(updated_delivery_item),
+        "processor_readiness": readiness,
     }
 
 

@@ -30,6 +30,7 @@ from francis.reactor.events import (
     record_deadletter_escalation_handoff,
     record_deadletter_external_escalation_attempt,
     record_deadletter_external_escalation_delivery,
+    record_deadletter_external_escalation_delivery_processor_handoff,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -2891,6 +2892,126 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert second_delivery["applied"] is False
     assert second_delivery["status"] == "already_external_escalation_delivery_queued"
     assert len(second_delivery["event"]["deadletter_external_escalation_deliveries"]) == 1
+
+    handoff = record_deadletter_external_escalation_delivery_processor_handoff(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record processor handoff without claiming external send",
+        },
+    )
+
+    assert handoff["ok"] is True
+    assert handoff["applied"] is True
+    assert handoff["status"] == "deadletter_external_escalation_delivery_processor_handoff_recorded"
+    handoff_receipt = handoff["receipt"]
+    assert handoff_receipt["kind"] == "reactor.deadletter.external_escalation_delivery_processor_handoff.receipt"
+    assert handoff_receipt["status"] == "processor_handoff_recorded"
+    assert handoff_receipt["route"] == "deadletter_external_escalation_delivery_processor_handoff"
+    assert handoff_receipt["stable_state"] == "deadletter_external_escalation_delivery_processor_handoff_recorded"
+    assert handoff_receipt["source_receipt_kind"] == "reactor.deadletter.external_escalation_delivery.receipt"
+    assert handoff_receipt["external_adapter"] == "local_outbox"
+    assert handoff_receipt["external_delivery_queued"] is True
+    assert handoff_receipt["external_delivery_started"] is False
+    assert handoff_receipt["external_message_sent"] is False
+    assert handoff_receipt["external_network_send"] is False
+    assert handoff_receipt["external_escalation_started"] is False
+    assert handoff_receipt["delivery_processor_handoff_recorded"] is True
+    assert handoff_receipt["delivery_processor_completed"] is False
+    assert handoff_receipt["execution_started"] is False
+    assert handoff_receipt["dispatch_applied"] is False
+    assert handoff_receipt["memory_write"] is False
+    assert handoff_receipt["completion_claim_allowed"] is False
+    assert handoff_receipt["governance"]["delivery_processor_handoff_authority"] is True
+    assert handoff_receipt["governance"]["external_delivery_authority"] is False
+    assert handoff_receipt["governance"]["external_escalation_authority"] is False
+
+    handoff_outbox_item = handoff["delivery_item"]
+    assert handoff_outbox_item["delivery_id"] == delivery_id
+    assert handoff_outbox_item["status"] == "processor_handoff_recorded"
+    assert handoff_outbox_item["delivery_processor_handoff_recorded"] is True
+    assert handoff_outbox_item["delivery_processor_completed"] is False
+    assert handoff_outbox_item["external_delivery_started"] is False
+    assert handoff_outbox_item["external_message_sent"] is False
+    assert handoff_outbox_item["external_network_send"] is False
+    assert get_external_escalation_delivery(delivery_id)["status"] == "processor_handoff_recorded"  # type: ignore[index]
+    post_handoff_readiness = get_external_escalation_delivery_processor_readiness(delivery_id)
+    assert post_handoff_readiness is not None
+    assert post_handoff_readiness["delivery_processor_status"] == "blocked"
+    assert post_handoff_readiness["delivery_processor_blockers"] == ["delivery_not_queued"]
+
+    handoff_event = handoff["event"]
+    assert handoff_event["stable_state"] == "deadletter_external_escalation_delivery_processor_handoff_recorded"
+    assert handoff_event["dispatch"]["deadletter_external_escalation_delivery_processor_handoff_recorded"] is True
+    assert handoff_event["dispatch"]["delivery_processor_handoff_recorded"] is True
+    assert handoff_event["dispatch"]["delivery_processor_completed"] is False
+    assert handoff_event["dispatch"]["external_delivery_started"] is False
+    assert handoff_event["dispatch"]["external_network_send"] is False
+    assert handoff_event["latest_receipt"]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_handoff.receipt"
+    )
+    assert handoff_event["decision_journal"][-1]["kind"] == (
+        "reactor.deadletter.external_escalation_delivery_processor_handoff_recorded"
+    )
+    assert handoff_event["governance"]["delivery_processor_handoff_authority"] is True
+    assert handoff_event["governance"]["external_delivery_authority"] is False
+
+    handoff_deadletter = get_deadletter(deadletter_id)
+    assert handoff_deadletter is not None
+    assert handoff_deadletter["status"] == "external_escalation_delivery_processor_handoff_recorded"
+    assert [
+        item["deadletter_id"]
+        for item in list_deadletters(status="external_escalation_delivery_processor_handoff_recorded")
+    ] == [deadletter_id]
+    assert {
+        item["event_id"]
+        for item in list_events(stable_state="deadletter_external_escalation_delivery_processor_handoff_recorded")
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"]
+        for item in list_events(
+            receipt_kind="reactor.deadletter.external_escalation_delivery_processor_handoff.receipt"
+        )
+    } == {str(created["event_id"])}
+    assert {
+        item["event_id"]
+        for item in list_events(review_route="deadletter_external_escalation_delivery_processor_handoff")
+    } == {str(created["event_id"])}
+    handoff_history = get_deadletter_history(
+        deadletter_id,
+        receipt_kind="reactor.deadletter.external_escalation_delivery_processor_handoff.receipt",
+    )
+    assert handoff_history is not None
+    assert handoff_history["total"] == 1
+    assert handoff_history["history"][0]["route"] == "deadletter_external_escalation_delivery_processor_handoff"
+    assert handoff_history["governance"]["external_delivery_authority"] is False
+
+    handoff_review_queue = reactor_review_queue(route="deadletter_external_escalation_delivery_processor_handoff")
+    assert handoff_review_queue["available_total"] == 1
+    assert (
+        handoff_review_queue["items"][0]["review"]["action"]
+        == "await_explicit_external_delivery_sender_before_marking_sent"
+    )
+    handoff_status = reactor_status()
+    assert handoff_status["stable_state_counts"] == {
+        "deadletter_external_escalation_delivery_processor_handoff_recorded": 1
+    }
+    assert handoff_status["deadletter_queue_counts"] == {"external_escalation_delivery_processor_handoff_recorded": 1}
+    assert handoff_status["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+    assert handoff_status["deadletter_external_escalation_delivery_processor_handoff_counts"] == {
+        "processor_handoff_recorded": 1
+    }
+
+    second_handoff = record_deadletter_external_escalation_delivery_processor_handoff(
+        delivery_id,
+        {
+            "actor": "reactor.test",
+            "reason": "processor handoff should be idempotent",
+        },
+    )
+    assert second_handoff["ok"] is True
+    assert second_handoff["applied"] is False
+    assert second_handoff["status"] == "already_external_escalation_delivery_processor_handoff_recorded"
 
 
 def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(

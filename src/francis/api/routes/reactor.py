@@ -30,6 +30,7 @@ from francis.reactor import (
     record_deadletter_escalation_handoff,
     record_deadletter_external_escalation_attempt,
     record_deadletter_external_escalation_delivery,
+    record_deadletter_external_escalation_delivery_processor_handoff,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -149,6 +150,15 @@ class ReactorDeadletterExternalEscalationAttemptIn(BaseModel):
 
 class ReactorDeadletterExternalEscalationDeliveryIn(BaseModel):
     deadletter_id: str = ""
+    id: str = ""
+    actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactorDeadletterExternalEscalationDeliveryProcessorHandoffIn(BaseModel):
+    delivery_id: str = ""
     id: str = ""
     actor: str = ""
     reason: str = ""
@@ -660,6 +670,19 @@ def deadletters_external_escalation_delivery(
     data = _payload_dict(payload)
     deadletter_id = str(data.get("deadletter_id") or data.get("id") or "")
     return record_deadletter_external_escalation_delivery(deadletter_id, data)
+
+
+@router.post("/deadletters/external_escalation_delivery_processor_handoff")
+def deadletters_external_escalation_delivery_processor_handoff(
+    payload: ReactorDeadletterExternalEscalationDeliveryProcessorHandoffIn,
+    request: Request,
+) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    delivery_id = str(data.get("delivery_id") or data.get("id") or "")
+    return record_deadletter_external_escalation_delivery_processor_handoff(delivery_id, data)
 
 
 @router.post("/deadletters/recovery_request")

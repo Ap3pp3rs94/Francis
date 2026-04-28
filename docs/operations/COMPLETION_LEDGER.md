@@ -917,6 +917,27 @@ claim, lease, send, deliver, start execution, change deadletter state, decide
 approvals, write memory, or grant external-delivery, external-escalation,
 execution, dispatch, approval, retry, promotion, or memory-write authority.
 
+As of `2026-04-28`, queued Reactor local outbox external escalation artifacts
+can record a bounded local processor handoff receipt without claiming external
+send or delivery. `POST
+/reactor/deadletters/external_escalation_delivery_processor_handoff` requires
+the existing `reactor.write` API scope and only applies to a queued
+`local_outbox` delivery artifact whose processor-readiness projection is ready.
+The route records
+`reactor.deadletter.external_escalation_delivery_processor_handoff.receipt`,
+updates the local outbox artifact to `processor_handoff_recorded`, moves the
+durable deadletter and parent Reactor event to
+`deadletter_external_escalation_delivery_processor_handoff_recorded`, and links
+the receipt through the parent decision journal, receipt-kind filters,
+review-route filters, deadletter history, review-queue projection, and
+`/reactor/status` processor-handoff counts. This is a local handoff/readback
+boundary only: it does not send an external message, start external delivery,
+complete a processor run, execute work, dispatch work, decide approvals, write
+memory, promote capabilities, or grant external-delivery, external-escalation,
+execution, approval, promotion, retry, or memory-write authority. The next
+truthful gap remains an explicit external delivery sender before anything can
+be marked sent.
+
 As of `2026-04-28`, Reactor deadletters have direct read-only history
 readback. `GET /reactor/deadletters/history/get` derives a chronological
 history for one persisted deadletter from the durable deadletter item,
@@ -9923,6 +9944,24 @@ processor readiness readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor local outbox processor
+handoff receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `failed before adding the processor-handoff review-route projection; passed after updating the projection`
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed after adding deadletter-history readback assertions`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\events.py, tests\test_api_reactor.py, and tests\unit\test_reactor_event_queue.py; passed after formatting`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 Latest targeted validation for the `2026-04-28` Reactor deadletter history
 readback slice:
 
@@ -10131,9 +10170,11 @@ These remain true and should block any "finished" claim:
   `local_outbox` attempts can now queue one durable local outbox artifact with
   an external-delivery receipt, receipt-kind/review-route filters, review-queue
   projection, direct artifact list/get readback, processor-readiness readback,
+  explicit local processor-handoff receipt/readback, deadletter-history linkage,
   and status counts while still sending no external message, starting no
-  external delivery, and granting no external-delivery or external-escalation
-  authority. Queued `deadletter_recovery` events
+  external delivery, completing no processor run, and granting no
+  external-delivery or external-escalation authority. Queued
+  `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
   execution, verification, stable-return, and readback receipts, and successful
@@ -10171,7 +10212,8 @@ These remain true and should block any "finished" claim:
   visibility beyond the current read-only Reactor summary, route-filtered review
   queue, deadletter queue, recovery receipt, and proposal-review readbacks,
   and actual external escalation send/execution beyond the current non-sending
-  local outbox queue, artifact readback, and processor-readiness readback
+  local outbox queue, artifact readback, processor-readiness readback, and
+  local processor-handoff receipt/readback
 
 ## 6. Update rule
 
