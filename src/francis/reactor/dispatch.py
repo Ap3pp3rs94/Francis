@@ -15,7 +15,8 @@ from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 _MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
-SUPPORTED_ACTIONS = ("mission_tick", "operation_run", "proposal_review")
+_CLASSIFICATION_SOURCES = frozenset({"observer_anomaly", "telemetry_event"})
+SUPPORTED_ACTIONS = ("classify", "mission_tick", "operation_run", "proposal_review")
 
 
 def _safe_str(value: Any) -> str:
@@ -185,6 +186,70 @@ def _proposal_artifact(proposal_id: str) -> tuple[dict[str, Any], str]:
     return (raw if isinstance(raw, dict) else {}), str(path)
 
 
+def _classification_receipt(
+    *,
+    event_id: str,
+    trigger: dict[str, Any],
+    classification: dict[str, Any],
+    bounds: dict[str, Any],
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any]:
+    source = _safe_str(trigger.get("source")).strip().lower()
+    trigger_type = _safe_str(trigger.get("type")).strip().lower() or source
+    outcome = f"{source}_classified" if source else "trigger_classified"
+    next_step = f"review_classified_{source}_before_followup" if source else "review_classification_before_followup"
+    metadata = _as_dict(trigger.get("metadata"))
+    metadata_keys = sorted(key for key in (_safe_str(key).strip() for key in metadata) if key)
+    return _redacted_dict(
+        {
+            "kind": "reactor.dispatch.execution.receipt",
+            "receipt_id": f"{event_id}_dispatch_execution_{attempt_count}",
+            "event_id": event_id,
+            "status": "completed",
+            "outcome": outcome,
+            "route": "classification",
+            "gate": "reactor_dispatch_engine",
+            "stable_state": "classification_recorded",
+            "next_step": next_step,
+            "actor": actor,
+            "reason": reason,
+            "trigger_source": source,
+            "trigger_type": trigger_type,
+            "trigger_summary": _safe_str(trigger.get("summary")).strip(),
+            "mode": _safe_str(classification.get("mode")).strip(),
+            "risk_tier": _safe_str(classification.get("risk_tier")).strip(),
+            "approval_required": bool(classification.get("approval_required")),
+            "dispatch_allowed": bool(classification.get("dispatch_allowed")),
+            "max_actions": _safe_int(bounds.get("max_actions"), default=1, minimum=0, maximum=50),
+            "max_runtime_seconds": _safe_int(bounds.get("max_runtime_seconds"), default=60, minimum=1, maximum=86_400),
+            "max_retries": _safe_int(bounds.get("max_retries"), default=0, minimum=0, maximum=10),
+            "stop_conditions": _as_str_list(bounds.get("stop_conditions")),
+            "metadata_keys": metadata_keys,
+            "attempt_count": attempt_count,
+            "ts": ts,
+            "execution_started": False,
+            "dispatch_applied": True,
+            "verified": True,
+            "completion_claim_allowed": True,
+            "memory_write": False,
+            "readback_only": True,
+            "governance": {
+                "gate": "reactor_dispatch_engine",
+                "execution_authority": False,
+                "dispatch_authority": True,
+                "approval_authority": False,
+                "memory_write": False,
+                "authority_source": "reactor.write",
+                "classification_authority": True,
+                "readback_only": True,
+            },
+        }
+    )
+
+
 def _blocked_receipt(
     *,
     event_id: str,
@@ -257,6 +322,31 @@ def dispatch_event(
     event_id = _safe_str(event.get("event_id") or event.get("id")).strip()
     trigger = _as_dict(event.get("trigger"))
     bounds = _as_dict(event.get("bounds"))
+    if action_class == "classify":
+        source = _safe_str(trigger.get("source")).strip().lower()
+        if source not in _CLASSIFICATION_SOURCES:
+            return {"handled": False}
+        receipt = _classification_receipt(
+            event_id=event_id,
+            trigger=trigger,
+            classification=classification,
+            bounds=bounds,
+            actor=actor,
+            reason=reason,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
+        return {
+            "handled": True,
+            "applied": True,
+            "blocked": False,
+            "status": "dispatch_completed",
+            "outcome": receipt.get("outcome"),
+            "stable_state": "classification_recorded",
+            "next_step": receipt.get("next_step"),
+            "receipt": receipt,
+        }
+
     if action_class == "proposal_review":
         proposal_id = _proposal_id_from_trigger(trigger)
         if not proposal_id:

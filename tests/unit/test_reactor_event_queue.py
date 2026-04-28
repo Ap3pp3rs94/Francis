@@ -292,6 +292,91 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert status["stable_return_counts"] == {"settled": 1}
 
 
+def test_reactor_dispatch_engine_classifies_telemetry_without_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "telemetry_event",
+            "trigger_type": "ci_failure",
+            "summary": "CI failed and needs bounded classification",
+            "mode": "assist",
+            "risk_tier": "normal",
+            "max_actions": 2,
+            "max_runtime_seconds": 90,
+            "metadata": {"workflow": "ci", "secret": "sk-" + ("r" * 24)},
+        }
+    )
+    event_id = str(created["event_id"])
+
+    attempted = record_dispatch_attempt(
+        event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "classify telemetry without starting execution",
+        },
+    )
+
+    assert attempted["ok"] is True
+    assert attempted["applied"] is True
+    event = attempted["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "classification_recorded"
+    assert event["dispatch"]["status"] == "dispatch_completed"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["engine"] == "classification"
+    assert event["dispatch"]["execution_started"] is False
+    assert event["governance"]["dispatch_authority"] is True
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["memory_write"] is False
+
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["route"] == "classification"
+    assert execution["outcome"] == "telemetry_event_classified"
+    assert execution["trigger_source"] == "telemetry_event"
+    assert execution["trigger_type"] == "ci_failure"
+    assert execution["metadata_keys"] == ["secret", "workflow"]
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is True
+    assert execution["verified"] is True
+    assert execution["readback_only"] is True
+    assert execution["memory_write"] is False
+    assert execution["governance"]["classification_authority"] is True
+    assert execution["governance"]["execution_authority"] is False
+
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "telemetry_event_classified"
+    assert verification["verification_reason"] == "classification_completed_with_execution_receipts"
+    assert verification["route"] == "classification"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is True
+    assert verification["governance"]["execution_authority"] is False
+
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "classification"
+    assert stable_return["stable_state"] == "classification_recorded"
+    assert stable_return["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert stable_return["execution_started"] is False
+    assert stable_return["dispatch_applied"] is True
+
+    stored_text = Path(str(event["path"])).read_text(encoding="utf-8")
+    assert "sk-" + ("r" * 24) not in stored_text
+    status = reactor_status()
+    assert status["dispatch_engine_supported_actions"] == [
+        "classify",
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
+    assert status["status_counts"] == {"dispatch_completed": 1}
+    assert status["dispatch_execution_counts"] == {"completed": 1}
+    assert status["verification_counts"] == {"passed": 1}
+    assert status["verification_outcome_counts"] == {"telemetry_event_classified": 1}
+
+
 def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -561,6 +646,7 @@ def test_reactor_dispatch_engine_runs_mission_tick_with_receipts(monkeypatch, tm
 
     status = reactor_status()
     assert status["dispatch_engine_supported_actions"] == [
+        "classify",
         "mission_tick",
         "operation_run",
         "proposal_review",

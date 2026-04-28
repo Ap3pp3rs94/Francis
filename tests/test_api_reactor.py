@@ -28,6 +28,7 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert empty_status.json()["total"] == 0
     assert empty_status.json()["dispatch_engine"] == "partial"
     assert empty_status.json()["dispatch_engine_supported_actions"] == [
+        "classify",
         "mission_tick",
         "operation_run",
         "proposal_review",
@@ -137,6 +138,103 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["verification_counts"] == {"not_available": 1}
     assert status.json()["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
     assert status.json()["stable_return_counts"] == {"settled": 1}
+
+
+def test_reactor_classification_dispatch_records_read_only_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "observer_anomaly",
+            "trigger_type": "watcher_stale",
+            "summary": "Observer watcher stale event needs bounded classification",
+            "actor": _REACTOR_ACTOR,
+            "mode": "assist",
+            "risk_tier": "normal",
+            "max_actions": 2,
+            "max_runtime_seconds": 90,
+            "metadata": {"surface": "observer", "token": "ghp_" + ("r" * 36)},
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+    assert queued.json()["event"]["classification"]["action_class"] == "classify"
+
+    dispatched = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "classify observer anomaly without execution",
+        },
+    )
+    assert dispatched.status_code == 200
+    body = dispatched.json()
+    assert body["ok"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "classification_recorded"
+    assert event["dispatch"]["engine"] == "classification"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is False
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["route"] == "classification"
+    assert execution["outcome"] == "observer_anomaly_classified"
+    assert execution["trigger_source"] == "observer_anomaly"
+    assert execution["trigger_type"] == "watcher_stale"
+    assert execution["metadata_keys"] == ["surface", "token"]
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is True
+    assert execution["readback_only"] is True
+    assert execution["memory_write"] is False
+    assert execution["governance"]["execution_authority"] is False
+    assert execution["governance"]["classification_authority"] is True
+
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "observer_anomaly_classified"
+    assert verification["route"] == "classification"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is True
+    assert verification["governance"]["execution_authority"] is False
+
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "classification"
+    assert stable_return["stable_state"] == "classification_recorded"
+    assert stable_return["execution_started"] is False
+    assert stable_return["dispatch_applied"] is True
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["memory_write"] is False
+
+    listed = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.dispatch.execution.receipt"},
+    )
+    assert listed.status_code == 200
+    assert {item["event_id"] for item in listed.json()["items"]} == {event_id}
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["dispatch_engine_supported_actions"] == [
+        "classify",
+        "mission_tick",
+        "operation_run",
+        "proposal_review",
+    ]
+    assert status_body["status_counts"] == {"dispatch_completed": 1}
+    assert status_body["dispatch_execution_counts"] == {"completed": 1}
+    assert status_body["verification_counts"] == {"passed": 1}
+    assert status_body["verification_outcome_counts"] == {"observer_anomaly_classified": 1}
 
 
 def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
@@ -255,6 +353,7 @@ def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
     assert status.status_code == 200
     status_body = status.json()
     assert status_body["dispatch_engine_supported_actions"] == [
+        "classify",
         "mission_tick",
         "operation_run",
         "proposal_review",
@@ -470,6 +569,7 @@ def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp
     status = client.get("/reactor/status")
     assert status.status_code == 200
     assert status.json()["dispatch_engine_supported_actions"] == [
+        "classify",
         "mission_tick",
         "operation_run",
         "proposal_review",
