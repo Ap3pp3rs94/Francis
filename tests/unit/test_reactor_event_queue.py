@@ -15,6 +15,7 @@ from francis.reactor.events import (
     reactor_status,
     record_deadletter_escalation_acknowledgement,
     record_deadletter_escalation_handoff,
+    record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
     record_dispatch_attempt,
@@ -2011,12 +2012,20 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor deadletter recovery should target an existing operation",
+        input={"goal": "prove recovery request handoff"},
+        actor="reactor.test",
+    )
+    operation_id = str(operation["operation_id"])
 
     created = enqueue_event(
         {
             "trigger_source": "mission_queue",
             "summary": "Escalated Reactor deadletter needs a durable handoff",
             "action_class": "mission_tick",
+            "operation_id": operation_id,
             "max_actions": 0,
             "max_retries": 1,
             "backoff_seconds": 15,
@@ -2147,6 +2156,17 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert second_handoff["status"] == "already_escalation_handoff_recorded"
     assert len(second_handoff["event"]["deadletter_escalation_handoffs"]) == 1
 
+    premature_recovery = record_deadletter_recovery_request(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "recovery request should require acknowledgement first",
+        },
+    )
+    assert premature_recovery["ok"] is False
+    assert premature_recovery["applied"] is False
+    assert premature_recovery["error"] == "deadletter_escalation_acknowledgement_required"
+
     acknowledgement = record_deadletter_escalation_acknowledgement(
         deadletter_id,
         {
@@ -2231,6 +2251,107 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert second_acknowledgement["applied"] is False
     assert second_acknowledgement["status"] == "already_escalation_acknowledged"
     assert len(second_acknowledgement["event"]["deadletter_escalation_acknowledgements"]) == 1
+
+    recovery_request = record_deadletter_recovery_request(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "queue recovery through the existing operation dispatch gate",
+        },
+    )
+
+    assert recovery_request["ok"] is True
+    assert recovery_request["applied"] is True
+    assert recovery_request["status"] == "deadletter_recovery_requested"
+    recovered_event = recovery_request["event"]
+    assert recovered_event["stable_state"] == "deadletter_recovery_requested"
+    assert recovered_event["dispatch"]["deadletter_recovery_requested"] is True
+    assert recovered_event["dispatch"]["recovery_operation_id"] == operation_id
+    recovery_receipt = recovered_event["latest_deadletter_recovery_request_receipt"]
+    recovery_event_id = recovery_receipt["recovery_event_id"]
+    assert recovery_receipt["kind"] == "reactor.deadletter.recovery_request.receipt"
+    assert recovery_receipt["deadletter_id"] == deadletter_id
+    assert recovery_receipt["status"] == "recovery_requested"
+    assert recovery_receipt["route"] == "deadletter_recovery_request"
+    assert recovery_receipt["stable_state"] == "deadletter_recovery_requested"
+    assert recovery_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert recovery_receipt["operation_id"] == operation_id
+    assert recovery_receipt["recovery_requested"] is True
+    assert recovery_receipt["recovery_event_enqueued"] is True
+    assert recovery_receipt["external_escalation_started"] is False
+    assert recovery_receipt["recovery_started"] is False
+    assert recovery_receipt["retry_started"] is False
+    assert recovery_receipt["execution_started"] is False
+    assert recovery_receipt["escalation_started"] is False
+    assert recovery_receipt["memory_write"] is False
+    assert recovery_receipt["governance"]["execution_authority"] is False
+    assert recovery_receipt["governance"]["dispatch_authority"] is False
+    assert recovery_receipt["governance"]["recovery_request_authority"] is True
+    assert recovery_receipt["governance"]["memory_write"] is False
+    assert recovered_event["latest_receipt"]["kind"] == "reactor.deadletter.recovery_request.receipt"
+    assert recovered_event["latest_deadletter_item"]["status"] == "recovery_requested"
+    assert recovered_event["deadletter_recovery_requests"][0]["deadletter_id"] == deadletter_id
+    assert recovered_event["decision_journal"][-1]["kind"] == "reactor.deadletter.recovery_requested"
+    assert recovered_event["decision_journal"][-1]["recovery_event_enqueued"] is True
+    assert recovered_event["decision_journal"][-1]["execution_started"] is False
+    assert recovered_event["governance"]["deadletter_recovery_requested"] is True
+    assert recovered_event["governance"]["execution_authority"] is False
+    assert recovered_event["governance"]["dispatch_authority"] is False
+
+    queued_recovery = recovery_request["recovery_event"]
+    assert queued_recovery["event_id"] == recovery_event_id
+    assert queued_recovery["status"] == "queued"
+    assert queued_recovery["stable_state"] == "awaiting_dispatch"
+    assert queued_recovery["trigger"]["source"] == "deadletter_recovery"
+    assert queued_recovery["trigger"]["type"] == "deadletter_recovery_request"
+    assert queued_recovery["trigger"]["operation_id"] == operation_id
+    assert queued_recovery["trigger"]["metadata"]["deadletter_id"] == deadletter_id
+    assert queued_recovery["classification"]["action_class"] == "operation_run"
+    assert queued_recovery["dispatch"]["applied"] is False
+    assert queued_recovery["governance"]["execution_authority"] is False
+    assert get_event(recovery_event_id)["trigger"]["operation_id"] == operation_id  # type: ignore[index]
+
+    requested_deadletter = get_deadletter(deadletter_id)
+    assert requested_deadletter is not None
+    assert requested_deadletter["status"] == "recovery_requested"
+    assert requested_deadletter["latest_recovery_request_receipt"]["recovery_event_id"] == recovery_event_id
+    assert [item["deadletter_id"] for item in list_deadletters(status="recovery_requested")] == [deadletter_id]
+    assert {item["event_id"] for item in list_events(stable_state="deadletter_recovery_requested")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(review_route="deadletter_recovery_request")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(trigger_source="deadletter_recovery")} == {recovery_event_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.recovery_request.receipt")} == {
+        str(created["event_id"])
+    }
+
+    recovery_review_queue = reactor_review_queue(route="deadletter_recovery_request")
+    assert recovery_review_queue["available_total"] == 1
+    assert (
+        recovery_review_queue["items"][0]["review"]["action"] == "record_dispatch_attempt_for_deadletter_recovery_event"
+    )
+    assert reactor_review_queue(route="deadletter_escalation_acknowledgement")["available_total"] == 0
+    recovery_status = reactor_status()
+    assert recovery_status["stable_state_counts"] == {
+        "deadletter_recovery_requested": 1,
+        "awaiting_dispatch": 1,
+    }
+    assert recovery_status["deadletter_queue_counts"] == {"recovery_requested": 1}
+    assert recovery_status["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
+
+    second_recovery_request = record_deadletter_recovery_request(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "same recovery request should not duplicate receipts",
+        },
+    )
+    assert second_recovery_request["ok"] is True
+    assert second_recovery_request["applied"] is False
+    assert second_recovery_request["status"] == "already_recovery_requested"
+    assert len(second_recovery_request["event"]["deadletter_recovery_requests"]) == 1
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:

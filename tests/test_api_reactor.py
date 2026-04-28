@@ -844,6 +844,13 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+    operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor API recovery request should target an existing operation",
+        input={"goal": "prove API recovery request handoff"},
+        actor=_REACTOR_ACTOR,
+    )
+    operation_id = str(operation["operation_id"])
 
     from fastapi.testclient import TestClient
 
@@ -858,6 +865,7 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
             "summary": "Budget-exhausted Reactor item can be escalated",
             "actor": _REACTOR_ACTOR,
             "action_class": "mission_tick",
+            "operation_id": operation_id,
             "max_actions": 0,
             "max_retries": 1,
         },
@@ -1099,6 +1107,81 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_acknowledgement.status_code == 200
     assert second_acknowledgement.json()["applied"] is False
     assert second_acknowledgement.json()["status"] == "already_escalation_acknowledged"
+
+    recovery_request = client.post(
+        "/reactor/deadletters/recovery_request",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "queue recovery through existing operation dispatch gate",
+        },
+    )
+    assert recovery_request.status_code == 200
+    recovery_body = recovery_request.json()
+    assert recovery_body["ok"] is True
+    assert recovery_body["applied"] is True
+    assert recovery_body["status"] == "deadletter_recovery_requested"
+    recovery_receipt = recovery_body["receipt"]
+    recovery_event_id = recovery_receipt["recovery_event_id"]
+    assert recovery_receipt["kind"] == "reactor.deadletter.recovery_request.receipt"
+    assert recovery_receipt["deadletter_id"] == deadletter_id
+    assert recovery_receipt["route"] == "deadletter_recovery_request"
+    assert recovery_receipt["operation_id"] == operation_id
+    assert recovery_receipt["recovery_event_enqueued"] is True
+    assert recovery_receipt["execution_started"] is False
+    assert recovery_receipt["retry_started"] is False
+    assert recovery_receipt["escalation_started"] is False
+    assert recovery_receipt["recovery_started"] is False
+    assert recovery_receipt["memory_write"] is False
+    assert recovery_receipt["governance"]["execution_authority"] is False
+    assert recovery_receipt["governance"]["dispatch_authority"] is False
+    assert recovery_receipt["governance"]["recovery_request_authority"] is True
+    recovery_source_event = recovery_body["event"]
+    assert recovery_source_event["stable_state"] == "deadletter_recovery_requested"
+    assert recovery_source_event["dispatch"]["deadletter_recovery_requested"] is True
+    assert recovery_source_event["dispatch"]["recovery_event_id"] == recovery_event_id
+    assert recovery_source_event["governance"]["execution_authority"] is False
+    assert recovery_source_event["governance"]["dispatch_authority"] is False
+    recovery_event = recovery_body["recovery_event"]
+    assert recovery_event["event_id"] == recovery_event_id
+    assert recovery_event["status"] == "queued"
+    assert recovery_event["stable_state"] == "awaiting_dispatch"
+    assert recovery_event["trigger"]["source"] == "deadletter_recovery"
+    assert recovery_event["trigger"]["operation_id"] == operation_id
+    assert recovery_event["classification"]["action_class"] == "operation_run"
+    assert recovery_event["governance"]["execution_authority"] is False
+
+    recovery_list = client.get("/reactor/deadletters/list", params={"status": "recovery_requested"})
+    assert recovery_list.status_code == 200
+    assert {item["deadletter_id"] for item in recovery_list.json()["items"]} == {deadletter_id}
+    recovery_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.recovery_request.receipt"},
+    )
+    assert recovery_receipts.status_code == 200
+    assert {item["event_id"] for item in recovery_receipts.json()["items"]} == {event_id}
+    recovery_trigger = client.get("/reactor/events/list", params={"trigger_source": "deadletter_recovery"})
+    assert recovery_trigger.status_code == 200
+    assert {item["event_id"] for item in recovery_trigger.json()["items"]} == {recovery_event_id}
+    recovery_review = client.get("/reactor/review_queue", params={"route": "deadletter_recovery_request"})
+    assert recovery_review.status_code == 200
+    assert recovery_review.json()["available_total"] == 1
+    assert (
+        recovery_review.json()["items"][0]["review"]["action"]
+        == "record_dispatch_attempt_for_deadletter_recovery_event"
+    )
+    recovery_status = client.get("/reactor/status")
+    assert recovery_status.status_code == 200
+    assert recovery_status.json()["deadletter_queue_counts"] == {"recovery_requested": 1}
+    assert recovery_status.json()["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
+
+    second_recovery_request = client.post(
+        "/reactor/deadletters/recovery_request",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_recovery_request.status_code == 200
+    assert second_recovery_request.json()["applied"] is False
+    assert second_recovery_request.json()["status"] == "already_recovery_requested"
 
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(

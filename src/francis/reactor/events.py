@@ -16,6 +16,7 @@ from francis.reactor.deadletters import (
     queue_deadletter,
     record_escalation_acknowledgement,
     record_escalation_handoff,
+    record_recovery_request,
     resolve_deadletter,
     review_deadletter,
 )
@@ -31,6 +32,7 @@ from francis.reactor.retries import (
 VALID_TRIGGER_SOURCES = frozenset(
     {
         "approval_decision",
+        "deadletter_recovery",
         "federated_handoff",
         "forge_proposal",
         "mission_queue",
@@ -2542,6 +2544,263 @@ def record_deadletter_escalation_acknowledgement(
     }
 
 
+def record_deadletter_recovery_request(
+    deadletter_id: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    redacted_payload = redact_governed_value(payload or {})
+    data = redacted_payload if isinstance(redacted_payload, dict) else {}
+    actor = _safe_str(data.get("actor")).strip()
+    reason = _safe_str(data.get("reason") or data.get("summary")).strip()
+    ts = _now_s()
+
+    deadletter = get_deadletter(deadletter_id)
+    if deadletter is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_not_found",
+            "receipt": {},
+            "event": None,
+            "recovery_event": None,
+        }
+
+    event_id = _safe_str(deadletter.get("event_id")).strip()
+    path = _event_path(event_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "event_not_found",
+            "receipt": {},
+            "event": None,
+            "recovery_event": None,
+        }
+
+    record = _read_raw_event(path)
+    if record is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_event",
+            "receipt": {},
+            "event": None,
+            "recovery_event": None,
+        }
+
+    deadletter_key = _safe_str(deadletter.get("deadletter_id")).strip()
+    current_status = _safe_str(deadletter.get("status")).strip()
+    latest_request = _as_dict(deadletter.get("latest_recovery_request_receipt"))
+    if current_status == "recovery_requested" and latest_request:
+        recovery_event = None
+        recovery_event_id = _safe_str(latest_request.get("recovery_event_id")).strip()
+        if recovery_event_id:
+            recovery_event = get_event(recovery_event_id)
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_recovery_requested",
+            "deadletter_id": deadletter_key,
+            "receipt": _display(latest_request),
+            "event": _display(record),
+            "recovery_event": recovery_event,
+        }
+    if current_status != "escalation_acknowledged":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_escalation_acknowledgement_required",
+            "receipt": {},
+            "event": _display(record),
+            "recovery_event": None,
+        }
+
+    source_trigger = _as_dict(deadletter.get("trigger")) or _as_dict(record.get("trigger"))
+    source_classification = _as_dict(record.get("classification"))
+    operation_id = _safe_str(source_trigger.get("operation_id")).strip()
+    if not operation_id:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_recovery_operation_required",
+            "receipt": {},
+            "event": _display(record),
+            "recovery_event": None,
+        }
+
+    acknowledgement_receipt = _as_dict(deadletter.get("latest_escalation_acknowledgement_receipt"))
+    summary = reason or f"Deadletter recovery requested for {deadletter_key}"
+    recovery_event_result = enqueue_event(
+        {
+            "trigger_source": "deadletter_recovery",
+            "trigger_type": "deadletter_recovery_request",
+            "summary": summary,
+            "reason": reason,
+            "actor": actor,
+            "mode": _safe_str(source_classification.get("mode")).strip() or "assist",
+            "risk_tier": _safe_str(source_classification.get("risk_tier")).strip() or "normal",
+            "action_class": "operation_run",
+            "approval_required": bool(source_classification.get("approval_required")),
+            "mission_id": _safe_str(source_trigger.get("mission_id")).strip(),
+            "operation_id": operation_id,
+            "trace_id": _safe_str(source_trigger.get("trace_id")).strip(),
+            "run_id": _safe_str(source_trigger.get("run_id")).strip(),
+            "max_actions": 1,
+            "max_runtime_seconds": 60,
+            "max_retries": 0,
+            "backoff_seconds": 0,
+            "metadata": {
+                "deadletter_id": deadletter_key,
+                "source_event_id": event_id,
+                "source_receipt_kind": acknowledgement_receipt.get("kind"),
+                "source_receipt_id": acknowledgement_receipt.get("receipt_id"),
+                "recovery_request": True,
+            },
+        }
+    )
+    if not recovery_event_result.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": recovery_event_result.get("error") or "deadletter_recovery_event_enqueue_failed",
+            "receipt": {},
+            "event": _display(record),
+            "recovery_event": recovery_event_result.get("event"),
+        }
+
+    recovery_event = _as_dict(recovery_event_result.get("event"))
+    recovery_event_id = _safe_str(recovery_event_result.get("event_id")).strip()
+    request_result = record_recovery_request(
+        deadletter_id=deadletter_key,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        operation_id=operation_id,
+        recovery_event_id=recovery_event_id,
+    )
+    request_receipt = _as_dict(request_result.get("receipt"))
+    request_item = _as_dict(request_result.get("item"))
+    if not request_result.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": request_result.get("error") or "deadletter_recovery_request_failed",
+            "receipt": request_receipt,
+            "event": _display(record),
+            "recovery_event": recovery_event,
+        }
+
+    if not request_result.get("applied"):
+        return {
+            "ok": True,
+            "applied": False,
+            "status": request_result.get("status") or "already_recovery_requested",
+            "deadletter_id": deadletter_key,
+            "receipt": _display(request_receipt),
+            "event": _display(record),
+            "recovery_event": recovery_event,
+        }
+
+    stable_state = _safe_str(request_receipt.get("stable_state")).strip() or "deadletter_recovery_requested"
+    raw_dispatch = record.get("dispatch")
+    dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+    updated_dispatch = {
+        **dispatch,
+        "deadletter_item": request_item,
+        "deadletter_recovery_request_receipt": request_receipt,
+        "deadletter_recovery_requested": True,
+        "recovery_event_id": recovery_event_id,
+        "recovery_operation_id": operation_id,
+        "next_step": request_receipt.get("next_step"),
+    }
+
+    raw_journal = record.get("decision_journal")
+    decision_journal = raw_journal if isinstance(raw_journal, list) else []
+    decision_journal.append(
+        {
+            "kind": "reactor.deadletter.recovery_requested",
+            "ts": ts,
+            "decision": stable_state,
+            "deadletter_id": deadletter_key,
+            "route": request_receipt.get("route"),
+            "stable_state": stable_state,
+            "next_step": request_receipt.get("next_step"),
+            "operation_id": operation_id,
+            "recovery_event_id": recovery_event_id,
+            "applied": True,
+            "recovery_requested": True,
+            "recovery_event_enqueued": True,
+            "external_escalation_started": False,
+            "recovery_started": False,
+            "retry_started": False,
+            "execution_started": False,
+            "escalation_started": False,
+            "memory_write": False,
+        }
+    )
+
+    raw_receipts = record.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    if not receipts and isinstance(record.get("receipt"), dict):
+        receipts.append(record["receipt"])
+    receipts.append(request_receipt)
+
+    raw_deadletter_items = record.get("deadletter_items")
+    deadletter_items = raw_deadletter_items if isinstance(raw_deadletter_items, list) else []
+    deadletter_items = [
+        item for item in deadletter_items if _safe_str(_as_dict(item).get("deadletter_id")).strip() != deadletter_key
+    ]
+    deadletter_items.append(request_item)
+    raw_deadletter_requests = record.get("deadletter_recovery_requests")
+    deadletter_requests = raw_deadletter_requests if isinstance(raw_deadletter_requests, list) else []
+    deadletter_requests.append(request_receipt)
+
+    record["updated_ts"] = ts
+    record["stable_state"] = stable_state
+    record["dispatch"] = updated_dispatch
+    record["decision_journal"] = decision_journal
+    record["receipts"] = receipts
+    record["deadletter_items"] = deadletter_items
+    record["latest_deadletter_item"] = request_item
+    record["deadletter_recovery_requests"] = deadletter_requests
+    record["latest_deadletter_recovery_request_receipt"] = request_receipt
+    record["latest_receipt"] = request_receipt
+    raw_governance = record.get("governance")
+    governance = raw_governance if isinstance(raw_governance, dict) else {}
+    governance.update(
+        {
+            "gate": "reactor_deadletter_recovery_request",
+            "execution_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+            "dispatch_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "deadletter_recovery_requested": True,
+            "recovery_request_authority": True,
+            "recovery_event_enqueued": True,
+            "recovery_event_id": recovery_event_id,
+            "retry_execution_authority": False,
+            "escalation_authority": False,
+            "next_step": request_receipt.get("next_step"),
+        }
+    )
+    record["governance"] = governance
+
+    _atomic_write_json(path, record)
+    return {
+        "ok": True,
+        "applied": True,
+        "status": stable_state,
+        "deadletter_id": deadletter_key,
+        "recovery_event_id": recovery_event_id,
+        "receipt": _display(request_receipt),
+        "event": _display(record),
+        "recovery_event": recovery_event,
+    }
+
+
 def list_events(
     *,
     limit: int = 200,
@@ -2616,6 +2875,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
         "deadletter_resolution_receipt",
         "deadletter_escalation_handoff_receipt",
         "deadletter_escalation_acknowledgement_receipt",
+        "deadletter_recovery_request_receipt",
     ):
         candidate = _as_dict(dispatch.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
@@ -2629,6 +2889,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_resolution_receipt",
         "latest_deadletter_escalation_handoff_receipt",
         "latest_deadletter_escalation_acknowledgement_receipt",
+        "latest_deadletter_recovery_request_receipt",
         "latest_retry_candidate",
         "latest_retry_due_receipt",
         "latest_retry_dispatch_attempt_receipt",
@@ -2664,6 +2925,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_resolution_receipt",
         "latest_deadletter_escalation_handoff_receipt",
         "latest_deadletter_escalation_acknowledgement_receipt",
+        "latest_deadletter_recovery_request_receipt",
         "latest_retry_candidate",
         "latest_retry_schedule_receipt",
         "latest_retry_due_receipt",
@@ -2697,6 +2959,8 @@ def _review_action(route: str, status: str, gate: str) -> str:
         return "track_escalation_handoff_until_acknowledged"
     if route == "deadletter_escalation_acknowledgement":
         return "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
+    if route == "deadletter_recovery_request":
+        return "record_dispatch_attempt_for_deadletter_recovery_event"
     if route == "deadletter_resolution":
         return "review_deadletter_resolution_receipt"
     if route == "retry_backoff":
@@ -2792,6 +3056,9 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
     deadletter_escalation_acknowledgement = _as_dict(
         dispatch.get("deadletter_escalation_acknowledgement_receipt")
     ) or _as_dict(item.get("latest_deadletter_escalation_acknowledgement_receipt"))
+    deadletter_recovery_request = _as_dict(dispatch.get("deadletter_recovery_request_receipt")) or _as_dict(
+        item.get("latest_deadletter_recovery_request_receipt")
+    )
     retry_candidate = _as_dict(dispatch.get("retry_candidate"))
     retry_schedule = _as_dict(dispatch.get("retry_schedule_receipt")) or _as_dict(
         item.get("latest_retry_schedule_receipt")
@@ -2856,6 +3123,15 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             gate=_safe_str(deadletter_escalation_acknowledgement.get("gate")).strip()
             or "reactor_deadletter_escalation_acknowledgement",
             receipt=deadletter_escalation_acknowledgement,
+            blocker=blocker,
+        )
+    if stable_state == "deadletter_recovery_requested" and deadletter_recovery_request:
+        return _review_projection(
+            item=item,
+            route="deadletter_recovery_request",
+            status=_safe_str(deadletter_recovery_request.get("status")).strip() or "recovery_requested",
+            gate=_safe_str(deadletter_recovery_request.get("gate")).strip() or "reactor_deadletter_recovery_request",
+            receipt=deadletter_recovery_request,
             blocker=blocker,
         )
     if stable_state == "deadletter_resolution_deferred" and deadletter_resolution:
@@ -2979,6 +3255,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_resolution_counts: dict[str, int] = {}
     deadletter_escalation_handoff_counts: dict[str, int] = {}
     deadletter_escalation_acknowledgement_counts: dict[str, int] = {}
+    deadletter_recovery_request_counts: dict[str, int] = {}
     dispatch_execution_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_schedule_counts: dict[str, int] = {}
@@ -3075,6 +3352,17 @@ def reactor_status() -> dict[str, Any]:
             deadletter_escalation_acknowledgement_counts[deadletter_escalation_acknowledgement_status] = (
                 deadletter_escalation_acknowledgement_counts.get(deadletter_escalation_acknowledgement_status, 0) + 1
             )
+        raw_deadletter_recovery_request = dispatch.get("deadletter_recovery_request_receipt") or item.get(
+            "latest_deadletter_recovery_request_receipt"
+        )
+        deadletter_recovery_request = (
+            raw_deadletter_recovery_request if isinstance(raw_deadletter_recovery_request, dict) else {}
+        )
+        deadletter_recovery_request_status = _safe_str(deadletter_recovery_request.get("status")).strip()
+        if deadletter_recovery_request_status:
+            deadletter_recovery_request_counts[deadletter_recovery_request_status] = (
+                deadletter_recovery_request_counts.get(deadletter_recovery_request_status, 0) + 1
+            )
         raw_dispatch_execution = dispatch.get("dispatch_execution_receipt") or item.get(
             "latest_dispatch_execution_receipt"
         )
@@ -3139,6 +3427,7 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_resolution_counts": deadletter_resolution_counts,
         "deadletter_escalation_handoff_counts": deadletter_escalation_handoff_counts,
         "deadletter_escalation_acknowledgement_counts": deadletter_escalation_acknowledgement_counts,
+        "deadletter_recovery_request_counts": deadletter_recovery_request_counts,
         "dispatch_execution_counts": dispatch_execution_counts,
         "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,

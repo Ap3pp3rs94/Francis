@@ -18,6 +18,7 @@ from francis.reactor import (
     reactor_status,
     record_deadletter_escalation_acknowledgement,
     record_deadletter_escalation_handoff,
+    record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
     record_dispatch_attempt,
@@ -111,6 +112,15 @@ class ReactorDeadletterEscalationHandoffIn(BaseModel):
 
 
 class ReactorDeadletterEscalationAcknowledgementIn(BaseModel):
+    deadletter_id: str = ""
+    id: str = ""
+    actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactorDeadletterRecoveryRequestIn(BaseModel):
     deadletter_id: str = ""
     id: str = ""
     actor: str = ""
@@ -276,6 +286,19 @@ def deadletters_escalation_acknowledgement(
     data = _payload_dict(payload)
     deadletter_id = str(data.get("deadletter_id") or data.get("id") or "")
     return record_deadletter_escalation_acknowledgement(deadletter_id, data)
+
+
+@router.post("/deadletters/recovery_request")
+def deadletters_recovery_request(
+    payload: ReactorDeadletterRecoveryRequestIn,
+    request: Request,
+) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    deadletter_id = str(data.get("deadletter_id") or data.get("id") or "")
+    return record_deadletter_recovery_request(deadletter_id, data)
 
 
 @router.get("/retries/list")

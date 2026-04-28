@@ -318,6 +318,10 @@ def _escalation_acknowledgement_next_step() -> str:
     return "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
 
 
+def _recovery_request_next_step() -> str:
+    return "dispatch_recovery_event_through_existing_operation_run_gate"
+
+
 def _resolution_receipt(
     *,
     item: dict[str, Any],
@@ -480,6 +484,69 @@ def _escalation_acknowledgement_receipt(
             "retry_execution_authority": False,
             "deadletter_disposition_authority": False,
             "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _recovery_request_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+    status: str,
+    applied: bool,
+    operation_id: str,
+    recovery_event_id: str,
+) -> dict[str, Any]:
+    latest_acknowledgement = _as_dict(item.get("latest_escalation_acknowledgement_receipt"))
+    source_ref = (
+        _safe_str(latest_acknowledgement.get("receipt_id")).strip()
+        or _safe_str(latest_acknowledgement.get("deadletter_id")).strip()
+        or _safe_str(item.get("deadletter_id")).strip()
+    )
+    receipt = {
+        "kind": "reactor.deadletter.recovery_request.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_recovery_request",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_recovery_request",
+        "gate": "reactor_deadletter_recovery_request",
+        "stable_state": "deadletter_recovery_requested",
+        "next_step": _recovery_request_next_step(),
+        "source_receipt_kind": _safe_str(latest_acknowledgement.get("kind")).strip(),
+        "source_receipt_ref": source_ref,
+        "source_gate": _safe_str(latest_acknowledgement.get("gate") or item.get("gate")).strip(),
+        "escalation_acknowledgement_receipt_id": latest_acknowledgement.get("receipt_id"),
+        "resolution_decision": latest_acknowledgement.get("resolution_decision") or item.get("resolution_decision"),
+        "operation_id": operation_id,
+        "recovery_event_id": recovery_event_id,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "recovery_requested": True,
+        "recovery_event_enqueued": bool(recovery_event_id),
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_recovery_request",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "recovery_request_authority": applied,
             "escalation_authority": False,
             "memory_write": False,
         },
@@ -878,6 +945,118 @@ def record_escalation_acknowledgement(
         "ok": True,
         "applied": True,
         "status": "deadletter_escalation_acknowledged",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+    }
+
+
+def record_recovery_request(
+    *,
+    deadletter_id: str,
+    operation_id: str,
+    recovery_event_id: str,
+    actor: str = "",
+    reason: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_deadletter", "item": {}, "receipt": {}}
+
+    current_status = _safe_str(item.get("status")).strip()
+    latest_request = _as_dict(item.get("latest_recovery_request_receipt"))
+    if current_status == "recovery_requested" and latest_request:
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_recovery_requested",
+            "item": _display(item),
+            "receipt": _display(latest_request),
+        }
+    if current_status != "escalation_acknowledged":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_escalation_acknowledgement_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+
+    operation_key = _safe_str(operation_id).strip()
+    recovery_event_key = _safe_str(recovery_event_id).strip()
+    if not operation_key:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_recovery_operation_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+    if not recovery_event_key:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_recovery_event_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+
+    receipt = _recovery_request_receipt(
+        item=item,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        status="recovery_requested",
+        applied=True,
+        operation_id=operation_key,
+        recovery_event_id=recovery_event_key,
+    )
+    raw_request_receipts = item.get("recovery_request_receipts")
+    request_receipts = raw_request_receipts if isinstance(raw_request_receipts, list) else []
+    request_receipts.append(receipt)
+    updated = {
+        **item,
+        "status": "recovery_requested",
+        "route": "deadletter_recovery_request",
+        "stable_state": "deadletter_recovery_requested",
+        "next_step": _recovery_request_next_step(),
+        "recovery_requested": True,
+        "recovery_requested_ts": ts,
+        "recovery_operation_id": operation_key,
+        "recovery_event_id": recovery_event_key,
+        "updated_ts": ts,
+        "recovery_request_receipts": request_receipts,
+        "latest_recovery_request_receipt": receipt,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_recovery_request",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "recovery_request_authority": True,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "deadletter_recovery_requested",
         "item": _display(updated),
         "receipt": _display(receipt),
     }

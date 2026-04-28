@@ -783,6 +783,24 @@ receipt when present. This is readback/UI-only; it does not add backend routes,
 write controls, execution authority, retry authority, approval authority,
 memory-write behavior, external-escalation authority, or recovery execution.
 
+As of `2026-04-28`, acknowledged Reactor deadletters can request recovery
+through a bounded event handoff without executing it. `POST
+/reactor/deadletters/recovery_request` requires the existing `reactor.write`
+API scope and only applies after `escalation_acknowledged`. The request records
+`reactor.deadletter.recovery_request.receipt`, moves the durable deadletter to
+`recovery_requested`, links the receipt through the parent Reactor event,
+decision journal, receipt history, receipt-kind filters, review-route filters,
+review-queue projection, and `/reactor/status`
+`deadletter_recovery_request_counts`, and enqueues a separate
+`deadletter_recovery` Reactor event with `action_class=operation_run` for the
+same source operation id. That recovery event remains queued and must still be
+dispatched through the existing `operation_run` engine and `operations.run`
+gate. This is a recovery request and dispatch-handoff boundary only: it does
+not run recovery, execute dispatch, decide approvals, write memory, promote
+capabilities, start external escalation, or grant execution, retry-execution,
+approval, memory-write, promotion, recovery-execution, or external-escalation
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9441,6 +9459,24 @@ acknowledgement UI readback slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor recovery request
+handoff slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed after moving the API test operation setup into the focused test`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed after formatting tests\unit\test_reactor_event_queue.py and tests\test_api_reactor.py`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9471,13 +9507,16 @@ These remain true and should block any "finished" claim:
   record bounded resolved/no-action or escalation-pending disposition receipts
   without starting recovery, retry, execution, memory writes, approval decisions,
   or external escalation, and escalation-pending deadletters can now record a
-  durable non-executing escalation handoff receipt plus acknowledgement receipt.
+  durable non-executing escalation handoff receipt, acknowledgement receipt, and
+  recovery request receipt that queues a separate `deadletter_recovery`
+  `operation_run` event for the same source operation id without dispatching it.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, broader execution-failure routing beyond the current
-  `operation_run` path, broader operator visibility beyond the route-filtered
-  review queue, direct deadletter queue history, escalation handoff readback,
-  and escalation acknowledgement readback, plus actual recovery/escalation
-  execution after disposition, handoff, and acknowledgement receipts
+  `operation_run` path, broader operator visibility beyond the current
+  route-filtered review queue and direct deadletter history, actual dispatch of
+  queued recovery events through the existing operation-run gate, and external
+  escalation execution after disposition, handoff, acknowledgement, and recovery
+  request receipts
 
 ## 6. Update rule
 
