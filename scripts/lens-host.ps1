@@ -11,12 +11,27 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
 $modeName = $Mode.ToLowerInvariant()
+$ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
+$ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
+$Blockers = @(
+  'lens_host_runtime_not_implemented',
+  'tray_host_missing',
+  'global_hotkey_binding_missing',
+  'overlay_window_missing',
+  'summon_binding_missing'
+)
+if (-not $ServiceConfigExists) {
+  $Blockers = @('lens_host_service_config_missing') + $Blockers
+}
+
 $payload = [ordered]@{
   ok = $true
   kind = 'lens.host.status_runner'
   status = 'status_only'
   mode = $modeName
   repo_root = $RepoRoot
+  service_config_path = 'config/runtime/services/lens-host.json'
+  service_config_exists = $ServiceConfigExists
   route = '/lens/host'
   manifest_route = '/lens/host/manifest'
   launch_supported = $false
@@ -29,14 +44,7 @@ $payload = [ordered]@{
   overlay_window = $false
   command_palette_binding = $false
   summon_anywhere = $false
-  blockers = @(
-    'lens_host_runtime_not_implemented',
-    'lens_host_service_config_missing',
-    'tray_host_missing',
-    'global_hotkey_binding_missing',
-    'overlay_window_missing',
-    'summon_binding_missing'
-  )
+  blockers = $Blockers
   governance = [ordered]@{
     read_only_contract = $true
     execution_authority = $false

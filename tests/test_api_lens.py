@@ -45,6 +45,35 @@ def _write_lens_host_status_runner(repo_root: Path) -> None:
     script.write_text("# Lens host status runner fixture\n", encoding="utf-8")
 
 
+def _write_lens_host_service_config(repo_root: Path) -> None:
+    config = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        """
+{
+  "kind": "lens.host.service_config",
+  "version": 1,
+  "enabled": false,
+  "service_name": "Francis-LensHost",
+  "display_name": "Francis Lens Host",
+  "description": "Disabled readiness baseline for the future resident Lens host.",
+  "manager": "scripts/service-install.ps1",
+  "entrypoint": "scripts/lens-host.ps1",
+  "status_mode": "Status",
+  "foreground_mode": "Foreground",
+  "start_type": "Manual",
+  "auto_start": false,
+  "start_after_install": false,
+  "installable": false,
+  "install_authority": false,
+  "service_install_authority": false,
+  "blocked_reason": "lens_host_runtime_not_implemented"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+
 def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     readiness = body.get("stage6_readiness") if isinstance(body.get("stage6_readiness"), dict) else {}
     criteria = readiness.get("criteria") if isinstance(readiness.get("criteria"), list) else []
@@ -59,6 +88,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
+    _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
@@ -146,6 +176,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["local_palette_route"] == "/lens/status"
     assert resident_host["handoff_target"] == "chat_ui.system_orb"
     assert resident_host["status_runner_present"] is True
+    assert resident_host["service_config_present"] is True
+    assert resident_host["service_config_path"] == "config/runtime/services/lens-host.json"
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
     assert resident_host["startup_integration"] is False
@@ -157,6 +189,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["summon_anywhere"] is False
     assert [item["id"] for item in resident_host["components"]] == [
         "host_status_runner",
+        "host_service_config",
         "host_process",
         "tray_presence",
         "global_hotkey",
@@ -218,14 +251,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert launch_manifest["service_install"] == {
         "manager": "scripts/service-install.ps1",
-        "config_path": "data/config/services/lens-host.json",
-        "config_exists": False,
+        "config_path": "config/runtime/services/lens-host.json",
+        "config_exists": True,
+        "config_status": "present_disabled",
+        "service_name": "Francis-LensHost",
+        "installable": False,
+        "blocked_reason": "lens_host_runtime_not_implemented",
         "install_authority": False,
         "start_after_install": False,
+        "auto_start": False,
     }
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
         "host_status_runner",
+        "host_service_config",
         "host_readiness",
         "tray_presence",
         "global_hotkey",
@@ -233,7 +272,6 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     ]
     assert launch_manifest["blockers"] == [
         "lens_host_runtime_not_implemented",
-        "lens_host_service_config_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
         "overlay_window_missing",
@@ -292,6 +330,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert _criterion(body, "resident_host_runtime")["resident"] is False
     assert "lens_host_runtime_not_implemented" in _criterion(body, "resident_host_runtime")["blockers"]
     assert "resident_host_process_missing" in _criterion(body, "resident_host_runtime")["blockers"]
+    assert "lens_host_service_config_missing" not in _criterion(body, "resident_host_runtime")["blockers"]
     assert _criterion(body, "hud_layer_runtime")["status"] == "readback_only"
     assert _criterion(body, "hud_layer_runtime")["resident_overlay"] is False
     assert "resident_overlay_runtime_missing" in _criterion(body, "hud_layer_runtime")["blockers"]
@@ -314,6 +353,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_body["status"] == "not_implemented"
     assert host_body["contract_status"] == "readback_ready"
     assert host_body["status_runner_present"] is True
+    assert host_body["service_config_present"] is True
     assert host_body["resident"] is False
     assert host_body["global_hotkey"] is False
     assert host_body["summon_anywhere"] is False
@@ -325,6 +365,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["status"] == "status_runner_present"
     assert manifest_body["enabled"] is False
     assert manifest_body["declared_entrypoint"]["exists"] is True
+    assert manifest_body["service_install"]["config_exists"] is True
+    assert manifest_body["service_install"]["installable"] is False
     assert manifest_body["status_command"]["executable"] is True
     assert manifest_body["candidate_command"]["executable"] is False
     assert manifest_body["governance"]["local_process_launch_authority"] is False
@@ -336,6 +378,7 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
+    _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")

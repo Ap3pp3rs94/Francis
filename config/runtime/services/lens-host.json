@@ -1,0 +1,26 @@
+{
+  "kind": "lens.host.service_config",
+  "version": 1,
+  "enabled": false,
+  "service_name": "Francis-LensHost",
+  "display_name": "Francis Lens Host",
+  "description": "Disabled readiness baseline for the future resident Lens host.",
+  "manager": "scripts/service-install.ps1",
+  "entrypoint": "scripts/lens-host.ps1",
+  "status_mode": "Status",
+  "foreground_mode": "Foreground",
+  "start_type": "Manual",
+  "auto_start": false,
+  "start_after_install": false,
+  "installable": false,
+  "install_authority": false,
+  "service_install_authority": false,
+  "blocked_reason": "lens_host_runtime_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_presence",
+    "global_hotkey_binding",
+    "overlay_window",
+    "summon_binding"
+  ]
+}

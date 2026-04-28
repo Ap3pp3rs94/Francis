@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +14,25 @@ def _runtime_file_exists(relative_path: str) -> bool:
         return False
 
 
+def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
+    try:
+        path = repo_root() / Path(relative_path)
+        if not path.is_file():
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
-    service_config = "data/config/services/lens-host.json"
+    service_config = "config/runtime/services/lens-host.json"
     entrypoint_exists = _runtime_file_exists(entrypoint)
+    service_config_payload = _runtime_json_dict(service_config)
+    service_config_exists = bool(service_config_payload)
     blockers = [
         "lens_host_runtime_not_implemented",
-        "lens_host_service_config_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
         "overlay_window_missing",
@@ -27,6 +40,9 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     ]
     if not entrypoint_exists:
         blockers.insert(0, "lens_host_entrypoint_missing")
+    if not service_config_exists:
+        insert_at = 1 if not entrypoint_exists else 0
+        blockers.insert(insert_at, "lens_host_service_config_missing")
 
     return {
         "ok": True,
@@ -76,9 +92,14 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "service_install": {
             "manager": "scripts/service-install.ps1",
             "config_path": service_config,
-            "config_exists": False,
+            "config_exists": service_config_exists,
+            "config_status": "present_disabled" if service_config_exists else "missing",
+            "service_name": str(service_config_payload.get("service_name") or ""),
+            "installable": False,
+            "blocked_reason": str(service_config_payload.get("blocked_reason") or "lens_host_runtime_not_implemented"),
             "install_authority": False,
             "start_after_install": False,
+            "auto_start": False,
         },
         "required_bindings": [
             {
@@ -90,6 +111,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_status_runner",
                 "path": entrypoint,
                 "status": "present" if entrypoint_exists else "missing",
+            },
+            {
+                "id": "host_service_config",
+                "path": service_config,
+                "status": "present_disabled" if service_config_exists else "missing",
             },
             {
                 "id": "host_readiness",

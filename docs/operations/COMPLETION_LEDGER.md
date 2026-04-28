@@ -11122,6 +11122,51 @@ runner:
 - `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens host service config baseline
+
+Stage 6/Lens now has a tracked disabled service-readiness baseline for the
+future Lens resident host. `config/runtime/services/lens-host.json` declares
+`kind: lens.host.service_config`, service name `Francis-LensHost`, the current
+`scripts/lens-host.ps1` entrypoint, status/foreground modes, manual startup
+intent, and explicit false values for `enabled`, `auto_start`,
+`start_after_install`, `installable`, `install_authority`, and
+`service_install_authority`.
+
+The launch manifest now points to this tracked config path instead of ignored
+runtime state, reports `config_exists: true` with `config_status:
+present_disabled`, and no longer lists `lens_host_service_config_missing` when
+the config is present. `/lens/host` now exposes `service_config_present: true`
+and a `host_service_config` component marked `present_disabled`. The service
+config is readiness/readback only; the foreground command remains disabled, the
+runner still refuses foreground launch, and the resident host runtime remains
+`not_implemented`.
+
+This is a config/readback slice only. It does not install or start a service,
+create a resident process, register a hotkey, open an overlay, change UI
+behavior, write memory, decide approvals, execute actions, or grant
+overlay-control, summon, capture, sensing, telemetry, promotion, policy,
+service-install, or local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host service
+config baseline:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-host.ps1 -Mode Foreground; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11131,10 +11176,10 @@ These remain true and should block any "finished" claim:
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a status-only
-  `scripts/lens-host.ps1` runner that refuses foreground launch, but no OS-wide
-  summon, resident host process, service config, resident overlay/HUD runtime,
-  OS-level command palette, tray presence, hotkey binding, or live Pilot
-  takeover surface yet
+  `scripts/lens-host.ps1` runner and disabled tracked service config baseline,
+  but no OS-wide summon, resident host process, installed/started service,
+  resident overlay/HUD runtime, OS-level command palette, tray presence, hotkey
+  binding, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

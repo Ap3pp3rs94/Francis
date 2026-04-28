@@ -225,6 +225,8 @@ def _hud_runtime_surface() -> dict[str, Any]:
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
+    service_install = _as_dict(launch_manifest.get("service_install"))
+    service_config_present = bool(service_install.get("config_exists"))
     blockers = [
         "lens_host_runtime_not_implemented",
         "resident_host_process_missing",
@@ -236,12 +238,21 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     ]
     if not status_runner_present:
         blockers.insert(0, "lens_host_entrypoint_missing")
+    if not service_config_present:
+        insert_at = 1 if not status_runner_present else 0
+        blockers.insert(insert_at, "lens_host_service_config_missing")
     components = [
         {
             "id": "host_status_runner",
             "label": "Host status runner",
             "status": "present" if status_runner_present else "missing",
             "required_for": ["launch_readiness_readback"],
+        },
+        {
+            "id": "host_service_config",
+            "label": "Host service config",
+            "status": "present_disabled" if service_config_present else "missing",
+            "required_for": ["startup_supervision"],
         },
         {
             "id": "host_process",
@@ -288,6 +299,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
         "handoff_target": "chat_ui.system_orb",
         "status_runner_present": status_runner_present,
+        "service_config_present": service_config_present,
+        "service_config_path": _safe_str(service_install.get("config_path")).strip(),
         "resident": False,
         "process_supervision": False,
         "startup_integration": False,
