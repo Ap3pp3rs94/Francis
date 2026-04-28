@@ -11,6 +11,7 @@ from francis.reactor.events import (
     list_events,
     reactor_review_queue,
     reactor_status,
+    record_deadletter_review,
     record_dispatch_attempt,
     record_retry_dispatch_attempt,
     record_retry_due,
@@ -1317,6 +1318,104 @@ def test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget(
     assert second_attempt["event"]["dispatch"]["deadletter_enqueue"]["status"] == "already_queued"
     assert len(second_attempt["event"]["deadletter_items"]) == 1
     assert len(list_deadletters()) == 1
+
+
+def test_reactor_deadletter_review_records_receipt_without_resolution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Mission queue deadletter can be reviewed",
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        }
+    )
+    attempted = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+    deadletter_id = str(attempted["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+
+    reviewed = record_deadletter_review(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "retry_later",
+            "reason": "operator reviewed failed Reactor item",
+        },
+    )
+
+    assert reviewed["ok"] is True
+    assert reviewed["applied"] is True
+    assert reviewed["status"] == "deadletter_reviewed"
+    event = reviewed["event"]
+    assert event["stable_state"] == "deadletter_reviewed"
+    assert event["dispatch"]["deadletter_reviewed"] is True
+    assert event["dispatch"]["deadletter_review_decision"] == "retry_later"
+    review_receipt = event["latest_deadletter_review_receipt"]
+    assert review_receipt["kind"] == "reactor.deadletter.review.receipt"
+    assert review_receipt["deadletter_id"] == deadletter_id
+    assert review_receipt["status"] == "reviewed"
+    assert review_receipt["route"] == "deadletter_review"
+    assert review_receipt["stable_state"] == "deadletter_reviewed"
+    assert review_receipt["review_decision"] == "retry_later"
+    assert review_receipt["deadletter_resolved"] is False
+    assert review_receipt["recovery_started"] is False
+    assert review_receipt["retry_started"] is False
+    assert review_receipt["execution_started"] is False
+    assert review_receipt["escalation_started"] is False
+    assert review_receipt["governance"]["deadletter_resolution_authority"] is False
+    assert review_receipt["governance"]["escalation_authority"] is False
+    assert review_receipt["governance"]["retry_authority"] is False
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.review.receipt"
+    assert event["latest_deadletter_item"]["status"] == "reviewed"
+    assert event["deadletter_reviews"][0]["deadletter_id"] == deadletter_id
+    assert event["decision_journal"][-1]["kind"] == "reactor.deadletter.reviewed"
+    assert event["decision_journal"][-1]["deadletter_resolved"] is False
+    assert event["decision_journal"][-1]["retry_started"] is False
+    assert event["decision_journal"][-1]["escalation_started"] is False
+    assert event["governance"]["deadletter_reviewed"] is True
+    assert event["governance"]["deadletter_resolved"] is False
+    assert event["governance"]["deadletter_resolution_authority"] is False
+
+    stored_deadletter = get_deadletter(deadletter_id)
+    assert stored_deadletter is not None
+    assert stored_deadletter["status"] == "reviewed"
+    assert stored_deadletter["latest_review_receipt"]["review_decision"] == "retry_later"
+    assert [item["deadletter_id"] for item in list_deadletters(status="reviewed")] == [deadletter_id]
+    assert {item["event_id"] for item in list_events(stable_state="deadletter_reviewed")} == {str(created["event_id"])}
+    assert {item["event_id"] for item in list_events(review_route="deadletter_review")} == {str(created["event_id"])}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.review.receipt")} == {
+        str(created["event_id"])
+    }
+
+    review_queue = reactor_review_queue(route="deadletter_review")
+    assert review_queue["available_total"] == 1
+    assert review_queue["items"][0]["review"]["receipt_kind"] == "reactor.deadletter.review.receipt"
+    assert review_queue["items"][0]["review"]["action"] == "wait_for_deadletter_resolution_or_escalation_path"
+    status = reactor_status()
+    assert status["stable_state_counts"] == {"deadletter_reviewed": 1}
+    assert status["deadletter_queue_counts"] == {"reviewed": 1}
+    assert status["deadletter_review_counts"] == {"reviewed": 1}
+    assert status["deadletter_total"] == 1
+
+    second_review = record_deadletter_review(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "retry_later",
+            "reason": "same review should not duplicate receipts",
+        },
+    )
+
+    assert second_review["ok"] is True
+    assert second_review["applied"] is False
+    assert second_review["status"] == "already_reviewed"
+    assert len(second_review["event"]["deadletter_reviews"]) == 1
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:

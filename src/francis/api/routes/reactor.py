@@ -16,6 +16,7 @@ from francis.reactor import (
     list_retry_schedules,
     reactor_review_queue,
     reactor_status,
+    record_deadletter_review,
     record_dispatch_attempt,
     record_retry_dispatch_attempt,
     record_retry_due,
@@ -72,6 +73,16 @@ class ReactorRetryDispatchAttemptIn(BaseModel):
     retry_schedule_id: str = ""
     id: str = ""
     actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactorDeadletterReviewIn(BaseModel):
+    deadletter_id: str = ""
+    id: str = ""
+    actor: str = ""
+    decision: str = ""
     reason: str = ""
     summary: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -188,6 +199,16 @@ def deadletters_get(id: str) -> dict[str, Any]:
             "memory_write": False,
         },
     }
+
+
+@router.post("/deadletters/review")
+def deadletters_review(payload: ReactorDeadletterReviewIn, request: Request) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    deadletter_id = str(data.get("deadletter_id") or data.get("id") or "")
+    return record_deadletter_review(deadletter_id, data)
 
 
 @router.get("/retries/list")

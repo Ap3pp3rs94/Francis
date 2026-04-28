@@ -561,6 +561,18 @@ not retry work, escalate work, resolve deadletters, execute dispatches, write
 memory, or grant retry, escalation, dispatch, execution, or deadletter
 resolution authority.
 
+As of `2026-04-27`, Reactor deadletter queue items can also record bounded
+operator review receipts. `POST /reactor/deadletters/review` requires
+`reactor.write`, accepts an existing deadletter id, records
+`reactor.deadletter.review.receipt`, updates the deadletter queue item to
+`reviewed`, and links that review back through the Reactor event dispatch state,
+decision journal, receipt history, `latest_deadletter_review_receipt`,
+receipt-kind filtering, review-queue projection, deadletter status filtering,
+and `/reactor/status` deadletter-review counts. This is review traceability
+only: it does not retry work, resolve deadletters, run recovery, escalate work,
+execute dispatches, write memory, or grant retry, escalation, execution,
+dispatch, or deadletter-resolution authority.
+
 As of `2026-04-27`, Reactor dispatch attempts also preserve an explicit stable
 return receipt after every attempted dispatch path. Each dispatch attempt now
 appends `reactor.stable_return.receipt`, records the route that currently holds
@@ -4501,6 +4513,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor deadletter
+review receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\events.py; passed after running Ruff format`
+- `python -m ruff format src\francis\reactor\events.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor due retry
 dispatch-attempt slice:
@@ -9148,13 +9178,14 @@ These remain true and should block any "finished" claim:
   Reactor dispatch attempts can create a pending approval request when missing,
   and reconcile terminal approval decisions back into deferred dispatch or
   operator-review-blocked state, and deadletter candidates now persist real
-  Reactor deadletter queue items, and every dispatch attempt now records a
-  verification-state receipt plus stable-return receipt, retry candidates now
-  persist durable retry schedule queue items, and retry schedules can be marked
-  due with a handoff receipt and then feed one bounded retry dispatch-attempt
-  receipt, but bounded dispatch execution, real verification hooks/results,
-  retry execution beyond non-executing due dispatch attempts, deadletter
-  resolution/escalation, and broader operator visibility are still remaining work
+  Reactor deadletter queue items with bounded review receipts, and every
+  dispatch attempt now records a verification-state receipt plus stable-return
+  receipt, retry candidates now persist durable retry schedule queue items, and
+  retry schedules can be marked due with a handoff receipt and then feed one
+  bounded retry dispatch-attempt receipt, but bounded dispatch execution, real
+  verification hooks/results, retry execution beyond non-executing due dispatch
+  attempts, deadletter resolution/escalation beyond non-authoritative review
+  receipts, and broader operator visibility are still remaining work
 
 ## 6. Update rule
 

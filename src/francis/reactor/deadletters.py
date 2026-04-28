@@ -206,6 +206,76 @@ def _enqueue_receipt(
     return redacted if isinstance(redacted, dict) else {}
 
 
+def _review_decision(value: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", _safe_str(value).strip().lower()).strip("_")
+    if normalized in {"retry_later", "retry", "recover", "recovery"}:
+        return "retry_later"
+    if normalized in {"escalate_later", "escalate", "escalation"}:
+        return "escalate_later"
+    if normalized in {"operator_reviewed", "reviewed", "acknowledge", "acknowledged"}:
+        return "operator_reviewed"
+    return "defer"
+
+
+def _review_next_step(decision: str) -> str:
+    if decision == "retry_later":
+        return "wait_for_explicit_deadletter_recovery_path_before_retry"
+    if decision == "escalate_later":
+        return "wait_for_explicit_deadletter_escalation_path"
+    if decision == "operator_reviewed":
+        return "keep_deadletter_review_visible_until_resolution_or_escalation"
+    return "defer_deadletter_until_resolution_or_escalation_path_exists"
+
+
+def _review_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    decision: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    receipt = {
+        "kind": "reactor.deadletter.review.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_review_{decision}",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_review",
+        "gate": "reactor_deadletter_review",
+        "stable_state": "deadletter_reviewed",
+        "next_step": _review_next_step(decision),
+        "source_receipt_kind": _safe_str(item.get("kind")).strip(),
+        "source_receipt_ref": item.get("deadletter_id"),
+        "source_gate": item.get("gate"),
+        "review_decision": decision,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "reviewed": status in {"reviewed", "already_reviewed"},
+        "deadletter_resolved": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_review",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
 def queue_deadletter(
     *,
     event: dict[str, Any],
@@ -238,6 +308,96 @@ def queue_deadletter(
         "ok": True,
         "created": created,
         "item": _display(persisted),
+        "receipt": _display(receipt),
+    }
+
+
+def review_deadletter(
+    *,
+    deadletter_id: str,
+    actor: str = "",
+    reason: str = "",
+    decision: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_deadletter", "item": {}, "receipt": {}}
+
+    review_decision = _review_decision(decision)
+    latest_review = _as_dict(item.get("latest_review_receipt"))
+    if (
+        _safe_str(item.get("status")).strip() == "reviewed"
+        and _safe_str(latest_review.get("review_decision")).strip() == review_decision
+    ):
+        receipt = _review_receipt(
+            item=item,
+            actor=actor,
+            reason=reason,
+            decision=review_decision,
+            ts=ts,
+            status="already_reviewed",
+            applied=False,
+        )
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_reviewed",
+            "item": _display(item),
+            "receipt": _display(receipt),
+        }
+
+    receipt = _review_receipt(
+        item=item,
+        actor=actor,
+        reason=reason,
+        decision=review_decision,
+        ts=ts,
+        status="reviewed",
+        applied=True,
+    )
+    raw_review_receipts = item.get("review_receipts")
+    review_receipts = raw_review_receipts if isinstance(raw_review_receipts, list) else []
+    review_receipts.append(receipt)
+    updated = {
+        **item,
+        "status": "reviewed",
+        "route": "deadletter_review",
+        "stable_state": "deadletter_reviewed",
+        "next_step": _review_next_step(review_decision),
+        "review_decision": review_decision,
+        "reviewed_ts": ts,
+        "updated_ts": ts,
+        "review_receipts": review_receipts,
+        "latest_review_receipt": receipt,
+        "deadletter_resolved": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_review",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, updated)
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "reviewed",
+        "item": _display(updated),
         "receipt": _display(receipt),
     }
 

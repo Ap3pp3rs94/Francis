@@ -646,6 +646,111 @@ def test_reactor_deadletter_queue_readback_routes(monkeypatch, tmp_path: Path) -
     assert status.json()["deadletter_total"] == 1
 
 
+def test_reactor_deadletter_review_route_records_receipt_without_resolution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted Reactor item can be reviewed",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": event_id, "actor": _REACTOR_ACTOR},
+    )
+    assert attempted.status_code == 200
+    deadletter_id = str(attempted.json()["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+
+    reviewed = client.post(
+        "/reactor/deadletters/review",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "decision": "escalate_later",
+            "reason": "operator reviewed failed Reactor item",
+        },
+    )
+
+    assert reviewed.status_code == 200
+    reviewed_body = reviewed.json()
+    assert reviewed_body["ok"] is True
+    assert reviewed_body["applied"] is True
+    assert reviewed_body["status"] == "deadletter_reviewed"
+    receipt = reviewed_body["receipt"]
+    assert receipt["kind"] == "reactor.deadletter.review.receipt"
+    assert receipt["deadletter_id"] == deadletter_id
+    assert receipt["status"] == "reviewed"
+    assert receipt["route"] == "deadletter_review"
+    assert receipt["review_decision"] == "escalate_later"
+    assert receipt["deadletter_resolved"] is False
+    assert receipt["execution_started"] is False
+    assert receipt["retry_started"] is False
+    assert receipt["escalation_started"] is False
+    assert receipt["governance"]["deadletter_resolution_authority"] is False
+    assert receipt["governance"]["escalation_authority"] is False
+    event = reviewed_body["event"]
+    assert event["stable_state"] == "deadletter_reviewed"
+    assert event["dispatch"]["deadletter_reviewed"] is True
+    assert event["latest_deadletter_review_receipt"]["deadletter_id"] == deadletter_id
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.review.receipt"
+    assert event["governance"]["deadletter_reviewed"] is True
+    assert event["governance"]["deadletter_resolution_authority"] is False
+
+    reviewed_list = client.get("/reactor/deadletters/list", params={"status": "reviewed"})
+    assert reviewed_list.status_code == 200
+    assert {item["deadletter_id"] for item in reviewed_list.json()["items"]} == {deadletter_id}
+    fetched = client.get("/reactor/deadletters/get", params={"id": deadletter_id})
+    assert fetched.status_code == 200
+    assert fetched.json()["item"]["latest_review_receipt"]["review_decision"] == "escalate_later"
+
+    receipt_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.review.receipt"},
+    )
+    assert receipt_list.status_code == 200
+    assert {item["event_id"] for item in receipt_list.json()["items"]} == {event_id}
+    review_route = client.get("/reactor/events/list", params={"review_route": "deadletter_review"})
+    assert review_route.status_code == 200
+    assert {item["event_id"] for item in review_route.json()["items"]} == {event_id}
+    review_queue = client.get("/reactor/review_queue", params={"route": "deadletter_review"})
+    assert review_queue.status_code == 200
+    assert review_queue.json()["available_total"] == 1
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["stable_state_counts"] == {"deadletter_reviewed": 1}
+    assert status.json()["deadletter_queue_counts"] == {"reviewed": 1}
+    assert status.json()["deadletter_review_counts"] == {"reviewed": 1}
+
+    second_review = client.post(
+        "/reactor/deadletters/review",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR, "decision": "escalate_later"},
+    )
+    assert second_review.status_code == 200
+    assert second_review.json()["applied"] is False
+    assert second_review.json()["status"] == "already_reviewed"
+
+
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     monkeypatch,
     tmp_path: Path,
