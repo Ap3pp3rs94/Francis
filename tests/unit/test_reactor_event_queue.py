@@ -414,7 +414,7 @@ def test_reactor_dispatch_engine_blocks_plugin_run_boundary_without_execution(
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == {event_id}
 
     status = reactor_status()
-    assert status["dispatch_engine_boundary_actions"] == ["execute", "plugin_run"]
+    assert status["dispatch_engine_boundary_actions"] == ["execute", "mutate", "plugin_run"]
     assert status["status_counts"] == {"dispatch_blocked": 1}
     assert status["stable_state_counts"] == {"plugin_run_dispatch_not_enabled": 1}
     assert status["dispatch_execution_counts"] == {"blocked": 1}
@@ -502,12 +502,100 @@ def test_reactor_dispatch_engine_blocks_execute_boundary_without_execution(
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == {event_id}
 
     status = reactor_status()
-    assert status["dispatch_engine_boundary_actions"] == ["execute", "plugin_run"]
+    assert status["dispatch_engine_boundary_actions"] == ["execute", "mutate", "plugin_run"]
     assert status["status_counts"] == {"dispatch_blocked": 1}
     assert status["stable_state_counts"] == {"execute_dispatch_not_enabled": 1}
     assert status["dispatch_execution_counts"] == {"blocked": 1}
     assert status["verification_counts"] == {"not_run": 1}
     assert status["verification_outcome_counts"] == {"execute_dispatch_not_enabled": 1}
+
+
+def test_reactor_dispatch_engine_blocks_mutate_boundary_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Generic mutate needs a governed Reactor boundary.",
+            "mode": "pilot",
+            "action_class": "mutate",
+            "max_actions": 1,
+        }
+    )
+    event_id = str(created["event_id"])
+    assert created["event"]["classification"]["stable_state"] == "awaiting_dispatch"
+    assert created["event"]["classification"]["dispatch_allowed"] is True
+
+    attempted = record_dispatch_attempt(
+        event_id,
+        {
+            "actor": "reactor.test",
+            "reason": "prove generic mutate dispatch stays blocked until a governed mutator exists",
+        },
+    )
+
+    assert attempted["ok"] is True
+    event = attempted["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "mutate_dispatch_not_enabled"
+    assert event["dispatch"]["engine"] == "mutate"
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["execution_started"] is False
+    assert event["dispatch"]["blocked_route"] == "operator_review"
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["memory_write"] is False
+
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["status"] == "blocked"
+    assert execution["route"] == "mutate"
+    assert execution["gate"] == "reactor_mutate_boundary"
+    assert execution["outcome"] == "mutate_dispatch_not_enabled"
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is False
+    assert execution["readback_only"] is True
+    assert execution["governance"]["mutate_authority"] is False
+    assert execution["governance"]["execution_authority"] is False
+    assert execution["governance"]["dispatch_authority"] is False
+
+    _assert_verification(
+        event,
+        route="operator_review",
+        stable_state="mutate_dispatch_not_enabled",
+        source_kind="reactor.dispatch.execution.receipt",
+        verification_status="not_run",
+        verification_outcome="mutate_dispatch_not_enabled",
+    )
+    _assert_stable_return(
+        event,
+        route="operator_review",
+        stable_state="mutate_dispatch_not_enabled",
+        source_kind="reactor.dispatch.execution.receipt",
+    )
+    assert "retry_candidate" not in event["dispatch"]
+    assert "deadletter_candidate" not in event["dispatch"]
+
+    review_queue = reactor_review_queue(route="operator_review")
+    assert review_queue["available_total"] == 1
+    review = review_queue["items"][0]["review"]
+    assert review["gate"] == "mutate_dispatch_not_enabled"
+    assert review["receipt_kind"] == "reactor.dispatch_blocker"
+    assert review["execution_started"] is False
+    assert review["applied"] is False
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == {event_id}
+
+    status = reactor_status()
+    assert status["dispatch_engine_boundary_actions"] == ["execute", "mutate", "plugin_run"]
+    assert status["status_counts"] == {"dispatch_blocked": 1}
+    assert status["stable_state_counts"] == {"mutate_dispatch_not_enabled": 1}
+    assert status["dispatch_execution_counts"] == {"blocked": 1}
+    assert status["verification_counts"] == {"not_run": 1}
+    assert status["verification_outcome_counts"] == {"mutate_dispatch_not_enabled": 1}
 
 
 def test_reactor_dispatch_engine_classifies_telemetry_without_execution(monkeypatch, tmp_path: Path) -> None:
@@ -2307,13 +2395,25 @@ def test_reactor_dispatch_attempt_resumes_after_approval_without_execution(monke
 
     assert resumed["ok"] is True
     event = resumed["event"]
-    assert event["status"] == "dispatch_deferred"
-    assert event["stable_state"] == "awaiting_dispatch_engine"
-    assert event["dispatch"]["allowed"] is True
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "mutate_dispatch_not_enabled"
+    assert event["dispatch"]["allowed"] is False
     assert event["dispatch"]["applied"] is False
-    assert event["dispatch"]["engine"] == "not_implemented"
-    assert "blocker" not in event["dispatch"]
-    assert "blocked_route" not in event["dispatch"]
+    assert event["dispatch"]["engine"] == "mutate"
+    assert event["dispatch"]["execution_started"] is False
+    assert event["dispatch"]["blocked_route"] == "operator_review"
+    assert event["dispatch"]["blocker"]["gate"] == "mutate_dispatch_not_enabled"
+    assert event["dispatch"]["blocker"]["dispatch_execution_receipt_id"]
+
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["status"] == "blocked"
+    assert execution["route"] == "mutate"
+    assert execution["gate"] == "reactor_mutate_boundary"
+    assert execution["outcome"] == "mutate_dispatch_not_enabled"
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is False
+    assert execution["governance"]["mutate_authority"] is False
 
     approval_decision = event["dispatch"]["approval_decision"]
     assert approval_decision["kind"] == "reactor.approval_decision.receipt"
@@ -2326,16 +2426,16 @@ def test_reactor_dispatch_attempt_resumes_after_approval_without_execution(monke
     assert event["latest_approval_decision"]["approval_id"] == approval_id
     _assert_verification(
         event,
-        route="dispatch_engine",
-        stable_state="awaiting_dispatch_engine",
+        route="operator_review",
+        stable_state="mutate_dispatch_not_enabled",
         source_kind="reactor.approval_decision.receipt",
-        verification_status="not_available",
-        verification_outcome="dispatch_engine_not_implemented",
+        verification_status="not_run",
+        verification_outcome="mutate_dispatch_not_enabled",
     )
     _assert_stable_return(
         event,
-        route="dispatch_engine",
-        stable_state="awaiting_dispatch_engine",
+        route="operator_review",
+        stable_state="mutate_dispatch_not_enabled",
         source_kind="reactor.approval_decision.receipt",
         approval_status="approved",
     )
@@ -2348,10 +2448,13 @@ def test_reactor_dispatch_attempt_resumes_after_approval_without_execution(monke
     assert event["governance"]["approval_allows_dispatch"] is True
 
     status = reactor_status()
-    assert status["status_counts"] == {"dispatch_deferred": 1}
-    assert status["blocker_route_counts"] == {}
+    assert status["status_counts"] == {"dispatch_blocked": 1}
+    assert status["blocker_route_counts"] == {"operator_review": 1}
     assert status["approval_decision_counts"] == {"approved": 1}
     assert reactor_review_queue(route="approval_queue")["available_total"] == 0
+    operator_review = reactor_review_queue(route="operator_review")
+    assert operator_review["available_total"] == 1
+    assert operator_review["items"][0]["review"]["gate"] == "mutate_dispatch_not_enabled"
 
 
 def test_reactor_dispatch_attempt_blocks_rejected_approval_without_execution(monkeypatch, tmp_path: Path) -> None:

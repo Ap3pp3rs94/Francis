@@ -1163,6 +1163,21 @@ capabilities, send external messages, start retries, or grant plugin-run,
 execution, dispatch, approval, promotion, external-delivery, or memory-write
 authority.
 
+As of `2026-04-28`, Stage 5/Reactor also has an explicit generic mutation
+dispatch boundary. `action_class=mutate` Reactor events now produce a blocked
+`reactor.dispatch.execution.receipt` with `route=mutate`, stable
+`mutate_dispatch_not_enabled` state, verification and stable-return receipts,
+operator-review projection, and `/reactor/status`
+`dispatch_engine_boundary_actions` readback. Approval-required mutation events
+still queue and reconcile approval decisions through the existing approval path;
+when an approval allows dispatch, the resumed attempt now stops at the typed
+mutation boundary instead of falling through to generic not-implemented
+deferment. This is boundary/readback behavior only: it does not perform the
+requested mutation, implement a mutator, decide approvals, execute commands,
+run plugins, schedule retries, enqueue deadletters, send externally, write
+memory, promote capabilities, or grant mutation, execution, dispatch, approval,
+promotion, external-delivery, or memory-write authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -10359,6 +10374,22 @@ boundary slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor generic mutate
+boundary slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_mutate_boundary_without_execution tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_resumes_after_approval_without_execution tests\test_api_reactor.py::test_reactor_mutate_dispatch_route_blocks_without_execution tests\test_api_reactor.py::test_reactor_dispatch_attempt_reconciles_approved_decision -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed` with non-blocking Ruff cache write warnings for `.ruff_cache`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10441,13 +10472,14 @@ These remain true and should block any "finished" claim:
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
   approval-resume history readback. Reactor also has explicit no-execution
-  `execute` and `plugin_run` dispatch boundaries with operator-review readback,
-  so those attempts are blocked by typed receipts instead of generic
+  `execute`, `mutate`, and `plugin_run` dispatch boundaries with
+  operator-review readback, so those attempts are blocked by typed receipts
+  instead of generic
   not-implemented deferment. Remaining Stage 5 gaps still include broader dispatch action
   coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
   read-only telemetry/observer classification, read-only approval-decision
-  resume receipts, and the blocked plugin-run boundary; broader
+  resume receipts, and the blocked generic execution boundaries; broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review
