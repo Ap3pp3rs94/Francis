@@ -16,7 +16,7 @@ from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 _MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
-_CLASSIFICATION_SOURCES = frozenset({"observer_anomaly", "telemetry_event"})
+_CLASSIFICATION_SOURCES = frozenset({"federated_handoff", "observer_anomaly", "schedule_window", "telemetry_event"})
 SUPPORTED_ACTIONS = ("classify", "mission_tick", "operation_run", "proposal_review", "resume")
 BOUNDARY_ACTIONS = ("dispatch", "execute", "mutate", "plugin_run")
 

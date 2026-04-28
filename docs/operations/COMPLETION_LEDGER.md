@@ -1089,16 +1089,16 @@ messages, promote capabilities, execute plugins, write memory, or create new
 backend authority.
 
 As of `2026-04-28`, Stage 5/Reactor also has a bounded read-only classification
-dispatch path for observation-style triggers. The dispatch engine now supports
-`action_class=classify` for `telemetry_event` and `observer_anomaly` Reactor
-events only, producing a `reactor.dispatch.execution.receipt`,
-verification receipt, and stable-return receipt with `route=classification` and
-`stable_state=classification_recorded`. This broadens dispatch coverage beyond
-operation runs, mission queue ticks, and Forge proposal review while preserving
-the old deferred/not-implemented behavior for non-observation `classify` events.
-The path does not start execution, decide approvals, resolve deadletters,
-perform retries, send external messages, promote capabilities, execute plugins,
-or write memory.
+dispatch path for classifiable Reactor triggers. The dispatch engine now
+supports `action_class=classify` for `telemetry_event`, `observer_anomaly`,
+`schedule_window`, and `federated_handoff` Reactor events, producing a
+`reactor.dispatch.execution.receipt`, verification receipt, and stable-return
+receipt with `route=classification` and `stable_state=classification_recorded`.
+This broadens dispatch coverage beyond operation runs, mission queue ticks, and
+Forge proposal review while preserving the old deferred/not-implemented
+behavior for non-classification dispatches. The path does not start execution,
+decide approvals, resolve deadletters, perform retries, send external messages,
+promote capabilities, execute plugins, or write memory.
 
 As of `2026-04-28`, Stage 5/Reactor also records bounded approval-decision
 resume receipts without executing the target event. The dispatch engine now
@@ -10420,6 +10420,32 @@ boundary slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, Reactor read-only classification dispatch also covers the
+valid `schedule_window` and `federated_handoff` trigger sources. Dispatch
+attempts for those default `classify` events now produce
+`reactor.dispatch.execution.receipt`, verification receipt, and stable-return
+receipt with `route=classification`, `stable_state=classification_recorded`,
+and source-specific outcomes (`schedule_window_classified` /
+`federated_handoff_classified`). This narrows the Stage 5 trigger/action
+coverage gap against roadmap-named scheduled maintenance windows and federated
+handoffs. It does not start execution, decide approvals, resolve deadletters,
+perform retries, send external messages, promote capabilities, execute plugins,
+write memory, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor schedule/handoff
+classification dispatch slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_classifies_schedule_and_handoff_without_execution tests\test_api_reactor.py::test_reactor_classification_dispatch_accepts_schedule_and_handoff_triggers -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `failed before formatting src\francis\reactor\dispatch.py; passed after formatting`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10497,8 +10523,9 @@ These remain true and should block any "finished" claim:
   delivery/readiness, and stable route-link readbacks through
   `/reactor/operator_visibility/summary` without new authority, and the chat UI
   System/ORB panel now renders that summary as read-only operator visibility.
-  Read-only classification dispatch now covers `telemetry_event` and
-  `observer_anomaly` triggers with receipts and stable-return proof, and
+  Read-only classification dispatch now covers `telemetry_event`,
+  `observer_anomaly`, `schedule_window`, and `federated_handoff` triggers with
+  receipts and stable-return proof, and
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
   approval-resume history readback. Reactor also has explicit no-execution
@@ -10508,8 +10535,9 @@ These remain true and should block any "finished" claim:
   not-implemented deferment. Remaining Stage 5 gaps still include broader dispatch action
   coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
-  read-only telemetry/observer classification, read-only approval-decision
-  resume receipts, and the blocked generic execution boundaries; broader
+  read-only `telemetry_event` / `observer_anomaly` / `schedule_window` /
+  `federated_handoff` classification, read-only approval-decision resume
+  receipts, and the blocked generic execution boundaries; broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator UI
   visibility beyond the current read-only Reactor summary, route-filtered review
