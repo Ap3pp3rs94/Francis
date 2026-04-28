@@ -65,9 +65,70 @@ export type ReactorReviewQueueSnapshot = {
   error?: string;
 };
 
+export type ReactorReceiptSummary = {
+  kind?: string;
+  receipt_id?: string;
+  deadletter_id?: string;
+  event_id?: string;
+  status?: string;
+  route?: string;
+  gate?: string;
+  stable_state?: string;
+  next_step?: string;
+  review_decision?: string;
+  resolution_decision?: string;
+  deadletter_resolved?: boolean;
+  escalation_recorded?: boolean;
+  execution_started?: boolean;
+  retry_started?: boolean;
+  escalation_started?: boolean;
+  memory_write?: boolean;
+  applied?: boolean;
+};
+
+export type ReactorDeadletterItem = {
+  deadletter_id: string;
+  id?: string;
+  event_id?: string;
+  status?: string;
+  route?: string;
+  gate?: string;
+  stable_state?: string;
+  next_step?: string;
+  source_route?: string;
+  source_receipt_kind?: string;
+  source_receipt_ref?: string;
+  review_decision?: string;
+  resolution_decision?: string;
+  deadletter_resolved?: boolean;
+  escalation_recorded?: boolean;
+  execution_started?: boolean;
+  retry_started?: boolean;
+  escalation_started?: boolean;
+  created_ts?: number;
+  updated_ts?: number;
+  latest_review_receipt?: ReactorReceiptSummary;
+  latest_resolution_receipt?: ReactorReceiptSummary;
+};
+
+export type ReactorDeadletterSnapshot = {
+  ok: boolean;
+  items: ReactorDeadletterItem[];
+  total: number;
+  limit: number;
+  status?: string;
+  governance?: Record<string, unknown>;
+  error?: string;
+};
+
 export type ReactorReviewQueueParams = {
   limit?: number;
   route?: string;
+};
+
+export type ReactorDeadletterListParams = {
+  limit?: number;
+  status?: string;
 };
 
 export class ReactorApiError extends Error {
@@ -109,6 +170,28 @@ export class ReactorClient {
 
     const raw = (await response.json()) as unknown;
     return parseReactorReviewQueueSnapshot(raw, { limit, route });
+  }
+
+  async listDeadletters(
+    params: ReactorDeadletterListParams = {},
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<ReactorDeadletterSnapshot> {
+    const url = new URL(`${this.baseUrl}/reactor/deadletters/list`);
+    const limit = boundedLimit(params.limit, 20);
+    url.searchParams.set("limit", String(limit));
+    const status = safeString(params.status).trim();
+    if (status) url.searchParams.set("status", status);
+
+    const response = await fetchWithTimeout(url.toString(), { method: "GET", signal: options.signal }, options.timeoutMs ?? 10_000);
+    if (!response.ok) {
+      throw new ReactorApiError(`Reactor deadletter list request failed with HTTP ${response.status}`, {
+        status: response.status,
+        url: url.toString(),
+      });
+    }
+
+    const raw = (await response.json()) as unknown;
+    return parseReactorDeadletterSnapshot(raw, { limit, status });
   }
 }
 
@@ -162,6 +245,88 @@ export function parseReactorReviewQueueItem(raw: unknown): ReactorReviewQueueIte
     classification,
     review,
   };
+}
+
+export function parseReactorDeadletterSnapshot(
+  raw: unknown,
+  defaults: { limit?: number; status?: string } = {},
+): ReactorDeadletterSnapshot {
+  const record = isRecord(raw) ? raw : {};
+  const rawItems = Array.isArray(record.items) ? record.items : [];
+  const items = rawItems.map(parseReactorDeadletterItem).filter((item): item is ReactorDeadletterItem => Boolean(item));
+  const status = safeString(record.status).trim() || safeString(defaults.status).trim();
+  const limit = Math.max(0, safeNumber(record.limit, boundedLimit(defaults.limit, 20)));
+  const total = Math.max(0, safeNumber(record.total, items.length));
+  const governance = isRecord(record.governance) ? record.governance : undefined;
+  const error = safeString(record.error).trim();
+
+  return {
+    ok: typeof record.ok === "boolean" ? record.ok : error.length === 0,
+    items,
+    total,
+    limit,
+    status: status || undefined,
+    governance,
+    error: error || undefined,
+  };
+}
+
+export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem | null {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return null;
+  const deadletterId = safeString(record.deadletter_id).trim() || safeString(record.id).trim();
+  if (!deadletterId) return null;
+
+  return {
+    deadletter_id: deadletterId,
+    id: optionalString(record.id),
+    event_id: optionalString(record.event_id),
+    status: optionalString(record.status),
+    route: optionalString(record.route),
+    gate: optionalString(record.gate),
+    stable_state: optionalString(record.stable_state),
+    next_step: optionalString(record.next_step),
+    source_route: optionalString(record.source_route),
+    source_receipt_kind: optionalString(record.source_receipt_kind),
+    source_receipt_ref: optionalString(record.source_receipt_ref),
+    review_decision: optionalString(record.review_decision),
+    resolution_decision: optionalString(record.resolution_decision),
+    deadletter_resolved: optionalBoolean(record.deadletter_resolved),
+    escalation_recorded: optionalBoolean(record.escalation_recorded),
+    execution_started: optionalBoolean(record.execution_started),
+    retry_started: optionalBoolean(record.retry_started),
+    escalation_started: optionalBoolean(record.escalation_started),
+    created_ts: optionalNumber(record.created_ts),
+    updated_ts: optionalNumber(record.updated_ts),
+    latest_review_receipt: parseReceipt(record.latest_review_receipt),
+    latest_resolution_receipt: parseReceipt(record.latest_resolution_receipt),
+  };
+}
+
+function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return undefined;
+  const receipt: ReactorReceiptSummary = {
+    kind: optionalString(record.kind),
+    receipt_id: optionalString(record.receipt_id),
+    deadletter_id: optionalString(record.deadletter_id),
+    event_id: optionalString(record.event_id),
+    status: optionalString(record.status),
+    route: optionalString(record.route),
+    gate: optionalString(record.gate),
+    stable_state: optionalString(record.stable_state),
+    next_step: optionalString(record.next_step),
+    review_decision: optionalString(record.review_decision),
+    resolution_decision: optionalString(record.resolution_decision),
+    deadletter_resolved: optionalBoolean(record.deadletter_resolved),
+    escalation_recorded: optionalBoolean(record.escalation_recorded),
+    execution_started: optionalBoolean(record.execution_started),
+    retry_started: optionalBoolean(record.retry_started),
+    escalation_started: optionalBoolean(record.escalation_started),
+    memory_write: optionalBoolean(record.memory_write),
+    applied: optionalBoolean(record.applied),
+  };
+  return hasAnyValue(receipt) ? receipt : undefined;
 }
 
 function parseTrigger(raw: unknown): ReactorReviewTrigger | undefined {
@@ -243,6 +408,10 @@ function optionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = safeNumber(value, Number.NaN);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function hasAnyValue(record: Record<string, unknown>): boolean {

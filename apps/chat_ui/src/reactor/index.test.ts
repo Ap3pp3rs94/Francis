@@ -173,6 +173,91 @@ test("ReactorClient.getReviewQueue preserves route filters", async () => {
   }
 });
 
+test("ReactorClient.listDeadletters reads disposition history without mutation authority", async () => {
+  const requests: Array<{ path: string; method: string; limit: string | null; status: string | null }> = [];
+  const restoreFetch = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      limit: parsed.searchParams.get("limit"),
+      status: parsed.searchParams.get("status"),
+    });
+
+    return jsonResponse({
+      ok: true,
+      items: [
+        {
+          deadletter_id: "rdl_resolved",
+          event_id: "evt_resolved",
+          status: "resolved",
+          route: "deadletter_resolution",
+          stable_state: "deadletter_resolved",
+          next_step: "keep_deadletter_resolution_receipt_for_audit",
+          source_receipt_kind: "reactor.deadletter_candidate.receipt",
+          source_receipt_ref: "candidate_resolved",
+          resolution_decision: "resolved_no_action",
+          deadletter_resolved: true,
+          escalation_recorded: false,
+          execution_started: false,
+          retry_started: false,
+          escalation_started: false,
+          created_ts: "1770000800",
+          updated_ts: "1770000900",
+          latest_resolution_receipt: {
+            kind: "reactor.deadletter.resolution.receipt",
+            receipt_id: "rdl_resolved_resolution_resolved_no_action",
+            status: "resolved",
+            route: "deadletter_resolution",
+            resolution_decision: "resolved_no_action",
+            deadletter_resolved: true,
+            execution_started: false,
+            retry_started: false,
+            escalation_started: false,
+            memory_write: false,
+          },
+        },
+      ],
+      total: 1,
+      limit: 6,
+      status: "resolved",
+      governance: {
+        execution_authority: false,
+        deadletter_resolution_authority: false,
+        escalation_authority: false,
+        memory_write: false,
+      },
+    });
+  });
+
+  try {
+    const client = new ReactorClient("http://127.0.0.1:8000");
+    const snapshot = await client.listDeadletters({ status: "resolved", limit: 6 });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/reactor/deadletters/list",
+        method: "GET",
+        limit: "6",
+        status: "resolved",
+      },
+    ]);
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.status, "resolved");
+    assert.equal(snapshot.items[0]?.deadletter_id, "rdl_resolved");
+    assert.equal(snapshot.items[0]?.status, "resolved");
+    assert.equal(snapshot.items[0]?.route, "deadletter_resolution");
+    assert.equal(snapshot.items[0]?.stable_state, "deadletter_resolved");
+    assert.equal(snapshot.items[0]?.deadletter_resolved, true);
+    assert.equal(snapshot.items[0]?.execution_started, false);
+    assert.equal(snapshot.items[0]?.latest_resolution_receipt?.kind, "reactor.deadletter.resolution.receipt");
+    assert.equal(snapshot.items[0]?.latest_resolution_receipt?.memory_write, false);
+    assert.equal(snapshot.governance?.execution_authority, false);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("parseReactorReviewQueueSnapshot drops malformed items and preserves route errors", () => {
   const snapshot = parseReactorReviewQueueSnapshot({
     ok: false,

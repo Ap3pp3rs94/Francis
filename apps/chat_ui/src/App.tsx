@@ -35,7 +35,13 @@ import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline"
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
-import { ReactorApiError, ReactorClient, type ReactorReviewQueueSnapshot, type ReactorReviewRoute } from "./reactor";
+import {
+  ReactorApiError,
+  ReactorClient,
+  type ReactorDeadletterSnapshot,
+  type ReactorReviewQueueSnapshot,
+  type ReactorReviewRoute,
+} from "./reactor";
 import type {
   PluginCapabilityCatalogCoherence,
   PluginCapabilityCatalogEntry,
@@ -3835,6 +3841,9 @@ function SystemPanel(props: {
   const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
   const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
   const [reactorReviewRouteFilter, setReactorReviewRouteFilter] = useState<ReactorReviewRoute | "">("");
+  const [reactorDeadletters, setReactorDeadletters] = useState<ReactorDeadletterSnapshot | null>(null);
+  const [reactorDeadlettersError, setReactorDeadlettersError] = useState<string | null>(null);
+  const [reactorDeadlettersLoadedAt, setReactorDeadlettersLoadedAt] = useState<number | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -3970,6 +3979,7 @@ function SystemPanel(props: {
         nextOrbStatus,
         nextOperations,
         nextReactorReviewQueue,
+        nextReactorDeadletters,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -3981,6 +3991,7 @@ function SystemPanel(props: {
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
         reactorClient.getReviewQueue({ limit: 8, route: reactorReviewRouteFilter || undefined }),
+        reactorClient.listDeadletters({ limit: 6 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4057,6 +4068,15 @@ function SystemPanel(props: {
       } else {
         setReactorReviewQueueError(reactorError(nextReactorReviewQueue.reason));
         degradedFeeds.push("reactor review queue");
+      }
+
+      if (nextReactorDeadletters.status === "fulfilled") {
+        setReactorDeadletters(nextReactorDeadletters.value);
+        setReactorDeadlettersError(null);
+        setReactorDeadlettersLoadedAt(refreshStartedAt);
+      } else {
+        setReactorDeadlettersError(reactorError(nextReactorDeadletters.reason));
+        degradedFeeds.push("reactor deadletters");
       }
 
       if (degradedFeeds.length > 0) {
@@ -4248,6 +4268,9 @@ function SystemPanel(props: {
   const reactorReviewStableBadges = Object.entries(reactorReviewQueue?.stable_state_counts ?? {})
     .filter(([, count]) => count > 0)
     .slice(0, 3);
+  const reactorDeadletterItems = reactorDeadletters?.items ?? [];
+  const reactorDeadletterTotal = reactorDeadletters?.total ?? reactorDeadletterItems.length;
+  const reactorDeadletterRouteError = safeString(reactorDeadletters?.error).trim();
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const overviewMissionReadiness = overview?.mission_briefing?.readiness ?? shiftBriefingReadiness;
@@ -6653,6 +6676,110 @@ function SystemPanel(props: {
                         Inspect mission
                       </button>
                     ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div id="francis-reactor-deadletters" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Reactor Deadletters</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Read-only deadletter queue and disposition history from persisted Reactor receipts.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(reactorDeadletterTotal > 0 ? "attention" : "clear")}>deadletters {reactorDeadletterTotal}</span>
+            {reactorDeadlettersLoadedAt ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Loaded {toLocaleTime(reactorDeadlettersLoadedAt)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {reactorDeadlettersError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor deadletter queue unavailable: {reactorDeadlettersError}
+          </div>
+        ) : null}
+
+        {reactorDeadletterRouteError && !reactorDeadlettersError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor deadletter route reported: {reactorDeadletterRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {reactorDeadletterItems.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No Reactor deadletter queue items are persisted. Failed bounded dispatches will appear here after queueing.
+            </div>
+          ) : (
+            reactorDeadletterItems.slice(0, 4).map((item) => {
+              const status = safeString(item.status).trim() || "deadletter";
+              const route = safeString(item.route).trim();
+              const stableState = safeString(item.stable_state).trim();
+              const gate = safeString(item.gate).trim();
+              const nextStep = safeString(item.next_step).trim();
+              const reviewDecision = safeString(item.review_decision).trim();
+              const resolutionDecision = safeString(item.resolution_decision).trim();
+              const sourceKind = safeString(item.source_receipt_kind).trim();
+              const sourceRef = safeString(item.source_receipt_ref).trim();
+              const resolutionReceipt = item.latest_resolution_receipt;
+              const reviewReceipt = item.latest_review_receipt;
+              const latestReceiptId =
+                safeString(resolutionReceipt?.receipt_id).trim() ||
+                safeString(reviewReceipt?.receipt_id).trim() ||
+                sourceRef;
+              const latestReceiptKind =
+                safeString(resolutionReceipt?.kind).trim() || safeString(reviewReceipt?.kind).trim() || sourceKind;
+              return (
+                <div
+                  key={`reactor-deadletter-${item.deadletter_id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>
+                        <code>{item.deadletter_id}</code>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        event=<code>{item.event_id || "unknown"}</code>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(status)}>{status}</span>
+                      {route ? <span style={badgeStyle(route)}>{route}</span> : null}
+                      {stableState ? <span style={badgeStyle(stableState)}>{stableState}</span> : null}
+                      {gate ? <span style={badgeStyle(gate)}>{gate}</span> : null}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {reviewDecision ? <span style={badgeStyle(reviewDecision)}>{reviewDecision}</span> : null}
+                    {resolutionDecision ? <span style={badgeStyle(resolutionDecision)}>{resolutionDecision}</span> : null}
+                    {item.deadletter_resolved ? <span style={badgeStyle("resolved")}>resolved</span> : null}
+                    {item.escalation_recorded ? <span style={badgeStyle("escalation_pending")}>escalation pending</span> : null}
+                    {latestReceiptKind ? <span style={badgeStyle("receipt")}>{latestReceiptKind}</span> : null}
+                  </div>
+
+                  {nextStep ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>{nextStep}</div> : null}
+                  {latestReceiptId ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                      Receipt <code>{latestReceiptId}</code>
+                    </div>
+                  ) : null}
+                  {sourceRef ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      Source <code>{sourceKind || "receipt"}</code> <code>{sourceRef}</code>
+                    </div>
+                  ) : null}
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    execution=<code>{String(Boolean(item.execution_started))}</code> / retry=<code>{String(Boolean(item.retry_started))}</code> /
+                    escalation=<code>{String(Boolean(item.escalation_started))}</code>
                   </div>
                 </div>
               );
