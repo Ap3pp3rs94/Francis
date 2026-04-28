@@ -48,6 +48,10 @@ def _deadletter_root() -> Path:
     return data_dir() / "reactor" / "deadletters"
 
 
+def _external_delivery_root() -> Path:
+    return data_dir() / "reactor" / "external_escalation_outbox"
+
+
 def _path_token(value: Any) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", _safe_str(value).strip()).strip("._")
     return cleaned[:160] or "unknown"
@@ -63,6 +67,13 @@ def _deadletter_path(deadletter_id: str) -> Path | None:
     if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
         return None
     return _deadletter_root() / f"{cleaned}.json"
+
+
+def _external_delivery_path(delivery_id: str) -> Path | None:
+    cleaned = _safe_str(delivery_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _external_delivery_root() / f"{cleaned}.json"
 
 
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
@@ -321,6 +332,10 @@ def _escalation_acknowledgement_next_step() -> str:
 
 def _external_escalation_attempt_next_step() -> str:
     return "queue_recovery_request_or_configure_external_escalation_adapter_before_delivery"
+
+
+def _external_escalation_delivery_next_step() -> str:
+    return "await_local_outbox_external_delivery_processor_or_operator_review"
 
 
 def _recovery_request_next_step() -> str:
@@ -640,6 +655,159 @@ def _external_escalation_attempt_receipt(
             "retry_execution_authority": False,
             "deadletter_disposition_authority": False,
             "deadletter_resolution_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _local_outbox_delivery_id(item: dict[str, Any], source_receipt: dict[str, Any]) -> str:
+    deadletter_id = _safe_str(item.get("deadletter_id")).strip()
+    receipt_id = _safe_str(source_receipt.get("receipt_id")).strip()
+    digest = hashlib.sha256(f"{deadletter_id}:{receipt_id}:local_outbox".encode("utf-8")).hexdigest()[:12]
+    return f"red_{digest}"
+
+
+def _local_outbox_delivery_item(
+    *,
+    item: dict[str, Any],
+    source_receipt: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+) -> dict[str, Any]:
+    delivery_id = _local_outbox_delivery_id(item, source_receipt)
+    delivery = {
+        "kind": "reactor.deadletter.external_escalation.local_outbox.item",
+        "delivery_id": delivery_id,
+        "id": delivery_id,
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": "queued",
+        "route": "deadletter_external_escalation_delivery",
+        "gate": "reactor_deadletter_external_escalation_delivery",
+        "stable_state": "deadletter_external_escalation_delivery_queued",
+        "next_step": _external_escalation_delivery_next_step(),
+        "source_receipt_kind": _safe_str(source_receipt.get("kind")).strip(),
+        "source_receipt_ref": _safe_str(source_receipt.get("receipt_id")).strip()
+        or _safe_str(source_receipt.get("deadletter_id")).strip(),
+        "source_gate": _safe_str(source_receipt.get("gate") or item.get("gate")).strip(),
+        "external_escalation_attempt_receipt_id": source_receipt.get("receipt_id"),
+        "external_channel": source_receipt.get("external_channel"),
+        "external_target": source_receipt.get("external_target"),
+        "external_adapter": source_receipt.get("external_adapter"),
+        "external_adapter_status": source_receipt.get("external_adapter_status"),
+        "external_delivery_mode": source_receipt.get("external_delivery_mode"),
+        "external_delivery_ready": bool(source_receipt.get("external_delivery_ready")),
+        "external_delivery_queued": True,
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "completion_claimed": False,
+        "completion_claim_allowed": False,
+        "actor": actor,
+        "reason": reason,
+        "created_ts": ts,
+        "updated_ts": ts,
+        "applied": False,
+        "governance": {
+            "gate": "reactor_deadletter_external_escalation_delivery",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": True,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(delivery))
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _external_escalation_delivery_receipt(
+    *,
+    item: dict[str, Any],
+    source_receipt: dict[str, Any],
+    delivery_item: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    source_ref = (
+        _safe_str(source_receipt.get("receipt_id")).strip()
+        or _safe_str(source_receipt.get("deadletter_id")).strip()
+        or _safe_str(item.get("deadletter_id")).strip()
+    )
+    receipt = {
+        "kind": "reactor.deadletter.external_escalation_delivery.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_external_escalation_delivery",
+        "delivery_id": delivery_item.get("delivery_id"),
+        "outbox_item_kind": delivery_item.get("kind"),
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_external_escalation_delivery",
+        "gate": "reactor_deadletter_external_escalation_delivery",
+        "stable_state": "deadletter_external_escalation_delivery_queued",
+        "next_step": _external_escalation_delivery_next_step(),
+        "source_receipt_kind": _safe_str(source_receipt.get("kind")).strip(),
+        "source_receipt_ref": source_ref,
+        "source_gate": _safe_str(source_receipt.get("gate") or item.get("gate")).strip(),
+        "external_escalation_attempt_receipt_id": source_receipt.get("receipt_id"),
+        "external_channel": source_receipt.get("external_channel"),
+        "external_target": source_receipt.get("external_target"),
+        "external_adapter": source_receipt.get("external_adapter"),
+        "external_adapter_status": source_receipt.get("external_adapter_status"),
+        "external_delivery_mode": source_receipt.get("external_delivery_mode"),
+        "external_delivery_ready": bool(source_receipt.get("external_delivery_ready")),
+        "external_delivery_queued": True,
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "completion_claimed": False,
+        "completion_claim_allowed": False,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_external_escalation_delivery",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": applied,
+            "external_delivery_authority": False,
             "external_escalation_authority": False,
             "escalation_authority": False,
             "approval_authority": False,
@@ -1223,6 +1391,178 @@ def record_external_escalation_attempt(
         "status": "deadletter_external_escalation_attempt_recorded",
         "item": _display(updated),
         "receipt": _display(receipt),
+    }
+
+
+def record_external_escalation_delivery(
+    *,
+    deadletter_id: str,
+    actor: str = "",
+    reason: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "not_found",
+            "item": {},
+            "receipt": {},
+            "delivery_item": {},
+        }
+
+    item = _read_raw(path)
+    if item is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_deadletter",
+            "item": {},
+            "receipt": {},
+            "delivery_item": {},
+        }
+
+    current_status = _safe_str(item.get("status")).strip()
+    latest_delivery = _as_dict(item.get("latest_external_escalation_delivery_receipt"))
+    existing_delivery_item = _as_dict(item.get("external_escalation_delivery_item"))
+    if current_status == "external_escalation_delivery_queued" and latest_delivery:
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_external_escalation_delivery_queued",
+            "item": _display(item),
+            "receipt": _display(latest_delivery),
+            "delivery_item": _display(existing_delivery_item),
+        }
+    if current_status != "external_escalation_attempt_recorded":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_external_escalation_attempt_required",
+            "item": _display(item),
+            "receipt": {},
+            "delivery_item": {},
+        }
+
+    latest_attempt = _as_dict(item.get("latest_external_escalation_attempt_receipt"))
+    if not latest_attempt:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_external_escalation_attempt_required",
+            "item": _display(item),
+            "receipt": {},
+            "delivery_item": {},
+        }
+    if _safe_str(latest_attempt.get("external_delivery_mode")).strip() != "local_outbox":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "local_outbox_external_escalation_adapter_required",
+            "item": _display(item),
+            "receipt": _display(latest_attempt),
+            "delivery_item": {},
+        }
+    if not bool(latest_attempt.get("external_delivery_ready")):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "external_escalation_delivery_not_ready",
+            "item": _display(item),
+            "receipt": _display(latest_attempt),
+            "delivery_item": {},
+        }
+
+    delivery_item = _local_outbox_delivery_item(
+        item=item,
+        source_receipt=latest_attempt,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+    )
+    delivery_id = _safe_str(delivery_item.get("delivery_id")).strip()
+    delivery_path = _external_delivery_path(delivery_id)
+    if delivery_path is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "invalid_external_escalation_delivery_id",
+            "item": _display(item),
+            "receipt": {},
+            "delivery_item": {},
+        }
+
+    existing_delivery = _read_raw(delivery_path) if delivery_path.exists() and delivery_path.is_file() else None
+    persisted_delivery = existing_delivery if existing_delivery is not None else delivery_item
+    if existing_delivery is None:
+        _atomic_write_json(delivery_path, _filtered_record(delivery_item))
+
+    receipt = _external_escalation_delivery_receipt(
+        item=item,
+        source_receipt=latest_attempt,
+        delivery_item=persisted_delivery,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        status="delivery_queued",
+        applied=True,
+    )
+    raw_delivery_receipts = item.get("external_escalation_delivery_receipts")
+    delivery_receipts = raw_delivery_receipts if isinstance(raw_delivery_receipts, list) else []
+    delivery_receipts.append(receipt)
+    updated = {
+        **item,
+        "status": "external_escalation_delivery_queued",
+        "route": "deadletter_external_escalation_delivery",
+        "stable_state": "deadletter_external_escalation_delivery_queued",
+        "next_step": _external_escalation_delivery_next_step(),
+        "external_escalation_delivery_queued": True,
+        "external_escalation_delivery_queued_ts": ts,
+        "external_escalation_delivery_id": delivery_id,
+        "external_delivery_id": delivery_id,
+        "external_escalation_delivery_item": persisted_delivery,
+        "external_delivery_queued": True,
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "updated_ts": ts,
+        "external_escalation_delivery_receipts": delivery_receipts,
+        "latest_external_escalation_delivery_receipt": receipt,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_external_escalation_delivery",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_queue_authority": True,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "deadletter_external_escalation_delivery_queued",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+        "delivery_item": _display(persisted_delivery),
     }
 
 

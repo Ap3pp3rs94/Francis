@@ -17,6 +17,7 @@ from francis.reactor.events import (
     record_deadletter_escalation_acknowledgement,
     record_deadletter_escalation_handoff,
     record_deadletter_external_escalation_attempt,
+    record_deadletter_external_escalation_delivery,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -2423,6 +2424,111 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
     assert event["decision_journal"][-1]["external_delivery_ready"] is True
     assert event["governance"]["external_delivery_authority"] is False
 
+    delivery = record_deadletter_external_escalation_delivery(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "queue local outbox delivery without external send authority",
+        },
+    )
+
+    assert delivery["ok"] is True
+    assert delivery["applied"] is True
+    assert delivery["status"] == "deadletter_external_escalation_delivery_queued"
+    delivery_receipt = delivery["receipt"]
+    delivery_id = delivery_receipt["delivery_id"]
+    assert delivery_receipt["kind"] == "reactor.deadletter.external_escalation_delivery.receipt"
+    assert delivery_receipt["status"] == "delivery_queued"
+    assert delivery_receipt["route"] == "deadletter_external_escalation_delivery"
+    assert delivery_receipt["stable_state"] == "deadletter_external_escalation_delivery_queued"
+    assert delivery_receipt["source_receipt_kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert delivery_receipt["external_escalation_attempt_receipt_id"] == receipt["receipt_id"]
+    assert delivery_receipt["external_adapter"] == "local_outbox"
+    assert delivery_receipt["external_delivery_mode"] == "local_outbox"
+    assert delivery_receipt["external_delivery_ready"] is True
+    assert delivery_receipt["external_delivery_queued"] is True
+    assert delivery_receipt["external_delivery_started"] is False
+    assert delivery_receipt["external_message_sent"] is False
+    assert delivery_receipt["external_network_send"] is False
+    assert delivery_receipt["external_escalation_started"] is False
+    assert delivery_receipt["execution_started"] is False
+    assert delivery_receipt["dispatch_applied"] is False
+    assert delivery_receipt["memory_write"] is False
+    assert delivery_receipt["completion_claim_allowed"] is False
+    assert delivery_receipt["governance"]["external_delivery_queue_authority"] is True
+    assert delivery_receipt["governance"]["external_delivery_authority"] is False
+    assert delivery_receipt["governance"]["external_escalation_authority"] is False
+
+    outbox_item = delivery["delivery_item"]
+    assert outbox_item["kind"] == "reactor.deadletter.external_escalation.local_outbox.item"
+    assert outbox_item["delivery_id"] == delivery_id
+    assert outbox_item["status"] == "queued"
+    assert outbox_item["external_delivery_queued"] is True
+    assert outbox_item["external_delivery_started"] is False
+    assert outbox_item["external_message_sent"] is False
+    assert outbox_item["external_network_send"] is False
+    assert (data_root / "reactor" / "external_escalation_outbox" / f"{delivery_id}.json").exists()
+
+    delivered_event = delivery["event"]
+    assert delivered_event["stable_state"] == "deadletter_external_escalation_delivery_queued"
+    assert delivered_event["dispatch"]["deadletter_external_escalation_delivery_queued"] is True
+    assert delivered_event["dispatch"]["external_delivery_id"] == delivery_id
+    assert delivered_event["dispatch"]["external_delivery_queued"] is True
+    assert delivered_event["dispatch"]["external_delivery_started"] is False
+    assert delivered_event["dispatch"]["external_message_sent"] is False
+    assert delivered_event["dispatch"]["execution_started"] is False
+    assert delivered_event["latest_receipt"]["kind"] == "reactor.deadletter.external_escalation_delivery.receipt"
+    assert delivered_event["latest_deadletter_item"]["status"] == "external_escalation_delivery_queued"
+    assert delivered_event["deadletter_external_escalation_deliveries"][0]["delivery_id"] == delivery_id
+    assert delivered_event["decision_journal"][-1]["kind"] == ("reactor.deadletter.external_escalation_delivery_queued")
+    assert delivered_event["decision_journal"][-1]["external_delivery_started"] is False
+    assert delivered_event["decision_journal"][-1]["external_network_send"] is False
+    assert delivered_event["decision_journal"][-1]["dispatch_applied"] is False
+    assert delivered_event["governance"]["external_delivery_queue_authority"] is True
+    assert delivered_event["governance"]["external_delivery_authority"] is False
+    assert delivered_event["governance"]["external_escalation_authority"] is False
+
+    delivered_deadletter = get_deadletter(deadletter_id)
+    assert delivered_deadletter is not None
+    assert delivered_deadletter["status"] == "external_escalation_delivery_queued"
+    assert delivered_deadletter["latest_external_escalation_delivery_receipt"]["delivery_id"] == delivery_id
+    assert [item["deadletter_id"] for item in list_deadletters(status="external_escalation_delivery_queued")] == [
+        deadletter_id
+    ]
+    assert {
+        item["event_id"] for item in list_events(stable_state="deadletter_external_escalation_delivery_queued")
+    } == {str(created["event_id"])}
+    assert {item["event_id"] for item in list_events(review_route="deadletter_external_escalation_delivery")} == {
+        str(created["event_id"])
+    }
+    assert {
+        item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.external_escalation_delivery.receipt")
+    } == {str(created["event_id"])}
+
+    delivery_review_queue = reactor_review_queue(route="deadletter_external_escalation_delivery")
+    assert delivery_review_queue["available_total"] == 1
+    assert (
+        delivery_review_queue["items"][0]["review"]["action"]
+        == "await_local_outbox_external_delivery_processor_or_operator_review"
+    )
+    delivery_status = reactor_status()
+    assert delivery_status["stable_state_counts"] == {"deadletter_external_escalation_delivery_queued": 1}
+    assert delivery_status["deadletter_queue_counts"] == {"external_escalation_delivery_queued": 1}
+    assert delivery_status["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
+    assert delivery_status["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+
+    second_delivery = record_deadletter_external_escalation_delivery(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "same local outbox delivery should not duplicate receipts",
+        },
+    )
+    assert second_delivery["ok"] is True
+    assert second_delivery["applied"] is False
+    assert second_delivery["status"] == "already_external_escalation_delivery_queued"
+    assert len(second_delivery["event"]["deadletter_external_escalation_deliveries"]) == 1
+
 
 def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(
     monkeypatch,
@@ -2759,6 +2865,17 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert external_status["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
     assert external_status["deadletter_escalation_acknowledgement_counts"] == {"acknowledged": 1}
     assert external_status["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
+
+    blocked_delivery = record_deadletter_external_escalation_delivery(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "unsupported adapters must not queue local outbox delivery",
+        },
+    )
+    assert blocked_delivery["ok"] is False
+    assert blocked_delivery["applied"] is False
+    assert blocked_delivery["error"] == "local_outbox_external_escalation_adapter_required"
 
     second_external_attempt = record_deadletter_external_escalation_attempt(
         deadletter_id,

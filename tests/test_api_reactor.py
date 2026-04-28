@@ -1527,6 +1527,19 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert external_status.json()["deadletter_queue_counts"] == {"external_escalation_attempt_recorded": 1}
     assert external_status.json()["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
 
+    blocked_delivery = client.post(
+        "/reactor/deadletters/external_escalation_delivery",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "unsupported adapter must not queue local outbox delivery",
+        },
+    )
+    assert blocked_delivery.status_code == 200
+    assert blocked_delivery.json()["ok"] is False
+    assert blocked_delivery.json()["applied"] is False
+    assert blocked_delivery.json()["error"] == "local_outbox_external_escalation_adapter_required"
+
     second_external_attempt = client.post(
         "/reactor/deadletters/external_escalation_attempt",
         json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
@@ -1733,6 +1746,185 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
 
     operation_detail = operations_runtime.get_operation_detail(operation_id)
     assert operation_detail["operation"]["status"] == "succeeded"
+
+
+def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "External escalation delivery should use local outbox only",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "classify",
+            "max_actions": 0,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        },
+    )
+    assert created.status_code == 200
+    event_id = str(created.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": event_id, "actor": _REACTOR_ACTOR},
+    )
+    assert attempted.status_code == 200
+    deadletter_id = str(attempted.json()["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+
+    review = client.post(
+        "/reactor/deadletters/review",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "decision": "escalate_later",
+        },
+    )
+    assert review.status_code == 200
+    resolution = client.post(
+        "/reactor/deadletters/resolve",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "decision": "escalate",
+        },
+    )
+    assert resolution.status_code == 200
+    handoff = client.post(
+        "/reactor/deadletters/escalation_handoff",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert handoff.status_code == 200
+    acknowledgement = client.post(
+        "/reactor/deadletters/escalation_acknowledgement",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert acknowledgement.status_code == 200
+
+    external_attempt = client.post(
+        "/reactor/deadletters/external_escalation_attempt",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "preflight local outbox delivery metadata",
+            "external_channel": "ops_bridge",
+            "external_target": "on_call",
+            "external_adapter": "local-outbox",
+        },
+    )
+    assert external_attempt.status_code == 200
+    attempt_receipt = external_attempt.json()["receipt"]
+    assert attempt_receipt["external_adapter"] == "local_outbox"
+    assert attempt_receipt["external_delivery_ready"] is True
+    assert attempt_receipt["external_delivery_queued"] is False
+    assert attempt_receipt["external_delivery_started"] is False
+
+    delivery = client.post(
+        "/reactor/deadletters/external_escalation_delivery",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "queue local outbox item without sending externally",
+        },
+    )
+    assert delivery.status_code == 200
+    delivery_body = delivery.json()
+    assert delivery_body["ok"] is True
+    assert delivery_body["applied"] is True
+    assert delivery_body["status"] == "deadletter_external_escalation_delivery_queued"
+    delivery_receipt = delivery_body["receipt"]
+    delivery_id = delivery_receipt["delivery_id"]
+    assert delivery_receipt["kind"] == "reactor.deadletter.external_escalation_delivery.receipt"
+    assert delivery_receipt["status"] == "delivery_queued"
+    assert delivery_receipt["route"] == "deadletter_external_escalation_delivery"
+    assert delivery_receipt["stable_state"] == "deadletter_external_escalation_delivery_queued"
+    assert delivery_receipt["source_receipt_kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert delivery_receipt["external_escalation_attempt_receipt_id"] == attempt_receipt["receipt_id"]
+    assert delivery_receipt["external_adapter"] == "local_outbox"
+    assert delivery_receipt["external_delivery_mode"] == "local_outbox"
+    assert delivery_receipt["external_delivery_ready"] is True
+    assert delivery_receipt["external_delivery_queued"] is True
+    assert delivery_receipt["external_delivery_started"] is False
+    assert delivery_receipt["external_message_sent"] is False
+    assert delivery_receipt["external_network_send"] is False
+    assert delivery_receipt["external_escalation_started"] is False
+    assert delivery_receipt["execution_started"] is False
+    assert delivery_receipt["dispatch_applied"] is False
+    assert delivery_receipt["completion_claim_allowed"] is False
+    assert delivery_receipt["memory_write"] is False
+    assert delivery_receipt["governance"]["external_delivery_queue_authority"] is True
+    assert delivery_receipt["governance"]["external_delivery_authority"] is False
+    assert delivery_receipt["governance"]["external_escalation_authority"] is False
+
+    outbox_item = delivery_body["delivery_item"]
+    assert outbox_item["kind"] == "reactor.deadletter.external_escalation.local_outbox.item"
+    assert outbox_item["delivery_id"] == delivery_id
+    assert outbox_item["status"] == "queued"
+    assert outbox_item["external_delivery_started"] is False
+    assert outbox_item["external_message_sent"] is False
+    assert outbox_item["external_network_send"] is False
+    assert (data_root / "reactor" / "external_escalation_outbox" / f"{delivery_id}.json").exists()
+
+    delivered_event = delivery_body["event"]
+    assert delivered_event["stable_state"] == "deadletter_external_escalation_delivery_queued"
+    assert delivered_event["dispatch"]["deadletter_external_escalation_delivery_queued"] is True
+    assert delivered_event["dispatch"]["external_delivery_id"] == delivery_id
+    assert delivered_event["dispatch"]["external_delivery_queued"] is True
+    assert delivered_event["dispatch"]["external_delivery_started"] is False
+    assert delivered_event["dispatch"]["external_message_sent"] is False
+    assert delivered_event["dispatch"]["execution_started"] is False
+    assert delivered_event["governance"]["external_delivery_queue_authority"] is True
+    assert delivered_event["governance"]["external_delivery_authority"] is False
+    assert delivered_event["governance"]["external_escalation_authority"] is False
+
+    delivered_list = client.get(
+        "/reactor/deadletters/list",
+        params={"status": "external_escalation_delivery_queued"},
+    )
+    assert delivered_list.status_code == 200
+    assert {item["deadletter_id"] for item in delivered_list.json()["items"]} == {deadletter_id}
+    delivery_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.external_escalation_delivery.receipt"},
+    )
+    assert delivery_receipts.status_code == 200
+    assert {item["event_id"] for item in delivery_receipts.json()["items"]} == {event_id}
+    delivery_review = client.get(
+        "/reactor/review_queue",
+        params={"route": "deadletter_external_escalation_delivery"},
+    )
+    assert delivery_review.status_code == 200
+    assert delivery_review.json()["available_total"] == 1
+    assert (
+        delivery_review.json()["items"][0]["review"]["action"]
+        == "await_local_outbox_external_delivery_processor_or_operator_review"
+    )
+    delivery_status = client.get("/reactor/status")
+    assert delivery_status.status_code == 200
+    assert delivery_status.json()["stable_state_counts"] == {"deadletter_external_escalation_delivery_queued": 1}
+    assert delivery_status.json()["deadletter_queue_counts"] == {"external_escalation_delivery_queued": 1}
+    assert delivery_status.json()["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
+    assert delivery_status.json()["deadletter_external_escalation_delivery_counts"] == {"delivery_queued": 1}
+
+    second_delivery = client.post(
+        "/reactor/deadletters/external_escalation_delivery",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_delivery.status_code == 200
+    assert second_delivery.json()["applied"] is False
+    assert second_delivery.json()["status"] == "already_external_escalation_delivery_queued"
 
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(

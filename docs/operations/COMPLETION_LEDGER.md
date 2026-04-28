@@ -855,6 +855,22 @@ queue an outbox item, send an external message, start external delivery, execute
 work, write memory, or grant external-escalation, delivery, dispatch, execution,
 approval, promotion, retry, or memory-write authority.
 
+As of `2026-04-28`, preflight-ready Reactor external escalation attempts can
+now queue a bounded local outbox delivery artifact without sending externally.
+`POST /reactor/deadletters/external_escalation_delivery` requires the existing
+`reactor.write` API scope, only applies after an external escalation attempt
+has a configured `local_outbox` adapter with channel and target, writes a
+durable `reactor.deadletter.external_escalation.local_outbox.item`, records
+`reactor.deadletter.external_escalation_delivery.receipt`, moves the durable
+deadletter to `external_escalation_delivery_queued`, and links the receipt
+through the parent Reactor event, decision journal, receipt-kind filters,
+review-route filters, review-queue projection, and `/reactor/status`
+`deadletter_external_escalation_delivery_counts`. This is local queue
+persistence and readback only: it does not send an external message, start
+external delivery, execute work, dispatch work, decide approvals, write memory,
+promote capabilities, or grant external-delivery, external-escalation,
+execution, approval, promotion, retry, or memory-write authority.
+
 As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
 request and recovery-dispatch settlement truth from the existing backend routes.
 The typed Reactor UI client parses `latest_recovery_request_receipt`,
@@ -9698,6 +9714,26 @@ attempt receipt slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor local outbox external
+delivery queue slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_send -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\events.py and tests\unit\test_reactor_event_queue.py; passed after formatting`
+- `python -m mypy src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9741,7 +9777,12 @@ These remain true and should block any "finished" claim:
   adapter preflight state including unsupported `not_configured` adapters and
   configured `local_outbox` readiness, no-delivery/no-execution flags,
   receipt-kind filtering, review-queue readback, and status counts without
-  granting external escalation or delivery authority. Queued `deadletter_recovery` events
+  granting external escalation or delivery authority. Preflight-ready
+  `local_outbox` attempts can now queue one durable local outbox artifact with
+  an external-delivery receipt, receipt-kind/review-route filters, review-queue
+  projection, and status counts while still sending no external message,
+  starting no external delivery, and granting no external-delivery or
+  external-escalation authority. Queued `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
   execution, verification, stable-return, and readback receipts, and successful
@@ -9759,9 +9800,8 @@ These remain true and should block any "finished" claim:
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator
   visibility beyond the current route-filtered review queue, direct deadletter
   history, recovery receipt readback, and proposal-review event-history readback,
-  and actual
-  external escalation delivery/execution beyond the current non-executing
-  attempt receipt and preflight readback
+  and actual external escalation send/execution beyond the current non-sending
+  local outbox queue and readback receipt
 
 ## 6. Update rule
 
