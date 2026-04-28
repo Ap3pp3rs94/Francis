@@ -229,6 +229,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_config_present = bool(service_install.get("config_exists"))
     service_readback = _as_dict(launch_manifest.get("service_readback"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
     blockers = [
         "lens_host_runtime_not_implemented",
@@ -321,6 +322,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "service_readback_ready": bool(service_readback.get("readback_ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
+        "supervision_readiness": supervision_readiness,
         "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
         "resident": False,
         "process_supervision": False,

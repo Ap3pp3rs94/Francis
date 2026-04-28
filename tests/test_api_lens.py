@@ -47,6 +47,12 @@ def _write_lens_host_status_runner(repo_root: Path) -> None:
     script.write_text("# Lens host status runner fixture\n", encoding="utf-8")
 
 
+def _write_service_manager(repo_root: Path) -> None:
+    script = repo_root / "scripts" / "service-install.ps1"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("# Service manager fixture\n", encoding="utf-8")
+
+
 def _write_lens_host_service_config(repo_root: Path) -> None:
     config = repo_root / "config" / "runtime" / "services" / "lens-host.json"
     config.parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +80,10 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "start_after_install": false,
   "installable": false,
   "process_supervision_enabled": false,
+  "supervision_readiness_gate": true,
+  "supervision_mode": "windows_service",
+  "supervision_ready": false,
+  "supervision_blocked_reason": "resident_supervision_disabled",
   "process_supervision_readback": true,
   "service_status_readback": true,
   "service_control_authority": false,
@@ -130,6 +140,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
     _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -257,6 +268,76 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "supervision_authority": False,
         "blocked_reason": "resident_host_process_missing",
     }
+    expected_supervision_readiness = {
+        "status": "blocked",
+        "ready": False,
+        "mode": "windows_service",
+        "service_manager": "scripts/service-install.ps1",
+        "service_manager_exists": True,
+        "process_supervision_enabled": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "resident_claim_allowed": False,
+        "next_allowed_transition": "foreground_status_session_only",
+        "blocked_by": [
+            "process_supervision_enabled",
+            "service_install_authority",
+            "service_control_authority",
+        ],
+        "blocked_reason": "resident_supervision_disabled",
+        "prerequisites": [
+            {
+                "id": "host_entrypoint",
+                "label": "Lens host entrypoint",
+                "ready": True,
+                "status": "ready",
+                "reason": "",
+            },
+            {
+                "id": "service_manager",
+                "label": "Service manager script",
+                "ready": True,
+                "status": "ready",
+                "reason": "",
+            },
+            {
+                "id": "service_config",
+                "label": "Lens host service config",
+                "ready": True,
+                "status": "present_disabled",
+                "reason": "",
+            },
+            {
+                "id": "foreground_process_readback",
+                "label": "Foreground process readback",
+                "ready": True,
+                "status": "missing",
+                "reason": "",
+            },
+            {
+                "id": "process_supervision_enabled",
+                "label": "Process supervision enabled",
+                "ready": False,
+                "status": "blocked",
+                "reason": "disabled_in_service_config",
+            },
+            {
+                "id": "service_install_authority",
+                "label": "Service install authority",
+                "ready": False,
+                "status": "blocked",
+                "reason": "install_authority_false",
+            },
+            {
+                "id": "service_control_authority",
+                "label": "Service control authority",
+                "ready": False,
+                "status": "blocked",
+                "reason": "service_control_authority_false",
+            },
+        ],
+    }
+    assert resident_host["supervision_readiness"] == expected_supervision_readiness
     assert resident_host["foreground_session"] == {
         "supported": True,
         "default_seconds": 0,
@@ -344,6 +425,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert launch_manifest["service_install"] == {
         "manager": "scripts/service-install.ps1",
+        "manager_exists": True,
         "config_path": "config/runtime/services/lens-host.json",
         "config_exists": True,
         "config_status": "present_disabled",
@@ -356,6 +438,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
+    assert launch_manifest["supervision_readiness"] == expected_supervision_readiness
     assert launch_manifest["foreground_session"] == resident_host["foreground_session"]
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
@@ -483,6 +566,7 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
     _write_lens_host_service_config(repo_root)
     _write_lens_host_runtime_state(data_root, pid=os.getpid())
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
@@ -517,6 +601,16 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
         "status": "foreground_observed",
         "required_for": ["resident_presence", "startup_supervision"],
     }
+    assert resident_host["supervision_readiness"]["status"] == "blocked"
+    assert resident_host["supervision_readiness"]["ready"] is False
+    assert resident_host["supervision_readiness"]["resident_claim_allowed"] is False
+    assert resident_host["supervision_readiness"]["blocked_by"] == [
+        "process_supervision_enabled",
+        "service_install_authority",
+        "service_control_authority",
+    ]
+    assert resident_host["supervision_readiness"]["prerequisites"][3]["id"] == "foreground_process_readback"
+    assert resident_host["supervision_readiness"]["prerequisites"][3]["status"] == "process_observed"
     assert "resident_host_process_missing" not in resident_host["blockers"]
     assert "lens_host_runtime_not_implemented" in resident_host["blockers"]
     assert resident_host["governance"]["service_control_authority"] is False
@@ -534,6 +628,7 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
     _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
     _write_lens_host_service_config(repo_root)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

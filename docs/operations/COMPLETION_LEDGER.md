@@ -11508,6 +11508,41 @@ readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens resident supervision readiness gate
+
+Stage 6/Lens now exposes an explicit resident supervision readiness gate instead
+of leaving the next host step implicit. `config/runtime/services/lens-host.json`
+declares the disabled supervision gate and Windows-service supervision mode.
+`/lens/status`, `/lens/host`, and `/lens/host/manifest` now include
+`supervision_readiness`, with prerequisite readback for the host entrypoint,
+service manager script, disabled service config, foreground process readback,
+process-supervision enablement, service-install authority, and service-control
+authority. The gate remains `blocked`; `process_supervision_enabled`,
+`service_install_authority`, and `service_control_authority` are the active
+blockers in the validated baseline.
+
+This is readback-only. It does not install, start, stop, update, restart, or
+supervise a Windows service; create a resident host process; register tray
+presence; bind a global hotkey; open or focus an overlay window; summon Francis
+anywhere; capture screen content; write memory; decide approvals; execute
+operator actions; or grant overlay-control, window-management, summon, capture,
+sensing, telemetry, promotion, policy, service-control, tray-registration,
+hotkey-registration, service-install, or API local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens resident
+supervision readiness gate:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11519,7 +11554,8 @@ These remain true and should block any "finished" claim:
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session with live foreground process
   readback proof plus API live process readback, disabled tracked service config
-  baseline, and non-starting process readback boundary plus read-only Windows service status
+  baseline, resident supervision readiness gate, and non-starting process
+  readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus a disabled tray/presence preflight baseline and
   disabled overlay/window preflight baseline, but no OS-wide summon, resident

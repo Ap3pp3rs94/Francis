@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -160,14 +160,120 @@ def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[
     }
 
 
+def _readiness_item(item_id: str, *, label: str, ready: bool, status: str, reason: str = "") -> dict[str, Any]:
+    return {
+        "id": item_id,
+        "label": label,
+        "ready": ready,
+        "status": status,
+        "reason": reason,
+    }
+
+
+def _lens_host_supervision_readiness(
+    *,
+    entrypoint_exists: bool,
+    service_manager: str,
+    service_manager_exists: bool,
+    service_config_exists: bool,
+    service_config_payload: dict[str, Any],
+    process_readback: dict[str, Any],
+) -> dict[str, Any]:
+    supervision_enabled = bool(service_config_payload.get("process_supervision_enabled"))
+    install_authority = bool(
+        service_config_payload.get("install_authority") or service_config_payload.get("service_install_authority")
+    )
+    service_control_authority = bool(service_config_payload.get("service_control_authority"))
+    foreground_readback_ready = bool(process_readback.get("readback_ready"))
+    prerequisites = [
+        _readiness_item(
+            "host_entrypoint",
+            label="Lens host entrypoint",
+            ready=entrypoint_exists,
+            status="ready" if entrypoint_exists else "missing",
+            reason="" if entrypoint_exists else "scripts/lens-host.ps1 is missing",
+        ),
+        _readiness_item(
+            "service_manager",
+            label="Service manager script",
+            ready=service_manager_exists,
+            status="ready" if service_manager_exists else "missing",
+            reason="" if service_manager_exists else f"{service_manager} is missing",
+        ),
+        _readiness_item(
+            "service_config",
+            label="Lens host service config",
+            ready=service_config_exists,
+            status="present_disabled" if service_config_exists else "missing",
+            reason="" if service_config_exists else "config/runtime/services/lens-host.json is missing",
+        ),
+        _readiness_item(
+            "foreground_process_readback",
+            label="Foreground process readback",
+            ready=foreground_readback_ready,
+            status=str(process_readback.get("status") or "missing"),
+            reason="" if foreground_readback_ready else "process readback is not available",
+        ),
+        _readiness_item(
+            "process_supervision_enabled",
+            label="Process supervision enabled",
+            ready=supervision_enabled,
+            status="ready" if supervision_enabled else "blocked",
+            reason="" if supervision_enabled else "disabled_in_service_config",
+        ),
+        _readiness_item(
+            "service_install_authority",
+            label="Service install authority",
+            ready=install_authority,
+            status="ready" if install_authority else "blocked",
+            reason="" if install_authority else "install_authority_false",
+        ),
+        _readiness_item(
+            "service_control_authority",
+            label="Service control authority",
+            ready=service_control_authority,
+            status="ready" if service_control_authority else "blocked",
+            reason="" if service_control_authority else "service_control_authority_false",
+        ),
+    ]
+    blocked_by = [str(item["id"]) for item in prerequisites if not bool(item["ready"])]
+    return {
+        "status": "blocked" if blocked_by else "ready",
+        "ready": not blocked_by,
+        "mode": str(service_config_payload.get("supervision_mode") or "windows_service"),
+        "service_manager": service_manager,
+        "service_manager_exists": service_manager_exists,
+        "process_supervision_enabled": supervision_enabled,
+        "service_install_authority": install_authority,
+        "service_control_authority": service_control_authority,
+        "resident_claim_allowed": False,
+        "next_allowed_transition": "foreground_status_session_only" if blocked_by else "operator_review_required",
+        "blocked_by": blocked_by,
+        "blocked_reason": str(
+            service_config_payload.get("supervision_blocked_reason") or "resident_supervision_disabled"
+        ),
+        "prerequisites": prerequisites,
+    }
+
+
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
     service_config = "config/runtime/services/lens-host.json"
     entrypoint_exists = _runtime_file_exists(entrypoint)
     service_config_payload = _runtime_json_dict(service_config)
     service_config_exists = bool(service_config_payload)
+    service_manager = str(service_config_payload.get("manager") or "scripts/service-install.ps1")
+    service_manager_exists = _runtime_file_exists(service_manager)
     service_readback = _lens_host_service_readback(service_config_payload)
     process_readback = _lens_host_process_readback()
+    supervision_readiness = _lens_host_supervision_readiness(
+        entrypoint_exists=entrypoint_exists,
+        service_manager=service_manager,
+        service_manager_exists=service_manager_exists,
+        service_config_exists=service_config_exists,
+        service_config_payload=service_config_payload,
+        process_readback=process_readback,
+    )
     foreground_supported = bool(service_config_payload.get("foreground_session_enabled"))
     blockers = [
         "lens_host_runtime_not_implemented",
@@ -232,7 +338,8 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             ),
         },
         "service_install": {
-            "manager": "scripts/service-install.ps1",
+            "manager": service_manager,
+            "manager_exists": service_manager_exists,
             "config_path": service_config,
             "config_exists": service_config_exists,
             "config_status": "present_disabled" if service_config_exists else "missing",
@@ -257,6 +364,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         },
         "service_readback": service_readback,
         "process_readback": process_readback,
+        "supervision_readiness": supervision_readiness,
         "required_bindings": [
             {
                 "id": "api_status",
