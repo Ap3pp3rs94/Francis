@@ -6,6 +6,7 @@ from typing import Any
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
+from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.reactor import reactor_operator_visibility_summary
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.snapshot import (
@@ -222,6 +223,7 @@ def _hud_runtime_surface() -> dict[str, Any]:
 
 
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
+    launch_manifest = lens_host_launch_manifest()
     blockers = [
         "resident_host_process_missing",
         "tray_host_missing",
@@ -269,6 +271,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "contract_status": "readback_ready",
         "availability": "backend_readback_only",
         "route": "/lens/host",
+        "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
+        "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
         "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",

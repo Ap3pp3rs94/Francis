@@ -11050,6 +11050,40 @@ readiness contract:
 - `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens host launch manifest contract
+
+Stage 6/Lens now has a dedicated read-only launch-manifest contract for the
+future resident host. `GET /lens/host/manifest` returns
+`kind: lens.host.launch_manifest`, and `/lens/host` embeds the same manifest.
+The manifest declares the intended future entrypoint as `scripts/lens-host.ps1`,
+marks that entrypoint as missing and non-executable, declares the candidate
+foreground `pwsh` command as disabled, and names the future service config path
+`data/config/services/lens-host.json` as absent. It also records the required
+bindings that a real host must satisfy before Stage 6 can claim resident host
+behavior: `/lens/status`, `/lens/host`, tray presence, global hotkey, and overlay
+window.
+
+This is a backend readback/contract slice only. It does not create
+`scripts/lens-host.ps1`, create a service config, launch a process, install or
+start a service, register a hotkey, open an overlay, change UI behavior, write
+memory, decide approvals, execute actions, or grant overlay-control, summon,
+capture, sensing, telemetry, promotion, policy, service-install, or
+local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host launch
+manifest contract:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11057,10 +11091,11 @@ These remain true and should block any "finished" claim:
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
-  readback only, and has a `/lens/host` resident-host readiness contract, but no
-  OS-wide summon, resident host process, resident overlay/HUD runtime, OS-level
-  command palette, tray presence, hotkey binding, or live Pilot takeover surface
-  yet
+  readback only, has a `/lens/host` resident-host readiness contract, and has a
+  disabled `/lens/host/manifest` launch-manifest contract, but no OS-wide summon,
+  resident host process, `scripts/lens-host.ps1`, service config, resident
+  overlay/HUD runtime, OS-level command palette, tray presence, hotkey binding,
+  or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

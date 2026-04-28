@@ -133,6 +133,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["contract_status"] == "readback_ready"
     assert resident_host["availability"] == "backend_readback_only"
     assert resident_host["route"] == "/lens/host"
+    assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
     assert resident_host["local_palette_route"] == "/lens/status"
@@ -161,6 +162,70 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "overlay_window_missing",
         "summon_binding_missing",
     ]
+    launch_manifest = resident_host["launch_manifest"]
+    assert launch_manifest["kind"] == "lens.host.launch_manifest"
+    assert launch_manifest["status"] == "entrypoint_missing"
+    assert launch_manifest["contract_status"] == "readback_ready"
+    assert launch_manifest["enabled"] is False
+    assert launch_manifest["launch_authority"] is False
+    assert launch_manifest["auto_start"] is False
+    assert launch_manifest["default_action"] == "manual_review_required"
+    assert launch_manifest["route"] == "/lens/host/manifest"
+    assert launch_manifest["host_route"] == "/lens/host"
+    assert launch_manifest["declared_entrypoint"] == {
+        "path": "scripts/lens-host.ps1",
+        "exists": False,
+        "purpose": "Future foreground Lens host runner for tray, summon, and overlay lifecycle.",
+    }
+    assert launch_manifest["candidate_command"] == {
+        "shell": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/lens-host.ps1",
+            "--mode",
+            "foreground",
+        ],
+        "working_directory": ".",
+        "executable": False,
+    }
+    assert launch_manifest["service_install"] == {
+        "manager": "scripts/service-install.ps1",
+        "config_path": "data/config/services/lens-host.json",
+        "config_exists": False,
+        "install_authority": False,
+        "start_after_install": False,
+    }
+    assert [item["id"] for item in launch_manifest["required_bindings"]] == [
+        "api_status",
+        "host_readiness",
+        "tray_presence",
+        "global_hotkey",
+        "overlay_window",
+    ]
+    assert launch_manifest["blockers"] == [
+        "lens_host_entrypoint_missing",
+        "lens_host_service_config_missing",
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    assert launch_manifest["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "local_process_launch_authority": False,
+        "service_install_authority": False,
+        "mutation_authority_granted": False,
+    }
     assert resident_host["governance"] == {
         "read_only_contract": True,
         "execution_authority": False,
@@ -225,6 +290,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_body["global_hotkey"] is False
     assert host_body["summon_anywhere"] is False
     assert host_body["governance"]["local_process_launch_authority"] is False
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    manifest_body = manifest.json()
+    assert manifest_body["kind"] == "lens.host.launch_manifest"
+    assert manifest_body["status"] == "entrypoint_missing"
+    assert manifest_body["enabled"] is False
+    assert manifest_body["declared_entrypoint"]["exists"] is False
+    assert manifest_body["candidate_command"]["executable"] is False
+    assert manifest_body["governance"]["local_process_launch_authority"] is False
+    assert manifest_body["governance"]["service_install_authority"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-from francis.lens import lens_host_status, lens_status
+from francis.lens import lens_host_launch_manifest, lens_host_status, lens_status
 
 router = APIRouter()
 
@@ -18,3 +18,8 @@ def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
 @router.get("/host")
 def host(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
     return lens_host_status(limit=limit)
+
+
+@router.get("/host/manifest")
+def host_manifest() -> dict[str, Any]:
+    return lens_host_launch_manifest()
