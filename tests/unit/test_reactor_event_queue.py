@@ -13,6 +13,7 @@ from francis.reactor.events import (
     list_events,
     reactor_review_queue,
     reactor_status,
+    record_deadletter_escalation_handoff,
     record_deadletter_resolution,
     record_deadletter_review,
     record_dispatch_attempt,
@@ -2001,6 +2002,138 @@ def test_reactor_deadletter_resolution_records_receipt_without_recovery(
     assert second_resolution["applied"] is False
     assert second_resolution["status"] == "already_resolved"
     assert len(second_resolution["event"]["deadletter_resolutions"]) == 1
+
+
+def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Escalated Reactor deadletter needs a durable handoff",
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        }
+    )
+    attempted = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+    deadletter_id = str(attempted["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+    reviewed = record_deadletter_review(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "escalate_later",
+            "reason": "operator reviewed failed Reactor item",
+        },
+    )
+    assert reviewed["status"] == "deadletter_reviewed"
+
+    premature_handoff = record_deadletter_escalation_handoff(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "handoff should require escalation disposition first",
+        },
+    )
+    assert premature_handoff["ok"] is False
+    assert premature_handoff["applied"] is False
+    assert premature_handoff["error"] == "deadletter_escalation_required"
+
+    escalated = record_deadletter_resolution(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "escalate",
+            "reason": "operator wants escalation tracked before recovery",
+        },
+    )
+    assert escalated["status"] == "deadletter_escalation_pending"
+
+    handoff = record_deadletter_escalation_handoff(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record external operator follow-up without starting execution",
+        },
+    )
+
+    assert handoff["ok"] is True
+    assert handoff["applied"] is True
+    assert handoff["status"] == "deadletter_escalation_handoff_recorded"
+    event = handoff["event"]
+    assert event["stable_state"] == "deadletter_escalation_handoff_recorded"
+    assert event["dispatch"]["deadletter_escalation_handoff_recorded"] is True
+    receipt = event["latest_deadletter_escalation_handoff_receipt"]
+    assert receipt["kind"] == "reactor.deadletter.escalation_handoff.receipt"
+    assert receipt["deadletter_id"] == deadletter_id
+    assert receipt["status"] == "handoff_recorded"
+    assert receipt["route"] == "deadletter_escalation_handoff"
+    assert receipt["stable_state"] == "deadletter_escalation_handoff_recorded"
+    assert receipt["resolution_decision"] == "escalation_pending"
+    assert receipt["escalation_handoff_recorded"] is True
+    assert receipt["external_escalation_started"] is False
+    assert receipt["recovery_started"] is False
+    assert receipt["retry_started"] is False
+    assert receipt["execution_started"] is False
+    assert receipt["escalation_started"] is False
+    assert receipt["memory_write"] is False
+    assert receipt["governance"]["execution_authority"] is False
+    assert receipt["governance"]["retry_authority"] is False
+    assert receipt["governance"]["escalation_authority"] is False
+    assert receipt["governance"]["memory_write"] is False
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.escalation_handoff.receipt"
+    assert event["latest_deadletter_item"]["status"] == "escalation_handoff_recorded"
+    assert event["deadletter_escalation_handoffs"][0]["deadletter_id"] == deadletter_id
+    assert event["decision_journal"][-1]["kind"] == "reactor.deadletter.escalation_handoff_recorded"
+    assert event["decision_journal"][-1]["applied"] is True
+    assert event["decision_journal"][-1]["execution_started"] is False
+    assert event["decision_journal"][-1]["escalation_started"] is False
+    assert event["governance"]["deadletter_escalation_handoff_recorded"] is True
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["escalation_authority"] is False
+
+    stored_deadletter = get_deadletter(deadletter_id)
+    assert stored_deadletter is not None
+    assert stored_deadletter["status"] == "escalation_handoff_recorded"
+    assert stored_deadletter["latest_escalation_handoff_receipt"]["deadletter_id"] == deadletter_id
+    assert [item["deadletter_id"] for item in list_deadletters(status="escalation_handoff_recorded")] == [deadletter_id]
+    assert {item["event_id"] for item in list_events(stable_state="deadletter_escalation_handoff_recorded")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(review_route="deadletter_escalation_handoff")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.escalation_handoff.receipt")} == {
+        str(created["event_id"])
+    }
+
+    review_queue = reactor_review_queue(route="deadletter_escalation_handoff")
+    assert review_queue["available_total"] == 1
+    assert review_queue["items"][0]["review"]["action"] == "track_escalation_handoff_until_acknowledged"
+    status = reactor_status()
+    assert status["stable_state_counts"] == {"deadletter_escalation_handoff_recorded": 1}
+    assert status["deadletter_queue_counts"] == {"escalation_handoff_recorded": 1}
+    assert status["deadletter_review_counts"] == {"reviewed": 1}
+    assert status["deadletter_resolution_counts"] == {"escalation_pending": 1}
+    assert status["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
+
+    second_handoff = record_deadletter_escalation_handoff(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "same handoff should not duplicate receipts",
+        },
+    )
+
+    assert second_handoff["ok"] is True
+    assert second_handoff["applied"] is False
+    assert second_handoff["status"] == "already_escalation_handoff_recorded"
+    assert len(second_handoff["event"]["deadletter_escalation_handoffs"]) == 1
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:

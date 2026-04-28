@@ -962,6 +962,64 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_resolution.json()["applied"] is False
     assert second_resolution.json()["status"] == "already_escalation_pending"
 
+    handoff = client.post(
+        "/reactor/deadletters/escalation_handoff",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "record escalation handoff without external execution",
+        },
+    )
+
+    assert handoff.status_code == 200
+    handoff_body = handoff.json()
+    assert handoff_body["ok"] is True
+    assert handoff_body["applied"] is True
+    assert handoff_body["status"] == "deadletter_escalation_handoff_recorded"
+    handoff_receipt = handoff_body["receipt"]
+    assert handoff_receipt["kind"] == "reactor.deadletter.escalation_handoff.receipt"
+    assert handoff_receipt["deadletter_id"] == deadletter_id
+    assert handoff_receipt["route"] == "deadletter_escalation_handoff"
+    assert handoff_receipt["execution_started"] is False
+    assert handoff_receipt["retry_started"] is False
+    assert handoff_receipt["escalation_started"] is False
+    assert handoff_receipt["external_escalation_started"] is False
+    assert handoff_receipt["memory_write"] is False
+    assert handoff_receipt["governance"]["execution_authority"] is False
+    assert handoff_receipt["governance"]["escalation_authority"] is False
+    handoff_event = handoff_body["event"]
+    assert handoff_event["stable_state"] == "deadletter_escalation_handoff_recorded"
+    assert handoff_event["dispatch"]["deadletter_escalation_handoff_recorded"] is True
+    assert handoff_event["governance"]["execution_authority"] is False
+    assert handoff_event["governance"]["escalation_authority"] is False
+
+    handoff_list = client.get("/reactor/deadletters/list", params={"status": "escalation_handoff_recorded"})
+    assert handoff_list.status_code == 200
+    assert {item["deadletter_id"] for item in handoff_list.json()["items"]} == {deadletter_id}
+    handoff_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.escalation_handoff.receipt"},
+    )
+    assert handoff_receipts.status_code == 200
+    assert {item["event_id"] for item in handoff_receipts.json()["items"]} == {event_id}
+    handoff_review = client.get("/reactor/review_queue", params={"route": "deadletter_escalation_handoff"})
+    assert handoff_review.status_code == 200
+    assert handoff_review.json()["available_total"] == 1
+    assert handoff_review.json()["items"][0]["review"]["action"] == "track_escalation_handoff_until_acknowledged"
+    handoff_status = client.get("/reactor/status")
+    assert handoff_status.status_code == 200
+    assert handoff_status.json()["stable_state_counts"] == {"deadletter_escalation_handoff_recorded": 1}
+    assert handoff_status.json()["deadletter_queue_counts"] == {"escalation_handoff_recorded": 1}
+    assert handoff_status.json()["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
+
+    second_handoff = client.post(
+        "/reactor/deadletters/escalation_handoff",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_handoff.status_code == 200
+    assert second_handoff.json()["applied"] is False
+    assert second_handoff.json()["status"] == "already_escalation_handoff_recorded"
+
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     monkeypatch,

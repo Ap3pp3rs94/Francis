@@ -734,6 +734,20 @@ write routes, backend behavior, execution authority, retry authority, approval
 authority, memory-write behavior, external-escalation authority, or recovery
 execution.
 
+As of `2026-04-28`, Reactor escalation-pending deadletters can record a durable
+non-executing escalation handoff receipt. `POST
+/reactor/deadletters/escalation_handoff` requires the existing `reactor.write`
+API scope and only applies after a deadletter has been reviewed and
+dispositioned to `escalation_pending`. The handoff records
+`reactor.deadletter.escalation_handoff.receipt`, updates the durable
+deadletter item, parent Reactor event, decision journal, receipt history,
+receipt-kind filters, review-route filters, review-queue projection, and
+`/reactor/status` `deadletter_escalation_handoff_counts`. This is a bounded
+operator/external-followup handoff record only: it does not retry work, execute
+recovery, start external escalation, decide approvals, write memory, promote
+capabilities, or grant execution, retry-execution, approval, memory-write,
+promotion, or external-escalation authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9340,6 +9354,24 @@ readback slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor escalation handoff
+receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed after formatting tests\unit\test_reactor_event_queue.py`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9369,12 +9401,13 @@ These remain true and should block any "finished" claim:
   without active retry/deadletter review leftovers. Deadletter items can now
   record bounded resolved/no-action or escalation-pending disposition receipts
   without starting recovery, retry, execution, memory writes, approval decisions,
-  or external escalation. Remaining Stage 5 gaps still
+  or external escalation, and escalation-pending deadletters can now record a
+  durable non-executing escalation handoff receipt. Remaining Stage 5 gaps still
   include broader dispatch action coverage beyond existing operation runs,
-  broader execution-failure routing beyond the current `operation_run` path, and
-  broader operator visibility beyond the route-filtered review queue and direct
-  deadletter queue history plus actual recovery/escalation execution after
-  disposition receipts
+  broader execution-failure routing beyond the current `operation_run` path,
+  broader operator visibility beyond the route-filtered review queue, direct
+  deadletter queue history, and handoff receipt readback, plus actual
+  recovery/escalation execution after disposition and handoff receipts
 
 ## 6. Update rule
 
