@@ -33,6 +33,7 @@ import {
 import { ExplanationApiError, ExplanationClient, type ExplanationRecord } from "./explanation_explorer";
 import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
 import type { MemoryTimelineEvent } from "./memory_timeline";
+import { LensApiError, LensClient, type LensStatus } from "./lens";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import {
@@ -3824,6 +3825,7 @@ function SystemPanel(props: {
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const reactorClient = useMemo(() => new ReactorClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const lensClient = useMemo(() => new LensClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -3856,6 +3858,9 @@ function SystemPanel(props: {
   const [reactorDeadletters, setReactorDeadletters] = useState<ReactorDeadletterSnapshot | null>(null);
   const [reactorDeadlettersError, setReactorDeadlettersError] = useState<string | null>(null);
   const [reactorDeadlettersLoadedAt, setReactorDeadlettersLoadedAt] = useState<number | null>(null);
+  const [lensStatus, setLensStatus] = useState<LensStatus | null>(null);
+  const [lensStatusError, setLensStatusError] = useState<string | null>(null);
+  const [lensStatusLoadedAt, setLensStatusLoadedAt] = useState<number | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -3960,6 +3965,14 @@ function SystemPanel(props: {
     return "Reactor request failed.";
   }, []);
 
+  const lensError = useCallback((err: unknown): string => {
+    if (err instanceof LensApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Lens request failed.";
+  }, []);
+
   const scrollOrbSection = useCallback((sectionId: string) => {
     window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3994,6 +4007,7 @@ function SystemPanel(props: {
         nextReactorReviewQueue,
         nextReactorProposalReviews,
         nextReactorDeadletters,
+        nextLensStatus,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4013,6 +4027,7 @@ function SystemPanel(props: {
           receipt_kind: "reactor.dispatch.execution.receipt",
         }),
         reactorClient.listDeadletters({ limit: 6 }),
+        lensClient.getStatus({ limit: 6 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4118,6 +4133,15 @@ function SystemPanel(props: {
         degradedFeeds.push("reactor deadletters");
       }
 
+      if (nextLensStatus.status === "fulfilled") {
+        setLensStatus(nextLensStatus.value);
+        setLensStatusError(null);
+        setLensStatusLoadedAt(refreshStartedAt);
+      } else {
+        setLensStatusError(lensError(nextLensStatus.reason));
+        degradedFeeds.push("lens status");
+      }
+
       if (degradedFeeds.length > 0) {
         setRefreshNotice(`Refresh completed with degraded feeds: ${degradedFeeds.join(", ")}.`);
       }
@@ -4127,7 +4151,17 @@ function SystemPanel(props: {
       setLastRefreshCompletedAt(nowUnixSeconds());
       setBusy(false);
     }
-  }, [client, operationsClient, operationsError, reactorClient, reactorError, reactorReviewRouteFilter, settingsError]);
+  }, [
+    client,
+    lensClient,
+    lensError,
+    operationsClient,
+    operationsError,
+    reactorClient,
+    reactorError,
+    reactorReviewRouteFilter,
+    settingsError,
+  ]);
 
   const recordObserverScan = useCallback(async () => {
     if (!modeClient) {
@@ -4398,6 +4432,44 @@ function SystemPanel(props: {
   const reactorDeadletterItems = reactorDeadletters?.items ?? [];
   const reactorDeadletterTotal = reactorDeadletters?.total ?? reactorDeadletterItems.length;
   const reactorDeadletterRouteError = safeString(reactorDeadletters?.error).trim();
+  const lensHud = lensStatus?.hud;
+  const lensCommandPalette = lensStatus?.command_palette;
+  const lensModeSelector = lensStatus?.mode_selector;
+  const lensApprovals = lensStatus?.approvals_view;
+  const lensIncidents = lensStatus?.incident_view;
+  const lensMissionFeed = lensStatus?.mission_feed;
+  const lensPilot = lensStatus?.pilot_indicator;
+  const lensGovernance = lensStatus?.governance;
+  const lensStage6Readiness = lensStatus?.stage6_readiness;
+  const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
+  const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
+  const lensHudBadges = lensHud?.badges ?? [];
+  const lensModeLabel =
+    safeString(lensStatus?.mode.label).trim() ||
+    safeString(lensStatus?.mode.id).trim() ||
+    safeString(lensModeSelector?.active_mode).trim() ||
+    "unknown";
+  const lensModeWrites =
+    safeString(lensStatus?.mode.writes).trim() ||
+    safeString(lensStatus?.mode_selector.write_guard).trim() ||
+    "readback";
+  const lensFocusLabel =
+    safeString(lensScopeFocus?.label).trim() || safeString(lensScopeFocus?.plane_id).trim() || "no active focus";
+  const lensHudHeadline = safeString(lensHud?.headline).trim();
+  const lensPendingApprovals = safeNumber(lensApprovals?.pending_count, 0);
+  const lensObserverIncidents = safeNumber(lensIncidents?.observer_counts.active, 0);
+  const lensReactorReview = safeNumber(lensIncidents?.reactor_review_queue_total, 0);
+  const lensMemoryReceipts = safeNumber(lensMissionFeed?.memory_receipt_count, 0);
+  const lensClaim = safeString(lensStage6Readiness?.claim).trim();
+  const lensSummonCriterion = lensStage6Criteria.find((criterion) => safeString(criterion.id).trim() === "summon_anywhere");
+  const lensSummonStatus =
+    safeString(lensSummonCriterion?.status).trim() || (lensCommandPalette?.summon_anywhere ? "ready" : "not_implemented");
+  const lensAuthorityBlocked =
+    lensGovernance?.execution_authority === false &&
+    lensGovernance?.approval_decision_authority === false &&
+    lensGovernance?.overlay_control_authority === false &&
+    lensGovernance?.capture_authority === false;
+  const lensObservedAt = lensStatus?.generated_at || lensStatusLoadedAt;
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const overviewMissionReadiness = overview?.mission_briefing?.readiness ?? shiftBriefingReadiness;
@@ -5253,6 +5325,18 @@ function SystemPanel(props: {
         : `${coreLoop.length} core loop planes and ${gateStack.length} governance gates are exposed in this snapshot.`,
     },
     {
+      id: "lens-status",
+      label: "Lens",
+      observedAt: lensObservedAt,
+      error: lensStatusError,
+      staleAfterSeconds: 180,
+      actionLabel: "Inspect Lens",
+      onAction: () => scrollOrbSection("francis-lens-status"),
+      detail: lensStatusError
+        ? `Lens status could not refresh: ${lensStatusError}`
+        : lensHudHeadline || "Lens readback is available once the backend status contract responds.",
+    },
+    {
       id: "operations",
       label: "Live Operations",
       observedAt: takeoverOperationsLoadedAt,
@@ -5328,6 +5412,128 @@ function SystemPanel(props: {
           <b>Refresh:</b> {refreshNotice}
         </div>
       ) : null}
+
+      <div id="francis-lens-status" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Lens Readback</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              {lensHudHeadline || "Lens status is available when the readback contract responds."}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(lensHud?.status || lensStatus?.status || "unknown")}>
+              {lensHud?.status || lensStatus?.status || "unknown"}
+            </span>
+            <span style={badgeStyle(lensStatus?.read_only ? "read_only" : "unknown")}>
+              {lensStatus?.read_only ? "read-only" : "not loaded"}
+            </span>
+            <span style={badgeStyle(lensPilot?.active ? "pilot" : "standby")}>
+              pilot {lensPilot?.status || "standby"}
+            </span>
+            <span style={badgeStyle(lensSummonStatus)}>{lensSummonStatus}</span>
+          </div>
+        </div>
+
+        {lensStatusError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>Lens feed is degraded: {lensStatusError}</div>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>HUD</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>{lensHud?.primary_plane_label || "Interface"}</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              plane <code>{lensHud?.primary_plane || "P1_INTERFACE"}</code>
+            </div>
+            {lensHudBadges.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {lensHudBadges.slice(0, 5).map((badge, index) => (
+                  <span key={`lens-hud-badge-${badge.label}-${index}`} style={badgeStyle(badge.severity || "neutral")}>
+                    {badge.label} {String(badge.value)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Mode and scope</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>{lensModeLabel}</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              writes <code>{lensModeWrites}</code>
+            </div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              focus <code>{lensFocusLabel}</code>
+            </div>
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Approvals and incidents</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle(lensPendingApprovals > 0 ? "attention" : "clear")}>approvals {lensPendingApprovals}</span>
+              <span style={badgeStyle(lensObserverIncidents > 0 ? "attention" : "clear")}>
+                incidents {lensObserverIncidents}
+              </span>
+              <span style={badgeStyle(lensReactorReview > 0 ? "attention" : "clear")}>reactor {lensReactorReview}</span>
+              <span style={badgeStyle(lensMemoryReceipts > 0 ? "memory" : "clear")}>receipts {lensMemoryReceipts}</span>
+            </div>
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Pilot and command surface</div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>{lensPilot?.message || "Pilot indicator is waiting for Lens readback."}</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+              summon_anywhere <code>{lensCommandPalette?.summon_anywhere ? "true" : "false"}</code>
+            </div>
+            {lensCommandPalette?.message ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{lensCommandPalette.message}</div>
+            ) : null}
+          </div>
+        </div>
+
+        {lensStage6Criteria.length ? (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+            {lensStage6Criteria.slice(0, 6).map((criterion) => (
+              <span key={`lens-stage6-${criterion.id}`} style={badgeStyle(criterion.status || "unknown")}>
+                {criterion.id || "criterion"}: {criterion.status || "unknown"}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 8 }}>
+          gate=<code>{lensGovernance?.gate || "lens_readback_only"}</code>
+          {" / "}authority=<code>{lensAuthorityBlocked ? "none" : "unknown"}</code>
+          {lensClaim ? (
+            <>
+              {" / "}claim=<code>{lensClaim}</code>
+            </>
+          ) : null}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <button style={buttonStyle} disabled={busy} onClick={() => void refresh()}>
+            {busy ? "Refreshing." : "Refresh Lens"}
+          </button>
+          <button style={buttonStyle} onClick={() => props.onOpenApprovals()}>
+            Open approvals
+          </button>
+          <button style={buttonStyle} onClick={() => scrollOrbSection("francis-reactor-operator-visibility")}>
+            Inspect Reactor
+          </button>
+          <button style={buttonStyle} onClick={() => scrollOrbSection("francis-shift-briefing")}>
+            Inspect briefing
+          </button>
+        </div>
+      </div>
 
       <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>

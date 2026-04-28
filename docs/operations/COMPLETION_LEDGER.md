@@ -10922,14 +10922,40 @@ contract:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py src\francis\api\app.py`
   Result: `passed`
 
+As of `2026-04-28`, the chat UI System/ORB panel has its first Stage 6/Lens
+readback binding. `apps/chat_ui/src/lens` now provides a typed client/parser
+for `GET /lens/status`, and the ORB System panel reads that contract into a
+read-only Lens band plus the existing freshness monitor. The surface shows
+Lens HUD status, mode/scope, pending approvals, incident pressure, Reactor
+review pressure, memory-receipt count, Pilot indicator state, Stage 6 criterion
+status, and the current read-only governance gate. It preserves the backend
+truth that OS-wide summon is not implemented (`summon_anywhere: false` /
+`not_implemented`) and grants no execution authority, approval-decision
+authority, memory-write behavior, promotion authority, overlay-control
+authority, capture authority, sensing authority, telemetry authority, or new
+policy authority. This is an operator readback binding only, not a resident OS
+overlay or global command palette.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens chat UI readback
+binding:
+
+- `node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
 
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
-- Stage 6/Lens has a backend readback contract for Lens primitives, but no
-  OS-wide summon, resident overlay/HUD runtime, chat UI Lens binding, or live
-  Pilot takeover surface yet
+- Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
+  binding for Lens primitives, but no OS-wide summon, resident overlay/HUD
+  runtime, OS-level command palette, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
