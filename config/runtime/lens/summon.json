@@ -1,0 +1,31 @@
+{
+  "kind": "lens.summon.config",
+  "version": 1,
+  "enabled": false,
+  "summon_name": "Francis Lens Summon",
+  "global_hotkey": "Ctrl+Alt+Space",
+  "binding_scope": "global",
+  "binding_enabled": false,
+  "register_hotkey": false,
+  "startup_register": false,
+  "launch_target": "lens_host",
+  "launch_mode": "Foreground",
+  "palette_route": "/lens/status",
+  "host_preflight": "scripts/lens-host-preflight.ps1",
+  "host_status_runner": "scripts/lens-host.ps1",
+  "overlay_required": true,
+  "tray_required": true,
+  "requires_explicit_enable": true,
+  "summon_authority": false,
+  "hotkey_registration_authority": false,
+  "overlay_control_authority": false,
+  "local_process_launch_authority": false,
+  "blocked_reason": "lens_summon_binding_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_presence",
+    "overlay_window",
+    "global_hotkey_binding",
+    "summon_binding"
+  ]
+}
