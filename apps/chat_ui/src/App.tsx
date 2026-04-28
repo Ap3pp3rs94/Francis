@@ -197,6 +197,7 @@ const REACTOR_REVIEW_ROUTE_FILTERS: Array<{ label: string; route: ReactorReviewR
   { label: "Deadletter", route: "deadletter_candidate" },
   { label: "Reviewed", route: "deadletter_review" },
   { label: "Escalation", route: "deadletter_escalation" },
+  { label: "Handoff", route: "deadletter_escalation_handoff" },
   { label: "Retry", route: "retry_backoff" },
   { label: "Due", route: "retry_due" },
   { label: "Operation", route: "operation_run" },
@@ -6728,14 +6729,19 @@ function SystemPanel(props: {
               const resolutionDecision = safeString(item.resolution_decision).trim();
               const sourceKind = safeString(item.source_receipt_kind).trim();
               const sourceRef = safeString(item.source_receipt_ref).trim();
+              const handoffReceipt = item.latest_escalation_handoff_receipt;
               const resolutionReceipt = item.latest_resolution_receipt;
               const reviewReceipt = item.latest_review_receipt;
               const latestReceiptId =
+                safeString(handoffReceipt?.receipt_id).trim() ||
                 safeString(resolutionReceipt?.receipt_id).trim() ||
                 safeString(reviewReceipt?.receipt_id).trim() ||
                 sourceRef;
               const latestReceiptKind =
-                safeString(resolutionReceipt?.kind).trim() || safeString(reviewReceipt?.kind).trim() || sourceKind;
+                safeString(handoffReceipt?.kind).trim() ||
+                safeString(resolutionReceipt?.kind).trim() ||
+                safeString(reviewReceipt?.kind).trim() ||
+                sourceKind;
               return (
                 <div
                   key={`reactor-deadletter-${item.deadletter_id}`}
@@ -6763,6 +6769,7 @@ function SystemPanel(props: {
                     {resolutionDecision ? <span style={badgeStyle(resolutionDecision)}>{resolutionDecision}</span> : null}
                     {item.deadletter_resolved ? <span style={badgeStyle("resolved")}>resolved</span> : null}
                     {item.escalation_recorded ? <span style={badgeStyle("escalation_pending")}>escalation pending</span> : null}
+                    {item.escalation_handoff_recorded ? <span style={badgeStyle("handoff_recorded")}>handoff recorded</span> : null}
                     {latestReceiptKind ? <span style={badgeStyle("receipt")}>{latestReceiptKind}</span> : null}
                   </div>
 
