@@ -958,6 +958,19 @@ event-history readback only: it does not add backend routes, proposal decisions,
 review approvals, promotions, plugin execution, memory writes, controls, or new
 execution, approval, promotion, or external-escalation authority.
 
+As of `2026-04-28`, Reactor proposal-review dispatch history also has a direct
+read-only backend readback surface. `GET /reactor/proposal_reviews/history/list`
+projects completed `forge_proposal` Reactor events with
+`proposal_review_inspected` stable state into compact history items carrying
+proposal id, plugin id, quality readiness, missing requirements, review
+receipt, validation receipt, verification, stable-return, source governance,
+and explicit no-authority readback governance. The route supports proposal id,
+plugin id, quality-ready, and review-status filters. This is event-history
+readback only: it does not dispatch events, decide proposals, approve reviews,
+promote staged capabilities, execute plugins, write memory, or grant execution,
+approval, proposal-decision, promotion, dispatch, or external-escalation
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9864,6 +9877,26 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor proposal-review
+history readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_proposal_review_history_readback_is_read_only -q`
+  Result: `failed before correcting the test proposal fixture to include validation path and known limits; passed after fixture correction`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed with Ruff cache write warnings`
+- `python -m mypy src\francis\reactor\events.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9929,15 +9962,17 @@ These remain true and should block any "finished" claim:
   and recovery-dispatch filters, badges, and latest receipt handles from the
   existing read routes, and the System/ORB panel now exposes read-only
   proposal-review execution receipts from Reactor event history for completed
-  Forge proposal inspections.
+  Forge proposal inspections. Direct proposal-review history readback now
+  projects completed `forge_proposal` Reactor inspections through a dedicated
+  list route with proposal, plugin, quality-ready, and review-status filters.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
   existing operation runs, bounded mission queue ticks, and read-only Forge
   proposal reviews, broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator
   visibility beyond the current route-filtered review queue and direct recovery
-  receipt readback, proposal-review event-history readback,
-  and actual external escalation send/execution beyond the current non-sending
+  receipt/proposal-review history readbacks, and actual external escalation
+  send/execution beyond the current non-sending
   local outbox queue, artifact readback, and processor-readiness readback
 
 ## 6. Update rule

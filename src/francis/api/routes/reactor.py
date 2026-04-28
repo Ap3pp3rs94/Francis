@@ -20,6 +20,7 @@ from francis.reactor import (
     list_events,
     list_external_escalation_deliveries,
     list_external_escalation_delivery_processor_readiness,
+    list_proposal_review_history,
     list_retry_schedules,
     reactor_review_queue,
     reactor_status,
@@ -221,6 +222,46 @@ def events_list(
         receipt_kind=receipt_kind,
     )
     return {"ok": True, "items": items, "total": len(items), "limit": limit}
+
+
+@router.get("/proposal_reviews/history/list")
+def proposal_reviews_history_list(
+    limit: int = Query(200, ge=1, le=5000),
+    proposal_id: str | None = None,
+    plugin_id: str | None = None,
+    quality_ready: bool | None = None,
+    review_status: str | None = None,
+) -> dict[str, Any]:
+    items = list_proposal_review_history(
+        limit=limit,
+        proposal_id=proposal_id,
+        plugin_id=plugin_id,
+        quality_ready=quality_ready,
+        review_status=review_status,
+    )
+    ready_total = len([item for item in items if bool(item.get("quality_ready"))])
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "ready_total": ready_total,
+        "blocked_total": len(items) - ready_total,
+        "limit": limit,
+        "proposal_id": proposal_id or "",
+        "plugin_id": plugin_id or "",
+        "quality_ready": quality_ready,
+        "review_status": review_status or "",
+        "governance": {
+            "gate": "reactor_proposal_review_history_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "approval_authority": False,
+            "proposal_decision_authority": False,
+            "promotion_authority": False,
+            "external_escalation_authority": False,
+            "memory_write": False,
+        },
+    }
 
 
 @router.get("/review_queue")

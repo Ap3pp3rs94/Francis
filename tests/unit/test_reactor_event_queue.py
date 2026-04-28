@@ -22,6 +22,7 @@ from francis.reactor.events import (
     enqueue_event,
     get_event,
     list_events,
+    list_proposal_review_history,
     reactor_review_queue,
     reactor_status,
     record_deadletter_escalation_acknowledgement,
@@ -388,6 +389,84 @@ def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypat
 
     operation_detail = operations_runtime.get_operation_detail(operation_id)
     assert operation_detail["operation"]["status"] == "succeeded"
+
+
+def test_reactor_proposal_review_history_readback_is_read_only(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    actor = "test.reactor.proposal_review"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["reactor.write"]}))
+    proposal_id = "plugin_proposal_history_unit"
+    proposal_path = data_root / "artifacts" / "plugins" / "proposals" / f"{proposal_id}.json"
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_text(
+        json.dumps(
+            {
+                "kind": "plugin.proposal",
+                "proposal_id": proposal_id,
+                "plugin_id": "generated.proposal_history_unit",
+                "status": "staged",
+                "friction": {
+                    "summary": "Repeated proposal reviews need direct Reactor history.",
+                    "evidence": ["forge.proposal.history.unit"],
+                },
+                "quality_requirements": {
+                    "tests": ["tests/unit/test_reactor_event_queue.py::proposal_history"],
+                    "docs": ["README.md"],
+                    "risk_tier": "normal",
+                    "validation_path": ["tests/unit/test_reactor_event_queue.py"],
+                    "known_limits": ["readback only"],
+                },
+                "review": {"status": "approved", "receipt_id": "review_history_unit"},
+                "validation": {"validation_receipt_id": "validation_history_unit"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    created_event = enqueue_event(
+        {
+            "trigger_source": "forge_proposal",
+            "summary": "Inspect proposal history through Reactor.",
+            "mode": "pilot",
+            "actor": actor,
+            "max_actions": 1,
+            "metadata": {"proposal_id": proposal_id},
+        }
+    )
+    event_id = str(created_event["event_id"])
+
+    dispatched = record_dispatch_attempt(
+        event_id,
+        {"actor": actor, "reason": "read proposal quality history without changing proposal state"},
+    )
+
+    assert dispatched["ok"] is True
+    history = list_proposal_review_history(proposal_id=proposal_id)
+    assert [item["event_id"] for item in history] == [event_id]
+    item = history[0]
+    assert item["kind"] == "reactor.proposal_review.history.readback"
+    assert item["proposal_id"] == proposal_id
+    assert item["plugin_id"] == "generated.proposal_history_unit"
+    assert item["route"] == "proposal_review"
+    assert item["quality_ready"] is True
+    assert item["review_status"] == "approved"
+    assert item["review_receipt_id"] == "review_history_unit"
+    assert item["validation_receipt_id"] == "validation_history_unit"
+    assert item["readback_only"] is True
+    assert item["proposal_decision_applied"] is False
+    assert item["promotion_applied"] is False
+    assert item["execution_started"] is False
+    assert item["dispatch_applied"] is True
+    assert item["memory_write"] is False
+    assert item["source_governance"]["dispatch_authority"] is True
+    assert item["governance"]["execution_authority"] is False
+    assert item["governance"]["dispatch_authority"] is False
+    assert item["governance"]["proposal_decision_authority"] is False
+    assert item["governance"]["promotion_authority"] is False
+    assert list_proposal_review_history(plugin_id="generated.proposal_history_unit")[0]["event_id"] == event_id
+    assert list_proposal_review_history(quality_ready=True)[0]["event_id"] == event_id
+    assert list_proposal_review_history(review_status="approved")[0]["event_id"] == event_id
+    assert list_proposal_review_history(proposal_id="missing_proposal") == []
 
 
 def test_reactor_dispatch_engine_runs_mission_tick_with_receipts(monkeypatch, tmp_path: Path) -> None:

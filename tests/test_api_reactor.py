@@ -263,6 +263,39 @@ def test_reactor_proposal_review_dispatch_reads_forge_quality_without_authority(
     assert status_body["dispatch_execution_counts"] == {"completed": 1}
     assert status_body["verification_counts"] == {"passed": 1}
     assert status_body["verification_outcome_counts"] == {"proposal_review_ready": 1}
+    history = client.get(
+        "/reactor/proposal_reviews/history/list",
+        params={"proposal_id": proposal_id, "quality_ready": "true"},
+    )
+    assert history.status_code == 200
+    history_body = history.json()
+    assert history_body["ok"] is True
+    assert history_body["total"] == 1
+    assert history_body["ready_total"] == 1
+    assert history_body["blocked_total"] == 0
+    assert history_body["governance"]["execution_authority"] is False
+    assert history_body["governance"]["dispatch_authority"] is False
+    history_item = history_body["items"][0]
+    assert history_item["kind"] == "reactor.proposal_review.history.readback"
+    assert history_item["event_id"] == event_id
+    assert history_item["proposal_id"] == proposal_id
+    assert history_item["plugin_id"] == "generated.reactor_quality"
+    assert history_item["route"] == "proposal_review"
+    assert history_item["quality_ready"] is True
+    assert history_item["readback_only"] is True
+    assert history_item["proposal_decision_applied"] is False
+    assert history_item["promotion_applied"] is False
+    assert history_item["execution_started"] is False
+    assert history_item["memory_write"] is False
+    assert history_item["source_governance"]["dispatch_authority"] is True
+    assert history_item["governance"]["proposal_decision_authority"] is False
+    assert history_item["governance"]["promotion_authority"] is False
+    plugin_history = client.get(
+        "/reactor/proposal_reviews/history/list",
+        params={"plugin_id": "generated.reactor_quality"},
+    )
+    assert plugin_history.status_code == 200
+    assert [item["event_id"] for item in plugin_history.json()["items"]] == [event_id]
 
 
 def test_reactor_operation_dispatch_route_runs_existing_operation(monkeypatch, tmp_path: Path) -> None:

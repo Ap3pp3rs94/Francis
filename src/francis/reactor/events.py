@@ -3390,6 +3390,127 @@ def list_events(
     return items[: max(1, min(int(limit), 5000))]
 
 
+def _proposal_review_history_governance() -> dict[str, Any]:
+    return {
+        "gate": "reactor_proposal_review_history_readback",
+        "execution_authority": False,
+        "dispatch_authority": False,
+        "approval_authority": False,
+        "proposal_decision_authority": False,
+        "promotion_authority": False,
+        "external_escalation_authority": False,
+        "memory_write": False,
+    }
+
+
+def _proposal_review_history_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    trigger = _as_dict(item.get("trigger"))
+    classification = _as_dict(item.get("classification"))
+    dispatch = _as_dict(item.get("dispatch"))
+    receipt = _as_dict(dispatch.get("dispatch_execution_receipt")) or _as_dict(
+        item.get("latest_dispatch_execution_receipt")
+    )
+    if _safe_str(trigger.get("source")).strip().lower() != "forge_proposal":
+        return None
+    if _safe_str(classification.get("action_class")).strip().lower() != "proposal_review":
+        return None
+    if _safe_str(item.get("stable_state")).strip().lower() != "proposal_review_inspected":
+        return None
+    if _safe_str(receipt.get("kind")).strip() != "reactor.dispatch.execution.receipt":
+        return None
+    if _safe_str(receipt.get("route")).strip().lower() != "proposal_review":
+        return None
+
+    metadata = _as_dict(trigger.get("metadata"))
+    verification = _as_dict(item.get("latest_verification_receipt"))
+    stable_return = _as_dict(item.get("latest_stable_return"))
+    entry = {
+        "kind": "reactor.proposal_review.history.readback",
+        "event_id": item.get("event_id") or item.get("id"),
+        "status": item.get("status"),
+        "stable_state": item.get("stable_state"),
+        "created_ts": item.get("created_ts"),
+        "updated_ts": item.get("updated_ts"),
+        "trigger_source": trigger.get("source"),
+        "trigger_type": trigger.get("type"),
+        "summary": trigger.get("summary"),
+        "action_class": classification.get("action_class"),
+        "risk_tier": classification.get("risk_tier"),
+        "approval_required": bool(classification.get("approval_required")),
+        "receipt_id": receipt.get("receipt_id"),
+        "receipt_kind": receipt.get("kind"),
+        "route": receipt.get("route"),
+        "outcome": receipt.get("outcome"),
+        "next_step": receipt.get("next_step"),
+        "proposal_id": receipt.get("proposal_id") or metadata.get("proposal_id") or metadata.get("forge_proposal_id"),
+        "plugin_id": receipt.get("plugin_id") or metadata.get("plugin_id"),
+        "proposal_status": receipt.get("proposal_status"),
+        "proposal_artifact_path": receipt.get("proposal_artifact_path"),
+        "quality_ready": bool(receipt.get("quality_ready")),
+        "missing_requirements": _as_list(receipt.get("missing_requirements")),
+        "review_status": receipt.get("review_status"),
+        "review_receipt_id": receipt.get("review_receipt_id"),
+        "validation_receipt_id": receipt.get("validation_receipt_id"),
+        "validation_receipt_path": receipt.get("validation_receipt_path"),
+        "readback_only": bool(receipt.get("readback_only")),
+        "proposal_decision_applied": bool(receipt.get("proposal_decision_applied")),
+        "promotion_applied": bool(receipt.get("promotion_applied")),
+        "execution_started": bool(receipt.get("execution_started")),
+        "dispatch_applied": bool(receipt.get("dispatch_applied")),
+        "memory_write": bool(receipt.get("memory_write")),
+        "verified": bool(receipt.get("verified") or verification.get("verified")),
+        "verification_status": verification.get("verification_status"),
+        "verification_outcome": verification.get("verification_outcome"),
+        "stable_return_receipt_id": stable_return.get("receipt_id"),
+        "stable_return_state": stable_return.get("stable_state"),
+        "source_governance": _as_dict(receipt.get("governance")),
+        "governance": _proposal_review_history_governance(),
+    }
+    return _display(entry)
+
+
+def list_proposal_review_history(
+    *,
+    limit: int = 200,
+    proposal_id: str | None = None,
+    plugin_id: str | None = None,
+    quality_ready: bool | None = None,
+    review_status: str | None = None,
+) -> list[dict[str, Any]]:
+    proposal_filter = _safe_str(proposal_id).strip()
+    plugin_filter = _safe_str(plugin_id).strip()
+    review_status_filter = _safe_str(review_status).strip()
+    entries: list[dict[str, Any]] = []
+    for item in list_events(
+        limit=5000,
+        trigger_source="forge_proposal",
+        stable_state="proposal_review_inspected",
+        receipt_kind="reactor.dispatch.execution.receipt",
+    ):
+        entry = _proposal_review_history_item(item)
+        if entry is None:
+            continue
+        if proposal_filter and _safe_str(entry.get("proposal_id")).strip() != proposal_filter:
+            continue
+        if plugin_filter and _safe_str(entry.get("plugin_id")).strip() != plugin_filter:
+            continue
+        if quality_ready is not None and bool(entry.get("quality_ready")) is not quality_ready:
+            continue
+        if review_status_filter and _safe_str(entry.get("review_status")).strip() != review_status_filter:
+            continue
+        entries.append(entry)
+    entries.sort(
+        key=lambda entry: (
+            _safe_int(entry.get("updated_ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_int(entry.get("created_ts"), default=0, minimum=0, maximum=2_147_483_647),
+            _safe_str(entry.get("event_id")),
+        ),
+        reverse=True,
+    )
+    safe_limit = _safe_int(limit, default=200, minimum=1, maximum=5000)
+    return entries[:safe_limit]
+
+
 def _blocker_routes(dispatch: dict[str, Any]) -> set[str]:
     routes = {_safe_str(dispatch.get("blocked_route")).strip().lower()}
     blocker = _as_dict(dispatch.get("blocker"))
