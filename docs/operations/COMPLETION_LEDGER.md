@@ -1128,6 +1128,18 @@ write memory, promote capabilities, send external messages, or grant execution,
 dispatch, approval-decision, retry, promotion, external-delivery,
 external-escalation, or memory-write authority.
 
+As of `2026-04-28`, the Reactor operator-visibility summary also includes
+direct sender-readiness visibility for local outbox external escalation
+artifacts. `GET /reactor/operator_visibility/summary` now aggregates the
+existing sender-readiness projection into attention counts, status counts, a
+stable readback surface link, and limited ready/blocked sender-readiness item
+lists. This makes the current `external_sender_adapter` blocker visible from
+the compact backend operator summary without adding UI controls or changing the
+sender route. It does not attempt, send, deliver, execute, decide approvals,
+write memory, promote capabilities, or grant external-delivery,
+external-escalation, execution, approval, promotion, retry, dispatch, or
+memory-write authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches

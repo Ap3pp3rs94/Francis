@@ -7,6 +7,7 @@ from francis.reactor.deadletters import (
     list_deadletters,
     list_external_escalation_deliveries,
     list_external_escalation_delivery_processor_readiness,
+    list_external_escalation_delivery_sender_readiness,
 )
 from francis.reactor.events import list_proposal_review_history, reactor_review_queue, reactor_status
 from francis.reactor.retries import list_retry_schedules
@@ -66,9 +67,16 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
     proposal_reviews = list_proposal_review_history(limit=5000)
     external_deliveries = list_external_escalation_deliveries(limit=5000)
     delivery_processor_readiness = list_external_escalation_delivery_processor_readiness(limit=5000)
+    delivery_sender_readiness = list_external_escalation_delivery_sender_readiness(limit=5000)
 
     ready_delivery_processors = [
         item for item in delivery_processor_readiness if bool(item.get("delivery_processor_ready"))
+    ]
+    ready_delivery_senders = [
+        item for item in delivery_sender_readiness if bool(item.get("external_delivery_sender_ready"))
+    ]
+    blocked_delivery_senders = [
+        item for item in delivery_sender_readiness if not bool(item.get("external_delivery_sender_ready"))
     ]
     due_retries = [item for item in retry_schedules if _safe_str(item.get("status")).strip().lower() == "due"]
     ready_proposal_reviews = [item for item in proposal_reviews if bool(item.get("quality_ready"))]
@@ -78,6 +86,10 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
         next_step = "review_active_reactor_queue"
     elif ready_delivery_processors:
         next_step = "inspect_ready_external_delivery_processor_items"
+    elif ready_delivery_senders:
+        next_step = "inspect_ready_external_delivery_sender_items"
+    elif blocked_delivery_senders:
+        next_step = "inspect_blocked_external_delivery_sender_items"
     elif due_retries:
         next_step = "dispatch_due_reactor_retries"
     elif proposal_reviews:
@@ -96,6 +108,7 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
         "deadletter_total": len(deadletters),
         "retry_schedule_total": len(retry_schedules),
         "external_delivery_total": len(external_deliveries),
+        "external_delivery_sender_readiness_total": len(delivery_sender_readiness),
         "recovery_receipt_total": len(recovery_receipts),
         "proposal_review_history_total": len(proposal_reviews),
         "attention": {
@@ -103,6 +116,8 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             "ready_external_delivery_processor_total": len(ready_delivery_processors),
             "blocked_external_delivery_processor_total": len(delivery_processor_readiness)
             - len(ready_delivery_processors),
+            "ready_external_delivery_sender_total": len(ready_delivery_senders),
+            "blocked_external_delivery_sender_total": len(blocked_delivery_senders),
             "due_retry_total": len(due_retries),
             "proposal_review_ready_total": len(ready_proposal_reviews),
             "proposal_review_blocked_total": len(proposal_reviews) - len(ready_proposal_reviews),
@@ -119,6 +134,10 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
                 delivery_processor_readiness,
                 "delivery_processor_status",
             ),
+            "delivery_sender_status": _count_by(
+                delivery_sender_readiness,
+                "external_delivery_sender_status",
+            ),
             "proposal_review_outcome": _count_by(proposal_reviews, "outcome"),
         },
         "readback_surfaces": {
@@ -133,10 +152,15 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             "external_delivery_processor_readiness": (
                 "/reactor/deadletters/external_escalation_deliveries/processor_readiness/list"
             ),
+            "external_delivery_sender_readiness": (
+                "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list"
+            ),
             "retry_schedules": "/reactor/retries/list",
         },
         "latest_review_items": review_queue.get("items", [])[:safe_limit],
         "latest_proposal_reviews": proposal_reviews[:safe_limit],
         "ready_external_delivery_processor_items": ready_delivery_processors[:safe_limit],
+        "ready_external_delivery_sender_items": ready_delivery_senders[:safe_limit],
+        "blocked_external_delivery_sender_items": blocked_delivery_senders[:safe_limit],
         "governance": _readback_governance(),
     }
