@@ -83,12 +83,30 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert attempt_body["event"]["status"] == "dispatch_deferred"
     assert attempt_body["event"]["dispatch"]["engine"] == "not_implemented"
     assert attempt_body["event"]["governance"]["execution_authority"] is False
+    stable_return = attempt_body["event"]["latest_stable_return"]
+    assert stable_return["kind"] == "reactor.stable_return.receipt"
+    assert stable_return["status"] == "settled"
+    assert stable_return["route"] == "dispatch_engine"
+    assert stable_return["source_receipt_kind"] == "reactor.dispatch_attempt.receipt"
+    assert stable_return["returned_to_stable_state"] is True
+    assert stable_return["execution_started"] is False
+    assert stable_return["dispatch_applied"] is False
+    assert stable_return["governance"]["execution_authority"] is False
+    assert attempt_body["event"]["latest_receipt"]["receipt_id"] == stable_return["receipt_id"]
+
+    stable_return_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.stable_return.receipt"},
+    )
+    assert stable_return_list.status_code == 200
+    assert {item["event_id"] for item in stable_return_list.json()["items"]} == {event_id}
 
     status = client.get("/reactor/status")
     assert status.status_code == 200
     assert status.json()["total"] == 1
     assert status.json()["trigger_source_counts"] == {"mission_queue": 1}
     assert status.json()["status_counts"] == {"dispatch_deferred": 1}
+    assert status.json()["stable_return_counts"] == {"settled": 1}
 
 
 def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Path) -> None:

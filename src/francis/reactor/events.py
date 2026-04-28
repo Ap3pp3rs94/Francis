@@ -280,6 +280,22 @@ def _filtered_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in receipt.items() if value not in ("", {}, [])}
 
 
+def _receipt_reference(receipt: dict[str, Any]) -> str:
+    for key in (
+        "deadletter_id",
+        "approval_id",
+        "candidate_id",
+        "exhaustion_id",
+        "blocker_id",
+        "receipt_id",
+        "event_id",
+    ):
+        value = _safe_str(receipt.get(key)).strip()
+        if value:
+            return value
+    return ""
+
+
 def _dispatch_attempt_receipt(
     *,
     event_id: str,
@@ -475,6 +491,136 @@ def _retry_exhausted_receipt(
             "retry_started": False,
             "deadletter_enqueued": False,
             "applied": False,
+        }
+    )
+
+
+def _stable_return_route(
+    *,
+    status: str,
+    blocker: dict[str, Any] | None,
+    approval_decision: dict[str, Any] | None,
+    approval_request: dict[str, Any] | None,
+    deadletter_enqueue: dict[str, Any] | None,
+    retry_candidate: dict[str, Any] | None,
+    retry_exhausted: dict[str, Any] | None,
+) -> str:
+    if deadletter_enqueue:
+        return "deadletter_queue"
+    if retry_exhausted:
+        return "deadletter_candidate"
+    if retry_candidate:
+        return "retry_backoff"
+    if approval_request:
+        return "approval_queue"
+    if approval_decision and approval_decision.get("approval_allows_dispatch") is False:
+        return "operator_review"
+    if blocker:
+        return _safe_str(blocker.get("route")).strip() or "operator_review"
+    if status == "dispatch_deferred":
+        return "dispatch_engine"
+    return "operator_review"
+
+
+def _stable_return_source_receipt(
+    *,
+    dispatch_receipt: dict[str, Any],
+    approval_decision: dict[str, Any] | None,
+    approval_request: dict[str, Any] | None,
+    deadletter_enqueue: dict[str, Any] | None,
+    retry_candidate: dict[str, Any] | None,
+    retry_exhausted: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return (
+        deadletter_enqueue
+        or approval_request
+        or approval_decision
+        or retry_exhausted
+        or retry_candidate
+        or dispatch_receipt
+    )
+
+
+def _stable_return_receipt(
+    *,
+    event_id: str,
+    status: str,
+    outcome: str,
+    stable_state: str,
+    next_step: str,
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+    dispatch_receipt: dict[str, Any],
+    blocker: dict[str, Any] | None,
+    approval_decision: dict[str, Any] | None,
+    approval_request: dict[str, Any] | None,
+    deadletter_enqueue: dict[str, Any] | None,
+    retry_candidate: dict[str, Any] | None,
+    retry_exhausted: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source_receipt = _stable_return_source_receipt(
+        dispatch_receipt=dispatch_receipt,
+        approval_decision=approval_decision,
+        approval_request=approval_request,
+        deadletter_enqueue=deadletter_enqueue,
+        retry_candidate=retry_candidate,
+        retry_exhausted=retry_exhausted,
+    )
+    route = _stable_return_route(
+        status=status,
+        blocker=blocker,
+        approval_decision=approval_decision,
+        approval_request=approval_request,
+        deadletter_enqueue=deadletter_enqueue,
+        retry_candidate=retry_candidate,
+        retry_exhausted=retry_exhausted,
+    )
+    gate = (
+        _safe_str(source_receipt.get("gate")).strip()
+        or _safe_str((blocker or {}).get("gate")).strip()
+        or _safe_str(stable_state).strip()
+    )
+    return _filtered_receipt(
+        {
+            "kind": "reactor.stable_return.receipt",
+            "receipt_id": f"{event_id}_stable_return_{attempt_count}",
+            "event_id": event_id,
+            "status": "settled",
+            "dispatch_status": status,
+            "outcome": outcome,
+            "route": route,
+            "gate": gate,
+            "stable_state": stable_state,
+            "next_step": next_step,
+            "source_receipt_kind": source_receipt.get("kind"),
+            "source_receipt_ref": _receipt_reference(source_receipt),
+            "attempt_count": attempt_count,
+            "actor": actor,
+            "reason": reason,
+            "ts": ts,
+            "returned_to_stable_state": True,
+            "approval_queued": approval_request is not None,
+            "approval_status": (approval_decision or {}).get("status"),
+            "deadletter_enqueued": deadletter_enqueue is not None,
+            "retry_candidate": retry_candidate is not None,
+            "retry_exhausted": retry_exhausted is not None,
+            "execution_started": False,
+            "dispatch_applied": False,
+            "retry_started": False,
+            "escalation_started": False,
+            "memory_write": False,
+            "governance": {
+                "gate": "reactor_stable_return_receipt",
+                "execution_authority": False,
+                "dispatch_authority": False,
+                "approval_authority": False,
+                "retry_authority": False,
+                "deadletter_resolution_authority": False,
+                "escalation_authority": False,
+                "memory_write": False,
+            },
         }
     )
 
@@ -847,6 +993,24 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         bounds=bounds,
         blocker=blocker,
     )
+    stable_return = _stable_return_receipt(
+        event_id=event_key,
+        status=status,
+        outcome=outcome,
+        stable_state=stable_state,
+        next_step=next_step,
+        actor=actor,
+        reason=reason,
+        attempt_count=attempt_count,
+        ts=ts,
+        dispatch_receipt=receipt,
+        blocker=blocker,
+        approval_decision=approval_decision,
+        approval_request=approval_request,
+        deadletter_enqueue=deadletter_enqueue,
+        retry_candidate=retry_candidate,
+        retry_exhausted=retry_exhausted,
+    )
     updated_dispatch = {
         **dispatch,
         "status": status,
@@ -937,6 +1101,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         receipts.append(retry_exhausted)
     if deadletter_enqueue:
         receipts.append(deadletter_enqueue)
+    receipts.append(stable_return)
     raw_blockers = record.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
     if blocker is not None:
@@ -950,15 +1115,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
     record["latest_dispatch_attempt_receipt"] = receipt
-    record["latest_receipt"] = (
-        approval_request
-        or approval_decision
-        or deadletter_enqueue
-        or deadletter_candidate
-        or retry_exhausted
-        or retry_candidate
-        or receipt
-    )
+    record["latest_stable_return"] = stable_return
+    record["latest_receipt"] = stable_return
     if blocker is not None:
         record["blockers"] = blockers
         record["latest_blocker"] = blocker
@@ -1010,6 +1168,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         retry_exhaustions.append(retry_exhausted)
         record["retry_exhaustions"] = retry_exhaustions
         record["latest_retry_exhausted"] = retry_exhausted
+    raw_stable_returns = record.get("stable_returns")
+    stable_returns = raw_stable_returns if isinstance(raw_stable_returns, list) else []
+    stable_returns.append(stable_return)
+    record["stable_returns"] = stable_returns
     raw_governance = record.get("governance")
     governance = raw_governance if isinstance(raw_governance, dict) else {}
     governance.update(
@@ -1124,6 +1286,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_receipt",
         "latest_dispatch_attempt_receipt",
         "latest_approval_decision",
+        "latest_stable_return",
         "latest_deadletter_enqueue",
         "latest_deadletter_candidate",
         "latest_retry_candidate",
@@ -1137,14 +1300,6 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         receipt = _as_dict(receipt_item)
         kinds.add(_safe_str(receipt.get("kind")).strip().lower())
     return {kind for kind in kinds if kind}
-
-
-def _receipt_reference(receipt: dict[str, Any]) -> str:
-    for key in ("approval_id", "candidate_id", "exhaustion_id", "blocker_id", "receipt_id", "event_id"):
-        value = _safe_str(receipt.get(key)).strip()
-        if value:
-            return value
-    return ""
 
 
 def _review_action(route: str, status: str, gate: str) -> str:
@@ -1337,6 +1492,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_queue_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_exhausted_counts: dict[str, int] = {}
+    stable_return_counts: dict[str, int] = {}
     deadletters = list_deadletters(limit=5000)
     for deadletter in deadletters:
         deadletter_status = _safe_str(deadletter.get("status")).strip() or "unknown"
@@ -1386,6 +1542,11 @@ def reactor_status() -> dict[str, Any]:
         retry_exhausted_status = _safe_str(retry_exhausted.get("status")).strip()
         if retry_exhausted_status:
             retry_exhausted_counts[retry_exhausted_status] = retry_exhausted_counts.get(retry_exhausted_status, 0) + 1
+        raw_stable_return = item.get("latest_stable_return")
+        stable_return = raw_stable_return if isinstance(raw_stable_return, dict) else {}
+        stable_return_status = _safe_str(stable_return.get("status")).strip()
+        if stable_return_status:
+            stable_return_counts[stable_return_status] = stable_return_counts.get(stable_return_status, 0) + 1
     return {
         "ok": True,
         "status": "ready",
@@ -1401,6 +1562,7 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,
         "retry_exhausted_counts": retry_exhausted_counts,
+        "stable_return_counts": stable_return_counts,
         "dispatch_engine": "not_implemented",
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {

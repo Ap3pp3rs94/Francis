@@ -561,6 +561,18 @@ not retry work, escalate work, resolve deadletters, execute dispatches, write
 memory, or grant retry, escalation, dispatch, execution, or deadletter
 resolution authority.
 
+As of `2026-04-27`, Reactor dispatch attempts also preserve an explicit stable
+return receipt after every attempted dispatch path. Each dispatch attempt now
+appends `reactor.stable_return.receipt`, records the route that currently holds
+the event (`dispatch_engine`, `approval_queue`, `operator_review`,
+`retry_backoff`, or `deadletter_queue`), links back to the source receipt that
+caused that settled state, exposes `latest_stable_return`, keeps
+`latest_receipt` aligned to that terminal-for-now receipt, and summarizes
+`stable_return_counts` through `/reactor/status`. This is stable-state readback
+only: it does not implement dispatch execution, verification, retry scheduling,
+deadletter resolution/escalation, memory writes, approval decisions, or any new
+execution, dispatch, retry, escalation, or approval authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4434,6 +4446,25 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+stable-return receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `failed once while existing assertions still expected the previous
+  latest receipt kinds; passed after updating the Reactor contract tests for
+  reactor.stable_return.receipt as the latest terminal-for-now receipt`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`; Ruff reported non-blocking cache write warnings under
+  `.ruff_cache`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 deadletter queue baseline slice:
@@ -8994,10 +9025,10 @@ These remain true and should block any "finished" claim:
   Reactor dispatch attempts can create a pending approval request when missing,
   and reconcile terminal approval decisions back into deferred dispatch or
   operator-review-blocked state, and deadletter candidates now persist real
-  Reactor deadletter queue items, but bounded dispatch execution, verification,
+  Reactor deadletter queue items, and every dispatch attempt now records a
+  stable-return receipt, but bounded dispatch execution, verification,
   real retry scheduling/backoff execution, deadletter resolution/escalation,
-  stable-return receipts, and broader operator visibility are still remaining
-  work
+  and broader operator visibility are still remaining work
 
 ## 6. Update rule
 
