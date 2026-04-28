@@ -549,6 +549,16 @@ dispatch gating only: it does not decide approvals, execute work, write memory,
 schedule retries, enqueue deadletters, or grant approval, dispatch, or execution
 authority.
 
+As of `2026-04-28`, the rejected approval-decision path also has focused API
+proof. The API test covers a critical Reactor event that queues an approval,
+receives a rejected approval decision, and then remains
+`dispatch_blocked` / `approval_rejected` on a later dispatch attempt with
+operator-review routing, approval-denied verification, stable-return readback,
+status counts, and no dispatch-execution receipt. This is test-only evidence
+for the existing denied path; it adds no route, no runtime behavior, no
+approval-decision authority, no execution authority, no retry/deadletter
+handoff, no UI claim, and no memory-write authority.
+
 As of `2026-04-27`, Reactor deadletter candidates can now create a real durable
 deadletter queue item. Budget-exhausted dispatch blockers and retry-exhausted
 dispatch attempts write one idempotent `reactor.deadletter.item` under the
@@ -10010,6 +10020,22 @@ resume dispatch slice:
 - `python -m ruff format --check src\francis\reactor\dispatch.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py`
   Result: `passed`
 - `python -m mypy src\francis\reactor\dispatch.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-28` Reactor rejected approval
+decision API proof slice:
+
+- `python -m pytest tests\test_api_reactor.py::test_reactor_dispatch_attempt_keeps_rejected_decision_in_operator_review -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_dispatch_attempt_reconciles_approved_decision tests\test_api_reactor.py::test_reactor_dispatch_attempt_keeps_rejected_decision_in_operator_review tests\test_api_reactor.py::test_reactor_approval_decision_event_records_resume_receipt_without_execution tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_blocks_rejected_approval_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_reactor.py`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

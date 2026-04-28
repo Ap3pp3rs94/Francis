@@ -2365,6 +2365,123 @@ def test_reactor_dispatch_attempt_reconciles_approved_decision(
     assert review_queue.json()["available_total"] == 0
 
 
+def test_reactor_dispatch_attempt_keeps_rejected_decision_in_operator_review(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write"], _APPROVAL_ACTOR: ["approvals.decide"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Rejected Reactor work must remain blocked",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    first_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "queue missing approval for rejected Reactor proof",
+        },
+    )
+    assert first_attempt.status_code == 200
+    approval_id = first_attempt.json()["event"]["trigger"]["approval_id"]
+    assert approval_id
+
+    rejected = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "reject",
+            "actor": _APPROVAL_ACTOR,
+            "comment": "rejected for Reactor denial proof",
+        },
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["ok"] is True
+    assert rejected.json()["status"] == "rejected"
+
+    resumed = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "honor rejected approval decision",
+        },
+    )
+    assert resumed.status_code == 200
+    body = resumed.json()
+    assert body["ok"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "approval_rejected"
+    assert event["dispatch"]["allowed"] is False
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["engine"] == "not_implemented"
+    assert event["dispatch"]["blocked_route"] == "operator_review"
+    assert event["dispatch"]["blocker"]["gate"] == "approval_rejected"
+    assert event["dispatch"]["blocker"]["route"] == "operator_review"
+    assert "dispatch_execution_receipt" not in event["dispatch"]
+
+    approval_decision = event["dispatch"]["approval_decision"]
+    assert approval_decision["kind"] == "reactor.approval_decision.receipt"
+    assert approval_decision["approval_id"] == approval_id
+    assert approval_decision["status"] == "rejected"
+    assert approval_decision["approval_allows_dispatch"] is False
+    assert approval_decision["execution_started"] is False
+    assert approval_decision["applied"] is False
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["approval_status"] == "rejected"
+
+    verification = event["latest_verification_receipt"]
+    assert verification["route"] == "operator_review"
+    assert verification["verification_status"] == "not_run"
+    assert verification["verification_outcome"] == "approval_denied"
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is False
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "operator_review"
+    assert stable_return["stable_state"] == "approval_rejected"
+    assert stable_return["approval_status"] == "rejected"
+
+    operator_review = client.get("/reactor/review_queue", params={"route": "operator_review"})
+    assert operator_review.status_code == 200
+    assert operator_review.json()["available_total"] == 1
+    assert operator_review.json()["items"][0]["review"]["gate"] == "approval_rejected"
+    approval_review = client.get("/reactor/review_queue", params={"route": "approval_queue"})
+    assert approval_review.status_code == 200
+    assert approval_review.json()["available_total"] == 0
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["status_counts"] == {"dispatch_blocked": 1}
+    assert status.json()["blocker_route_counts"] == {"operator_review": 1}
+    assert status.json()["approval_decision_counts"] == {"rejected": 1}
+    assert status.json()["verification_outcome_counts"] == {"approval_denied": 1}
+
+
 def test_reactor_approval_decision_event_records_resume_receipt_without_execution(
     monkeypatch,
     tmp_path: Path,
