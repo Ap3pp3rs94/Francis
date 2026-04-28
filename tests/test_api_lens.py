@@ -78,11 +78,48 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "capture_authority": False,
         "new_sensing_authority": False,
     }
-    assert body["command_palette"]["status"] == "contract_ready"
+    assert body["command_palette"]["status"] == "readback_ready"
     assert body["command_palette"]["summon_anywhere"] is False
+    assert body["command_palette"]["availability"] == "chat_ui_only"
+    assert body["command_palette"]["command_total"] == len(body["command_palette"]["commands"])
+    assert body["command_palette"]["command_total"] >= 15
+    assert body["command_palette"]["groups"]["Navigation"] >= 8
+    assert body["command_palette"]["groups"]["Control"] >= 5
+    assert body["command_palette"]["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "mutation_authority_granted": False,
+    }
+    command_ids = {item["id"] for item in body["command_palette"]["commands"]}
+    assert {
+        "nav.briefing",
+        "nav.approvals",
+        "nav.orb",
+        "mode.observe",
+        "mode.assist",
+        "mode.pilot",
+        "mode.away",
+        "observer.scan",
+    }.issubset(command_ids)
+    observer_scan = next(item for item in body["command_palette"]["commands"] if item["id"] == "observer.scan")
+    assert observer_scan["route"] == "/system/observer/scan"
+    assert observer_scan["method"] == "POST"
+    assert observer_scan["mutates"] is True
+    assert observer_scan["receipt_kind"] == "observer.scan"
+    assert observer_scan["execution_authority"] is False
+    pilot_mode = next(item for item in body["command_palette"]["commands"] if item["id"] == "mode.pilot")
+    assert pilot_mode["route"] == "/system/operator_mode"
+    assert pilot_mode["target_mode"] == "pilot"
+    assert pilot_mode["write_guard"] == "system.write plus operator posture"
     assert body["mode_selector"]["status"] == "readback_ready"
     assert body["pilot_indicator"]["status"] == "standby"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
+    assert _criterion(body, "command_palette_commands")["status"] == "readback_ready"
+    assert _criterion(body, "command_palette_commands")["command_count"] == body["command_palette"]["command_total"]
     assert _criterion(body, "mode_visibility")["status"] == "readback_ready"
     assert _criterion(body, "approvals_view")["status"] == "readback_ready"
     assert _criterion(body, "incident_view")["status"] == "readback_ready"
@@ -124,6 +161,9 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     body = response.json()
     assert body["approvals_view"]["pending_count"] == 1
     assert body["approvals_view"]["status"] == "attention"
+    approvals_command = next(item for item in body["command_palette"]["commands"] if item["id"] == "nav.approvals")
+    assert approvals_command["attention_count"] == 1
+    assert approvals_command["route"] == "/approvals/list?status=pending"
     assert body["approvals_view"]["items"][0]["status"] == "pending"
     assert body["approvals_view"]["items"][0]["action"] == "operations.run"
     assert body["approvals_view"]["items"][0]["payload_summary"]["risk_tier"] == "normal"

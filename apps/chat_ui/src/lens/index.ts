@@ -22,11 +22,39 @@ export type LensHud = {
   route?: string;
 };
 
+export type LensPaletteCommand = {
+  id?: string;
+  label?: string;
+  description?: string;
+  group?: string;
+  keywords?: string;
+  status?: string;
+  action?: string;
+  route?: string;
+  method?: string;
+  surface?: string;
+  mutates?: boolean;
+  requires_confirmation?: boolean;
+  write_guard?: string;
+  target_mode?: string;
+  receipt_kind?: string;
+  attention_count?: number;
+  execution_authority?: boolean;
+  approval_decision_authority?: boolean;
+  memory_write?: boolean;
+};
+
 export type LensCommandPalette = {
   status?: string;
+  availability?: string;
   summon_anywhere?: boolean;
   message?: string;
   route?: string;
+  local_surface?: string;
+  command_total: number;
+  groups: Record<string, number>;
+  commands: LensPaletteCommand[];
+  governance: Record<string, unknown>;
 };
 
 export type LensModeSelector = {
@@ -77,6 +105,7 @@ export type LensStage6Criterion = {
   id?: string;
   status?: string;
   evidence: string[];
+  command_count?: number;
   pending_count?: number;
   observer_active_count?: number;
   reactor_review_queue_total?: number;
@@ -262,10 +291,49 @@ function parseCommandPalette(value: unknown): LensCommandPalette {
   const raw = safeRecord(value);
   return {
     status: safeString(raw.status).trim(),
+    availability: safeString(raw.availability).trim(),
     summon_anywhere: safeBoolean(raw.summon_anywhere, false),
     message: safeString(raw.message).trim(),
     route: safeString(raw.route).trim(),
+    local_surface: safeString(raw.local_surface).trim(),
+    command_total: safeNumber(raw.command_total, 0),
+    groups: parseNumberMap(raw.groups),
+    commands: parsePaletteCommands(raw.commands),
+    governance: safeRecord(raw.governance),
   };
+}
+
+function parsePaletteCommand(value: unknown): LensPaletteCommand | null {
+  if (!isRecord(value)) return null;
+  const id = safeString(value.id).trim();
+  const label = safeString(value.label).trim();
+  if (!id || !label) return null;
+  return {
+    id,
+    label,
+    description: safeString(value.description).trim() || undefined,
+    group: safeString(value.group).trim() || undefined,
+    keywords: safeString(value.keywords).trim() || undefined,
+    status: safeString(value.status).trim() || undefined,
+    action: safeString(value.action).trim() || undefined,
+    route: safeString(value.route).trim() || undefined,
+    method: safeString(value.method).trim() || undefined,
+    surface: safeString(value.surface).trim() || undefined,
+    mutates: safeBoolean(value.mutates, false),
+    requires_confirmation: safeBoolean(value.requires_confirmation, false),
+    write_guard: safeString(value.write_guard).trim() || undefined,
+    target_mode: safeString(value.target_mode).trim() || undefined,
+    receipt_kind: safeString(value.receipt_kind).trim() || undefined,
+    attention_count: safeNumber(value.attention_count, 0),
+    execution_authority: safeBoolean(value.execution_authority, false),
+    approval_decision_authority: safeBoolean(value.approval_decision_authority, false),
+    memory_write: safeBoolean(value.memory_write, false),
+  };
+}
+
+function parsePaletteCommands(value: unknown): LensPaletteCommand[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(parsePaletteCommand).filter((item): item is LensPaletteCommand => item !== null);
 }
 
 function parseModeSelector(value: unknown): LensModeSelector {
@@ -338,6 +406,7 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
     id,
     status: safeString(value.status).trim(),
     evidence: safeStringList(value.evidence),
+    command_count: safeOptionalNumber(value.command_count),
     pending_count: safeOptionalNumber(value.pending_count),
     observer_active_count: safeOptionalNumber(value.observer_active_count),
     reactor_review_queue_total: safeOptionalNumber(value.reactor_review_queue_total),

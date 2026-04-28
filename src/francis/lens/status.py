@@ -240,6 +240,233 @@ def _pilot_indicator(mode: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _palette_command(
+    command_id: str,
+    label: str,
+    description: str,
+    group: str,
+    *,
+    route: str = "",
+    method: str = "GET",
+    surface: str = "",
+    action: str = "open_surface",
+    keywords: str = "",
+    mutates: bool = False,
+    write_guard: str = "",
+    target_mode: str = "",
+    receipt_kind: str = "",
+    attention_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "id": command_id,
+        "label": label,
+        "description": description,
+        "group": group,
+        "keywords": keywords,
+        "status": "available",
+        "action": action,
+        "route": route,
+        "method": method,
+        "surface": surface,
+        "mutates": mutates,
+        "requires_confirmation": mutates,
+        "write_guard": write_guard,
+        "target_mode": target_mode,
+        "receipt_kind": receipt_kind,
+        "attention_count": attention_count,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+    }
+
+
+def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
+    pending_approvals = _safe_int(approvals.get("pending_count"))
+    commands = [
+        _palette_command(
+            "nav.briefing",
+            "Request Continuity Briefing",
+            "Open the shift briefing and return-to-work recommendations.",
+            "Navigation",
+            route="/continuity/briefing",
+            surface="chat_ui.shift_briefing",
+            keywords="briefing continuity mission return to work handoff",
+        ),
+        _palette_command(
+            "nav.takeover",
+            "Open Takeover Feed",
+            "Inspect active Pilot scope, live execution, and hand-back guidance.",
+            "Navigation",
+            route="/operations/list",
+            surface="chat_ui.takeover_feed",
+            keywords="takeover pilot delegated execution interrupt hand back",
+        ),
+        _palette_command(
+            "nav.telemetry",
+            "Open Telemetry Status",
+            "Inspect visible sensing posture and continuation state.",
+            "Navigation",
+            route="/system/operator_mode",
+            surface="chat_ui.telemetry_status",
+            keywords="telemetry away sensing continuation status posture",
+        ),
+        _palette_command(
+            "nav.approvals",
+            "Open Approvals",
+            "Review the approval queue and make governance decisions.",
+            "Navigation",
+            route="/approvals/list?status=pending",
+            surface="chat_ui.approvals",
+            keywords="approval review queue governance",
+            attention_count=pending_approvals,
+        ),
+        _palette_command(
+            "nav.operations",
+            "Open Operations",
+            "Inspect queued, blocked, and running task activity.",
+            "Navigation",
+            route="/operations/list",
+            surface="chat_ui.operations",
+            keywords="operations tasks backlog execution",
+        ),
+        _palette_command(
+            "nav.orb",
+            "Open ORB",
+            "Inspect the canonical flow, incidents, and runtime posture.",
+            "Navigation",
+            route="/system/orb",
+            surface="chat_ui.orb",
+            keywords="orb system incidents runtime",
+        ),
+        _palette_command(
+            "nav.continuity-ledger",
+            "Open Continuity Ledger",
+            "Inspect raw local continuity receipts without treating them as synthesized memory.",
+            "Navigation",
+            route="/continuity/ledger",
+            surface="chat_ui.continuity_ledger",
+            keywords="continuity ledger receipts memory trace audit",
+        ),
+        _palette_command(
+            "nav.plugins",
+            "Open Plugins",
+            "Inspect plugins, tools, and governance outcomes.",
+            "Navigation",
+            route="/plugins/list",
+            surface="chat_ui.plugins",
+            keywords="plugins tools browser",
+        ),
+        _palette_command(
+            "nav.settings",
+            "Open Settings",
+            "Adjust console preferences and voice settings.",
+            "Navigation",
+            route="/system/config",
+            surface="chat_ui.settings",
+            keywords="settings preferences voice",
+        ),
+        _palette_command(
+            "chat.new",
+            "Start New Chat",
+            "Open a fresh Francis conversation.",
+            "Chat",
+            surface="chat_ui.chat",
+            action="create_local_conversation",
+            keywords="new chat session",
+        ),
+        _palette_command(
+            "mode.observe",
+            "Switch to Observe",
+            "Declare read-only posture with no claimed write authority.",
+            "Control",
+            route="/system/operator_mode",
+            method="POST",
+            action="declare_control_mode",
+            keywords="observe readonly mode",
+            mutates=True,
+            write_guard="system.write plus operator posture",
+            target_mode="observe",
+        ),
+        _palette_command(
+            "mode.assist",
+            "Switch to Assist",
+            "Return to collaborative operator posture.",
+            "Control",
+            route="/system/operator_mode",
+            method="POST",
+            action="declare_control_mode",
+            keywords="assist collaborative mode",
+            mutates=True,
+            write_guard="system.write plus operator posture",
+            target_mode="assist",
+        ),
+        _palette_command(
+            "mode.pilot",
+            "Switch to Pilot",
+            "Declare takeover posture and light the pilot indicator.",
+            "Control",
+            route="/system/operator_mode",
+            method="POST",
+            action="declare_control_mode",
+            keywords="pilot takeover active indicator",
+            mutates=True,
+            write_guard="system.write plus operator posture",
+            target_mode="pilot",
+        ),
+        _palette_command(
+            "mode.away",
+            "Switch to Away",
+            "Declare away posture for continuity while you step out.",
+            "Control",
+            route="/system/operator_mode",
+            method="POST",
+            action="declare_control_mode",
+            keywords="away night shift mode",
+            mutates=True,
+            write_guard="system.write plus operator posture",
+            target_mode="away",
+        ),
+        _palette_command(
+            "observer.scan",
+            "Record Observer Scan",
+            "Trigger an explicit receipted observer scan and refresh the continuity surfaces.",
+            "Control",
+            route="/system/observer/scan",
+            method="POST",
+            action="record_observer_scan",
+            keywords="observer scan receipt continuity observability",
+            mutates=True,
+            write_guard="explicit operator action plus system.write",
+            receipt_kind="observer.scan",
+        ),
+    ]
+    group_counts: dict[str, int] = {}
+    for command in commands:
+        group = _safe_str(command.get("group")).strip() or "Other"
+        group_counts[group] = group_counts.get(group, 0) + 1
+
+    return {
+        "status": "readback_ready",
+        "availability": "chat_ui_only",
+        "summon_anywhere": False,
+        "message": "Palette command readback exists; OS-wide summon and overlay binding are not implemented here.",
+        "route": "/lens/status",
+        "local_surface": "chat_ui.command_palette",
+        "command_total": len(commands),
+        "groups": group_counts,
+        "commands": commands,
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _stage6_readiness(
     *,
     mode: dict[str, Any],
@@ -247,11 +474,18 @@ def _stage6_readiness(
     incidents: dict[str, Any],
     missions: dict[str, Any],
     reactor: dict[str, Any],
+    command_palette: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
         "criteria": [
+            {
+                "id": "command_palette_commands",
+                "status": "readback_ready" if _as_list(command_palette.get("commands")) else "missing",
+                "evidence": ["/lens/status"],
+                "command_count": _safe_int(command_palette.get("command_total")),
+            },
             {
                 "id": "mode_visibility",
                 "status": "readback_ready" if mode else "missing",
@@ -313,6 +547,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         missions=missions,
         reactor=reactor,
     )
+    command_palette = _command_palette_surface(approvals=approvals)
 
     return {
         "ok": True,
@@ -326,12 +561,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "available_modes": operator.get("available_modes", []),
         "scope": scope,
         "hud": hud,
-        "command_palette": {
-            "status": "contract_ready",
-            "summon_anywhere": False,
-            "message": "Readback contract exists; OS-wide summon and overlay binding are not implemented here.",
-            "route": "/lens/status",
-        },
+        "command_palette": command_palette,
         "mode_selector": {
             "status": "readback_ready",
             "active_mode": _safe_str(mode.get("id")).strip(),
@@ -356,6 +586,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             incidents=incidents,
             missions=missions,
             reactor=reactor,
+            command_palette=command_palette,
         ),
         "governance": {
             "gate": "lens_readback_only",

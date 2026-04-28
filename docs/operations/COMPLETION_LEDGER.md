@@ -10948,6 +10948,38 @@ binding:
 - `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
   Result: `passed`
 
+As of `2026-04-28`, the Lens readback contract also exposes the current
+chat-UI command palette as bounded command metadata. `GET /lens/status` now
+includes command ids, labels, groups, keywords, local UI surfaces, backing
+routes, methods, attention counts, mutation flags, write guards, receipt kinds,
+and per-command authority denials for the existing navigation, chat, mode, and
+explicit observer-scan commands. This gives Stage 6 a truthful command-palette
+readback list without claiming an OS-level palette, hotkey summon, overlay
+binding, execution authority, approval-decision authority, memory-write
+authority, promotion authority, telemetry authority, or policy authority. Mode
+declaration and observer-scan commands remain represented as guarded existing
+routes, not newly granted capability.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens command palette
+readback list:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens tests\test_api_lens.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
