@@ -10,16 +10,20 @@ from francis.reactor.events import (
     record_dispatch_attempt,
     reactor_status,
 )
+from francis.reactor.retries import get_retry_schedule, list_retry_schedules, schedule_retry
 
 __all__ = [
     "VALID_TRIGGER_SOURCES",
     "enqueue_event",
     "get_deadletter",
     "get_event",
+    "get_retry_schedule",
     "list_deadletters",
     "list_events",
+    "list_retry_schedules",
     "queue_deadletter",
     "reactor_review_queue",
     "record_dispatch_attempt",
     "reactor_status",
+    "schedule_retry",
 ]

@@ -282,12 +282,101 @@ def test_reactor_review_queue_route_projects_readonly_items(monkeypatch, tmp_pat
     assert by_id[approval_id]["review"]["gate"] == "approval_required"
     assert by_id[approval_id]["trigger"]["approval_id"] == "appr_reactor_review_queue"
     assert by_id[retry_id]["review"]["route"] == "retry_backoff"
-    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry_candidate.receipt"
+    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry.schedule.receipt"
 
     retry_only = client.get("/reactor/review_queue", params={"route": "retry_backoff"})
     assert retry_only.status_code == 200
     assert retry_only.json()["available_total"] == 1
     assert retry_only.json()["items"][0]["event_id"] == retry_id
+
+
+def test_reactor_retry_schedule_readback_routes(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Deferred Reactor dispatch needs a durable retry schedule",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 1,
+            "max_retries": 2,
+            "backoff_seconds": 45,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "schedule retry without starting retry execution",
+        },
+    )
+    assert attempted.status_code == 200
+    event = attempted.json()["event"]
+    retry_candidate = event["dispatch"]["retry_candidate"]
+    retry_schedule = event["dispatch"]["retry_schedule"]
+    retry_schedule_receipt = event["dispatch"]["retry_schedule_receipt"]
+    retry_schedule_id = retry_schedule["retry_schedule_id"]
+    assert retry_candidate["retry_scheduled"] is True
+    assert retry_schedule["kind"] == "reactor.retry_schedule.item"
+    assert retry_schedule["candidate_id"] == retry_candidate["candidate_id"]
+    assert retry_schedule["status"] == "scheduled"
+    assert retry_schedule["due_after_ts"] == retry_candidate["next_retry_after_ts"]
+    assert retry_schedule["retry_started"] is False
+    assert retry_schedule["execution_started"] is False
+    assert retry_schedule["governance"]["retry_execution_authority"] is False
+    assert retry_schedule_receipt["kind"] == "reactor.retry.schedule.receipt"
+    assert retry_schedule_receipt["retry_schedule_id"] == retry_schedule_id
+    assert retry_schedule_receipt["retry_scheduled"] is True
+    assert event["latest_verification_receipt"]["verification_outcome"] == "retry_scheduled"
+    assert event["latest_stable_return"]["source_receipt_kind"] == "reactor.retry.schedule.receipt"
+    assert event["latest_stable_return"]["retry_scheduled"] is True
+
+    listed = client.get("/reactor/retries/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["ok"] is True
+    assert listed_body["total"] == 1
+    assert listed_body["items"][0]["retry_schedule_id"] == retry_schedule_id
+    assert listed_body["items"][0]["event_id"] == event_id
+    assert listed_body["governance"]["retry_execution_authority"] is False
+
+    scheduled_only = client.get("/reactor/retries/list", params={"status": "scheduled"})
+    assert scheduled_only.status_code == 200
+    assert {item["retry_schedule_id"] for item in scheduled_only.json()["items"]} == {retry_schedule_id}
+
+    fetched = client.get("/reactor/retries/get", params={"id": retry_schedule_id})
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["item"]["retry_schedule_id"] == retry_schedule_id
+    assert fetched_body["item"]["retry_started"] is False
+    assert fetched_body["item"]["execution_started"] is False
+
+    schedule_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.retry.schedule.receipt"},
+    )
+    assert schedule_receipts.status_code == 200
+    assert {item["event_id"] for item in schedule_receipts.json()["items"]} == {event_id}
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["retry_schedule_counts"] == {"scheduled": 1}
+    assert status.json()["retry_schedule_total"] == 1
 
 
 def test_reactor_deadletter_queue_readback_routes(monkeypatch, tmp_path: Path) -> None:

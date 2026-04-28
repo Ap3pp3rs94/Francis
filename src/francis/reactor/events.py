@@ -11,6 +11,7 @@ from francis.governance import approvals
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
 from francis.reactor.deadletters import list_deadletters, queue_deadletter
+from francis.reactor.retries import list_retry_schedules, schedule_retry
 
 VALID_TRIGGER_SOURCES = frozenset(
     {
@@ -502,6 +503,7 @@ def _stable_return_route(
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
+    retry_schedule: dict[str, Any] | None,
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> str:
@@ -509,6 +511,8 @@ def _stable_return_route(
         return "deadletter_queue"
     if retry_exhausted:
         return "deadletter_candidate"
+    if retry_schedule:
+        return "retry_backoff"
     if retry_candidate:
         return "retry_backoff"
     if approval_request:
@@ -528,6 +532,7 @@ def _stable_return_source_receipt(
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
+    retry_schedule: dict[str, Any] | None,
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -536,6 +541,7 @@ def _stable_return_source_receipt(
         or approval_request
         or approval_decision
         or retry_exhausted
+        or retry_schedule
         or retry_candidate
         or dispatch_receipt
     )
@@ -557,6 +563,7 @@ def _stable_return_receipt(
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
+    retry_schedule: dict[str, Any] | None,
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
     verification_receipt: dict[str, Any] | None = None,
@@ -566,6 +573,7 @@ def _stable_return_receipt(
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -575,6 +583,7 @@ def _stable_return_receipt(
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -609,6 +618,7 @@ def _stable_return_receipt(
             "approval_status": (approval_decision or {}).get("status"),
             "deadletter_enqueued": deadletter_enqueue is not None,
             "retry_candidate": retry_candidate is not None,
+            "retry_scheduled": retry_schedule is not None,
             "retry_exhausted": retry_exhausted is not None,
             "execution_started": False,
             "dispatch_applied": False,
@@ -637,6 +647,7 @@ def _verification_state(
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
+    retry_schedule: dict[str, Any] | None,
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> tuple[str, str, str]:
@@ -651,6 +662,12 @@ def _verification_state(
             "not_run",
             "retry_budget_exhausted",
             "retry_exhaustion_requires_review_before_recovery_or_completion_claim",
+        )
+    if retry_schedule:
+        return (
+            "not_run",
+            "retry_scheduled",
+            "retry_schedule_item_waits_for_due_time_before_execution_claim",
         )
     if retry_candidate:
         return (
@@ -693,6 +710,7 @@ def _verification_receipt(
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
+    retry_schedule: dict[str, Any] | None,
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -701,6 +719,7 @@ def _verification_receipt(
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -710,6 +729,7 @@ def _verification_receipt(
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -720,6 +740,7 @@ def _verification_receipt(
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -1072,6 +1093,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     deadletter_candidate = None
     deadletter_item = None
     deadletter_enqueue = None
+    retry_schedule_item = None
+    retry_schedule_receipt = None
     if blocker is not None and blocker.get("route") == "deadletter_candidate":
         deadletter_candidate = _deadletter_candidate_receipt(
             event_id=event_key,
@@ -1103,6 +1126,23 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         if retry_exhausted is not None:
             stable_state = _safe_str(retry_exhausted.get("stable_state")).strip() or stable_state
             next_step = _safe_str(retry_exhausted.get("next_step")).strip() or next_step
+    if retry_candidate is not None:
+        scheduled_retry = schedule_retry(
+            event=record,
+            source_receipt=retry_candidate,
+            actor=actor,
+            reason=reason,
+            ts=ts,
+        )
+        retry_schedule_item = _as_dict(scheduled_retry.get("item"))
+        retry_schedule_receipt = _as_dict(scheduled_retry.get("receipt"))
+        retry_schedule_id = _safe_str(
+            retry_schedule_item.get("retry_schedule_id") or retry_schedule_receipt.get("retry_schedule_id")
+        ).strip()
+        if retry_schedule_id:
+            retry_candidate["retry_schedule_id"] = retry_schedule_id
+            retry_candidate["retry_schedule_receipt_id"] = retry_schedule_id
+            retry_candidate["retry_scheduled"] = True
     deadletter_source = retry_exhausted or deadletter_candidate
     if deadletter_source is not None:
         queued_deadletter = queue_deadletter(
@@ -1148,6 +1188,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule_receipt,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
@@ -1166,6 +1207,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
+        retry_schedule=retry_schedule_receipt,
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
         verification_receipt=verification,
@@ -1201,6 +1243,14 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         updated_dispatch["retry_candidate"] = retry_candidate
     else:
         updated_dispatch.pop("retry_candidate", None)
+    if retry_schedule_item:
+        updated_dispatch["retry_schedule"] = retry_schedule_item
+    else:
+        updated_dispatch.pop("retry_schedule", None)
+    if retry_schedule_receipt:
+        updated_dispatch["retry_schedule_receipt"] = retry_schedule_receipt
+    else:
+        updated_dispatch.pop("retry_schedule_receipt", None)
     if retry_exhausted is not None:
         updated_dispatch["retry_exhausted"] = retry_exhausted
         updated_dispatch["retry_exhausted_route"] = retry_exhausted.get("route")
@@ -1238,6 +1288,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         journal_entry["approval_request_queued"] = True
     if retry_candidate is not None:
         journal_entry["retry_candidate_id"] = retry_candidate.get("candidate_id")
+    if retry_schedule_receipt:
+        journal_entry["retry_schedule_id"] = retry_schedule_receipt.get("retry_schedule_id")
+        journal_entry["retry_scheduled"] = True
+        journal_entry["retry_schedule_status"] = retry_schedule_receipt.get("status")
     if retry_exhausted is not None:
         journal_entry["retry_exhausted_id"] = retry_exhausted.get("exhaustion_id")
         journal_entry["retry_exhausted_route"] = retry_exhausted.get("route")
@@ -1259,6 +1313,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         receipts.append(deadletter_candidate)
     if retry_candidate is not None:
         receipts.append(retry_candidate)
+    if retry_schedule_receipt:
+        receipts.append(retry_schedule_receipt)
     if retry_exhausted is not None:
         receipts.append(retry_exhausted)
     if deadletter_enqueue:
@@ -1326,6 +1382,22 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         retry_candidates.append(retry_candidate)
         record["retry_candidates"] = retry_candidates
         record["latest_retry_candidate"] = retry_candidate
+    if retry_schedule_item:
+        raw_retry_schedules = record.get("retry_schedules")
+        retry_schedules = raw_retry_schedules if isinstance(raw_retry_schedules, list) else []
+        retry_schedule_id = _safe_str(retry_schedule_item.get("retry_schedule_id")).strip()
+        if retry_schedule_id and all(
+            _safe_str(_as_dict(item).get("retry_schedule_id")).strip() != retry_schedule_id for item in retry_schedules
+        ):
+            retry_schedules.append(retry_schedule_item)
+        record["retry_schedules"] = retry_schedules
+        record["latest_retry_schedule"] = retry_schedule_item
+    if retry_schedule_receipt:
+        raw_retry_schedule_receipts = record.get("retry_schedule_receipts")
+        retry_schedule_receipts = raw_retry_schedule_receipts if isinstance(raw_retry_schedule_receipts, list) else []
+        retry_schedule_receipts.append(retry_schedule_receipt)
+        record["retry_schedule_receipts"] = retry_schedule_receipts
+        record["latest_retry_schedule_receipt"] = retry_schedule_receipt
     if retry_exhausted is not None:
         raw_retry_exhaustions = record.get("retry_exhaustions")
         retry_exhaustions = raw_retry_exhaustions if isinstance(raw_retry_exhaustions, list) else []
@@ -1356,6 +1428,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             "approval_allows_dispatch": approval_allows_dispatch,
             "deadletter_enqueued": bool(deadletter_enqueue),
             "deadletter_resolution_authority": False,
+            "retry_scheduled": bool(retry_schedule_receipt),
+            "retry_execution_authority": False,
             "next_step": next_step,
         }
     )
@@ -1436,9 +1510,15 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
     for key in ("deadletter_candidate", "retry_candidate", "retry_exhausted"):
         candidate = _as_dict(dispatch.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
+    retry_schedule = _as_dict(dispatch.get("retry_schedule")) or _as_dict(dispatch.get("retry_schedule_receipt"))
+    routes.add(_safe_str(retry_schedule.get("route")).strip().lower())
     for key in ("latest_blocker", "latest_deadletter_candidate", "latest_retry_candidate", "latest_retry_exhausted"):
         candidate = _as_dict(item.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
+    latest_retry_schedule = _as_dict(item.get("latest_retry_schedule")) or _as_dict(
+        item.get("latest_retry_schedule_receipt")
+    )
+    routes.add(_safe_str(latest_retry_schedule.get("route")).strip().lower())
     raw_blockers = item.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
     for blocker_item in blockers:
@@ -1459,6 +1539,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_enqueue",
         "latest_deadletter_candidate",
         "latest_retry_candidate",
+        "latest_retry_schedule_receipt",
         "latest_retry_exhausted",
     ):
         receipt = _as_dict(item.get(key))
@@ -1558,6 +1639,9 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
         item.get("latest_deadletter_candidate")
     )
     retry_candidate = _as_dict(dispatch.get("retry_candidate"))
+    retry_schedule = _as_dict(dispatch.get("retry_schedule_receipt")) or _as_dict(
+        item.get("latest_retry_schedule_receipt")
+    )
     retry_exhausted = _as_dict(dispatch.get("retry_exhausted")) or _as_dict(item.get("latest_retry_exhausted"))
 
     if stable_state == "retry_budget_exhausted" and retry_exhausted:
@@ -1576,6 +1660,15 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             status=_safe_str(deadletter_candidate.get("status")).strip() or "candidate",
             gate=_safe_str(deadletter_candidate.get("gate")).strip() or "budget_exhausted",
             receipt=deadletter_candidate,
+            blocker=blocker,
+        )
+    if stable_state == "awaiting_dispatch_engine" and retry_schedule:
+        return _review_projection(
+            item=item,
+            route="retry_backoff",
+            status=_safe_str(retry_schedule.get("status")).strip() or "scheduled",
+            gate=_safe_str(retry_schedule.get("gate")).strip() or "dispatch_engine_not_implemented",
+            receipt=retry_schedule,
             blocker=blocker,
         )
     if stable_state == "awaiting_dispatch_engine" and retry_candidate:
@@ -1660,14 +1753,19 @@ def reactor_status() -> dict[str, Any]:
     deadletter_candidate_counts: dict[str, int] = {}
     deadletter_queue_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
+    retry_schedule_counts: dict[str, int] = {}
     retry_exhausted_counts: dict[str, int] = {}
     verification_counts: dict[str, int] = {}
     verification_outcome_counts: dict[str, int] = {}
     stable_return_counts: dict[str, int] = {}
     deadletters = list_deadletters(limit=5000)
+    retry_schedules = list_retry_schedules(limit=5000)
     for deadletter in deadletters:
         deadletter_status = _safe_str(deadletter.get("status")).strip() or "unknown"
         deadletter_queue_counts[deadletter_status] = deadletter_queue_counts.get(deadletter_status, 0) + 1
+    for retry_schedule in retry_schedules:
+        retry_schedule_status = _safe_str(retry_schedule.get("status")).strip() or "unknown"
+        retry_schedule_counts[retry_schedule_status] = retry_schedule_counts.get(retry_schedule_status, 0) + 1
     for item in items:
         status = _safe_str(item.get("status")).strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -1742,6 +1840,8 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_queue_counts": deadletter_queue_counts,
         "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,
+        "retry_schedule_counts": retry_schedule_counts,
+        "retry_schedule_total": len(retry_schedules),
         "retry_exhausted_counts": retry_exhausted_counts,
         "verification_counts": verification_counts,
         "verification_outcome_counts": verification_outcome_counts,

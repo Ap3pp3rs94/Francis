@@ -13,6 +13,7 @@ from francis.reactor.events import (
     reactor_status,
     record_dispatch_attempt,
 )
+from francis.reactor.retries import get_retry_schedule, list_retry_schedules
 
 
 def _assert_verification(
@@ -239,7 +240,7 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert status["stable_return_counts"] == {"settled": 1}
 
 
-def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
+def test_reactor_dispatch_attempt_records_retry_schedule_without_starting_retry(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -282,43 +283,77 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
     assert retry_candidate["remaining_retries"] == 1
     assert retry_candidate["backoff_seconds"] == 30
     assert retry_candidate["next_retry_after_ts"] >= retry_candidate["ts"] + 30
-    assert retry_candidate["retry_scheduled"] is False
+    assert retry_candidate["retry_scheduled"] is True
     assert retry_candidate["retry_started"] is False
     assert retry_candidate["execution_started"] is False
     assert retry_candidate["applied"] is False
+    retry_schedule = event["dispatch"]["retry_schedule"]
+    assert retry_schedule["kind"] == "reactor.retry_schedule.item"
+    assert retry_schedule["event_id"] == event_id
+    assert retry_schedule["candidate_id"] == retry_candidate["candidate_id"]
+    assert retry_schedule["status"] == "scheduled"
+    assert retry_schedule["route"] == "retry_backoff"
+    assert retry_schedule["gate"] == "dispatch_engine_not_implemented"
+    assert retry_schedule["due_after_ts"] == retry_candidate["next_retry_after_ts"]
+    assert retry_schedule["retry_scheduled"] is True
+    assert retry_schedule["retry_started"] is False
+    assert retry_schedule["execution_started"] is False
+    assert retry_schedule["dispatch_applied"] is False
+    assert retry_schedule["governance"]["execution_authority"] is False
+    assert retry_schedule["governance"]["dispatch_authority"] is False
+    assert retry_schedule["governance"]["retry_execution_authority"] is False
+    retry_schedule_receipt = event["dispatch"]["retry_schedule_receipt"]
+    assert retry_schedule_receipt["kind"] == "reactor.retry.schedule.receipt"
+    assert retry_schedule_receipt["retry_schedule_id"] == retry_schedule["retry_schedule_id"]
+    assert retry_schedule_receipt["candidate_id"] == retry_candidate["candidate_id"]
+    assert retry_schedule_receipt["status"] == "scheduled"
+    assert retry_schedule_receipt["retry_scheduled"] is True
+    assert retry_schedule_receipt["retry_started"] is False
     assert event["latest_retry_candidate"]["candidate_id"] == retry_candidate["candidate_id"]
+    assert event["latest_retry_schedule"]["retry_schedule_id"] == retry_schedule["retry_schedule_id"]
+    assert event["latest_retry_schedule_receipt"]["retry_schedule_id"] == retry_schedule["retry_schedule_id"]
     _assert_verification(
         event,
         route="retry_backoff",
         stable_state="awaiting_dispatch_engine",
-        source_kind="reactor.retry_candidate.receipt",
-        verification_status="not_available",
-        verification_outcome="retry_scheduler_not_implemented",
+        source_kind="reactor.retry.schedule.receipt",
+        verification_status="not_run",
+        verification_outcome="retry_scheduled",
     )
     _assert_stable_return(
         event,
         route="retry_backoff",
         stable_state="awaiting_dispatch_engine",
-        source_kind="reactor.retry_candidate.receipt",
+        source_kind="reactor.retry.schedule.receipt",
         retry_candidate=True,
     )
+    assert event["latest_stable_return"]["retry_scheduled"] is True
     assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-4]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-3]["kind"] == "reactor.retry_candidate.receipt"
+    assert event["receipts"][-5]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-4]["kind"] == "reactor.retry_candidate.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.retry.schedule.receipt"
     assert event["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert event["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert event["decision_journal"][-1]["retry_candidate_id"] == retry_candidate["candidate_id"]
+    assert event["decision_journal"][-1]["retry_schedule_id"] == retry_schedule["retry_schedule_id"]
+    assert event["decision_journal"][-1]["retry_scheduled"] is True
     assert event["governance"]["dispatch_authority"] is False
     assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["retry_execution_authority"] is False
 
     stored = get_event(event_id)
     assert stored is not None
     assert stored["latest_retry_candidate"]["candidate_id"] == retry_candidate["candidate_id"]
+    assert stored["latest_retry_schedule"]["retry_schedule_id"] == retry_schedule["retry_schedule_id"]
+    assert get_retry_schedule(str(retry_schedule["retry_schedule_id"]))["event_id"] == event_id  # type: ignore[index]
+    assert [item["retry_schedule_id"] for item in list_retry_schedules()] == [retry_schedule["retry_schedule_id"]]
     status = reactor_status()
     assert status["status_counts"] == {"dispatch_deferred": 1}
     assert status["retry_candidate_counts"] == {"candidate": 1}
-    assert status["verification_counts"] == {"not_available": 1}
-    assert status["verification_outcome_counts"] == {"retry_scheduler_not_implemented": 1}
+    assert status["retry_schedule_counts"] == {"scheduled": 1}
+    assert status["retry_schedule_total"] == 1
+    assert status["verification_counts"] == {"not_run": 1}
+    assert status["verification_outcome_counts"] == {"retry_scheduled": 1}
     assert status["stable_return_counts"] == {"settled": 1}
 
 
@@ -505,6 +540,7 @@ def test_reactor_event_list_filters_review_routes_and_receipt_kinds(monkeypatch,
         budget_id,
         retry_id,
     }
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.retry.schedule.receipt")} == {retry_id}
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter_candidate.receipt")} == {
         budget_id
     }
@@ -597,7 +633,7 @@ def test_reactor_review_queue_projects_active_review_items(monkeypatch, tmp_path
     assert by_id[mode_id]["review"]["action"] == "review_mode_boundary_before_dispatch"
     assert by_id[budget_id]["review"]["receipt_kind"] == "reactor.deadletter_candidate.receipt"
     assert by_id[retry_id]["review"]["route"] == "retry_backoff"
-    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry_candidate.receipt"
+    assert by_id[retry_id]["review"]["receipt_kind"] == "reactor.retry.schedule.receipt"
     assert by_id[exhausted_id]["review"]["route"] == "deadletter_candidate"
     assert by_id[exhausted_id]["review"]["gate"] == "retry_budget_exhausted"
     assert by_id[exhausted_id]["review"]["receipt_kind"] == "reactor.retry_exhausted.receipt"

@@ -10,8 +10,10 @@ from francis.reactor import (
     enqueue_event,
     get_deadletter,
     get_event,
+    get_retry_schedule,
     list_deadletters,
     list_events,
+    list_retry_schedules,
     reactor_review_queue,
     reactor_status,
     record_dispatch_attempt,
@@ -161,6 +163,52 @@ def deadletters_get(id: str) -> dict[str, Any]:
             "execution_authority": False,
             "dispatch_authority": False,
             "retry_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/retries/list")
+def retries_list(
+    limit: int = Query(200, ge=1, le=5000),
+    status: str | None = None,
+) -> dict[str, Any]:
+    items = list_retry_schedules(limit=limit, status=status)
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "limit": limit,
+        "status": status or "",
+        "governance": {
+            "gate": "reactor_retry_schedule_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/retries/get")
+def retries_get(id: str) -> dict[str, Any]:
+    item = get_retry_schedule(id)
+    if item is None:
+        return {"ok": False, "error": "not_found", "item": None}
+    return {
+        "ok": True,
+        "item": item,
+        "governance": {
+            "gate": "reactor_retry_schedule_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
             "deadletter_resolution_authority": False,
             "escalation_authority": False,
             "memory_write": False,

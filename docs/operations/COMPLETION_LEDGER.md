@@ -587,6 +587,20 @@ dispatch execution, execute verification hooks, schedule retries, resolve or
 escalate deadletters, write memory, decide approvals, or grant execution,
 dispatch, verification, retry, escalation, or approval authority.
 
+As of `2026-04-27`, Reactor retry candidates also persist a durable retry
+schedule queue item. When a dispatch-eligible event has retry budget remaining
+and dispatch is deferred because the dispatch engine is still absent, the event
+now writes one `reactor.retry_schedule.item`, records a
+`reactor.retry.schedule.receipt`, links the schedule id through dispatch state,
+the retry candidate, decision journal, receipt history, latest schedule
+readback, stable-return source metadata, review-queue projection, receipt-kind
+filtering, `/reactor/retries/list`, `/reactor/retries/get`, and
+`/reactor/status` retry schedule counts. This is retry schedule persistence and
+readback only: it does not start retry execution, run the dispatch engine,
+consume execution budgets, decide approvals, resolve or escalate deadletters,
+write memory, or grant execution, dispatch, retry-execution, escalation, or
+approval authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4460,6 +4474,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor retry schedule
+queue slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before mechanical formatting of src\francis\reactor\events.py; passed after running Ruff format`
+- `python -m ruff format src\francis\reactor\events.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 verification-state receipt slice:
@@ -9058,8 +9090,9 @@ These remain true and should block any "finished" claim:
   and reconcile terminal approval decisions back into deferred dispatch or
   operator-review-blocked state, and deadletter candidates now persist real
   Reactor deadletter queue items, and every dispatch attempt now records a
-  verification-state receipt plus stable-return receipt, but bounded dispatch
-  execution, real verification hooks/results, real retry scheduling/backoff
+  verification-state receipt plus stable-return receipt, and retry candidates
+  now persist durable retry schedule queue items, but bounded dispatch
+  execution, real verification hooks/results, retry due processing/backoff
   execution, deadletter resolution/escalation, and broader operator visibility
   are still remaining work
 
