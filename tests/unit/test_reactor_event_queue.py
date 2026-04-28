@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis.governance import approvals
 from francis.reactor.events import (
     enqueue_event,
     get_event,
@@ -506,6 +507,141 @@ def test_reactor_dispatch_attempt_queues_missing_approval_request_once(monkeypat
     assert second_attempt["event"]["trigger"]["approval_id"] == approval_id
     assert len(list((data_root / "approvals" / "pending").glob("*.json"))) == 1
     assert len(second_attempt["event"]["approval_requests"]) == 1
+
+
+def test_reactor_dispatch_attempt_resumes_after_approval_without_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Critical mutation can resume after approval decision",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+        }
+    )
+    event_id = str(created["event_id"])
+
+    first_attempt = record_dispatch_attempt(event_id, {"actor": "reactor.test", "reason": "queue approval"})
+    approval_id = first_attempt["event"]["trigger"]["approval_id"]
+    assert approval_id
+
+    decided = approvals.decide(
+        approval_id,
+        "approve",
+        "approved for bounded Reactor resume",
+        actor="operator.test",
+    )
+    assert decided["ok"] is True
+    assert decided["status"] == "approved"
+
+    resumed = record_dispatch_attempt(
+        event_id,
+        {"actor": "reactor.test", "reason": "resume after approval decision"},
+    )
+
+    assert resumed["ok"] is True
+    event = resumed["event"]
+    assert event["status"] == "dispatch_deferred"
+    assert event["stable_state"] == "awaiting_dispatch_engine"
+    assert event["dispatch"]["allowed"] is True
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["engine"] == "not_implemented"
+    assert "blocker" not in event["dispatch"]
+    assert "blocked_route" not in event["dispatch"]
+
+    approval_decision = event["dispatch"]["approval_decision"]
+    assert approval_decision["kind"] == "reactor.approval_decision.receipt"
+    assert approval_decision["approval_id"] == approval_id
+    assert approval_decision["status"] == "approved"
+    assert approval_decision["approval_allows_dispatch"] is True
+    assert approval_decision["approval_decision_recorded"] is True
+    assert approval_decision["execution_started"] is False
+    assert approval_decision["applied"] is False
+    assert event["latest_approval_decision"]["approval_id"] == approval_id
+    assert event["latest_receipt"]["kind"] == "reactor.approval_decision.receipt"
+    assert event["decision_journal"][-1]["approval_status"] == "approved"
+    assert event["decision_journal"][-1]["approval_allows_dispatch"] is True
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["approval_status"] == "approved"
+    assert event["governance"]["approval_allows_dispatch"] is True
+
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_deferred": 1}
+    assert status["blocker_route_counts"] == {}
+    assert status["approval_decision_counts"] == {"approved": 1}
+    assert reactor_review_queue(route="approval_queue")["available_total"] == 0
+
+
+def test_reactor_dispatch_attempt_blocks_rejected_approval_without_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "user_request",
+            "summary": "Rejected critical mutation stays blocked",
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+        }
+    )
+    event_id = str(created["event_id"])
+
+    first_attempt = record_dispatch_attempt(event_id, {"actor": "reactor.test", "reason": "queue approval"})
+    approval_id = first_attempt["event"]["trigger"]["approval_id"]
+    assert approval_id
+
+    decided = approvals.decide(
+        approval_id,
+        "reject",
+        "not approved for dispatch",
+        actor="operator.test",
+    )
+    assert decided["ok"] is True
+    assert decided["status"] == "rejected"
+
+    resumed = record_dispatch_attempt(
+        event_id,
+        {"actor": "reactor.test", "reason": "honor rejected approval decision"},
+    )
+
+    assert resumed["ok"] is True
+    event = resumed["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "approval_rejected"
+    assert event["dispatch"]["allowed"] is False
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["blocked_route"] == "operator_review"
+    assert event["dispatch"]["blocker"]["gate"] == "approval_rejected"
+    assert event["dispatch"]["blocker"]["route"] == "operator_review"
+
+    approval_decision = event["dispatch"]["approval_decision"]
+    assert approval_decision["kind"] == "reactor.approval_decision.receipt"
+    assert approval_decision["approval_id"] == approval_id
+    assert approval_decision["status"] == "rejected"
+    assert approval_decision["approval_allows_dispatch"] is False
+    assert approval_decision["execution_started"] is False
+    assert approval_decision["applied"] is False
+    assert event["latest_receipt"]["kind"] == "reactor.approval_decision.receipt"
+    assert event["decision_journal"][-1]["approval_status"] == "rejected"
+    assert event["decision_journal"][-1]["approval_allows_dispatch"] is False
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["approval_status"] == "rejected"
+
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_blocked": 1}
+    assert status["blocker_route_counts"] == {"operator_review": 1}
+    assert status["approval_decision_counts"] == {"rejected": 1}
+    review_queue = reactor_review_queue(route="operator_review")
+    assert review_queue["available_total"] == 1
+    assert review_queue["items"][0]["review"]["gate"] == "approval_rejected"
 
 
 def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatch, tmp_path: Path) -> None:

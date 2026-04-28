@@ -536,6 +536,19 @@ approval request queueing only: it does not decide approvals, resume dispatch
 after approval, execute work, write memory, schedule retries, enqueue
 deadletters, or grant approval authority.
 
+As of `2026-04-27`, Reactor dispatch attempts also reconcile terminal approval
+decisions through the existing approvals queue. When a previously queued
+Reactor dispatch approval is approved, a later dispatch attempt records a
+`reactor.approval_decision.receipt`, removes the active approval blocker, and
+moves only to `dispatch_deferred` / `awaiting_dispatch_engine` because the
+dispatch engine is still `not_implemented`. When that approval is rejected or
+emergency-routed, a later dispatch attempt records the same decision receipt and
+keeps the event blocked for operator review. `/reactor/status` now summarizes
+approval decision receipt statuses. This is approval-decision readback and
+dispatch gating only: it does not decide approvals, execute work, write memory,
+schedule retries, enqueue deadletters, or grant approval, dispatch, or execution
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4409,6 +4422,25 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+approval-decision reconciliation slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_approvals.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `failed before formatting src\francis\reactor\events.py; passed
+  after formatting`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 approval-request queue handoff slice:
@@ -8928,10 +8960,11 @@ These remain true and should block any "finished" claim:
   deadletter-candidate, retry-candidate, retry-exhausted, and review-filter
   readback plus a read-only review-queue projection with chat UI readback only.
   Reactor dispatch attempts can create a pending approval request when missing,
-  but approval-decision resume handling, bounded dispatch execution, real
-  deadletter queue integration, verification, real retry scheduling/backoff
-  execution, deadletter/escalation, stable-return receipts, and broader operator
-  visibility are still remaining work
+  and reconcile terminal approval decisions back into deferred dispatch or
+  operator-review-blocked state, but bounded dispatch execution, real deadletter
+  queue integration, verification, real retry scheduling/backoff execution,
+  deadletter/escalation, stable-return receipts, and broader operator visibility
+  are still remaining work
 
 ## 6. Update rule
 

@@ -563,6 +563,75 @@ def _reactor_approval_request_receipt(
     )
 
 
+def _approval_record_status(approval_id: str) -> str:
+    cleaned = _safe_str(approval_id).strip()
+    if not cleaned:
+        return ""
+    candidates = (
+        ("pending", approvals.pending_dir()),
+        ("approved", approvals.approved_dir()),
+        ("rejected", approvals.rejected_dir()),
+        ("emergency", approvals.emergency_dir()),
+    )
+    for status, folder in candidates:
+        path = folder / f"{cleaned}.json"
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return "corrupt"
+        return status
+    return "missing"
+
+
+def _approval_decision_next_step(status: str) -> str:
+    if status == "approved":
+        return "implement_dispatch_engine_before_execution"
+    if status == "rejected":
+        return "review_rejected_approval_before_dispatch"
+    if status == "emergency":
+        return "review_emergency_approval_before_dispatch"
+    return "wait_for_approval_decision_before_dispatch"
+
+
+def _reactor_approval_decision_receipt(
+    *,
+    event_id: str,
+    approval_id: str,
+    approval_status: str,
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any] | None:
+    if approval_status not in {"approved", "rejected", "emergency"}:
+        return None
+    route = "approval_queue" if approval_status == "approved" else "operator_review"
+    return _filtered_receipt(
+        {
+            "kind": "reactor.approval_decision.receipt",
+            "approval_id": approval_id,
+            "event_id": event_id,
+            "status": approval_status,
+            "route": route,
+            "gate": f"approval_{approval_status}",
+            "stable_state": "awaiting_dispatch_engine"
+            if approval_status == "approved"
+            else f"approval_{approval_status}",
+            "next_step": _approval_decision_next_step(approval_status),
+            "attempt_count": attempt_count,
+            "actor": actor,
+            "reason": reason,
+            "ts": ts,
+            "approval_allows_dispatch": approval_status == "approved",
+            "approval_decision_recorded": True,
+            "execution_started": False,
+            "applied": False,
+        }
+    )
+
+
 def _maybe_request_reactor_approval(
     *,
     event_id: str,
@@ -622,6 +691,14 @@ def _maybe_request_reactor_approval(
     return receipt
 
 
+def _approval_id_for_dispatch(trigger: dict[str, Any], dispatch: dict[str, Any]) -> str:
+    return (
+        _safe_str(trigger.get("approval_id")).strip()
+        or _safe_str(_as_dict(dispatch.get("approval_request")).get("approval_id")).strip()
+        or _safe_str(_as_dict(dispatch.get("approval_decision")).get("approval_id")).strip()
+    )
+
+
 def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     path = _event_path(event_id)
     if path is None or not path.exists() or not path.is_file():
@@ -642,11 +719,16 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     bounds = raw_bounds if isinstance(raw_bounds, dict) else {}
     raw_dispatch = record.get("dispatch")
     dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
-    allowed = bool(classification.get("dispatch_allowed"))
     raw_trigger = record.get("trigger")
     trigger = raw_trigger if isinstance(raw_trigger, dict) else {}
     event_key = _safe_str(record.get("event_id") or record.get("id")).strip()
     attempt_count = _safe_int(dispatch.get("attempt_count"), default=0, minimum=0, maximum=100_000) + 1
+    approval_id = _approval_id_for_dispatch(trigger, dispatch)
+    approval_status = _approval_record_status(approval_id)
+    approval_gate_state = _safe_str(classification.get("stable_state")).strip() == "awaiting_approval"
+    approval_allows_dispatch = approval_gate_state and approval_status == "approved"
+    approval_blocks_dispatch = approval_gate_state and approval_status in {"rejected", "emergency"}
+    allowed = bool(classification.get("dispatch_allowed")) or approval_allows_dispatch
 
     if allowed:
         status = "dispatch_deferred"
@@ -656,9 +738,17 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         blocker = None
     else:
         status = "dispatch_blocked"
-        outcome = _safe_str(classification.get("stable_state")).strip() or "dispatch_not_allowed"
+        outcome = (
+            f"approval_{approval_status}"
+            if approval_blocks_dispatch
+            else (_safe_str(classification.get("stable_state")).strip() or "dispatch_not_allowed")
+        )
         stable_state = outcome
-        next_step = _safe_str(classification.get("next_step")).strip() or "resolve_blocker_before_dispatch"
+        next_step = (
+            _approval_decision_next_step(approval_status)
+            if approval_blocks_dispatch
+            else _safe_str(classification.get("next_step")).strip() or "resolve_blocker_before_dispatch"
+        )
         blocker = _dispatch_blocker_record(
             event_id=event_key,
             stable_state=stable_state,
@@ -671,6 +761,15 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             attempt_count=attempt_count,
             ts=ts,
         )
+    approval_decision = _reactor_approval_decision_receipt(
+        event_id=event_key,
+        approval_id=approval_id,
+        approval_status=approval_status,
+        actor=actor,
+        reason=reason,
+        attempt_count=attempt_count,
+        ts=ts,
+    )
     approval_request = _maybe_request_reactor_approval(
         event_id=event_key,
         trigger=trigger,
@@ -748,6 +847,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         updated_dispatch.pop("blocked_route", None)
     if deadletter_candidate is not None:
         updated_dispatch["deadletter_candidate"] = deadletter_candidate
+    if approval_decision is not None:
+        updated_dispatch["approval_decision"] = approval_decision
     if approval_request is not None:
         updated_dispatch["approval_request"] = approval_request
     if retry_candidate is not None:
@@ -778,6 +879,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         journal_entry["blocked_route"] = blocker.get("route")
     if deadletter_candidate is not None:
         journal_entry["deadletter_candidate_id"] = deadletter_candidate.get("candidate_id")
+    if approval_decision is not None:
+        journal_entry["approval_id"] = approval_decision.get("approval_id")
+        journal_entry["approval_status"] = approval_decision.get("status")
+        journal_entry["approval_allows_dispatch"] = approval_decision.get("approval_allows_dispatch")
     if approval_request is not None:
         journal_entry["approval_id"] = approval_request.get("approval_id")
         journal_entry["approval_request_queued"] = True
@@ -793,6 +898,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if not receipts and isinstance(record.get("receipt"), dict):
         receipts.append(record["receipt"])
     receipts.append(receipt)
+    if approval_decision is not None:
+        receipts.append(approval_decision)
     if approval_request is not None:
         receipts.append(approval_request)
     if deadletter_candidate is not None:
@@ -814,7 +921,9 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
     record["latest_dispatch_attempt_receipt"] = receipt
-    record["latest_receipt"] = approval_request or deadletter_candidate or retry_exhausted or retry_candidate or receipt
+    record["latest_receipt"] = (
+        approval_request or approval_decision or deadletter_candidate or retry_exhausted or retry_candidate or receipt
+    )
     if blocker is not None:
         record["blockers"] = blockers
         record["latest_blocker"] = blocker
@@ -832,6 +941,12 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         approval_requests.append(approval_request)
         record["approval_requests"] = approval_requests
         record["latest_approval_request"] = approval_request
+    if approval_decision is not None:
+        raw_approval_decisions = record.get("approval_decisions")
+        approval_decisions = raw_approval_decisions if isinstance(raw_approval_decisions, list) else []
+        approval_decisions.append(approval_decision)
+        record["approval_decisions"] = approval_decisions
+        record["latest_approval_decision"] = approval_decision
     if retry_candidate is not None:
         raw_retry_candidates = record.get("retry_candidates")
         retry_candidates = raw_retry_candidates if isinstance(raw_retry_candidates, list) else []
@@ -856,6 +971,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             "dispatch_authority": False,
             "attempt_only": True,
             "approval_request_queued": approval_request is not None,
+            "approval_status": approval_status,
+            "approval_allows_dispatch": approval_allows_dispatch,
             "next_step": next_step,
         }
     )
@@ -953,6 +1070,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "receipt",
         "latest_receipt",
         "latest_dispatch_attempt_receipt",
+        "latest_approval_decision",
         "latest_deadletter_candidate",
         "latest_retry_candidate",
         "latest_retry_exhausted",
@@ -1160,6 +1278,7 @@ def reactor_status() -> dict[str, Any]:
     stable_state_counts: dict[str, int] = {}
     blocker_route_counts: dict[str, int] = {}
     approval_request_counts: dict[str, int] = {}
+    approval_decision_counts: dict[str, int] = {}
     deadletter_candidate_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_exhausted_counts: dict[str, int] = {}
@@ -1186,6 +1305,13 @@ def reactor_status() -> dict[str, Any]:
             approval_request_counts[approval_request_status] = (
                 approval_request_counts.get(approval_request_status, 0) + 1
             )
+        raw_approval_decision = dispatch.get("approval_decision") or item.get("latest_approval_decision")
+        approval_decision = raw_approval_decision if isinstance(raw_approval_decision, dict) else {}
+        approval_decision_status = _safe_str(approval_decision.get("status")).strip()
+        if approval_decision_status:
+            approval_decision_counts[approval_decision_status] = (
+                approval_decision_counts.get(approval_decision_status, 0) + 1
+            )
         raw_deadletter_candidate = dispatch.get("deadletter_candidate") or item.get("latest_deadletter_candidate")
         deadletter_candidate = raw_deadletter_candidate if isinstance(raw_deadletter_candidate, dict) else {}
         deadletter_status = _safe_str(deadletter_candidate.get("status")).strip()
@@ -1210,6 +1336,7 @@ def reactor_status() -> dict[str, Any]:
         "stable_state_counts": stable_state_counts,
         "blocker_route_counts": blocker_route_counts,
         "approval_request_counts": approval_request_counts,
+        "approval_decision_counts": approval_decision_counts,
         "deadletter_candidate_counts": deadletter_candidate_counts,
         "retry_candidate_counts": retry_candidate_counts,
         "retry_exhausted_counts": retry_exhausted_counts,

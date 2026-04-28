@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 _REACTOR_ACTOR = "test.reactor.write"
+_APPROVAL_ACTOR = "test.reactor.approvals.decide"
 
 
 def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) -> None:
@@ -321,6 +322,101 @@ def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     assert review_item["trigger"]["approval_id"] == approval_id
     assert review_item["review"]["receipt_kind"] == "reactor.approval_request.receipt"
     assert review_item["review"]["receipt_ref"] == approval_id
+
+
+def test_reactor_dispatch_attempt_reconciles_approved_decision(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write"], _APPROVAL_ACTOR: ["approvals.decide"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "user_request",
+            "summary": "Approved Reactor work should resume only to deferred dispatch",
+            "actor": _REACTOR_ACTOR,
+            "risk_tier": "critical",
+            "action_class": "mutate",
+            "approval_required": True,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    first_attempt = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "queue missing approval for Reactor dispatch",
+        },
+    )
+    assert first_attempt.status_code == 200
+    approval_id = first_attempt.json()["event"]["trigger"]["approval_id"]
+    assert approval_id
+
+    approved = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": _APPROVAL_ACTOR,
+            "comment": "approved for Reactor resume proof",
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+    assert approved.json()["status"] == "approved"
+
+    resumed = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "resume after approval decision",
+        },
+    )
+
+    assert resumed.status_code == 200
+    body = resumed.json()
+    assert body["ok"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_deferred"
+    assert event["stable_state"] == "awaiting_dispatch_engine"
+    assert event["dispatch"]["allowed"] is True
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["engine"] == "not_implemented"
+    assert "blocker" not in event["dispatch"]
+    approval_decision = event["dispatch"]["approval_decision"]
+    assert approval_decision["kind"] == "reactor.approval_decision.receipt"
+    assert approval_decision["approval_id"] == approval_id
+    assert approval_decision["status"] == "approved"
+    assert approval_decision["approval_allows_dispatch"] is True
+    assert approval_decision["execution_started"] is False
+    assert event["governance"]["approval_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["status_counts"] == {"dispatch_deferred": 1}
+    assert status.json()["approval_decision_counts"] == {"approved": 1}
+
+    review_queue = client.get("/reactor/review_queue", params={"route": "approval_queue"})
+    assert review_queue.status_code == 200
+    assert review_queue.json()["available_total"] == 0
 
 
 def test_reactor_event_routes_require_scope_and_valid_trigger(monkeypatch, tmp_path: Path) -> None:
