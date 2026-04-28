@@ -349,6 +349,39 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["contract_status"] == "readback_ready"
     assert resident_host["availability"] == "backend_readback_only"
     assert resident_host["route"] == "/lens/host"
+    assert resident_host["activation_request_route"] == "/lens/host/activation/request"
+    assert resident_host["activation_request"] == {
+        "status": "approval_request_ready",
+        "route": "/lens/host/activation/request",
+        "method": "POST",
+        "action": "lens.host.foreground_activation",
+        "mode": "foreground_status_session",
+        "creates_approval_request": True,
+        "launches_process": False,
+        "installs_service": False,
+        "starts_service": False,
+        "registers_hotkey": False,
+        "controls_overlay": False,
+        "governance": {
+            "gate": "lens_host_activation_request",
+            "route": "/lens/host/activation/request",
+            "required_scope": "system.write",
+            "approval_action": "lens.host.foreground_activation",
+            "approval_request_write": True,
+            "activation_authority": False,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "runtime_mutation_authority_granted": False,
+            "next_step": "operator_decides_pending_lens_host_activation_request",
+        },
+    }
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -712,6 +745,15 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert observer_scan["mutates"] is True
     assert observer_scan["receipt_kind"] == "observer.scan"
     assert observer_scan["execution_authority"] is False
+    activation_request_command = next(
+        item for item in body["command_palette"]["commands"] if item["id"] == "lens.host.activation.request"
+    )
+    assert activation_request_command["route"] == "/lens/host/activation/request"
+    assert activation_request_command["method"] == "POST"
+    assert activation_request_command["mutates"] is True
+    assert activation_request_command["write_guard"] == "system.write approval request; no launch authority"
+    assert activation_request_command["execution_authority"] is False
+    assert activation_request_command["approval_decision_authority"] is False
     pilot_mode = next(item for item in body["command_palette"]["commands"] if item["id"] == "mode.pilot")
     assert pilot_mode["route"] == "/system/operator_mode"
     assert pilot_mode["target_mode"] == "pilot"
@@ -733,6 +775,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert _criterion(body, "approvals_view")["status"] == "readback_ready"
     assert _criterion(body, "incident_view")["status"] == "readback_ready"
     assert _criterion(body, "receipt_visibility")["status"] == "readback_ready"
+    assert _criterion(body, "host_activation_request_boundary") == {
+        "id": "host_activation_request_boundary",
+        "status": "approval_request_ready",
+        "evidence": ["/lens/host/activation/request", "/approvals/list?status=pending", "/lens/status"],
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+    }
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -898,3 +948,141 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
     approval_badge = next(item for item in body["hud"]["badges"] if item["label"] == "approvals")
     assert approval_badge["value"] == 1
     assert approval_badge["severity"] == "attention"
+
+
+def test_lens_host_activation_request_requires_system_write_without_launch(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/host/activation/request",
+        json={
+            "actor": "test.lens.no_scope",
+            "reason": "try to launch without scope",
+            "mode": "foreground_status_session",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["approval_requested"] is False
+    assert body["applied"] is False
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["required_scope"] == "system.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["activation_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["local_process_launch_authority"] is False
+    assert client.get("/approvals/list?status=pending").json()["items"] == []
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/host/activation/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove governed foreground activation request",
+            "mode": "foreground_status_session",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "approval_requested"
+    assert body["approval_requested"] is True
+    assert body["applied"] is False
+    assert body["action"] == "lens.host.foreground_activation"
+    assert body["governance"]["approval_request_write"] is True
+    assert body["governance"]["activation_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["approval_decision_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["governance"]["local_process_launch_authority"] is False
+    assert body["governance"]["service_install_authority"] is False
+    assert body["governance"]["service_control_authority"] is False
+    assert body["governance"]["runtime_mutation_authority_granted"] is False
+    approval_id = str(body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    pending_payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending_payload["action"] == "lens.host.foreground_activation"
+    assert pending_payload["reason"] == "prove governed foreground activation request"
+    activation = pending_payload["payload"]
+    assert activation["request_kind"] == "lens.host.activation.request"
+    assert activation["mode"] == "foreground_status_session"
+    assert activation["route"] == "/lens/host/activation/request"
+    assert activation["host_route"] == "/lens/host"
+    assert activation["manifest_route"] == "/lens/host/manifest"
+    assert activation["preflight_route"] == "/lens/preflight"
+    assert activation["candidate_command"]["executable"] is True
+    assert activation["service_plan"]["status"] == "blocked"
+    assert activation["service_plan"]["ready"] is False
+    assert activation["process_readback"]["status"] == "missing"
+    assert activation["process_readback"]["process_alive"] is False
+    assert activation["preflight"]["status"] == "blocked"
+    assert "local_process_launch_authority_not_granted" in activation["preflight"]["blockers"]
+    assert "lens_host_runtime_not_implemented" in activation["blockers"]
+    assert activation["governance"]["approval_request_write"] is True
+    assert activation["governance"]["activation_authority"] is False
+    assert activation["governance"]["execution_authority"] is False
+    assert activation["governance"]["approval_decision_authority"] is False
+    assert activation["governance"]["memory_write"] is False
+    assert activation["governance"]["local_process_launch_authority"] is False
+    assert activation["governance"]["service_install_authority"] is False
+    assert activation["governance"]["service_control_authority"] is False
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+    assert listed_item["action"] == "lens.host.foreground_activation"
+    assert listed_item["status"] == "pending"
+    assert listed_item["payload"]["request_kind"] == "lens.host.activation.request"
+    assert listed_item["payload"]["governance"]["execution_authority"] is False
+
+    lens_status = client.get("/lens/status")
+    assert lens_status.status_code == 200
+    status_body = lens_status.json()
+    assert status_body["approvals_view"]["pending_count"] == 1
+    assert status_body["resident_host"]["activation_request_route"] == "/lens/host/activation/request"
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

@@ -11710,6 +11710,42 @@ preflight readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens host activation approval-request boundary
+
+Stage 6/Lens now has a governed request boundary for future foreground Lens host
+activation. `POST /lens/host/activation/request` requires the existing
+`system.write` API actor scope, records a pending
+`lens.host.foreground_activation` approval request, and returns the exact
+activation intent, preflight blockers, host manifest command projection, and
+non-execution governance flags. `/lens/status` and `/lens/host` expose the
+activation-request contract, and the Lens command palette readback includes the
+request command as a confirmation-requiring control with no launch authority.
+
+This is an approval-request write, not runtime activation. It does not launch a
+Lens host process; install, start, stop, restart, supervise, or control a
+Windows service; register tray presence; bind a global hotkey; open or focus an
+overlay window; summon Francis anywhere; capture screen content; write memory;
+decide approvals; execute operator actions; or grant overlay-control,
+window-management, summon, capture, sensing, telemetry, promotion, policy,
+service-install, service-control, wrapper-write, or API local-process-launch
+authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host activation
+approval-request boundary:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_service_install_plan_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11727,7 +11763,8 @@ These remain true and should block any "finished" claim:
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus API preflight readback, a disabled tray/presence
   preflight baseline plus API preflight readback, and disabled overlay/window
-  preflight baseline plus API preflight readback, but no OS-wide summon, resident
+  preflight baseline plus API preflight readback, and a governed host activation
+  approval-request boundary, but no OS-wide summon, resident
   host process, installed/started service, resident overlay/HUD runtime,
   OS-level command palette, tray presence, hotkey binding, or live Pilot takeover
   surface yet

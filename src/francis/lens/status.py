@@ -6,6 +6,7 @@ from typing import Any
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
+from francis.lens.activation import lens_host_activation_request_contract
 from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.lens.preflight import lens_preflight
 from francis.reactor import reactor_operator_visibility_summary
@@ -225,6 +226,7 @@ def _hud_runtime_surface() -> dict[str, Any]:
 
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
+    activation_request = lens_host_activation_request_contract()
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
@@ -317,6 +319,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "contract_status": "readback_ready",
         "availability": "backend_readback_only",
         "route": "/lens/host",
+        "activation_request_route": _safe_str(activation_request.get("route")).strip(),
+        "activation_request": activation_request,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
@@ -618,6 +622,19 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
             write_guard="explicit operator action plus system.write",
             receipt_kind="observer.scan",
         ),
+        _palette_command(
+            "lens.host.activation.request",
+            "Request Lens Host Activation",
+            "Create an approval request for a bounded foreground Lens host session without launching it.",
+            "Control",
+            route="/lens/host/activation/request",
+            method="POST",
+            action="request_lens_host_activation",
+            keywords="lens host foreground activation approval request",
+            mutates=True,
+            write_guard="system.write approval request; no launch authority",
+            receipt_kind="lens.host.activation.request",
+        ),
     ]
     group_counts: dict[str, int] = {}
     for command in commands:
@@ -716,6 +733,16 @@ def _stage6_readiness(
                 "status": "readback_ready",
                 "evidence": ["/continuity/ledger", "/reactor/operator_visibility/summary", "/lens/status"],
                 "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
+            },
+            {
+                "id": "host_activation_request_boundary",
+                "status": "approval_request_ready"
+                if _as_dict(resident_host.get("activation_request")).get("creates_approval_request")
+                else "missing",
+                "evidence": ["/lens/host/activation/request", "/approvals/list?status=pending", "/lens/status"],
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
             },
             {
                 "id": "summon_anywhere",
