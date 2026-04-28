@@ -10700,6 +10700,30 @@ slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, Reactor dispatch-attempt receipts now link back to the
+bounded-plan receipt that was recorded at intake. `reactor.dispatch_attempt.receipt`
+persists the bounded-plan receipt id, kind, route, and status alongside the
+existing budget snapshot, and the dispatch decision journal records the same
+bounded-plan receipt id. This makes the intake bounded plan traceable through
+the first dispatch receipt without granting execution, approval, retry, memory,
+promotion, or UI authority.
+
+Latest targeted validation for the `2026-04-28` Reactor plan-to-dispatch receipt
+linkage slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_records_receipt_without_execution tests\test_api_reactor.py::test_reactor_event_routes_enqueue_and_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\events.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10711,8 +10735,8 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
-- Stage 5/Reactor currently has trigger intake, readback, bounded-plan receipts,
-  dispatch-attempt
+- Stage 5/Reactor currently has trigger intake, readback, bounded-plan receipts
+  linked through dispatch-attempt
   receipts, blocked-dispatch blocker records, and deadletter-candidate,
   retry-candidate, retry-exhausted, and review-filter readback plus a read-only
   review-queue projection with chat UI readback only. Reactor dispatch attempts

@@ -417,8 +417,10 @@ def _dispatch_attempt_receipt(
     applied: bool = False,
     execution_started: bool = False,
     engine: str = "not_implemented",
+    bounded_plan: dict[str, Any] | None = None,
     dispatch_execution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    plan = bounded_plan or {}
     return _filtered_receipt(
         {
             "kind": "reactor.dispatch_attempt.receipt",
@@ -434,6 +436,10 @@ def _dispatch_attempt_receipt(
             "ts": ts,
             "stable_state": stable_state,
             "next_step": next_step,
+            "bounded_plan_receipt_id": _safe_str(plan.get("receipt_id")).strip(),
+            "bounded_plan_receipt_kind": _safe_str(plan.get("kind")).strip(),
+            "bounded_plan_route": _safe_str(plan.get("route")).strip(),
+            "bounded_plan_status": _safe_str(plan.get("status")).strip(),
             "budget_snapshot": bounds,
             "blocker": blocker or {},
             "dispatch_execution_receipt_id": _safe_str((dispatch_execution or {}).get("receipt_id")).strip(),
@@ -1324,6 +1330,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     classification = raw_classification if isinstance(raw_classification, dict) else {}
     raw_bounds = record.get("bounds")
     bounds = raw_bounds if isinstance(raw_bounds, dict) else {}
+    bounded_plan = _as_dict(record.get("latest_bounded_plan_receipt")) or _as_dict(record.get("bounded_plan"))
     raw_dispatch = record.get("dispatch")
     dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
     raw_trigger = record.get("trigger")
@@ -1537,6 +1544,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         applied=dispatch_execution_applied,
         execution_started=bool(dispatch_execution and dispatch_execution.get("execution_started")),
         engine=_safe_str((dispatch_execution or {}).get("route")).strip() or "not_implemented",
+        bounded_plan=bounded_plan,
         dispatch_execution=dispatch_execution,
     )
     verification = _verification_receipt(
@@ -1692,6 +1700,9 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if retry_exhausted is not None:
         journal_entry["retry_exhausted_id"] = retry_exhausted.get("exhaustion_id")
         journal_entry["retry_exhausted_route"] = retry_exhausted.get("route")
+    bounded_plan_receipt_id = _safe_str(bounded_plan.get("receipt_id")).strip()
+    if bounded_plan_receipt_id:
+        journal_entry["bounded_plan_receipt_id"] = bounded_plan_receipt_id
     journal_entry["verification_receipt_id"] = verification.get("receipt_id")
     journal_entry["verification_status"] = verification.get("verification_status")
     journal_entry["verification_outcome"] = verification.get("verification_outcome")

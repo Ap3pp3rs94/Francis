@@ -130,9 +130,14 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert attempt_body["applied"] is True
     assert attempt_body["receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
     assert attempt_body["receipt"]["execution_started"] is False
+    assert attempt_body["receipt"]["bounded_plan_receipt_id"] == bounded_plan["receipt_id"]
+    assert attempt_body["receipt"]["bounded_plan_receipt_kind"] == "reactor.bounded_plan.receipt"
+    assert attempt_body["receipt"]["bounded_plan_route"] == "bounded_plan"
+    assert attempt_body["receipt"]["bounded_plan_status"] == "planned"
     assert attempt_body["event"]["status"] == "dispatch_deferred"
     assert attempt_body["event"]["dispatch"]["engine"] == "not_implemented"
     assert attempt_body["event"]["governance"]["execution_authority"] is False
+    assert attempt_body["event"]["decision_journal"][-1]["bounded_plan_receipt_id"] == bounded_plan["receipt_id"]
     verification = attempt_body["event"]["latest_verification_receipt"]
     assert verification["kind"] == "reactor.verification.receipt"
     assert verification["verification_status"] == "not_available"

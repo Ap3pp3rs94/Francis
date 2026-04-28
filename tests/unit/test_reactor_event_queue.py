@@ -339,6 +339,7 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
         }
     )
     event_id = str(created["event_id"])
+    bounded_plan = created["event"]["latest_bounded_plan_receipt"]
 
     attempted = record_dispatch_attempt(
         event_id,
@@ -361,6 +362,10 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert event["latest_dispatch_attempt_receipt"]["execution_started"] is False
     assert "blocker" not in event["latest_dispatch_attempt_receipt"]
     assert event["latest_dispatch_attempt_receipt"]["budget_snapshot"]["max_actions"] == 2
+    assert event["latest_dispatch_attempt_receipt"]["bounded_plan_receipt_id"] == bounded_plan["receipt_id"]
+    assert event["latest_dispatch_attempt_receipt"]["bounded_plan_receipt_kind"] == "reactor.bounded_plan.receipt"
+    assert event["latest_dispatch_attempt_receipt"]["bounded_plan_route"] == "bounded_plan"
+    assert event["latest_dispatch_attempt_receipt"]["bounded_plan_status"] == "planned"
     _assert_verification(
         event,
         route="dispatch_engine",
@@ -387,9 +392,11 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert stored is not None
     assert stored["status"] == "dispatch_deferred"
     assert stored["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert stored["receipts"][-3]["bounded_plan_receipt_id"] == bounded_plan["receipt_id"]
     assert stored["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert stored["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert stored["decision_journal"][-1]["kind"] == "reactor.dispatch.attempted"
+    assert stored["decision_journal"][-1]["bounded_plan_receipt_id"] == bounded_plan["receipt_id"]
     status = reactor_status()
     assert status["status_counts"] == {"dispatch_deferred": 1}
     assert status["retry_candidate_counts"] == {}
