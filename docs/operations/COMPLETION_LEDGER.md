@@ -11401,6 +11401,46 @@ preflight baseline:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens bounded foreground host session
+
+Stage 6/Lens now has the first bounded foreground Lens host session instead of
+only a refusing status runner. `scripts/lens-host.ps1 -Mode Foreground
+-RunSeconds N` now writes a local runtime-state file and PID file under the
+configured `FRANCIS_DATA_DIR` or the repo `data/runtime/lens-host` path, bounds
+the session to `0..30` seconds, records a stopped runtime-state receipt when the
+foreground session completes, and exits successfully without launching any child
+process. `GET /lens/host/manifest` now exposes the foreground candidate command
+as executable only as a manual bounded foreground status session; the route
+still grants no API launch authority.
+
+This is a bounded local runtime-state slice only. It does not install or start a
+service; create a resident supervised process; register a tray icon; bind a
+global hotkey; open or focus an overlay window; capture screen content; write
+memory; decide approvals; execute operator actions; or grant overlay-control,
+window-management, summon, capture, sensing, telemetry, promotion, policy,
+service-install, service-control, tray-registration, hotkey-registration, or
+API local-process-launch authority. `resident_host_process_missing`,
+`tray_host_missing`, `global_hotkey_binding_missing`, `overlay_window_missing`,
+and `summon_binding_missing` remain blockers after the foreground session exits.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens bounded foreground
+host session:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$tmp = Join-Path $env:TEMP ("francis-lens-host-" + [guid]::NewGuid().ToString("N")); $env:FRANCIS_DATA_DIR = $tmp; $output = & .\scripts\lens-host.ps1 -Mode Foreground -RunSeconds 0; if ($LASTEXITCODE -ne 0) { Write-Error "expected exit 0, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11409,9 +11449,9 @@ These remain true and should block any "finished" claim:
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
-  disabled `/lens/host/manifest` launch-manifest contract plus a status-only
-  `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
-  non-starting process readback boundary plus read-only Windows service status
+  disabled `/lens/host/manifest` launch-manifest contract plus a bounded
+  foreground `scripts/lens-host.ps1` status session, disabled tracked service
+  config baseline, and non-starting process readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus a disabled tray/presence preflight baseline and
   disabled overlay/window preflight baseline, but no OS-wide summon, resident

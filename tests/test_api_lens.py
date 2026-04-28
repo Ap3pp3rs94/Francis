@@ -63,6 +63,10 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "pid_path": "data/runtime/lens-host/lens-host.pid",
   "status_mode": "Status",
   "foreground_mode": "Foreground",
+  "foreground_session_enabled": true,
+  "foreground_session_default_seconds": 0,
+  "foreground_session_max_seconds": 30,
+  "runtime_state_write": true,
   "start_type": "Manual",
   "auto_start": false,
   "start_after_install": false,
@@ -207,6 +211,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "readback_ready": True,
         "runtime_state_path": "data/runtime/lens-host/status.json",
         "state_exists": False,
+        "state_status": "",
+        "state_updated_at": "",
         "pid_path": "data/runtime/lens-host/lens-host.pid",
         "pid_present": False,
         "pid": 0,
@@ -218,6 +224,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "restart_supported": False,
         "supervision_authority": False,
         "blocked_reason": "resident_host_process_missing",
+    }
+    assert resident_host["foreground_session"] == {
+        "supported": True,
+        "default_seconds": 0,
+        "max_seconds": 30,
+        "runtime_state_write": True,
+        "resident": False,
+        "service_managed": False,
+        "tray_presence": False,
+        "global_hotkey": False,
+        "overlay_window": False,
+        "summon_anywhere": False,
     }
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
@@ -289,8 +307,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "Foreground",
         ],
         "working_directory": ".",
-        "executable": False,
-        "reason": "Foreground Lens host runtime is not implemented.",
+        "executable": True,
+        "reason": "Manual bounded foreground status session is available; resident service, tray, summon, and overlay remain blocked.",
     }
     assert launch_manifest["service_install"] == {
         "manager": "scripts/service-install.ps1",
@@ -306,6 +324,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
+    assert launch_manifest["foreground_session"] == resident_host["foreground_session"]
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
         "host_status_runner",
@@ -422,7 +441,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["service_readback"]["service_control_authority"] is False
     assert manifest_body["process_readback"]["status"] == "missing"
     assert manifest_body["status_command"]["executable"] is True
-    assert manifest_body["candidate_command"]["executable"] is False
+    assert manifest_body["candidate_command"]["executable"] is True
     assert manifest_body["governance"]["local_process_launch_authority"] is False
     assert manifest_body["governance"]["service_install_authority"] is False
 

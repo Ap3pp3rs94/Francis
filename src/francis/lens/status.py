@@ -319,6 +319,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "service_readback_ready": bool(service_readback.get("readback_ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
+        "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
         "resident": False,
         "process_supervision": False,
         "startup_integration": False,

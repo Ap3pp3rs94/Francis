@@ -55,12 +55,15 @@ def _lens_host_process_readback() -> dict[str, Any]:
     state_exists = _path_exists(state_file)
     pid_present = _path_exists(pid_file)
     pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _runtime_json_dict("data/runtime/lens-host/status.json") if state_exists else {}
     status = "state_present_process_unverified" if state_exists or pid_present else "missing"
     return {
         "status": status,
         "readback_ready": True,
         "runtime_state_path": "data/runtime/lens-host/status.json",
         "state_exists": state_exists,
+        "state_status": str(state_payload.get("status") or ""),
+        "state_updated_at": str(state_payload.get("updated_at") or ""),
         "pid_path": "data/runtime/lens-host/lens-host.pid",
         "pid_present": pid_present,
         "pid": pid,
@@ -103,6 +106,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     service_config_exists = bool(service_config_payload)
     service_readback = _lens_host_service_readback(service_config_payload)
     process_readback = _lens_host_process_readback()
+    foreground_supported = bool(service_config_payload.get("foreground_session_enabled"))
     blockers = [
         "lens_host_runtime_not_implemented",
         "tray_host_missing",
@@ -158,8 +162,12 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "Foreground",
             ],
             "working_directory": ".",
-            "executable": False,
-            "reason": "Foreground Lens host runtime is not implemented.",
+            "executable": entrypoint_exists and foreground_supported,
+            "reason": (
+                "Manual bounded foreground status session is available; resident service, tray, summon, and overlay remain blocked."
+                if entrypoint_exists and foreground_supported
+                else "Foreground Lens host runtime is not implemented."
+            ),
         },
         "service_install": {
             "manager": "scripts/service-install.ps1",
@@ -172,6 +180,18 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "install_authority": False,
             "start_after_install": False,
             "auto_start": False,
+        },
+        "foreground_session": {
+            "supported": foreground_supported,
+            "default_seconds": int(service_config_payload.get("foreground_session_default_seconds") or 0),
+            "max_seconds": int(service_config_payload.get("foreground_session_max_seconds") or 0),
+            "runtime_state_write": bool(service_config_payload.get("runtime_state_write")),
+            "resident": False,
+            "service_managed": False,
+            "tray_presence": False,
+            "global_hotkey": False,
+            "overlay_window": False,
+            "summon_anywhere": False,
         },
         "service_readback": service_readback,
         "process_readback": process_readback,
