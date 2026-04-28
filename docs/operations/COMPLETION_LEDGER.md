@@ -659,6 +659,24 @@ authority, deadletter resolution/escalation, generic plugin/mission dispatch,
 new memory-write authority beyond any memory receipts already produced by
 operation execution, or UI controls.
 
+As of `2026-04-28`, Reactor `operation_run` execution failures can now feed the
+bounded retry and deadletter path instead of stopping at operation-run review
+only. When the partial dispatch engine starts a linked operation and the
+operation result is failed, the event still preserves the failed
+`reactor.dispatch.execution.receipt`, but remaining retry budget now records an
+`operation_run_failed` retry candidate, schedules a durable retry item, settles
+the event into `awaiting_retry`, and keeps verification/stable-return readback
+from claiming completion. A due retry dispatch attempt uses the existing retry
+handoff path to run the same governed operation dispatch again; if the retry
+budget is exhausted after another failed execution, Reactor records
+`reactor.retry_exhausted.receipt`, queues a durable Reactor deadletter item, and
+routes stable-return/readback to the deadletter queue. This is failure routing
+through the existing `operations.run`-gated `operation_run` dispatcher only; it
+does not add new action classes, generic looping, approval authority,
+retry-execution authority outside explicit due retry handoffs, deadletter
+resolution/escalation, memory-write authority, promotion authority, or UI
+controls.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9193,6 +9211,24 @@ slice:
 - `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor operation failure
+retry/deadletter routing slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_failed_operation_dispatch_schedules_retry_then_deadletters -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\events.py src\francis\reactor\dispatch.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9216,12 +9252,13 @@ These remain true and should block any "finished" claim:
   dispatch-attempt receipt. Reactor now has a first partial dispatch engine for
   existing `operation_run` events guarded by the existing `operations.run` scope
   and operator posture, with execution, verification, stable-return, and status
-  readback. Remaining Stage 5 gaps still include broader dispatch action
-  coverage beyond existing operation runs, retry execution that can actually
-  re-run due schedules through successful execution paths, deadletter
-  resolution/escalation beyond non-authoritative review receipts, stronger
-  failure-to-retry/deadletter routing after real execution failures, and broader
-  operator visibility
+  readback. Failed `operation_run` dispatches can now schedule bounded retries
+  and deadletter after retry exhaustion through the same governed retry handoff
+  path. Remaining Stage 5 gaps still include broader dispatch action coverage
+  beyond existing operation runs, explicit successful due-retry proof/readback,
+  deadletter resolution/escalation beyond non-authoritative review receipts,
+  broader execution-failure routing beyond the current `operation_run` path, and
+  broader operator visibility
 
 ## 6. Update rule
 

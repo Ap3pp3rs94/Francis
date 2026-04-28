@@ -5,6 +5,7 @@ from pathlib import Path
 
 from francis.governance import approvals
 from francis.operations import runtime as operations_runtime
+from francis.reactor import dispatch as reactor_dispatch
 from francis.reactor.deadletters import get_deadletter, list_deadletters
 from francis.reactor.events import (
     enqueue_event,
@@ -341,6 +342,155 @@ def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypat
 
     operation_detail = operations_runtime.get_operation_detail(operation_id)
     assert operation_detail["operation"]["status"] == "succeeded"
+
+
+def test_reactor_failed_operation_dispatch_schedules_retry_then_deadletters(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    actor = "test.reactor.dispatch"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["operations.run"]}))
+
+    created_operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor dispatch should preserve failed operation retry routing",
+        input={"goal": "prove reactor operation failure retry routing"},
+        actor=actor,
+    )
+    assert created_operation["ok"] is True
+    operation_id = str(created_operation["operation_id"])
+    run_calls: list[str] = []
+
+    def fail_operation_run(operation_id_arg: str, **_: object) -> dict[str, object]:
+        run_calls.append(operation_id_arg)
+        attempt = len(run_calls)
+        return {
+            "ok": False,
+            "status": "failed",
+            "operation": {
+                "id": operation_id_arg,
+                "status": "failed",
+                "trace_id": f"trace_failed_{attempt}",
+                "run_id": f"run_failed_{attempt}",
+                "output": {
+                    "trace_id": f"trace_failed_{attempt}",
+                    "run_id": f"run_failed_{attempt}",
+                },
+            },
+        }
+
+    monkeypatch.setattr(reactor_dispatch.operations_runtime, "run_operation", fail_operation_run)
+
+    created_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Reactor retries a failed linked operation before deadletter.",
+            "mode": "pilot",
+            "action_class": "operation_run",
+            "operation_id": operation_id,
+            "max_actions": 2,
+            "max_retries": 1,
+            "backoff_seconds": 0,
+        }
+    )
+    event_id = str(created_event["event_id"])
+
+    first_attempt = record_dispatch_attempt(
+        event_id,
+        {"actor": actor, "reason": "run linked operation and preserve failure retry route"},
+    )
+
+    assert first_attempt["ok"] is True
+    event = first_attempt["event"]
+    assert event["status"] == "dispatch_failed"
+    assert event["stable_state"] == "awaiting_retry"
+    assert event["dispatch"]["engine"] == "operation_run"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is True
+    assert run_calls == [operation_id]
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["status"] == "failed"
+    assert execution["outcome"] == "operation_failed"
+    assert execution["operation_id"] == operation_id
+    assert execution["execution_started"] is True
+    assert execution["dispatch_applied"] is True
+    assert execution["verified"] is False
+    assert execution["completion_claim_allowed"] is False
+    retry_candidate = event["latest_retry_candidate"]
+    assert retry_candidate["gate"] == "operation_run_failed"
+    assert retry_candidate["outcome"] == "operation_failed"
+    assert retry_candidate["stable_state"] == "awaiting_retry"
+    assert retry_candidate["execution_started"] is True
+    assert retry_candidate["retry_scheduled"] is True
+    retry_schedule = event["latest_retry_schedule"]
+    retry_schedule_id = str(retry_schedule["retry_schedule_id"])
+    assert retry_schedule["status"] == "scheduled"
+    assert retry_schedule["gate"] == "operation_run_failed"
+    assert retry_schedule["stable_state"] == "awaiting_retry"
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "failed"
+    assert verification["verification_outcome"] == "operation_failed"
+    assert verification["route"] == "retry_backoff"
+    assert verification["source_receipt_kind"] == "reactor.retry.schedule.receipt"
+    assert verification["operation_id"] == operation_id
+    assert verification["execution_started"] is True
+    assert verification["dispatch_applied"] is True
+    assert verification["completion_claim_allowed"] is False
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "retry_backoff"
+    assert stable_return["stable_state"] == "awaiting_retry"
+    assert stable_return["source_receipt_kind"] == "reactor.retry.schedule.receipt"
+    assert stable_return["operation_id"] == operation_id
+    assert stable_return["execution_started"] is True
+    assert stable_return["dispatch_applied"] is True
+    assert stable_return["retry_scheduled"] is True
+    assert reactor_review_queue(route="retry_backoff")["items"][0]["review"]["gate"] == "operation_run_failed"
+
+    due = record_retry_due(retry_schedule_id, {"actor": actor, "reason": "make failed operation retry due"})
+    assert due["status"] == "retry_due"
+
+    retry_attempt = record_retry_dispatch_attempt(
+        retry_schedule_id,
+        {
+            "actor": actor,
+            "reason": "retry failed linked operation and exhaust retry budget",
+        },
+    )
+
+    assert retry_attempt["ok"] is True
+    assert retry_attempt["status"] == "retry_dispatch_attempted"
+    event = retry_attempt["event"]
+    assert event["status"] == "dispatch_failed"
+    assert event["stable_state"] == "retry_budget_exhausted"
+    assert run_calls == [operation_id, operation_id]
+    retry_exhausted = event["latest_retry_exhausted"]
+    assert retry_exhausted["kind"] == "reactor.retry_exhausted.receipt"
+    assert retry_exhausted["outcome"] == "operation_failed"
+    assert retry_exhausted["execution_started"] is True
+    assert retry_exhausted["attempt_count"] == 2
+    assert retry_exhausted["deadletter_enqueued"] is True
+    deadletter_item = event["latest_deadletter_item"]
+    assert deadletter_item["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert deadletter_item["gate"] == "retry_budget_exhausted"
+    assert deadletter_item["status"] == "queued"
+    deadletter_enqueue = event["latest_deadletter_enqueue"]
+    assert deadletter_enqueue["source_receipt_kind"] == "reactor.retry_exhausted.receipt"
+    assert event["latest_stable_return"]["route"] == "deadletter_queue"
+    assert event["latest_stable_return"]["deadletter_enqueued"] is True
+    assert event["latest_stable_return"]["retry_exhausted"] is True
+    assert event["latest_verification_receipt"]["verification_status"] == "failed"
+    assert event["latest_verification_receipt"]["route"] == "deadletter_queue"
+    assert event["latest_verification_receipt"]["completion_claim_allowed"] is False
+    assert get_deadletter(str(deadletter_item["deadletter_id"]))["event_id"] == event_id  # type: ignore[index]
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_failed": 1}
+    assert status["stable_state_counts"] == {"retry_budget_exhausted": 1}
+    assert status["dispatch_execution_counts"] == {"failed": 1}
+    assert status["retry_schedule_counts"] == {"attempted": 1}
+    assert status["retry_exhausted_counts"] == {"exhausted": 1}
+    assert status["deadletter_queue_counts"] == {"queued": 1}
 
 
 def test_reactor_dispatch_engine_blocks_operation_run_without_operations_scope(monkeypatch, tmp_path: Path) -> None:

@@ -439,6 +439,11 @@ def _retry_candidate_receipt(
     ts: int,
     actor: str,
     reason: str,
+    gate: str = "dispatch_engine_not_implemented",
+    outcome: str = "dispatch_engine_not_implemented",
+    stable_state: str = "awaiting_dispatch_engine",
+    next_step: str = "wait_for_dispatch_engine_before_retry",
+    execution_started: bool = False,
 ) -> dict[str, Any] | None:
     max_retries = _safe_int(bounds.get("max_retries"), default=0, minimum=0, maximum=10)
     if max_retries <= 0 or attempt_count > max_retries:
@@ -451,10 +456,10 @@ def _retry_candidate_receipt(
             "event_id": event_id,
             "status": "candidate",
             "route": "retry_backoff",
-            "gate": "dispatch_engine_not_implemented",
-            "outcome": "dispatch_engine_not_implemented",
-            "stable_state": "awaiting_dispatch_engine",
-            "next_step": "wait_for_dispatch_engine_before_retry",
+            "gate": gate,
+            "outcome": outcome,
+            "stable_state": stable_state,
+            "next_step": next_step,
             "attempt_count": attempt_count,
             "max_retries": max_retries,
             "remaining_retries": max(max_retries - attempt_count, 0),
@@ -464,7 +469,7 @@ def _retry_candidate_receipt(
             "actor": actor,
             "reason": reason,
             "ts": ts,
-            "execution_started": False,
+            "execution_started": execution_started,
             "retry_scheduled": False,
             "retry_started": False,
             "applied": False,
@@ -480,6 +485,9 @@ def _retry_exhausted_receipt(
     ts: int,
     actor: str,
     reason: str,
+    outcome: str = "dispatch_engine_not_implemented",
+    next_step: str = "review_retry_exhaustion_before_deadletter_or_dispatch_engine",
+    execution_started: bool = False,
 ) -> dict[str, Any] | None:
     max_retries = _safe_int(bounds.get("max_retries"), default=0, minimum=0, maximum=10)
     if max_retries <= 0 or attempt_count <= max_retries:
@@ -493,9 +501,9 @@ def _retry_exhausted_receipt(
             "status": "exhausted",
             "route": "deadletter_candidate",
             "gate": "retry_budget_exhausted",
-            "outcome": "dispatch_engine_not_implemented",
+            "outcome": outcome,
             "stable_state": "retry_budget_exhausted",
-            "next_step": "review_retry_exhaustion_before_deadletter_or_dispatch_engine",
+            "next_step": next_step,
             "attempt_count": attempt_count,
             "max_retries": max_retries,
             "remaining_retries": 0,
@@ -504,7 +512,7 @@ def _retry_exhausted_receipt(
             "actor": actor,
             "reason": reason,
             "ts": ts,
-            "execution_started": False,
+            "execution_started": execution_started,
             "retry_scheduled": False,
             "retry_started": False,
             "deadletter_enqueued": False,
@@ -525,8 +533,6 @@ def _stable_return_route(
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> str:
-    if dispatch_execution and dispatch_execution.get("dispatch_applied"):
-        return _safe_str(dispatch_execution.get("route")).strip() or "dispatch_engine"
     if deadletter_enqueue:
         return "deadletter_queue"
     if retry_exhausted:
@@ -535,6 +541,8 @@ def _stable_return_route(
         return "retry_backoff"
     if retry_candidate:
         return "retry_backoff"
+    if dispatch_execution and dispatch_execution.get("dispatch_applied"):
+        return _safe_str(dispatch_execution.get("route")).strip() or "dispatch_engine"
     if approval_request:
         return "approval_queue"
     if approval_decision and approval_decision.get("approval_allows_dispatch") is False:
@@ -1187,7 +1195,24 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     retry_candidate = None
     retry_exhausted = None
     dispatch_execution_applied = bool(dispatch_execution and dispatch_execution.get("dispatch_applied"))
-    if allowed and not dispatch_execution_applied:
+    dispatch_execution_failed = bool(
+        dispatch_execution_applied and dispatch_execution is not None and not dispatch_execution.get("verified")
+    )
+    retryable_dispatch_attempt = allowed and (not dispatch_execution_applied or dispatch_execution_failed)
+    if retryable_dispatch_attempt:
+        retry_outcome = outcome
+        retry_candidate_gate = "dispatch_engine_not_implemented"
+        retry_candidate_state = "awaiting_dispatch_engine"
+        retry_candidate_next_step = "wait_for_dispatch_engine_before_retry"
+        retry_exhausted_next_step = "review_retry_exhaustion_before_deadletter_or_dispatch_engine"
+        retry_execution_started = False
+        if dispatch_execution_failed and dispatch_execution is not None:
+            retry_outcome = _safe_str(dispatch_execution.get("outcome")).strip() or outcome
+            retry_candidate_gate = "operation_run_failed"
+            retry_candidate_state = "awaiting_retry"
+            retry_candidate_next_step = "wait_until_retry_due_before_reactor_operation_retry"
+            retry_exhausted_next_step = "review_failed_operation_retry_exhaustion_before_deadletter"
+            retry_execution_started = True
         retry_candidate = _retry_candidate_receipt(
             event_id=event_key,
             bounds=bounds,
@@ -1195,6 +1220,11 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             ts=ts,
             actor=actor,
             reason=reason,
+            gate=retry_candidate_gate,
+            outcome=retry_outcome,
+            stable_state=retry_candidate_state,
+            next_step=retry_candidate_next_step,
+            execution_started=retry_execution_started,
         )
         retry_exhausted = _retry_exhausted_receipt(
             event_id=event_key,
@@ -1203,6 +1233,9 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             ts=ts,
             actor=actor,
             reason=reason,
+            outcome=retry_outcome,
+            next_step=retry_exhausted_next_step,
+            execution_started=retry_execution_started,
         )
         if retry_exhausted is not None:
             stable_state = _safe_str(retry_exhausted.get("stable_state")).strip() or stable_state
@@ -1224,6 +1257,9 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
             retry_candidate["retry_schedule_id"] = retry_schedule_id
             retry_candidate["retry_schedule_receipt_id"] = retry_schedule_id
             retry_candidate["retry_scheduled"] = True
+        if dispatch_execution_failed and retry_schedule_receipt:
+            stable_state = _safe_str(retry_schedule_receipt.get("stable_state")).strip() or stable_state
+            next_step = _safe_str(retry_schedule_receipt.get("next_step")).strip() or next_step
     deadletter_source = retry_exhausted or deadletter_candidate
     if deadletter_source is not None:
         queued_deadletter = queue_deadletter(
@@ -2298,7 +2334,7 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             receipt=deadletter_candidate,
             blocker=blocker,
         )
-    if stable_state == "awaiting_dispatch_engine" and retry_schedule:
+    if stable_state in {"awaiting_dispatch_engine", "awaiting_retry"} and retry_schedule:
         return _review_projection(
             item=item,
             route="retry_backoff",
@@ -2307,7 +2343,7 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             receipt=retry_schedule,
             blocker=blocker,
         )
-    if stable_state == "awaiting_dispatch_engine" and retry_candidate:
+    if stable_state in {"awaiting_dispatch_engine", "awaiting_retry"} and retry_candidate:
         return _review_projection(
             item=item,
             route="retry_backoff",
