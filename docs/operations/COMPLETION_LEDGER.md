@@ -10750,6 +10750,36 @@ visibility slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, Reactor dispatch attempts now record an explicit
+readback-only reflection receipt between verification and stable return. Each
+dispatch attempt persists `reactor.reflection.receipt`, links it to the
+verification receipt, records whether bounded work was verified or not verified,
+keeps chained-action, execution, approval, retry, escalation, memory-write, and
+dispatch authority disabled on the reflection receipt itself, links stable return
+back to the reflection receipt, and exposes reflection readback through existing
+receipt-kind filtering and `/reactor/status` reflection counts. This closes the
+implicit `verify -> receipt -> reflect -> return to stable state` readback gap
+without granting new execution, approval, retry, memory, promotion, escalation,
+external-delivery, or UI authority.
+
+Latest targeted validation for the `2026-04-28` Reactor reflection receipt
+readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_records_receipt_without_execution tests\test_api_reactor.py::test_reactor_event_routes_enqueue_and_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\events.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed with existing .ruff_cache access warnings`
+- `python -m mypy src\francis\reactor\events.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10769,7 +10799,7 @@ These remain true and should block any "finished" claim:
   can create a pending approval request when missing, reconcile terminal
   approval decisions back into deferred dispatch or operator-review-blocked
   state, persist real Reactor deadletter queue items with bounded review
-  receipts, record verification-state and stable-return receipts, persist retry
+  receipts, record verification, reflection, and stable-return receipts, persist retry
   schedule queue items, mark retry schedules due, and feed one bounded retry
   dispatch-attempt receipt. Reactor now has a partial dispatch engine for
   existing `operation_run` events guarded by the existing `operations.run` scope

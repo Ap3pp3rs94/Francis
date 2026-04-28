@@ -700,6 +700,7 @@ def _stable_return_receipt(
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
     verification_receipt: dict[str, Any] | None = None,
+    reflection_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_receipt = _stable_return_source_receipt(
         dispatch_receipt=dispatch_receipt,
@@ -744,6 +745,9 @@ def _stable_return_receipt(
             "verification_receipt_id": _safe_str((verification_receipt or {}).get("receipt_id")).strip(),
             "verification_status": (verification_receipt or {}).get("verification_status"),
             "verification_outcome": (verification_receipt or {}).get("verification_outcome"),
+            "reflection_receipt_id": _safe_str((reflection_receipt or {}).get("receipt_id")).strip(),
+            "reflection_status": (reflection_receipt or {}).get("status"),
+            "reflection_outcome": (reflection_receipt or {}).get("reflection_outcome"),
             "attempt_count": attempt_count,
             "actor": actor,
             "reason": reason,
@@ -937,6 +941,68 @@ def _verification_receipt(
                 "deadletter_resolution_authority": False,
                 "escalation_authority": False,
                 "memory_write": bool((dispatch_execution or {}).get("memory_write")),
+            },
+        }
+    )
+
+
+def _reflection_receipt(
+    *,
+    event_id: str,
+    stable_state: str,
+    next_step: str,
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+    verification_receipt: dict[str, Any],
+) -> dict[str, Any]:
+    verification_status = _safe_str(verification_receipt.get("verification_status")).strip()
+    verification_outcome = _safe_str(verification_receipt.get("verification_outcome")).strip()
+    route = _safe_str(verification_receipt.get("route")).strip() or "operator_review"
+    reflection_outcome = "bounded_work_verified" if verification_status == "passed" else "bounded_work_not_verified"
+    reflection_next_step = "return_to_stable_state_without_chaining"
+    if verification_status == "passed":
+        reflection_next_step = "return_to_stable_state_after_verified_run"
+    return _filtered_receipt(
+        {
+            "kind": "reactor.reflection.receipt",
+            "receipt_id": f"{event_id}_reflection_{attempt_count}",
+            "event_id": event_id,
+            "status": "reflected",
+            "reflection_status": "reflected",
+            "reflection_outcome": reflection_outcome,
+            "route": route,
+            "gate": "reactor_reflection",
+            "stable_state": stable_state,
+            "next_step": reflection_next_step,
+            "source_receipt_kind": verification_receipt.get("kind"),
+            "source_receipt_ref": _receipt_reference(verification_receipt),
+            "verification_receipt_id": _safe_str(verification_receipt.get("receipt_id")).strip(),
+            "verification_status": verification_status,
+            "verification_outcome": verification_outcome,
+            "reactor_next_step": next_step,
+            "attempt_count": attempt_count,
+            "actor": actor,
+            "reason": reason,
+            "ts": ts,
+            "reflection_recorded": True,
+            "chained_action_started": False,
+            "execution_started": False,
+            "dispatch_applied": False,
+            "retry_started": False,
+            "escalation_started": False,
+            "memory_write": False,
+            "completion_claim_allowed": bool(verification_receipt.get("completion_claim_allowed")),
+            "governance": {
+                "gate": "reactor_reflection_receipt",
+                "execution_authority": False,
+                "dispatch_authority": False,
+                "approval_authority": False,
+                "retry_authority": False,
+                "deadletter_resolution_authority": False,
+                "escalation_authority": False,
+                "memory_write": False,
             },
         }
     )
@@ -1567,6 +1633,16 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
     )
+    reflection = _reflection_receipt(
+        event_id=event_key,
+        stable_state=stable_state,
+        next_step=next_step,
+        actor=actor,
+        reason=reason,
+        attempt_count=attempt_count,
+        ts=ts,
+        verification_receipt=verification,
+    )
     stable_return = _stable_return_receipt(
         event_id=event_key,
         status=status,
@@ -1587,6 +1663,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         retry_candidate=retry_candidate,
         retry_exhausted=retry_exhausted,
         verification_receipt=verification,
+        reflection_receipt=reflection,
     )
     updated_dispatch = {
         **dispatch,
@@ -1706,6 +1783,9 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     journal_entry["verification_receipt_id"] = verification.get("receipt_id")
     journal_entry["verification_status"] = verification.get("verification_status")
     journal_entry["verification_outcome"] = verification.get("verification_outcome")
+    journal_entry["reflection_receipt_id"] = reflection.get("receipt_id")
+    journal_entry["reflection_status"] = reflection.get("status")
+    journal_entry["reflection_outcome"] = reflection.get("reflection_outcome")
     decision_journal.append(journal_entry)
 
     raw_receipts = record.get("receipts")
@@ -1732,6 +1812,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if deadletter_enqueue:
         receipts.append(deadletter_enqueue)
     receipts.append(verification)
+    receipts.append(reflection)
     receipts.append(stable_return)
     raw_blockers = record.get("blockers")
     blockers = raw_blockers if isinstance(raw_blockers, list) else []
@@ -1753,6 +1834,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         record["dispatch_execution_receipts"] = dispatch_executions
         record["latest_dispatch_execution_receipt"] = dispatch_execution
     record["latest_verification_receipt"] = verification
+    record["latest_reflection_receipt"] = reflection
     record["latest_stable_return"] = stable_return
     record["latest_receipt"] = stable_return
     if blocker is not None:
@@ -1859,6 +1941,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     verifications = raw_verifications if isinstance(raw_verifications, list) else []
     verifications.append(verification)
     record["verification_receipts"] = verifications
+    raw_reflections = record.get("reflection_receipts")
+    reflections = raw_reflections if isinstance(raw_reflections, list) else []
+    reflections.append(reflection)
+    record["reflection_receipts"] = reflections
     raw_governance = record.get("governance")
     governance = raw_governance if isinstance(raw_governance, dict) else {}
     governance.update(
@@ -4462,6 +4548,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_dispatch_attempt_receipt",
         "latest_dispatch_execution_receipt",
         "latest_verification_receipt",
+        "latest_reflection_receipt",
         "latest_approval_decision",
         "latest_stable_return",
         "latest_deadletter_enqueue",
@@ -4908,6 +4995,8 @@ def reactor_status() -> dict[str, Any]:
     retry_exhausted_counts: dict[str, int] = {}
     verification_counts: dict[str, int] = {}
     verification_outcome_counts: dict[str, int] = {}
+    reflection_counts: dict[str, int] = {}
+    reflection_outcome_counts: dict[str, int] = {}
     stable_return_counts: dict[str, int] = {}
     deadletters = list_deadletters(limit=5000)
     retry_schedules = list_retry_schedules(limit=5000)
@@ -5157,6 +5246,14 @@ def reactor_status() -> dict[str, Any]:
             verification_outcome_counts[verification_outcome] = (
                 verification_outcome_counts.get(verification_outcome, 0) + 1
             )
+        raw_reflection = item.get("latest_reflection_receipt")
+        reflection = raw_reflection if isinstance(raw_reflection, dict) else {}
+        reflection_status = _safe_str(reflection.get("status")).strip()
+        if reflection_status:
+            reflection_counts[reflection_status] = reflection_counts.get(reflection_status, 0) + 1
+        reflection_outcome = _safe_str(reflection.get("reflection_outcome")).strip()
+        if reflection_outcome:
+            reflection_outcome_counts[reflection_outcome] = reflection_outcome_counts.get(reflection_outcome, 0) + 1
     return {
         "ok": True,
         "status": "ready",
@@ -5196,6 +5293,8 @@ def reactor_status() -> dict[str, Any]:
         "retry_exhausted_counts": retry_exhausted_counts,
         "verification_counts": verification_counts,
         "verification_outcome_counts": verification_outcome_counts,
+        "reflection_counts": reflection_counts,
+        "reflection_outcome_counts": reflection_outcome_counts,
         "stable_return_counts": stable_return_counts,
         "dispatch_engine": "partial",
         "dispatch_engine_supported_actions": list(SUPPORTED_ACTIONS),

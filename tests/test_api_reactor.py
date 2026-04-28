@@ -147,6 +147,18 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert verification["completion_claimed"] is False
     assert verification["completion_claim_allowed"] is False
     assert verification["governance"]["execution_authority"] is False
+    reflection = attempt_body["event"]["latest_reflection_receipt"]
+    assert reflection["kind"] == "reactor.reflection.receipt"
+    assert reflection["status"] == "reflected"
+    assert reflection["reflection_status"] == "reflected"
+    assert reflection["reflection_outcome"] == "bounded_work_not_verified"
+    assert reflection["source_receipt_kind"] == "reactor.verification.receipt"
+    assert reflection["verification_receipt_id"] == verification["receipt_id"]
+    assert reflection["verification_status"] == "not_available"
+    assert reflection["verification_outcome"] == "dispatch_engine_not_implemented"
+    assert reflection["chained_action_started"] is False
+    assert reflection["governance"]["execution_authority"] is False
+    assert reflection["governance"]["dispatch_authority"] is False
     stable_return = attempt_body["event"]["latest_stable_return"]
     assert stable_return["kind"] == "reactor.stable_return.receipt"
     assert stable_return["status"] == "settled"
@@ -159,6 +171,9 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert stable_return["verification_receipt_id"] == verification["receipt_id"]
     assert stable_return["verification_status"] == "not_available"
     assert stable_return["verification_outcome"] == "dispatch_engine_not_implemented"
+    assert stable_return["reflection_receipt_id"] == reflection["receipt_id"]
+    assert stable_return["reflection_status"] == "reflected"
+    assert stable_return["reflection_outcome"] == "bounded_work_not_verified"
     assert attempt_body["event"]["latest_receipt"]["receipt_id"] == stable_return["receipt_id"]
 
     verification_list = client.get(
@@ -167,6 +182,13 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     )
     assert verification_list.status_code == 200
     assert {item["event_id"] for item in verification_list.json()["items"]} == {event_id}
+
+    reflection_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.reflection.receipt"},
+    )
+    assert reflection_list.status_code == 200
+    assert {item["event_id"] for item in reflection_list.json()["items"]} == {event_id}
 
     stable_return_list = client.get(
         "/reactor/events/list",
@@ -182,6 +204,8 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["status_counts"] == {"dispatch_deferred": 1}
     assert status.json()["verification_counts"] == {"not_available": 1}
     assert status.json()["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
+    assert status.json()["reflection_counts"] == {"reflected": 1}
+    assert status.json()["reflection_outcome_counts"] == {"bounded_work_not_verified": 1}
     assert status.json()["stable_return_counts"] == {"settled": 1}
 
 
