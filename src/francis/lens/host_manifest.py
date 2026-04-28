@@ -75,12 +75,33 @@ def _lens_host_process_readback() -> dict[str, Any]:
     }
 
 
+def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[str, Any]:
+    service_name = str(service_config_payload.get("service_name") or "Francis-LensHost")
+    return {
+        "status": "not_checked_by_api",
+        "readback_ready": True,
+        "service_name": service_name,
+        "installed": False,
+        "windows_service": True,
+        "host_query": "runner_only",
+        "install_supported": False,
+        "start_supported": False,
+        "stop_supported": False,
+        "restart_supported": False,
+        "install_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "blocked_reason": "lens_host_service_status_runner_required",
+    }
+
+
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
     service_config = "config/runtime/services/lens-host.json"
     entrypoint_exists = _runtime_file_exists(entrypoint)
     service_config_payload = _runtime_json_dict(service_config)
     service_config_exists = bool(service_config_payload)
+    service_readback = _lens_host_service_readback(service_config_payload)
     process_readback = _lens_host_process_readback()
     blockers = [
         "lens_host_runtime_not_implemented",
@@ -152,6 +173,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "start_after_install": False,
             "auto_start": False,
         },
+        "service_readback": service_readback,
         "process_readback": process_readback,
         "required_bindings": [
             {
@@ -168,6 +190,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_service_config",
                 "path": service_config,
                 "status": "present_disabled" if service_config_exists else "missing",
+            },
+            {
+                "id": "host_service_readback",
+                "service_name": service_readback["service_name"],
+                "status": "readback_ready",
             },
             {
                 "id": "host_process_readback",
@@ -204,6 +231,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "new_sensing_authority": False,
             "local_process_launch_authority": False,
             "service_install_authority": False,
+            "service_control_authority": False,
             "mutation_authority_granted": False,
         },
     }

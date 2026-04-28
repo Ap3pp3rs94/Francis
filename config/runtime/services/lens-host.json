@@ -17,6 +17,8 @@
   "installable": false,
   "process_supervision_enabled": false,
   "process_supervision_readback": true,
+  "service_status_readback": true,
+  "service_control_authority": false,
   "install_authority": false,
   "service_install_authority": false,
   "blocked_reason": "lens_host_runtime_not_implemented",

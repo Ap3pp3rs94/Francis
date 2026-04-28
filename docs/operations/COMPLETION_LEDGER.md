@@ -11211,6 +11211,47 @@ readback boundary:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
   Result: `passed`
 
+As of `2026-04-28`, Stage 6/Lens host readiness also has read-only Windows
+service status readback. The disabled service config now declares
+`service_status_readback: true` and `service_control_authority: false` for the
+future `Francis-LensHost` service. `scripts/lens-host.ps1 -Mode Status` reads
+the configured service name, checks only the local Windows Service Control
+Manager/CIM status when available, and reports `service_readback` with
+installed/status/start-type/path/account/error fields plus explicit denials for
+install, start, stop, restart, service-install, and service-control authority.
+The API does not query host services directly; `/lens/host/manifest` and
+`/lens/host` expose a deterministic `runner_only` service-readback contract and
+mark `host_service_readback` as ready so the operator can distinguish a declared
+service from an installed/running resident host.
+
+This is service-status readback only. It does not install, start, stop, restart,
+or supervise a Windows service; create a resident host process; write PID/state
+files; register a hotkey; open an overlay; change UI behavior; write memory;
+decide approvals; execute actions; or grant overlay-control, summon, capture,
+sensing, telemetry, promotion, policy, service-install, service-control,
+supervision, restart, stop, or local-process-launch authority.
+`resident_host_process_missing` and service installation/startup remain blockers.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens host service status
+readback boundary:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-host.ps1 -Mode Foreground; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11221,10 +11262,10 @@ These remain true and should block any "finished" claim:
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a status-only
   `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
-  non-starting process readback boundary, but no OS-wide summon, resident host
-  process, installed/started service, resident overlay/HUD runtime, OS-level
-  command palette, tray presence, hotkey binding, or live Pilot takeover surface
-  yet
+  non-starting process readback boundary plus read-only Windows service status
+  readback, but no OS-wide summon, resident host process, installed/started
+  service, resident overlay/HUD runtime, OS-level command palette, tray presence,
+  hotkey binding, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

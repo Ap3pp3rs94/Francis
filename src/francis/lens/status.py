@@ -227,6 +227,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
+    service_readback = _as_dict(launch_manifest.get("service_readback"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     blockers = [
         "lens_host_runtime_not_implemented",
@@ -253,6 +254,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "id": "host_service_config",
             "label": "Host service config",
             "status": "present_disabled" if service_config_present else "missing",
+            "required_for": ["startup_supervision"],
+        },
+        {
+            "id": "host_service_readback",
+            "label": "Host service status readback",
+            "status": "readback_ready" if service_readback.get("readback_ready") else "missing",
             "required_for": ["startup_supervision"],
         },
         {
@@ -308,6 +315,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "status_runner_present": status_runner_present,
         "service_config_present": service_config_present,
         "service_config_path": _safe_str(service_install.get("config_path")).strip(),
+        "service_readback": service_readback,
+        "service_readback_ready": bool(service_readback.get("readback_ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
         "resident": False,
@@ -332,6 +341,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "capture_authority": False,
             "new_sensing_authority": False,
             "local_process_launch_authority": False,
+            "service_control_authority": False,
             "mutation_authority_granted": False,
         },
     }

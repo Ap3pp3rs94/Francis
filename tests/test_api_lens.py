@@ -69,6 +69,8 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "installable": false,
   "process_supervision_enabled": false,
   "process_supervision_readback": true,
+  "service_status_readback": true,
+  "service_control_authority": false,
   "install_authority": false,
   "service_install_authority": false,
   "blocked_reason": "lens_host_runtime_not_implemented"
@@ -182,6 +184,23 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["status_runner_present"] is True
     assert resident_host["service_config_present"] is True
     assert resident_host["service_config_path"] == "config/runtime/services/lens-host.json"
+    assert resident_host["service_readback_ready"] is True
+    assert resident_host["service_readback"] == {
+        "status": "not_checked_by_api",
+        "readback_ready": True,
+        "service_name": "Francis-LensHost",
+        "installed": False,
+        "windows_service": True,
+        "host_query": "runner_only",
+        "install_supported": False,
+        "start_supported": False,
+        "stop_supported": False,
+        "restart_supported": False,
+        "install_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "blocked_reason": "lens_host_service_status_runner_required",
+    }
     assert resident_host["process_readback_ready"] is True
     assert resident_host["process_readback"] == {
         "status": "missing",
@@ -212,6 +231,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert [item["id"] for item in resident_host["components"]] == [
         "host_status_runner",
         "host_service_config",
+        "host_service_readback",
         "host_process_readback",
         "host_process",
         "tray_presence",
@@ -284,11 +304,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "start_after_install": False,
         "auto_start": False,
     }
+    assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
         "api_status",
         "host_status_runner",
         "host_service_config",
+        "host_service_readback",
         "host_process_readback",
         "host_readiness",
         "tray_presence",
@@ -313,6 +335,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "new_sensing_authority": False,
         "local_process_launch_authority": False,
         "service_install_authority": False,
+        "service_control_authority": False,
         "mutation_authority_granted": False,
     }
     assert resident_host["governance"] == {
@@ -325,6 +348,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "capture_authority": False,
         "new_sensing_authority": False,
         "local_process_launch_authority": False,
+        "service_control_authority": False,
         "mutation_authority_granted": False,
     }
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
@@ -379,6 +403,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_body["contract_status"] == "readback_ready"
     assert host_body["status_runner_present"] is True
     assert host_body["service_config_present"] is True
+    assert host_body["service_readback_ready"] is True
     assert host_body["process_readback_ready"] is True
     assert host_body["resident"] is False
     assert host_body["global_hotkey"] is False
@@ -393,6 +418,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["declared_entrypoint"]["exists"] is True
     assert manifest_body["service_install"]["config_exists"] is True
     assert manifest_body["service_install"]["installable"] is False
+    assert manifest_body["service_readback"]["status"] == "not_checked_by_api"
+    assert manifest_body["service_readback"]["service_control_authority"] is False
     assert manifest_body["process_readback"]["status"] == "missing"
     assert manifest_body["status_command"]["executable"] is True
     assert manifest_body["candidate_command"]["executable"] is False

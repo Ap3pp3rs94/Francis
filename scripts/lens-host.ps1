@@ -13,6 +13,18 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $modeName = $Mode.ToLowerInvariant()
 $ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
 $ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
+$ServiceName = 'Francis-LensHost'
+if ($ServiceConfigExists) {
+  try {
+    $ServiceConfigPayload = Get-Content -LiteralPath $ServiceConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    $ServiceNameProperty = $ServiceConfigPayload.PSObject.Properties['service_name']
+    if ($null -ne $ServiceNameProperty -and -not [string]::IsNullOrWhiteSpace([string]$ServiceNameProperty.Value)) {
+      $ServiceName = [string]$ServiceNameProperty.Value
+    }
+  } catch {
+    $ServiceName = 'Francis-LensHost'
+  }
+}
 $ProcessStatePath = Join-Path $RepoRoot 'data\runtime\lens-host\status.json'
 $PidPath = Join-Path $RepoRoot 'data\runtime\lens-host\lens-host.pid'
 $ProcessStateExists = Test-Path -LiteralPath $ProcessStatePath -PathType Leaf
@@ -45,6 +57,41 @@ if (-not $ServiceConfigExists) {
   $Blockers = @('lens_host_service_config_missing') + $Blockers
 }
 
+$WindowsServiceSupported = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+$ServiceInstalled = $false
+$ServiceStatus = if ($WindowsServiceSupported) { 'not_installed' } else { 'unsupported_platform' }
+$ServiceStartType = ''
+$ServiceState = ''
+$ServicePathName = ''
+$ServiceAccount = ''
+$ServiceReadbackError = ''
+if ($WindowsServiceSupported) {
+  try {
+    $Service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($null -ne $Service) {
+      $ServiceInstalled = $true
+      $ServiceStatus = ([string]$Service.Status).ToLowerInvariant()
+      $FilterServiceName = $ServiceName.Replace("'", "''")
+      $CimService = $null
+      try {
+        $CimService = Get-CimInstance Win32_Service -Filter "Name='$FilterServiceName'" -ErrorAction SilentlyContinue
+      } catch {
+        $CimService = $null
+      }
+      if ($null -ne $CimService) {
+        $ServiceStartType = [string]$CimService.StartMode
+        $ServiceState = [string]$CimService.State
+        $ServicePathName = [string]$CimService.PathName
+        $ServiceAccount = [string]$CimService.StartName
+      }
+    }
+  } catch {
+    $ServiceStatus = 'unavailable'
+    $ServiceReadbackError = [string]$_.Exception.Message
+  }
+}
+$ServiceBlockedReason = if ($ServiceInstalled) { 'lens_host_runtime_not_implemented' } elseif ($WindowsServiceSupported) { 'lens_host_service_not_installed' } else { 'windows_service_readback_unavailable' }
+
 $payload = [ordered]@{
   ok = $true
   kind = 'lens.host.status_runner'
@@ -53,6 +100,26 @@ $payload = [ordered]@{
   repo_root = $RepoRoot
   service_config_path = 'config/runtime/services/lens-host.json'
   service_config_exists = $ServiceConfigExists
+  service_readback = [ordered]@{
+    status = $ServiceStatus
+    readback_ready = $true
+    service_name = $ServiceName
+    installed = $ServiceInstalled
+    windows_service = $WindowsServiceSupported
+    start_type = $ServiceStartType
+    state = $ServiceState
+    path_name = $ServicePathName
+    account = $ServiceAccount
+    error = $ServiceReadbackError
+    install_supported = $false
+    start_supported = $false
+    stop_supported = $false
+    restart_supported = $false
+    install_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    blocked_reason = $ServiceBlockedReason
+  }
   process_readback = [ordered]@{
     status = if ($ProcessAlive) { 'process_observed' } elseif ($PidPresent -or $ProcessStateExists) { 'state_present_process_not_running' } else { 'missing' }
     readback_ready = $true
@@ -93,6 +160,7 @@ $payload = [ordered]@{
     new_sensing_authority = $false
     local_process_launch_authority = $false
     service_install_authority = $false
+    service_control_authority = $false
     mutation_authority_granted = $false
   }
 }
