@@ -1178,6 +1178,20 @@ run plugins, schedule retries, enqueue deadletters, send externally, write
 memory, promote capabilities, or grant mutation, execution, dispatch, approval,
 promotion, external-delivery, or memory-write authority.
 
+As of `2026-04-28`, Stage 5/Reactor also has an explicit generic dispatch
+action boundary. `action_class=dispatch` Reactor events now produce a blocked
+`reactor.dispatch.execution.receipt` with `route=dispatch`, stable
+`dispatch_action_not_enabled` state, verification and stable-return receipts,
+operator-review projection, and `/reactor/status`
+`dispatch_engine_boundary_actions` readback. This replaces generic
+not-implemented deferment for direct dispatch-action attempts with a typed,
+reviewable no-execution boundary. This is boundary/readback behavior only: it
+does not implement a dispatcher, run commands, dispatch arbitrary work, decide
+approvals, mutate state, run plugins, schedule retries, enqueue deadletters,
+send externally, write memory, promote capabilities, or grant dispatch-action,
+execution, dispatch, approval, promotion, external-delivery, or memory-write
+authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -10390,6 +10404,22 @@ boundary slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor generic dispatch-action
+boundary slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_dispatch_boundary_without_execution tests\test_api_reactor.py::test_reactor_dispatch_action_route_blocks_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10472,7 +10502,7 @@ These remain true and should block any "finished" claim:
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
   approval-resume history readback. Reactor also has explicit no-execution
-  `execute`, `mutate`, and `plugin_run` dispatch boundaries with
+  `dispatch`, `execute`, `mutate`, and `plugin_run` dispatch boundaries with
   operator-review readback, so those attempts are blocked by typed receipts
   instead of generic
   not-implemented deferment. Remaining Stage 5 gaps still include broader dispatch action
