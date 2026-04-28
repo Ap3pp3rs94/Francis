@@ -772,7 +772,7 @@ def test_reactor_dispatch_engine_classifies_telemetry_without_execution(monkeypa
     assert status["verification_outcome_counts"] == {"telemetry_event_classified": 1}
 
 
-def test_reactor_dispatch_engine_classifies_schedule_and_handoff_without_execution(
+def test_reactor_dispatch_engine_classifies_roadmap_signal_triggers_without_execution(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -780,6 +780,12 @@ def test_reactor_dispatch_engine_classifies_schedule_and_handoff_without_executi
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     secret = "sk-" + ("s" * 24)
     cases = (
+        (
+            "build_failure",
+            "ci_failure",
+            "Build failed and needs Reactor classification",
+            "build_failure_classified",
+        ),
         (
             "schedule_window",
             "maintenance_window",
@@ -791,6 +797,12 @@ def test_reactor_dispatch_engine_classifies_schedule_and_handoff_without_executi
             "node_handoff",
             "Federated unit handed off bounded Reactor work",
             "federated_handoff_classified",
+        ),
+        (
+            "validation_completion",
+            "test_run_complete",
+            "Validation completed and needs Reactor classification",
+            "validation_completion_classified",
         ),
     )
     event_ids: set[str] = set()
@@ -863,12 +875,14 @@ def test_reactor_dispatch_engine_classifies_schedule_and_handoff_without_executi
 
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.dispatch.execution.receipt")} == event_ids
     status = reactor_status()
-    assert status["status_counts"] == {"dispatch_completed": 2}
-    assert status["dispatch_execution_counts"] == {"completed": 2}
-    assert status["verification_counts"] == {"passed": 2}
+    assert status["status_counts"] == {"dispatch_completed": 4}
+    assert status["dispatch_execution_counts"] == {"completed": 4}
+    assert status["verification_counts"] == {"passed": 4}
     assert status["verification_outcome_counts"] == {
+        "build_failure_classified": 1,
         "federated_handoff_classified": 1,
         "schedule_window_classified": 1,
+        "validation_completion_classified": 1,
     }
 
 

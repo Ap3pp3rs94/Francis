@@ -39,6 +39,7 @@ from francis.reactor.retries import (
 VALID_TRIGGER_SOURCES = frozenset(
     {
         "approval_decision",
+        "build_failure",
         "deadletter_recovery",
         "federated_handoff",
         "forge_proposal",
@@ -47,6 +48,7 @@ VALID_TRIGGER_SOURCES = frozenset(
         "schedule_window",
         "telemetry_event",
         "user_request",
+        "validation_completion",
     }
 )
 _VALID_MODES = frozenset({"observe", "assist", "pilot", "away"})

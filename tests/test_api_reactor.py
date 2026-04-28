@@ -642,7 +642,7 @@ def test_reactor_classification_dispatch_records_read_only_receipts(monkeypatch,
     assert status_body["verification_outcome_counts"] == {"observer_anomaly_classified": 1}
 
 
-def test_reactor_classification_dispatch_accepts_schedule_and_handoff_triggers(
+def test_reactor_classification_dispatch_accepts_roadmap_signal_triggers(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -657,8 +657,10 @@ def test_reactor_classification_dispatch_accepts_schedule_and_handoff_triggers(
     client = TestClient(create_app())
     event_ids: set[str] = set()
     cases = (
+        ("build_failure", "ci_failure", "build_failure_classified"),
         ("schedule_window", "maintenance_window", "schedule_window_classified"),
         ("federated_handoff", "node_handoff", "federated_handoff_classified"),
+        ("validation_completion", "test_run_complete", "validation_completion_classified"),
     )
 
     for trigger_source, trigger_type, outcome in cases:
@@ -733,12 +735,14 @@ def test_reactor_classification_dispatch_accepts_schedule_and_handoff_triggers(
     status = client.get("/reactor/status")
     assert status.status_code == 200
     status_body = status.json()
-    assert status_body["status_counts"] == {"dispatch_completed": 2}
-    assert status_body["dispatch_execution_counts"] == {"completed": 2}
-    assert status_body["verification_counts"] == {"passed": 2}
+    assert status_body["status_counts"] == {"dispatch_completed": 4}
+    assert status_body["dispatch_execution_counts"] == {"completed": 4}
+    assert status_body["verification_counts"] == {"passed": 4}
     assert status_body["verification_outcome_counts"] == {
+        "build_failure_classified": 1,
         "federated_handoff_classified": 1,
         "schedule_window_classified": 1,
+        "validation_completion_classified": 1,
     }
     assert status_body["governance"]["execution_authority"] is False
 
