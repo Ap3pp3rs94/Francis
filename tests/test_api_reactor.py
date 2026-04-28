@@ -1317,6 +1317,81 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_acknowledgement.json()["applied"] is False
     assert second_acknowledgement.json()["status"] == "already_escalation_acknowledged"
 
+    external_attempt = client.post(
+        "/reactor/deadletters/external_escalation_attempt",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "record external attempt without sending anything",
+            "external_channel": "ops_bridge",
+            "external_target": "on_call",
+            "external_adapter": "pager_stub",
+        },
+    )
+
+    assert external_attempt.status_code == 200
+    external_body = external_attempt.json()
+    assert external_body["ok"] is True
+    assert external_body["applied"] is True
+    assert external_body["status"] == "deadletter_external_escalation_attempt_recorded"
+    external_receipt = external_body["receipt"]
+    assert external_receipt["kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert external_receipt["deadletter_id"] == deadletter_id
+    assert external_receipt["status"] == "attempt_recorded"
+    assert external_receipt["route"] == "deadletter_external_escalation_attempt"
+    assert external_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert external_receipt["external_channel"] == "ops_bridge"
+    assert external_receipt["external_target"] == "on_call"
+    assert external_receipt["external_adapter"] == "pager_stub"
+    assert external_receipt["external_adapter_status"] == "not_configured"
+    assert external_receipt["external_escalation_started"] is False
+    assert external_receipt["external_delivery_started"] is False
+    assert external_receipt["execution_started"] is False
+    assert external_receipt["dispatch_applied"] is False
+    assert external_receipt["completion_claim_allowed"] is False
+    assert external_receipt["memory_write"] is False
+    assert external_receipt["governance"]["execution_authority"] is False
+    assert external_receipt["governance"]["external_escalation_authority"] is False
+    assert external_receipt["governance"]["escalation_authority"] is False
+    external_event = external_body["event"]
+    assert external_event["stable_state"] == "deadletter_external_escalation_attempt_recorded"
+    assert external_event["dispatch"]["deadletter_external_escalation_attempt_recorded"] is True
+    assert external_event["dispatch"]["external_delivery_started"] is False
+    assert external_event["governance"]["external_escalation_authority"] is False
+
+    external_list = client.get(
+        "/reactor/deadletters/list",
+        params={"status": "external_escalation_attempt_recorded"},
+    )
+    assert external_list.status_code == 200
+    assert {item["deadletter_id"] for item in external_list.json()["items"]} == {deadletter_id}
+    external_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.external_escalation_attempt.receipt"},
+    )
+    assert external_receipts.status_code == 200
+    assert {item["event_id"] for item in external_receipts.json()["items"]} == {event_id}
+    external_review = client.get("/reactor/review_queue", params={"route": "deadletter_external_escalation_attempt"})
+    assert external_review.status_code == 200
+    assert external_review.json()["available_total"] == 1
+    assert (
+        external_review.json()["items"][0]["review"]["action"]
+        == "queue_recovery_request_or_configure_external_escalation_adapter_before_delivery"
+    )
+    external_status = client.get("/reactor/status")
+    assert external_status.status_code == 200
+    assert external_status.json()["stable_state_counts"] == {"deadletter_external_escalation_attempt_recorded": 1}
+    assert external_status.json()["deadletter_queue_counts"] == {"external_escalation_attempt_recorded": 1}
+    assert external_status.json()["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
+
+    second_external_attempt = client.post(
+        "/reactor/deadletters/external_escalation_attempt",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_external_attempt.status_code == 200
+    assert second_external_attempt.json()["applied"] is False
+    assert second_external_attempt.json()["status"] == "already_external_escalation_attempt_recorded"
+
     recovery_request = client.post(
         "/reactor/deadletters/recovery_request",
         json={
@@ -1335,6 +1410,8 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert recovery_receipt["kind"] == "reactor.deadletter.recovery_request.receipt"
     assert recovery_receipt["deadletter_id"] == deadletter_id
     assert recovery_receipt["route"] == "deadletter_recovery_request"
+    assert recovery_receipt["source_receipt_kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert recovery_receipt["external_escalation_attempt_receipt_id"] == external_receipt["receipt_id"]
     assert recovery_receipt["operation_id"] == operation_id
     assert recovery_receipt["recovery_event_enqueued"] is True
     assert recovery_receipt["execution_started"] is False
@@ -1382,6 +1459,7 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     recovery_status = client.get("/reactor/status")
     assert recovery_status.status_code == 200
     assert recovery_status.json()["deadletter_queue_counts"] == {"recovery_requested": 1}
+    assert recovery_status.json()["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
     assert recovery_status.json()["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
 
     second_recovery_request = client.post(

@@ -318,6 +318,10 @@ def _escalation_acknowledgement_next_step() -> str:
     return "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
 
 
+def _external_escalation_attempt_next_step() -> str:
+    return "queue_recovery_request_or_configure_external_escalation_adapter_before_delivery"
+
+
 def _recovery_request_next_step() -> str:
     return "dispatch_recovery_event_through_existing_operation_run_gate"
 
@@ -507,10 +511,12 @@ def _recovery_request_receipt(
     operation_id: str,
     recovery_event_id: str,
 ) -> dict[str, Any]:
+    latest_external_attempt = _as_dict(item.get("latest_external_escalation_attempt_receipt"))
     latest_acknowledgement = _as_dict(item.get("latest_escalation_acknowledgement_receipt"))
+    source_receipt = latest_external_attempt or latest_acknowledgement
     source_ref = (
-        _safe_str(latest_acknowledgement.get("receipt_id")).strip()
-        or _safe_str(latest_acknowledgement.get("deadletter_id")).strip()
+        _safe_str(source_receipt.get("receipt_id")).strip()
+        or _safe_str(source_receipt.get("deadletter_id")).strip()
         or _safe_str(item.get("deadletter_id")).strip()
     )
     receipt = {
@@ -523,11 +529,12 @@ def _recovery_request_receipt(
         "gate": "reactor_deadletter_recovery_request",
         "stable_state": "deadletter_recovery_requested",
         "next_step": _recovery_request_next_step(),
-        "source_receipt_kind": _safe_str(latest_acknowledgement.get("kind")).strip(),
+        "source_receipt_kind": _safe_str(source_receipt.get("kind")).strip(),
         "source_receipt_ref": source_ref,
-        "source_gate": _safe_str(latest_acknowledgement.get("gate") or item.get("gate")).strip(),
+        "source_gate": _safe_str(source_receipt.get("gate") or item.get("gate")).strip(),
         "escalation_acknowledgement_receipt_id": latest_acknowledgement.get("receipt_id"),
-        "resolution_decision": latest_acknowledgement.get("resolution_decision") or item.get("resolution_decision"),
+        "external_escalation_attempt_receipt_id": _safe_str(latest_external_attempt.get("receipt_id")).strip(),
+        "resolution_decision": source_receipt.get("resolution_decision") or item.get("resolution_decision"),
         "operation_id": operation_id,
         "recovery_event_id": recovery_event_id,
         "actor": actor,
@@ -552,6 +559,78 @@ def _recovery_request_receipt(
             "deadletter_resolution_authority": False,
             "recovery_request_authority": applied,
             "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _external_escalation_attempt_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    external_channel: str,
+    external_target: str,
+    adapter: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    latest_acknowledgement = _as_dict(item.get("latest_escalation_acknowledgement_receipt"))
+    source_ref = (
+        _safe_str(latest_acknowledgement.get("receipt_id")).strip()
+        or _safe_str(latest_acknowledgement.get("deadletter_id")).strip()
+        or _safe_str(item.get("deadletter_id")).strip()
+    )
+    receipt = {
+        "kind": "reactor.deadletter.external_escalation_attempt.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_external_escalation_attempt",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_external_escalation_attempt",
+        "gate": "reactor_deadletter_external_escalation_attempt",
+        "stable_state": "deadletter_external_escalation_attempt_recorded",
+        "next_step": _external_escalation_attempt_next_step(),
+        "source_receipt_kind": _safe_str(latest_acknowledgement.get("kind")).strip(),
+        "source_receipt_ref": source_ref,
+        "source_gate": _safe_str(latest_acknowledgement.get("gate") or item.get("gate")).strip(),
+        "escalation_acknowledgement_receipt_id": latest_acknowledgement.get("receipt_id"),
+        "resolution_decision": latest_acknowledgement.get("resolution_decision") or item.get("resolution_decision"),
+        "external_channel": external_channel,
+        "external_target": external_target,
+        "external_adapter": adapter,
+        "external_adapter_declared": bool(adapter),
+        "external_adapter_status": "not_configured",
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "external_escalation_attempt_recorded": True,
+        "external_escalation_started": False,
+        "external_delivery_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "completion_claimed": False,
+        "completion_claim_allowed": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_external_escalation_attempt",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
             "memory_write": False,
         },
     }
@@ -1027,6 +1106,105 @@ def record_escalation_acknowledgement(
     }
 
 
+def record_external_escalation_attempt(
+    *,
+    deadletter_id: str,
+    actor: str = "",
+    reason: str = "",
+    external_channel: str = "",
+    external_target: str = "",
+    adapter: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_deadletter", "item": {}, "receipt": {}}
+
+    current_status = _safe_str(item.get("status")).strip()
+    latest_attempt = _as_dict(item.get("latest_external_escalation_attempt_receipt"))
+    if current_status == "external_escalation_attempt_recorded" and latest_attempt:
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_external_escalation_attempt_recorded",
+            "item": _display(item),
+            "receipt": _display(latest_attempt),
+        }
+    if current_status != "escalation_acknowledged":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_escalation_acknowledgement_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+
+    receipt = _external_escalation_attempt_receipt(
+        item=item,
+        actor=actor,
+        reason=reason,
+        external_channel=_safe_str(external_channel).strip(),
+        external_target=_safe_str(external_target).strip(),
+        adapter=_safe_str(adapter).strip(),
+        ts=ts,
+        status="attempt_recorded",
+        applied=True,
+    )
+    raw_attempt_receipts = item.get("external_escalation_attempt_receipts")
+    attempt_receipts = raw_attempt_receipts if isinstance(raw_attempt_receipts, list) else []
+    attempt_receipts.append(receipt)
+    updated = {
+        **item,
+        "status": "external_escalation_attempt_recorded",
+        "route": "deadletter_external_escalation_attempt",
+        "stable_state": "deadletter_external_escalation_attempt_recorded",
+        "next_step": _external_escalation_attempt_next_step(),
+        "external_escalation_attempt_recorded": True,
+        "external_escalation_attempt_recorded_ts": ts,
+        "external_channel": _safe_str(external_channel).strip(),
+        "external_target": _safe_str(external_target).strip(),
+        "external_adapter": _safe_str(adapter).strip(),
+        "external_adapter_status": "not_configured",
+        "updated_ts": ts,
+        "external_escalation_attempt_receipts": attempt_receipts,
+        "latest_external_escalation_attempt_receipt": receipt,
+        "external_escalation_started": False,
+        "external_delivery_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_external_escalation_attempt",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "deadletter_external_escalation_attempt_recorded",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+    }
+
+
 def record_recovery_request(
     *,
     deadletter_id: str,
@@ -1054,7 +1232,7 @@ def record_recovery_request(
             "item": _display(item),
             "receipt": _display(latest_request),
         }
-    if current_status != "escalation_acknowledged":
+    if current_status not in {"escalation_acknowledged", "external_escalation_attempt_recorded"}:
         return {
             "ok": False,
             "applied": False,

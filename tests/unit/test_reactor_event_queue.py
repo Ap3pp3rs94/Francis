@@ -16,6 +16,7 @@ from francis.reactor.events import (
     reactor_status,
     record_deadletter_escalation_acknowledgement,
     record_deadletter_escalation_handoff,
+    record_deadletter_external_escalation_attempt,
     record_deadletter_recovery_request,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -2547,6 +2548,99 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert second_acknowledgement["status"] == "already_escalation_acknowledged"
     assert len(second_acknowledgement["event"]["deadletter_escalation_acknowledgements"]) == 1
 
+    external_attempt = record_deadletter_external_escalation_attempt(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record external escalation attempt without delivery",
+            "external_channel": "ops_bridge",
+            "external_target": "on_call",
+            "external_adapter": "pager_stub",
+        },
+    )
+
+    assert external_attempt["ok"] is True
+    assert external_attempt["applied"] is True
+    assert external_attempt["status"] == "deadletter_external_escalation_attempt_recorded"
+    external_event = external_attempt["event"]
+    assert external_event["stable_state"] == "deadletter_external_escalation_attempt_recorded"
+    assert external_event["dispatch"]["deadletter_external_escalation_attempt_recorded"] is True
+    assert external_event["dispatch"]["external_escalation_started"] is False
+    assert external_event["dispatch"]["external_delivery_started"] is False
+    external_receipt = external_event["latest_deadletter_external_escalation_attempt_receipt"]
+    assert external_receipt["kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert external_receipt["deadletter_id"] == deadletter_id
+    assert external_receipt["status"] == "attempt_recorded"
+    assert external_receipt["route"] == "deadletter_external_escalation_attempt"
+    assert external_receipt["stable_state"] == "deadletter_external_escalation_attempt_recorded"
+    assert external_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert external_receipt["external_channel"] == "ops_bridge"
+    assert external_receipt["external_target"] == "on_call"
+    assert external_receipt["external_adapter"] == "pager_stub"
+    assert external_receipt["external_adapter_declared"] is True
+    assert external_receipt["external_adapter_status"] == "not_configured"
+    assert external_receipt["external_escalation_attempt_recorded"] is True
+    assert external_receipt["external_escalation_started"] is False
+    assert external_receipt["external_delivery_started"] is False
+    assert external_receipt["execution_started"] is False
+    assert external_receipt["dispatch_applied"] is False
+    assert external_receipt["completion_claim_allowed"] is False
+    assert external_receipt["memory_write"] is False
+    assert external_receipt["governance"]["execution_authority"] is False
+    assert external_receipt["governance"]["external_escalation_authority"] is False
+    assert external_receipt["governance"]["escalation_authority"] is False
+    assert external_event["latest_receipt"]["kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert external_event["latest_deadletter_item"]["status"] == "external_escalation_attempt_recorded"
+    assert external_event["deadletter_external_escalation_attempts"][0]["deadletter_id"] == deadletter_id
+    assert external_event["decision_journal"][-1]["kind"] == "reactor.deadletter.external_escalation_attempt_recorded"
+    assert external_event["decision_journal"][-1]["external_delivery_started"] is False
+    assert external_event["decision_journal"][-1]["dispatch_applied"] is False
+    assert external_event["governance"]["deadletter_external_escalation_attempt_recorded"] is True
+    assert external_event["governance"]["external_escalation_authority"] is False
+
+    external_deadletter = get_deadletter(deadletter_id)
+    assert external_deadletter is not None
+    assert external_deadletter["status"] == "external_escalation_attempt_recorded"
+    assert external_deadletter["latest_external_escalation_attempt_receipt"]["deadletter_id"] == deadletter_id
+    assert [item["deadletter_id"] for item in list_deadletters(status="external_escalation_attempt_recorded")] == [
+        deadletter_id
+    ]
+    assert {
+        item["event_id"] for item in list_events(stable_state="deadletter_external_escalation_attempt_recorded")
+    } == {str(created["event_id"])}
+    assert {item["event_id"] for item in list_events(review_route="deadletter_external_escalation_attempt")} == {
+        str(created["event_id"])
+    }
+    assert {
+        item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.external_escalation_attempt.receipt")
+    } == {str(created["event_id"])}
+
+    external_review_queue = reactor_review_queue(route="deadletter_external_escalation_attempt")
+    assert external_review_queue["available_total"] == 1
+    assert (
+        external_review_queue["items"][0]["review"]["action"]
+        == "queue_recovery_request_or_configure_external_escalation_adapter_before_delivery"
+    )
+    external_status = reactor_status()
+    assert external_status["stable_state_counts"] == {"deadletter_external_escalation_attempt_recorded": 1}
+    assert external_status["deadletter_queue_counts"] == {"external_escalation_attempt_recorded": 1}
+    assert external_status["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
+    assert external_status["deadletter_escalation_acknowledgement_counts"] == {"acknowledged": 1}
+    assert external_status["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
+
+    second_external_attempt = record_deadletter_external_escalation_attempt(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "same external attempt should not duplicate receipts",
+        },
+    )
+
+    assert second_external_attempt["ok"] is True
+    assert second_external_attempt["applied"] is False
+    assert second_external_attempt["status"] == "already_external_escalation_attempt_recorded"
+    assert len(second_external_attempt["event"]["deadletter_external_escalation_attempts"]) == 1
+
     recovery_request = record_deadletter_recovery_request(
         deadletter_id,
         {
@@ -2569,7 +2663,8 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert recovery_receipt["status"] == "recovery_requested"
     assert recovery_receipt["route"] == "deadletter_recovery_request"
     assert recovery_receipt["stable_state"] == "deadletter_recovery_requested"
-    assert recovery_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert recovery_receipt["source_receipt_kind"] == "reactor.deadletter.external_escalation_attempt.receipt"
+    assert recovery_receipt["external_escalation_attempt_receipt_id"] == external_receipt["receipt_id"]
     assert recovery_receipt["operation_id"] == operation_id
     assert recovery_receipt["recovery_requested"] is True
     assert recovery_receipt["recovery_event_enqueued"] is True
@@ -2628,12 +2723,14 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
         recovery_review_queue["items"][0]["review"]["action"] == "record_dispatch_attempt_for_deadletter_recovery_event"
     )
     assert reactor_review_queue(route="deadletter_escalation_acknowledgement")["available_total"] == 0
+    assert reactor_review_queue(route="deadletter_external_escalation_attempt")["available_total"] == 0
     recovery_status = reactor_status()
     assert recovery_status["stable_state_counts"] == {
         "deadletter_recovery_requested": 1,
         "awaiting_dispatch": 1,
     }
     assert recovery_status["deadletter_queue_counts"] == {"recovery_requested": 1}
+    assert recovery_status["deadletter_external_escalation_attempt_counts"] == {"attempt_recorded": 1}
     assert recovery_status["deadletter_recovery_request_counts"] == {"recovery_requested": 1}
 
     second_recovery_request = record_deadletter_recovery_request(

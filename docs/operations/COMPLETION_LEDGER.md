@@ -827,6 +827,21 @@ for a successful existing dispatch only: it adds no new route, no new dispatch
 engine, no automatic retry loop, no approval authority, no promotion authority,
 no memory-write behavior, and no external-escalation execution.
 
+As of `2026-04-28`, acknowledged Reactor deadletters can also record an explicit
+non-executing external escalation attempt receipt before recovery is requested.
+`POST /reactor/deadletters/external_escalation_attempt` requires the existing
+`reactor.write` API scope, requires the deadletter to have reached
+`escalation_acknowledged`, records
+`reactor.deadletter.external_escalation_attempt.receipt`, preserves declared
+channel/target/adapter intent with `not_configured` adapter state, and exposes
+the attempt through receipt-kind filters, review-route filters,
+`/reactor/deadletters/list`, and `/reactor/status`
+`deadletter_external_escalation_attempt_counts`. Recovery request handoff can
+continue from that receipt. This is attempt/readback truth only: it sends no
+external message, starts no external delivery, executes no work, writes no
+memory, decides no approval, and grants no external-escalation, dispatch,
+execution, retry, approval, promotion, or memory-write authority.
+
 As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
 request and recovery-dispatch settlement truth from the existing backend routes.
 The typed Reactor UI client parses `latest_recovery_request_receipt`,
@@ -9600,6 +9615,26 @@ exhaustion deadletter proof slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor external escalation
+attempt receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9636,14 +9671,18 @@ These remain true and should block any "finished" claim:
   disposition receipts without starting recovery, retry, execution, memory
   writes, approval decisions, or external escalation, and escalation-pending
   deadletters can now record a durable non-executing escalation handoff receipt,
-  acknowledgement receipt, and recovery request receipt that queues a separate
-  `deadletter_recovery` `operation_run` event for the same source operation id
-  without dispatching it. Queued `deadletter_recovery` events now have focused
-  unit and API proof that explicit dispatch attempts run through the existing
-  `operation_run` engine and `operations.run` scope with execution,
-  verification, stable-return, and readback receipts, and successful recovery
-  dispatches now settle the original `recovery_requested` deadletter into
-  `recovery_dispatched` with a dedicated recovery-dispatch receipt and
+  acknowledgement receipt, a non-executing external escalation attempt receipt,
+  and recovery request receipt that queues a separate `deadletter_recovery`
+  `operation_run` event for the same source operation id without dispatching it.
+  The external escalation attempt receipt records channel/target/adapter intent,
+  explicit `not_configured` adapter state, no-delivery/no-execution flags,
+  receipt-kind filtering, review-queue readback, and status counts without
+  granting external escalation authority. Queued `deadletter_recovery` events
+  now have focused unit and API proof that explicit dispatch attempts run
+  through the existing `operation_run` engine and `operations.run` scope with
+  execution, verification, stable-return, and readback receipts, and successful
+  recovery dispatches now settle the original `recovery_requested` deadletter
+  into `recovery_dispatched` with a dedicated recovery-dispatch receipt and
   parent-event readback. Chat UI Reactor readback now preserves recovery-request
   and recovery-dispatch filters, badges, and latest receipt handles from the
   existing read routes.
@@ -9652,9 +9691,9 @@ These remain true and should block any "finished" claim:
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator
   visibility beyond the current
-  route-filtered review queue and direct deadletter history, and external
-  escalation execution after disposition, handoff, acknowledgement, and recovery
-  request receipts
+  route-filtered review queue and direct deadletter history, and actual
+  external escalation delivery/execution beyond the current non-executing
+  attempt receipt
 
 ## 6. Update rule
 

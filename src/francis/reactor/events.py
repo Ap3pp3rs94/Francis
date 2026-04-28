@@ -16,6 +16,7 @@ from francis.reactor.deadletters import (
     queue_deadletter,
     record_escalation_acknowledgement,
     record_escalation_handoff,
+    record_external_escalation_attempt,
     record_recovery_dispatch,
     record_recovery_request,
     resolve_deadletter,
@@ -2706,6 +2707,179 @@ def record_deadletter_escalation_acknowledgement(
     }
 
 
+def _external_escalation_payload_value(data: dict[str, Any], key: str) -> str:
+    metadata = _as_dict(data.get("metadata"))
+    return _safe_str(data.get(key) or metadata.get(key)).strip()
+
+
+def record_deadletter_external_escalation_attempt(
+    deadletter_id: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    redacted_payload = redact_governed_value(payload or {})
+    data = redacted_payload if isinstance(redacted_payload, dict) else {}
+    actor = _safe_str(data.get("actor")).strip()
+    reason = _safe_str(data.get("reason") or data.get("summary")).strip()
+    ts = _now_s()
+
+    deadletter = get_deadletter(deadletter_id)
+    if deadletter is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_not_found",
+            "receipt": {},
+            "event": None,
+        }
+
+    event_id = _safe_str(deadletter.get("event_id")).strip()
+    path = _event_path(event_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "event_not_found",
+            "receipt": {},
+            "event": None,
+        }
+
+    record = _read_raw_event(path)
+    if record is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_event",
+            "receipt": {},
+            "event": None,
+        }
+
+    deadletter_key = _safe_str(deadletter.get("deadletter_id")).strip()
+    attempt_result = record_external_escalation_attempt(
+        deadletter_id=deadletter_key,
+        actor=actor,
+        reason=reason,
+        external_channel=_external_escalation_payload_value(data, "external_channel")
+        or _external_escalation_payload_value(data, "channel"),
+        external_target=_external_escalation_payload_value(data, "external_target")
+        or _external_escalation_payload_value(data, "target"),
+        adapter=_external_escalation_payload_value(data, "external_adapter")
+        or _external_escalation_payload_value(data, "adapter"),
+        ts=ts,
+    )
+    attempt_receipt = _as_dict(attempt_result.get("receipt"))
+    attempt_item = _as_dict(attempt_result.get("item"))
+    if not attempt_result.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": attempt_result.get("error") or "deadletter_external_escalation_attempt_failed",
+            "receipt": attempt_receipt,
+            "event": _display(record),
+        }
+
+    if not attempt_result.get("applied"):
+        return {
+            "ok": True,
+            "applied": False,
+            "status": attempt_result.get("status") or "already_external_escalation_attempt_recorded",
+            "deadletter_id": deadletter_key,
+            "receipt": _display(attempt_receipt),
+            "event": _display(record),
+        }
+
+    stable_state = (
+        _safe_str(attempt_receipt.get("stable_state")).strip() or "deadletter_external_escalation_attempt_recorded"
+    )
+    raw_dispatch = record.get("dispatch")
+    dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+    updated_dispatch = {
+        **dispatch,
+        "deadletter_item": attempt_item,
+        "deadletter_external_escalation_attempt_receipt": attempt_receipt,
+        "deadletter_external_escalation_attempt_recorded": True,
+        "external_escalation_started": False,
+        "external_delivery_started": False,
+        "next_step": attempt_receipt.get("next_step"),
+    }
+
+    raw_journal = record.get("decision_journal")
+    decision_journal = raw_journal if isinstance(raw_journal, list) else []
+    decision_journal.append(
+        {
+            "kind": "reactor.deadletter.external_escalation_attempt_recorded",
+            "ts": ts,
+            "decision": "deadletter_external_escalation_attempt_recorded",
+            "deadletter_id": deadletter_key,
+            "route": attempt_receipt.get("route"),
+            "stable_state": stable_state,
+            "next_step": attempt_receipt.get("next_step"),
+            "external_channel": attempt_receipt.get("external_channel"),
+            "external_target": attempt_receipt.get("external_target"),
+            "external_adapter_status": attempt_receipt.get("external_adapter_status"),
+            "external_escalation_started": False,
+            "external_delivery_started": False,
+            "execution_started": False,
+            "dispatch_applied": False,
+            "memory_write": False,
+            "applied": True,
+        }
+    )
+
+    raw_receipts = record.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    receipts.append(attempt_receipt)
+    raw_deadletter_items = record.get("deadletter_items")
+    deadletter_items = raw_deadletter_items if isinstance(raw_deadletter_items, list) else []
+    deadletter_items = [
+        item for item in deadletter_items if _safe_str(_as_dict(item).get("deadletter_id")).strip() != deadletter_key
+    ]
+    deadletter_items.append(attempt_item)
+    raw_deadletter_attempts = record.get("deadletter_external_escalation_attempts")
+    deadletter_attempts = raw_deadletter_attempts if isinstance(raw_deadletter_attempts, list) else []
+    deadletter_attempts.append(attempt_receipt)
+
+    record["updated_ts"] = ts
+    record["stable_state"] = stable_state
+    record["dispatch"] = updated_dispatch
+    record["decision_journal"] = decision_journal
+    record["receipts"] = receipts
+    record["deadletter_items"] = deadletter_items
+    record["latest_deadletter_item"] = attempt_item
+    record["deadletter_external_escalation_attempts"] = deadletter_attempts
+    record["latest_deadletter_external_escalation_attempt_receipt"] = attempt_receipt
+    record["latest_receipt"] = attempt_receipt
+    raw_governance = record.get("governance")
+    governance = raw_governance if isinstance(raw_governance, dict) else {}
+    governance.update(
+        {
+            "gate": "reactor_deadletter_external_escalation_attempt",
+            "execution_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+            "dispatch_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "deadletter_external_escalation_attempt_recorded": True,
+            "external_escalation_authority": False,
+            "retry_execution_authority": False,
+            "escalation_authority": False,
+            "next_step": attempt_receipt.get("next_step"),
+        }
+    )
+    record["governance"] = governance
+
+    _atomic_write_json(path, record)
+    return {
+        "ok": True,
+        "applied": True,
+        "status": stable_state,
+        "deadletter_id": deadletter_key,
+        "receipt": _display(attempt_receipt),
+        "event": _display(record),
+    }
+
+
 def record_deadletter_recovery_request(
     deadletter_id: str,
     payload: dict[str, Any] | None = None,
@@ -2767,7 +2941,7 @@ def record_deadletter_recovery_request(
             "event": _display(record),
             "recovery_event": recovery_event,
         }
-    if current_status != "escalation_acknowledged":
+    if current_status not in {"escalation_acknowledged", "external_escalation_attempt_recorded"}:
         return {
             "ok": False,
             "applied": False,
@@ -3052,6 +3226,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_resolution_receipt",
         "latest_deadletter_escalation_handoff_receipt",
         "latest_deadletter_escalation_acknowledgement_receipt",
+        "latest_deadletter_external_escalation_attempt_receipt",
         "latest_deadletter_recovery_request_receipt",
         "latest_deadletter_recovery_dispatch_receipt",
         "latest_retry_candidate",
@@ -3089,6 +3264,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_resolution_receipt",
         "latest_deadletter_escalation_handoff_receipt",
         "latest_deadletter_escalation_acknowledgement_receipt",
+        "latest_deadletter_external_escalation_attempt_receipt",
         "latest_deadletter_recovery_request_receipt",
         "latest_deadletter_recovery_dispatch_receipt",
         "latest_retry_candidate",
@@ -3124,6 +3300,8 @@ def _review_action(route: str, status: str, gate: str) -> str:
         return "track_escalation_handoff_until_acknowledged"
     if route == "deadletter_escalation_acknowledgement":
         return "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
+    if route == "deadletter_external_escalation_attempt":
+        return "queue_recovery_request_or_configure_external_escalation_adapter_before_delivery"
     if route == "deadletter_recovery_request":
         return "record_dispatch_attempt_for_deadletter_recovery_event"
     if route == "deadletter_resolution":
@@ -3221,6 +3399,9 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
     deadletter_escalation_acknowledgement = _as_dict(
         dispatch.get("deadletter_escalation_acknowledgement_receipt")
     ) or _as_dict(item.get("latest_deadletter_escalation_acknowledgement_receipt"))
+    deadletter_external_escalation_attempt = _as_dict(
+        dispatch.get("deadletter_external_escalation_attempt_receipt")
+    ) or _as_dict(item.get("latest_deadletter_external_escalation_attempt_receipt"))
     deadletter_recovery_request = _as_dict(dispatch.get("deadletter_recovery_request_receipt")) or _as_dict(
         item.get("latest_deadletter_recovery_request_receipt")
     )
@@ -3288,6 +3469,16 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             gate=_safe_str(deadletter_escalation_acknowledgement.get("gate")).strip()
             or "reactor_deadletter_escalation_acknowledgement",
             receipt=deadletter_escalation_acknowledgement,
+            blocker=blocker,
+        )
+    if stable_state == "deadletter_external_escalation_attempt_recorded" and deadletter_external_escalation_attempt:
+        return _review_projection(
+            item=item,
+            route="deadletter_external_escalation_attempt",
+            status=_safe_str(deadletter_external_escalation_attempt.get("status")).strip() or "attempt_recorded",
+            gate=_safe_str(deadletter_external_escalation_attempt.get("gate")).strip()
+            or "reactor_deadletter_external_escalation_attempt",
+            receipt=deadletter_external_escalation_attempt,
             blocker=blocker,
         )
     if stable_state == "deadletter_recovery_requested" and deadletter_recovery_request:
@@ -3420,6 +3611,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_resolution_counts: dict[str, int] = {}
     deadletter_escalation_handoff_counts: dict[str, int] = {}
     deadletter_escalation_acknowledgement_counts: dict[str, int] = {}
+    deadletter_external_escalation_attempt_counts: dict[str, int] = {}
     deadletter_recovery_request_counts: dict[str, int] = {}
     deadletter_recovery_dispatch_counts: dict[str, int] = {}
     dispatch_execution_counts: dict[str, int] = {}
@@ -3518,6 +3710,21 @@ def reactor_status() -> dict[str, Any]:
             deadletter_escalation_acknowledgement_counts[deadletter_escalation_acknowledgement_status] = (
                 deadletter_escalation_acknowledgement_counts.get(deadletter_escalation_acknowledgement_status, 0) + 1
             )
+        raw_deadletter_external_escalation_attempt = dispatch.get(
+            "deadletter_external_escalation_attempt_receipt"
+        ) or item.get("latest_deadletter_external_escalation_attempt_receipt")
+        deadletter_external_escalation_attempt = (
+            raw_deadletter_external_escalation_attempt
+            if isinstance(raw_deadletter_external_escalation_attempt, dict)
+            else {}
+        )
+        deadletter_external_escalation_attempt_status = _safe_str(
+            deadletter_external_escalation_attempt.get("status")
+        ).strip()
+        if deadletter_external_escalation_attempt_status:
+            deadletter_external_escalation_attempt_counts[deadletter_external_escalation_attempt_status] = (
+                deadletter_external_escalation_attempt_counts.get(deadletter_external_escalation_attempt_status, 0) + 1
+            )
         raw_deadletter_recovery_request = dispatch.get("deadletter_recovery_request_receipt") or item.get(
             "latest_deadletter_recovery_request_receipt"
         )
@@ -3604,6 +3811,7 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_resolution_counts": deadletter_resolution_counts,
         "deadletter_escalation_handoff_counts": deadletter_escalation_handoff_counts,
         "deadletter_escalation_acknowledgement_counts": deadletter_escalation_acknowledgement_counts,
+        "deadletter_external_escalation_attempt_counts": deadletter_external_escalation_attempt_counts,
         "deadletter_recovery_request_counts": deadletter_recovery_request_counts,
         "deadletter_recovery_dispatch_counts": deadletter_recovery_dispatch_counts,
         "dispatch_execution_counts": dispatch_execution_counts,
