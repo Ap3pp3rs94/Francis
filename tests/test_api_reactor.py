@@ -837,6 +837,132 @@ def test_reactor_deadletter_review_route_records_receipt_without_resolution(
     assert second_review.json()["status"] == "already_reviewed"
 
 
+def test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Budget-exhausted Reactor item can be escalated",
+            "actor": _REACTOR_ACTOR,
+            "action_class": "mission_tick",
+            "max_actions": 0,
+            "max_retries": 1,
+        },
+    )
+    assert queued.status_code == 200
+    event_id = str(queued.json()["event_id"])
+
+    attempted = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={"event_id": event_id, "actor": _REACTOR_ACTOR},
+    )
+    assert attempted.status_code == 200
+    deadletter_id = str(attempted.json()["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+
+    reviewed = client.post(
+        "/reactor/deadletters/review",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "decision": "escalate_later",
+            "reason": "operator reviewed failed Reactor item",
+        },
+    )
+    assert reviewed.status_code == 200
+    assert reviewed.json()["status"] == "deadletter_reviewed"
+
+    resolved = client.post(
+        "/reactor/deadletters/resolve",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "decision": "escalate",
+            "reason": "operator wants escalation tracked without recovery execution",
+        },
+    )
+
+    assert resolved.status_code == 200
+    resolved_body = resolved.json()
+    assert resolved_body["ok"] is True
+    assert resolved_body["applied"] is True
+    assert resolved_body["status"] == "deadletter_escalation_pending"
+    receipt = resolved_body["receipt"]
+    assert receipt["kind"] == "reactor.deadletter.resolution.receipt"
+    assert receipt["deadletter_id"] == deadletter_id
+    assert receipt["status"] == "escalation_pending"
+    assert receipt["route"] == "deadletter_escalation"
+    assert receipt["resolution_decision"] == "escalation_pending"
+    assert receipt["deadletter_resolved"] is False
+    assert receipt["escalation_recorded"] is True
+    assert receipt["execution_started"] is False
+    assert receipt["retry_started"] is False
+    assert receipt["escalation_started"] is False
+    assert receipt["memory_write"] is False
+    assert receipt["governance"]["deadletter_disposition_authority"] is True
+    assert receipt["governance"]["deadletter_resolution_authority"] is False
+    assert receipt["governance"]["escalation_authority"] is False
+    event = resolved_body["event"]
+    assert event["stable_state"] == "deadletter_escalation_pending"
+    assert event["dispatch"]["deadletter_escalation_recorded"] is True
+    assert event["latest_deadletter_resolution_receipt"]["deadletter_id"] == deadletter_id
+    assert event["latest_receipt"]["kind"] == "reactor.deadletter.resolution.receipt"
+    assert event["governance"]["deadletter_disposition_authority"] is True
+    assert event["governance"]["deadletter_resolution_authority"] is False
+    assert event["governance"]["escalation_authority"] is False
+    assert event["governance"]["execution_authority"] is False
+
+    escalated_list = client.get("/reactor/deadletters/list", params={"status": "escalation_pending"})
+    assert escalated_list.status_code == 200
+    assert {item["deadletter_id"] for item in escalated_list.json()["items"]} == {deadletter_id}
+    fetched = client.get("/reactor/deadletters/get", params={"id": deadletter_id})
+    assert fetched.status_code == 200
+    assert fetched.json()["item"]["latest_resolution_receipt"]["resolution_decision"] == "escalation_pending"
+
+    receipt_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.resolution.receipt"},
+    )
+    assert receipt_list.status_code == 200
+    assert {item["event_id"] for item in receipt_list.json()["items"]} == {event_id}
+    review_route = client.get("/reactor/events/list", params={"review_route": "deadletter_escalation"})
+    assert review_route.status_code == 200
+    assert {item["event_id"] for item in review_route.json()["items"]} == {event_id}
+    review_queue = client.get("/reactor/review_queue", params={"route": "deadletter_escalation"})
+    assert review_queue.status_code == 200
+    assert review_queue.json()["available_total"] == 1
+    assert (
+        review_queue.json()["items"][0]["review"]["action"] == "track_escalation_pending_external_or_operator_followup"
+    )
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["stable_state_counts"] == {"deadletter_escalation_pending": 1}
+    assert status.json()["deadletter_queue_counts"] == {"escalation_pending": 1}
+    assert status.json()["deadletter_review_counts"] == {"reviewed": 1}
+    assert status.json()["deadletter_resolution_counts"] == {"escalation_pending": 1}
+
+    second_resolution = client.post(
+        "/reactor/deadletters/resolve",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR, "decision": "escalate"},
+    )
+    assert second_resolution.status_code == 200
+    assert second_resolution.json()["applied"] is False
+    assert second_resolution.json()["status"] == "already_escalation_pending"
+
+
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(
     monkeypatch,
     tmp_path: Path,

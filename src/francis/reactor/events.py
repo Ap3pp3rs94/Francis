@@ -10,7 +10,13 @@ from typing import Any
 from francis.governance import approvals
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
-from francis.reactor.deadletters import get_deadletter, list_deadletters, queue_deadletter, review_deadletter
+from francis.reactor.deadletters import (
+    get_deadletter,
+    list_deadletters,
+    queue_deadletter,
+    resolve_deadletter,
+    review_deadletter,
+)
 from francis.reactor.dispatch import dispatch_event
 from francis.reactor.retries import (
     get_retry_schedule,
@@ -2055,6 +2061,167 @@ def record_deadletter_review(deadletter_id: str, payload: dict[str, Any] | None 
     }
 
 
+def record_deadletter_resolution(deadletter_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    redacted_payload = redact_governed_value(payload or {})
+    data = redacted_payload if isinstance(redacted_payload, dict) else {}
+    actor = _safe_str(data.get("actor")).strip()
+    reason = _safe_str(data.get("reason") or data.get("summary")).strip()
+    decision = _safe_str(data.get("decision") or data.get("resolution_decision")).strip()
+    ts = _now_s()
+
+    deadletter = get_deadletter(deadletter_id)
+    if deadletter is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_not_found",
+            "receipt": {},
+            "event": None,
+        }
+
+    event_id = _safe_str(deadletter.get("event_id")).strip()
+    path = _event_path(event_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "event_not_found",
+            "receipt": {},
+            "event": None,
+        }
+
+    record = _read_raw_event(path)
+    if record is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "unreadable_event",
+            "receipt": {},
+            "event": None,
+        }
+
+    deadletter_key = _safe_str(deadletter.get("deadletter_id")).strip()
+    resolution_result = resolve_deadletter(
+        deadletter_id=deadletter_key,
+        actor=actor,
+        reason=reason,
+        decision=decision,
+        ts=ts,
+    )
+    resolution_receipt = _as_dict(resolution_result.get("receipt"))
+    resolved_item = _as_dict(resolution_result.get("item"))
+    if not resolution_result.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "error": resolution_result.get("error") or "deadletter_resolution_failed",
+            "receipt": resolution_receipt,
+            "event": _display(record),
+        }
+
+    if not resolution_result.get("applied"):
+        return {
+            "ok": True,
+            "applied": False,
+            "status": resolution_result.get("status") or "already_dispositioned",
+            "deadletter_id": deadletter_key,
+            "receipt": _display(resolution_receipt),
+            "event": _display(record),
+        }
+
+    route = _safe_str(resolution_receipt.get("route")).strip()
+    stable_state = _safe_str(resolution_receipt.get("stable_state")).strip() or "deadletter_resolution_deferred"
+    raw_dispatch = record.get("dispatch")
+    dispatch = raw_dispatch if isinstance(raw_dispatch, dict) else {}
+    updated_dispatch = {
+        **dispatch,
+        "deadletter_item": resolved_item,
+        "deadletter_resolution_receipt": resolution_receipt,
+        "deadletter_resolution_decision": resolution_receipt.get("resolution_decision"),
+        "deadletter_resolved": bool(resolution_receipt.get("deadletter_resolved")),
+        "deadletter_escalation_recorded": bool(resolution_receipt.get("escalation_recorded")),
+        "next_step": resolution_receipt.get("next_step"),
+    }
+
+    raw_journal = record.get("decision_journal")
+    decision_journal = raw_journal if isinstance(raw_journal, list) else []
+    decision_journal.append(
+        {
+            "kind": "reactor.deadletter.resolution_recorded",
+            "ts": ts,
+            "decision": stable_state,
+            "deadletter_id": deadletter_key,
+            "resolution_decision": resolution_receipt.get("resolution_decision"),
+            "route": route,
+            "stable_state": stable_state,
+            "next_step": resolution_receipt.get("next_step"),
+            "applied": True,
+            "deadletter_resolved": bool(resolution_receipt.get("deadletter_resolved")),
+            "retry_started": False,
+            "execution_started": False,
+            "escalation_started": False,
+            "memory_write": False,
+        }
+    )
+
+    raw_receipts = record.get("receipts")
+    receipts = raw_receipts if isinstance(raw_receipts, list) else []
+    if not receipts and isinstance(record.get("receipt"), dict):
+        receipts.append(record["receipt"])
+    receipts.append(resolution_receipt)
+
+    raw_deadletter_items = record.get("deadletter_items")
+    deadletter_items = raw_deadletter_items if isinstance(raw_deadletter_items, list) else []
+    deadletter_items = [
+        item for item in deadletter_items if _safe_str(_as_dict(item).get("deadletter_id")).strip() != deadletter_key
+    ]
+    deadletter_items.append(resolved_item)
+    raw_deadletter_resolutions = record.get("deadletter_resolutions")
+    deadletter_resolutions = raw_deadletter_resolutions if isinstance(raw_deadletter_resolutions, list) else []
+    deadletter_resolutions.append(resolution_receipt)
+
+    record["updated_ts"] = ts
+    record["stable_state"] = stable_state
+    record["dispatch"] = updated_dispatch
+    record["decision_journal"] = decision_journal
+    record["receipts"] = receipts
+    record["deadletter_items"] = deadletter_items
+    record["latest_deadletter_item"] = resolved_item
+    record["deadletter_resolutions"] = deadletter_resolutions
+    record["latest_deadletter_resolution_receipt"] = resolution_receipt
+    record["latest_receipt"] = resolution_receipt
+    raw_governance = record.get("governance")
+    governance = raw_governance if isinstance(raw_governance, dict) else {}
+    governance.update(
+        {
+            "gate": "reactor_deadletter_resolution",
+            "execution_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+            "dispatch_authority": False,
+            "deadletter_disposition_authority": True,
+            "deadletter_resolved": bool(resolution_receipt.get("deadletter_resolved")),
+            "deadletter_resolution_authority": bool(resolution_receipt.get("deadletter_resolved")),
+            "deadletter_escalation_recorded": bool(resolution_receipt.get("escalation_recorded")),
+            "retry_execution_authority": False,
+            "escalation_authority": False,
+            "next_step": resolution_receipt.get("next_step"),
+        }
+    )
+    record["governance"] = governance
+
+    _atomic_write_json(path, record)
+    return {
+        "ok": True,
+        "applied": True,
+        "status": stable_state,
+        "deadletter_id": deadletter_key,
+        "receipt": _display(resolution_receipt),
+        "event": _display(record),
+    }
+
+
 def list_events(
     *,
     limit: int = 200,
@@ -2126,6 +2293,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
         "retry_due_receipt",
         "retry_dispatch_attempt_receipt",
         "deadletter_review_receipt",
+        "deadletter_resolution_receipt",
     ):
         candidate = _as_dict(dispatch.get(key))
         routes.add(_safe_str(candidate.get("route")).strip().lower())
@@ -2136,6 +2304,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
         "latest_dispatch_execution_receipt",
         "latest_deadletter_candidate",
         "latest_deadletter_review_receipt",
+        "latest_deadletter_resolution_receipt",
         "latest_retry_candidate",
         "latest_retry_due_receipt",
         "latest_retry_dispatch_attempt_receipt",
@@ -2168,6 +2337,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "latest_deadletter_enqueue",
         "latest_deadletter_candidate",
         "latest_deadletter_review_receipt",
+        "latest_deadletter_resolution_receipt",
         "latest_retry_candidate",
         "latest_retry_schedule_receipt",
         "latest_retry_due_receipt",
@@ -2195,6 +2365,10 @@ def _review_action(route: str, status: str, gate: str) -> str:
         return "review_deadletter_candidate_before_escalation"
     if route == "deadletter_review":
         return "wait_for_deadletter_resolution_or_escalation_path"
+    if route == "deadletter_escalation":
+        return "track_escalation_pending_external_or_operator_followup"
+    if route == "deadletter_resolution":
+        return "review_deadletter_resolution_receipt"
     if route == "retry_backoff":
         return "review_retry_candidate_before_scheduler_exists"
     if route == "retry_due":
@@ -2279,6 +2453,9 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
     deadletter_review = _as_dict(dispatch.get("deadletter_review_receipt")) or _as_dict(
         item.get("latest_deadletter_review_receipt")
     )
+    deadletter_resolution = _as_dict(dispatch.get("deadletter_resolution_receipt")) or _as_dict(
+        item.get("latest_deadletter_resolution_receipt")
+    )
     retry_candidate = _as_dict(dispatch.get("retry_candidate"))
     retry_schedule = _as_dict(dispatch.get("retry_schedule_receipt")) or _as_dict(
         item.get("latest_retry_schedule_receipt")
@@ -2314,6 +2491,24 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
             status=_safe_str(deadletter_review.get("status")).strip() or "reviewed",
             gate=_safe_str(deadletter_review.get("gate")).strip() or "reactor_deadletter_review",
             receipt=deadletter_review,
+            blocker=blocker,
+        )
+    if stable_state == "deadletter_escalation_pending" and deadletter_resolution:
+        return _review_projection(
+            item=item,
+            route="deadletter_escalation",
+            status=_safe_str(deadletter_resolution.get("status")).strip() or "escalation_pending",
+            gate=_safe_str(deadletter_resolution.get("gate")).strip() or "reactor_deadletter_resolution",
+            receipt=deadletter_resolution,
+            blocker=blocker,
+        )
+    if stable_state == "deadletter_resolution_deferred" and deadletter_resolution:
+        return _review_projection(
+            item=item,
+            route="deadletter_review",
+            status=_safe_str(deadletter_resolution.get("status")).strip() or "resolution_deferred",
+            gate=_safe_str(deadletter_resolution.get("gate")).strip() or "reactor_deadletter_resolution",
+            receipt=deadletter_resolution,
             blocker=blocker,
         )
     if stable_state == "retry_budget_exhausted" and retry_exhausted:
@@ -2425,6 +2620,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_candidate_counts: dict[str, int] = {}
     deadletter_queue_counts: dict[str, int] = {}
     deadletter_review_counts: dict[str, int] = {}
+    deadletter_resolution_counts: dict[str, int] = {}
     dispatch_execution_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_schedule_counts: dict[str, int] = {}
@@ -2485,6 +2681,15 @@ def reactor_status() -> dict[str, Any]:
         if deadletter_review_status:
             deadletter_review_counts[deadletter_review_status] = (
                 deadletter_review_counts.get(deadletter_review_status, 0) + 1
+            )
+        raw_deadletter_resolution = dispatch.get("deadletter_resolution_receipt") or item.get(
+            "latest_deadletter_resolution_receipt"
+        )
+        deadletter_resolution = raw_deadletter_resolution if isinstance(raw_deadletter_resolution, dict) else {}
+        deadletter_resolution_status = _safe_str(deadletter_resolution.get("status")).strip()
+        if deadletter_resolution_status:
+            deadletter_resolution_counts[deadletter_resolution_status] = (
+                deadletter_resolution_counts.get(deadletter_resolution_status, 0) + 1
             )
         raw_dispatch_execution = dispatch.get("dispatch_execution_receipt") or item.get(
             "latest_dispatch_execution_receipt"
@@ -2547,6 +2752,7 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_candidate_counts": deadletter_candidate_counts,
         "deadletter_queue_counts": deadletter_queue_counts,
         "deadletter_review_counts": deadletter_review_counts,
+        "deadletter_resolution_counts": deadletter_resolution_counts,
         "dispatch_execution_counts": dispatch_execution_counts,
         "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,

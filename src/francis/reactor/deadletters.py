@@ -276,6 +276,96 @@ def _review_receipt(
     return redacted if isinstance(redacted, dict) else {}
 
 
+def _resolution_decision(value: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", _safe_str(value).strip().lower()).strip("_")
+    if normalized in {
+        "resolve",
+        "resolved",
+        "resolved_no_action",
+        "resolve_no_action",
+        "closed",
+        "close",
+        "no_action",
+        "operator_resolved",
+    }:
+        return "resolved_no_action"
+    if normalized in {"escalate", "escalation", "escalate_later", "escalation_pending"}:
+        return "escalation_pending"
+    return "defer"
+
+
+def _resolution_state(decision: str) -> tuple[str, str, str]:
+    if decision == "resolved_no_action":
+        return ("resolved", "deadletter_resolution", "deadletter_resolved")
+    if decision == "escalation_pending":
+        return ("escalation_pending", "deadletter_escalation", "deadletter_escalation_pending")
+    return ("resolution_deferred", "deadletter_review", "deadletter_resolution_deferred")
+
+
+def _resolution_next_step(decision: str) -> str:
+    if decision == "resolved_no_action":
+        return "keep_deadletter_resolution_receipt_for_audit"
+    if decision == "escalation_pending":
+        return "track_escalation_pending_external_or_operator_followup"
+    return "keep_deadletter_review_visible_until_resolution_or_escalation"
+
+
+def _resolution_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    decision: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    persisted_status, route, stable_state = _resolution_state(decision)
+    resolved = persisted_status == "resolved"
+    escalation_recorded = persisted_status == "escalation_pending"
+    latest_review = _as_dict(item.get("latest_review_receipt"))
+    receipt = {
+        "kind": "reactor.deadletter.resolution.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_resolution_{decision}",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": route,
+        "gate": "reactor_deadletter_resolution",
+        "stable_state": stable_state,
+        "next_step": _resolution_next_step(decision),
+        "source_receipt_kind": _safe_str(item.get("kind")).strip(),
+        "source_receipt_ref": item.get("deadletter_id"),
+        "source_gate": item.get("gate"),
+        "review_receipt_id": latest_review.get("receipt_id"),
+        "resolution_decision": decision,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "deadletter_resolved": resolved,
+        "escalation_recorded": escalation_recorded,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_resolution",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": applied,
+            "deadletter_resolution_authority": resolved and applied,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
 def queue_deadletter(
     *,
     event: dict[str, Any],
@@ -397,6 +487,104 @@ def review_deadletter(
         "ok": True,
         "applied": True,
         "status": "reviewed",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+    }
+
+
+def resolve_deadletter(
+    *,
+    deadletter_id: str,
+    actor: str = "",
+    reason: str = "",
+    decision: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_deadletter", "item": {}, "receipt": {}}
+
+    current_status = _safe_str(item.get("status")).strip()
+    if current_status not in {"reviewed", "resolved", "escalation_pending", "resolution_deferred"}:
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_review_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+
+    resolution_decision = _resolution_decision(decision)
+    persisted_status, route, stable_state = _resolution_state(resolution_decision)
+    latest_resolution = _as_dict(item.get("latest_resolution_receipt"))
+    if (
+        _safe_str(item.get("status")).strip() == persisted_status
+        and _safe_str(latest_resolution.get("resolution_decision")).strip() == resolution_decision
+    ):
+        return {
+            "ok": True,
+            "applied": False,
+            "status": f"already_{persisted_status}",
+            "item": _display(item),
+            "receipt": _display(latest_resolution),
+        }
+
+    receipt = _resolution_receipt(
+        item=item,
+        actor=actor,
+        reason=reason,
+        decision=resolution_decision,
+        ts=ts,
+        status=persisted_status,
+        applied=True,
+    )
+    raw_resolution_receipts = item.get("resolution_receipts")
+    resolution_receipts = raw_resolution_receipts if isinstance(raw_resolution_receipts, list) else []
+    resolution_receipts.append(receipt)
+    resolved = persisted_status == "resolved"
+    escalation_recorded = persisted_status == "escalation_pending"
+    updated = {
+        **item,
+        "status": persisted_status,
+        "route": route,
+        "stable_state": stable_state,
+        "next_step": _resolution_next_step(resolution_decision),
+        "resolution_decision": resolution_decision,
+        "resolved_ts": ts if resolved else item.get("resolved_ts"),
+        "escalation_recorded_ts": ts if escalation_recorded else item.get("escalation_recorded_ts"),
+        "updated_ts": ts,
+        "resolution_receipts": resolution_receipts,
+        "latest_resolution_receipt": receipt,
+        "deadletter_resolved": resolved,
+        "escalation_recorded": escalation_recorded,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_resolution",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": True,
+            "deadletter_resolution_authority": resolved,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": persisted_status,
         "item": _display(updated),
         "receipt": _display(receipt),
     }

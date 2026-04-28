@@ -691,6 +691,22 @@ proof/readback only; no runtime code, UI, approval authority, memory-write
 authority, promotion authority, deadletter resolution/escalation, or new
 dispatch action class changed in this slice.
 
+As of `2026-04-28`, Reactor deadletter items can record bounded disposition
+receipts after review. `POST /reactor/deadletters/resolve` requires the existing
+`reactor.write` API scope, accepts an existing reviewed deadletter id, and
+records a `reactor.deadletter.resolution.receipt` for either
+`resolved_no_action` or `escalation_pending`. The receipt updates the durable
+deadletter item, parent Reactor event, decision journal, receipt history,
+receipt-kind filters, review-route filters, review-queue projection, and
+`/reactor/status`
+`deadletter_resolution_counts`. Resolved deadletters leave the active review
+queue while escalation-pending deadletters remain visible on the
+`deadletter_escalation` review route. This is deadletter disposition
+traceability only: it does not retry work, run recovery, execute dispatches,
+start external escalation, decide approvals, write memory, promote
+capabilities, or grant execution, retry-execution, approval, memory-write,
+promotion, or external-escalation authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9259,6 +9275,28 @@ proof/readback slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor deadletter disposition
+receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_resolution_records_receipt_without_recovery -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed after removing one unused local variable`
+- `python -m ruff format --check src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed after formatting the two new tests`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9285,11 +9323,14 @@ These remain true and should block any "finished" claim:
   readback. Failed `operation_run` dispatches can now schedule bounded retries
   and deadletter after retry exhaustion through the same governed retry handoff
   path, and successful due retry can settle back into operation success readback
-  without active retry/deadletter review leftovers. Remaining Stage 5 gaps still
+  without active retry/deadletter review leftovers. Deadletter items can now
+  record bounded resolved/no-action or escalation-pending disposition receipts
+  without starting recovery, retry, execution, memory writes, approval decisions,
+  or external escalation. Remaining Stage 5 gaps still
   include broader dispatch action coverage beyond existing operation runs,
-  deadletter resolution/escalation beyond non-authoritative review receipts,
   broader execution-failure routing beyond the current `operation_run` path, and
-  broader operator visibility
+  broader operator visibility plus actual recovery/escalation execution after
+  disposition receipts
 
 ## 6. Update rule
 

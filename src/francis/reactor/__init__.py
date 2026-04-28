@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from francis.reactor.deadletters import get_deadletter, list_deadletters, queue_deadletter
+from francis.reactor.deadletters import get_deadletter, list_deadletters, queue_deadletter, resolve_deadletter
 from francis.reactor.events import (
     VALID_TRIGGER_SOURCES,
     enqueue_event,
     get_event,
     list_events,
     reactor_review_queue,
+    record_deadletter_resolution,
     record_deadletter_review,
     record_dispatch_attempt,
     record_retry_dispatch_attempt,
@@ -32,11 +33,13 @@ __all__ = [
     "list_retry_schedules",
     "queue_deadletter",
     "reactor_review_queue",
+    "record_deadletter_resolution",
     "record_deadletter_review",
     "record_dispatch_attempt",
     "record_retry_dispatch_attempt",
     "record_retry_due",
     "reactor_status",
+    "resolve_deadletter",
     "mark_retry_dispatch_attempted",
     "mark_retry_due",
     "schedule_retry",
