@@ -11324,6 +11324,44 @@ preflight baseline:
 - `python -m json.tool config\runtime\lens\summon.json`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens tray presence preflight baseline
+
+Stage 6/Lens now has a disabled tray/presence preflight baseline for the future
+resident Lens presence surface.
+`config/runtime/lens/tray.json` declares the intended tray presence name,
+user-session tray scope, host/summon preflight dependencies, status routes, and
+the explicit disabled/no-authority flags that must remain false until a
+resident host process, tray icon, user-session presence, global hotkey binding,
+overlay window, and summon binding are real.
+`scripts/lens-tray-preflight.ps1` returns `kind: lens.tray.preflight` in status
+mode with a blocked readiness payload and refuses `Register` or `Show` intent
+with exit `2`.
+
+This is diagnostic/preflight-only. It does not register a tray icon; create
+tray presence; send notifications; launch Lens; start, install, or supervise a
+resident host; register a global hotkey; open an overlay; write memory; decide
+approvals; execute actions; or grant overlay-control, summon, capture, sensing,
+telemetry, promotion, policy, service-control, tray-registration,
+tray-icon, notification, or local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens tray presence
+preflight baseline:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-preflight.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$output = & .\scripts\lens-tray-preflight.ps1 -Mode Register; if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }; $output | Out-String'`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+- `python -m json.tool config\runtime\lens\tray.json`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11336,9 +11374,10 @@ These remain true and should block any "finished" claim:
   `scripts/lens-host.ps1` runner, disabled tracked service config baseline, and
   non-starting process readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
-  preflight baseline, but no OS-wide summon, resident host process,
-  installed/started service, resident overlay/HUD runtime, OS-level command
-  palette, tray presence, hotkey binding, or live Pilot takeover surface yet
+  preflight baseline plus a disabled tray/presence preflight baseline, but no
+  OS-wide summon, resident host process, installed/started service, resident
+  overlay/HUD runtime, OS-level command palette, tray presence, hotkey binding,
+  or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
