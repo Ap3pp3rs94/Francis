@@ -842,6 +842,19 @@ external message, starts no external delivery, executes no work, writes no
 memory, decides no approval, and grants no external-escalation, dispatch,
 execution, retry, approval, promotion, or memory-write authority.
 
+As of `2026-04-28`, Reactor external escalation attempts now include bounded
+adapter preflight readback. The preflight distinguishes undeclared or unsupported
+adapters from the built-in `local_outbox` adapter and records adapter status,
+configured/known flags, delivery mode, readiness, blocker, missing-requirement,
+and next-step fields on the same
+`reactor.deadletter.external_escalation_attempt.receipt`, parent event dispatch
+state, decision journal, and governance readback. Unsupported adapters still
+record `not_configured`; `local_outbox` can be recognized as configured and
+delivery-ready when channel and target are present, but this slice does not
+queue an outbox item, send an external message, start external delivery, execute
+work, write memory, or grant external-escalation, delivery, dispatch, execution,
+approval, promotion, retry, or memory-write authority.
+
 As of `2026-04-28`, the chat UI Reactor readback surface preserves that recovery
 request and recovery-dispatch settlement truth from the existing backend routes.
 The typed Reactor UI client parses `latest_recovery_request_receipt`,
@@ -4752,6 +4765,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-28` Stage 5/Reactor external
+escalation adapter preflight slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_external_escalation_adapter_preflight_distinguishes_local_outbox tests\unit\test_reactor_event_queue.py::test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-28` Stage 5/Reactor
 proposal-review UI readback slice:
@@ -9709,9 +9738,10 @@ These remain true and should block any "finished" claim:
   and recovery request receipt that queues a separate `deadletter_recovery`
   `operation_run` event for the same source operation id without dispatching it.
   The external escalation attempt receipt records channel/target/adapter intent,
-  explicit `not_configured` adapter state, no-delivery/no-execution flags,
+  adapter preflight state including unsupported `not_configured` adapters and
+  configured `local_outbox` readiness, no-delivery/no-execution flags,
   receipt-kind filtering, review-queue readback, and status counts without
-  granting external escalation authority. Queued `deadletter_recovery` events
+  granting external escalation or delivery authority. Queued `deadletter_recovery` events
   now have focused unit and API proof that explicit dispatch attempts run
   through the existing `operation_run` engine and `operations.run` scope with
   execution, verification, stable-return, and readback receipts, and successful
@@ -9731,7 +9761,7 @@ These remain true and should block any "finished" claim:
   history, recovery receipt readback, and proposal-review event-history readback,
   and actual
   external escalation delivery/execution beyond the current non-executing
-  attempt receipt
+  attempt receipt and preflight readback
 
 ## 6. Update rule
 

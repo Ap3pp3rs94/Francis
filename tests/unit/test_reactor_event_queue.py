@@ -24,6 +24,7 @@ from francis.reactor.events import (
     record_retry_dispatch_attempt,
     record_retry_due,
 )
+from francis.reactor.external_escalation import external_escalation_adapter_preflight
 from francis.reactor.retries import get_retry_schedule, list_retry_schedules
 
 
@@ -61,6 +62,34 @@ def _assert_verification(
     assert verification["governance"]["memory_write"] is False
     assert event["receipts"][-2]["receipt_id"] == verification["receipt_id"]
     return verification
+
+
+def test_external_escalation_adapter_preflight_distinguishes_local_outbox() -> None:
+    unknown = external_escalation_adapter_preflight(
+        "pager_stub",
+        channel="ops_bridge",
+        target="on_call",
+    )
+    assert unknown["external_adapter"] == "pager_stub"
+    assert unknown["external_adapter_status"] == "not_configured"
+    assert unknown["external_adapter_known"] is False
+    assert unknown["external_adapter_configured"] is False
+    assert unknown["external_delivery_ready"] is False
+    assert unknown["external_delivery_blocker"] == "unsupported_external_adapter"
+
+    local_outbox = external_escalation_adapter_preflight(
+        "local-outbox",
+        channel="ops_bridge",
+        target="on_call",
+    )
+    assert local_outbox["external_adapter"] == "local_outbox"
+    assert local_outbox["external_adapter_status"] == "configured"
+    assert local_outbox["external_adapter_known"] is True
+    assert local_outbox["external_adapter_configured"] is True
+    assert local_outbox["external_delivery_mode"] == "local_outbox"
+    assert local_outbox["external_delivery_ready"] is True
+    assert local_outbox["external_delivery_queued"] is False
+    assert local_outbox["external_delivery_started"] is False
 
 
 def _assert_stable_return(
@@ -2306,6 +2335,95 @@ def test_reactor_deadletter_resolution_records_receipt_without_recovery(
     assert len(second_resolution["event"]["deadletter_resolutions"]) == 1
 
 
+def test_reactor_external_escalation_attempt_records_adapter_preflight_without_delivery(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    created = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Escalated Reactor deadletter needs adapter preflight",
+            "action_class": "classify",
+            "max_actions": 0,
+            "max_retries": 1,
+            "backoff_seconds": 15,
+        }
+    )
+    attempted = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
+    deadletter_id = str(attempted["event"]["dispatch"]["deadletter_item"]["deadletter_id"])
+    record_deadletter_review(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "escalate_later",
+            "reason": "operator reviewed failed Reactor item",
+        },
+    )
+    record_deadletter_resolution(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "decision": "escalate",
+            "reason": "operator wants escalation tracked before external preflight",
+        },
+    )
+    record_deadletter_escalation_handoff(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "record external handoff before adapter preflight",
+        },
+    )
+    record_deadletter_escalation_acknowledgement(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "operator acknowledged the escalation handoff",
+        },
+    )
+
+    external_attempt = record_deadletter_external_escalation_attempt(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "preflight local outbox without sending externally",
+            "external_channel": "ops_bridge",
+            "external_target": "on_call",
+            "external_adapter": "local-outbox",
+        },
+    )
+
+    assert external_attempt["ok"] is True
+    assert external_attempt["applied"] is True
+    receipt = external_attempt["receipt"]
+    assert receipt["external_adapter"] == "local_outbox"
+    assert receipt["external_adapter_status"] == "configured"
+    assert receipt["external_adapter_known"] is True
+    assert receipt["external_adapter_configured"] is True
+    assert receipt["external_delivery_mode"] == "local_outbox"
+    assert receipt["external_delivery_ready"] is True
+    assert receipt["external_delivery_queued"] is False
+    assert receipt["external_delivery_started"] is False
+    assert receipt["external_escalation_started"] is False
+    assert receipt["execution_started"] is False
+    assert receipt["memory_write"] is False
+    assert receipt["next_step"] == "queue_local_outbox_external_escalation_delivery"
+    assert receipt["governance"]["external_escalation_authority"] is False
+
+    event = external_attempt["event"]
+    assert event["dispatch"]["external_adapter"] == "local_outbox"
+    assert event["dispatch"]["external_adapter_configured"] is True
+    assert event["dispatch"]["external_delivery_ready"] is True
+    assert event["dispatch"]["external_delivery_queued"] is False
+    assert event["dispatch"]["external_delivery_started"] is False
+    assert event["decision_journal"][-1]["external_adapter_configured"] is True
+    assert event["decision_journal"][-1]["external_delivery_ready"] is True
+    assert event["governance"]["external_delivery_authority"] is False
+
+
 def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution(
     monkeypatch,
     tmp_path: Path,
@@ -2582,7 +2700,14 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert external_receipt["external_target"] == "on_call"
     assert external_receipt["external_adapter"] == "pager_stub"
     assert external_receipt["external_adapter_declared"] is True
+    assert external_receipt["external_adapter_known"] is False
+    assert external_receipt["external_adapter_configured"] is False
     assert external_receipt["external_adapter_status"] == "not_configured"
+    assert external_receipt["external_delivery_mode"] == "unsupported"
+    assert external_receipt["external_delivery_ready"] is False
+    assert external_receipt["external_delivery_queued"] is False
+    assert external_receipt["external_delivery_blocker"] == "unsupported_external_adapter"
+    assert external_receipt["missing_requirements"] == ["supported_external_adapter"]
     assert external_receipt["external_escalation_attempt_recorded"] is True
     assert external_receipt["external_escalation_started"] is False
     assert external_receipt["external_delivery_started"] is False
@@ -2598,9 +2723,12 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert external_event["deadletter_external_escalation_attempts"][0]["deadletter_id"] == deadletter_id
     assert external_event["decision_journal"][-1]["kind"] == "reactor.deadletter.external_escalation_attempt_recorded"
     assert external_event["decision_journal"][-1]["external_delivery_started"] is False
+    assert external_event["decision_journal"][-1]["external_adapter_configured"] is False
+    assert external_event["decision_journal"][-1]["external_delivery_ready"] is False
     assert external_event["decision_journal"][-1]["dispatch_applied"] is False
     assert external_event["governance"]["deadletter_external_escalation_attempt_recorded"] is True
     assert external_event["governance"]["external_escalation_authority"] is False
+    assert external_event["governance"]["external_delivery_authority"] is False
 
     external_deadletter = get_deadletter(deadletter_id)
     assert external_deadletter is not None

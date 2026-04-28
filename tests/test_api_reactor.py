@@ -1477,7 +1477,13 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert external_receipt["external_channel"] == "ops_bridge"
     assert external_receipt["external_target"] == "on_call"
     assert external_receipt["external_adapter"] == "pager_stub"
+    assert external_receipt["external_adapter_known"] is False
+    assert external_receipt["external_adapter_configured"] is False
     assert external_receipt["external_adapter_status"] == "not_configured"
+    assert external_receipt["external_delivery_mode"] == "unsupported"
+    assert external_receipt["external_delivery_ready"] is False
+    assert external_receipt["external_delivery_queued"] is False
+    assert external_receipt["external_delivery_blocker"] == "unsupported_external_adapter"
     assert external_receipt["external_escalation_started"] is False
     assert external_receipt["external_delivery_started"] is False
     assert external_receipt["execution_started"] is False
@@ -1490,8 +1496,11 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     external_event = external_body["event"]
     assert external_event["stable_state"] == "deadletter_external_escalation_attempt_recorded"
     assert external_event["dispatch"]["deadletter_external_escalation_attempt_recorded"] is True
+    assert external_event["dispatch"]["external_adapter_configured"] is False
+    assert external_event["dispatch"]["external_delivery_ready"] is False
     assert external_event["dispatch"]["external_delivery_started"] is False
     assert external_event["governance"]["external_escalation_authority"] is False
+    assert external_event["governance"]["external_delivery_authority"] is False
 
     external_list = client.get(
         "/reactor/deadletters/list",

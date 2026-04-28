@@ -9,6 +9,7 @@ from typing import Any
 
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
+from francis.reactor.external_escalation import external_escalation_adapter_preflight
 
 
 def _safe_str(value: Any) -> str:
@@ -579,6 +580,11 @@ def _external_escalation_attempt_receipt(
     applied: bool,
 ) -> dict[str, Any]:
     latest_acknowledgement = _as_dict(item.get("latest_escalation_acknowledgement_receipt"))
+    preflight = external_escalation_adapter_preflight(
+        adapter,
+        channel=external_channel,
+        target=external_target,
+    )
     source_ref = (
         _safe_str(latest_acknowledgement.get("receipt_id")).strip()
         or _safe_str(latest_acknowledgement.get("deadletter_id")).strip()
@@ -593,7 +599,7 @@ def _external_escalation_attempt_receipt(
         "route": "deadletter_external_escalation_attempt",
         "gate": "reactor_deadletter_external_escalation_attempt",
         "stable_state": "deadletter_external_escalation_attempt_recorded",
-        "next_step": _external_escalation_attempt_next_step(),
+        "next_step": preflight.get("next_step") or _external_escalation_attempt_next_step(),
         "source_receipt_kind": _safe_str(latest_acknowledgement.get("kind")).strip(),
         "source_receipt_ref": source_ref,
         "source_gate": _safe_str(latest_acknowledgement.get("gate") or item.get("gate")).strip(),
@@ -601,9 +607,16 @@ def _external_escalation_attempt_receipt(
         "resolution_decision": latest_acknowledgement.get("resolution_decision") or item.get("resolution_decision"),
         "external_channel": external_channel,
         "external_target": external_target,
-        "external_adapter": adapter,
-        "external_adapter_declared": bool(adapter),
-        "external_adapter_status": "not_configured",
+        "external_adapter": preflight.get("external_adapter") or adapter,
+        "external_adapter_declared": bool(preflight.get("external_adapter_declared")),
+        "external_adapter_known": bool(preflight.get("external_adapter_known")),
+        "external_adapter_configured": bool(preflight.get("external_adapter_configured")),
+        "external_adapter_status": preflight.get("external_adapter_status"),
+        "external_delivery_mode": preflight.get("external_delivery_mode"),
+        "external_delivery_ready": bool(preflight.get("external_delivery_ready")),
+        "external_delivery_queued": False,
+        "external_delivery_blocker": preflight.get("external_delivery_blocker"),
+        "missing_requirements": preflight.get("missing_requirements"),
         "actor": actor,
         "reason": reason,
         "ts": ts,
@@ -1167,8 +1180,16 @@ def record_external_escalation_attempt(
         "external_escalation_attempt_recorded_ts": ts,
         "external_channel": _safe_str(external_channel).strip(),
         "external_target": _safe_str(external_target).strip(),
-        "external_adapter": _safe_str(adapter).strip(),
-        "external_adapter_status": "not_configured",
+        "external_adapter": receipt.get("external_adapter") or _safe_str(adapter).strip(),
+        "external_adapter_declared": receipt.get("external_adapter_declared"),
+        "external_adapter_known": receipt.get("external_adapter_known"),
+        "external_adapter_configured": receipt.get("external_adapter_configured"),
+        "external_adapter_status": receipt.get("external_adapter_status"),
+        "external_delivery_mode": receipt.get("external_delivery_mode"),
+        "external_delivery_ready": receipt.get("external_delivery_ready"),
+        "external_delivery_queued": receipt.get("external_delivery_queued"),
+        "external_delivery_blocker": receipt.get("external_delivery_blocker"),
+        "missing_requirements": receipt.get("missing_requirements"),
         "updated_ts": ts,
         "external_escalation_attempt_receipts": attempt_receipts,
         "latest_external_escalation_attempt_receipt": receipt,
