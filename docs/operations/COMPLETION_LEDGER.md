@@ -573,6 +573,20 @@ only: it does not implement dispatch execution, verification, retry scheduling,
 deadletter resolution/escalation, memory writes, approval decisions, or any new
 execution, dispatch, retry, escalation, or approval authority.
 
+As of `2026-04-27`, Reactor dispatch attempts also preserve an explicit
+verification-state receipt before the stable-return receipt. Each dispatch
+attempt now appends `reactor.verification.receipt`, records whether verification
+is `not_available` or `not_run`, names the reason such as missing dispatch
+engine, missing retry scheduler, pending approval, denied approval, blocked
+dispatch, or queued deadletter review, and keeps `completion_claimed: false` /
+`completion_claim_allowed: false` until a real verification path exists.
+`latest_verification_receipt`, receipt-kind filtering, stable-return metadata,
+decision-journal metadata, and `/reactor/status` verification counts now expose
+that state. This is verification-state readback only: it does not implement
+dispatch execution, execute verification hooks, schedule retries, resolve or
+escalate deadletters, write memory, decide approvals, or grant execution,
+dispatch, verification, retry, escalation, or approval authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4446,6 +4460,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor
+verification-state receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `failed once because the existing approval-required blocker test
+  expected awaiting_approval where the new verification receipt truthfully
+  reported approval_required; passed after correcting that assertion`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor
 stable-return receipt slice:
@@ -9026,9 +9058,10 @@ These remain true and should block any "finished" claim:
   and reconcile terminal approval decisions back into deferred dispatch or
   operator-review-blocked state, and deadletter candidates now persist real
   Reactor deadletter queue items, and every dispatch attempt now records a
-  stable-return receipt, but bounded dispatch execution, verification,
-  real retry scheduling/backoff execution, deadletter resolution/escalation,
-  and broader operator visibility are still remaining work
+  verification-state receipt plus stable-return receipt, but bounded dispatch
+  execution, real verification hooks/results, real retry scheduling/backoff
+  execution, deadletter resolution/escalation, and broader operator visibility
+  are still remaining work
 
 ## 6. Update rule
 

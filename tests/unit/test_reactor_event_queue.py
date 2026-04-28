@@ -15,6 +15,42 @@ from francis.reactor.events import (
 )
 
 
+def _assert_verification(
+    event: dict,
+    *,
+    route: str,
+    stable_state: str,
+    source_kind: str,
+    verification_status: str,
+    verification_outcome: str,
+) -> dict:
+    verification = event["latest_verification_receipt"]
+    assert verification["kind"] == "reactor.verification.receipt"
+    assert verification["status"] == verification_status
+    assert verification["verification_status"] == verification_status
+    assert verification["verification_outcome"] == verification_outcome
+    assert verification["route"] == route
+    assert verification["stable_state"] == stable_state
+    assert verification["source_receipt_kind"] == source_kind
+    assert verification["verified"] is False
+    assert verification["completion_claimed"] is False
+    assert verification["completion_claim_allowed"] is False
+    assert verification["verification_required_before_completion_claim"] is True
+    assert verification["execution_started"] is False
+    assert verification["dispatch_applied"] is False
+    assert verification["retry_started"] is False
+    assert verification["escalation_started"] is False
+    assert verification["memory_write"] is False
+    assert verification["governance"]["execution_authority"] is False
+    assert verification["governance"]["dispatch_authority"] is False
+    assert verification["governance"]["approval_authority"] is False
+    assert verification["governance"]["retry_authority"] is False
+    assert verification["governance"]["deadletter_resolution_authority"] is False
+    assert verification["governance"]["memory_write"] is False
+    assert event["receipts"][-2]["receipt_id"] == verification["receipt_id"]
+    return verification
+
+
 def _assert_stable_return(
     event: dict,
     *,
@@ -49,6 +85,10 @@ def _assert_stable_return(
     assert stable_return.get("retry_exhausted", False) is retry_exhausted
     if approval_status is not None:
         assert stable_return["approval_status"] == approval_status
+    verification = event["latest_verification_receipt"]
+    assert stable_return["verification_receipt_id"] == verification["receipt_id"]
+    assert stable_return["verification_status"] == verification["verification_status"]
+    assert stable_return["verification_outcome"] == verification["verification_outcome"]
     assert event["latest_receipt"]["receipt_id"] == stable_return["receipt_id"]
     assert event["receipts"][-1]["receipt_id"] == stable_return["receipt_id"]
     return stable_return
@@ -162,6 +202,14 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert event["latest_dispatch_attempt_receipt"]["execution_started"] is False
     assert "blocker" not in event["latest_dispatch_attempt_receipt"]
     assert event["latest_dispatch_attempt_receipt"]["budget_snapshot"]["max_actions"] == 2
+    _assert_verification(
+        event,
+        route="dispatch_engine",
+        stable_state="awaiting_dispatch_engine",
+        source_kind="reactor.dispatch_attempt.receipt",
+        verification_status="not_available",
+        verification_outcome="dispatch_engine_not_implemented",
+    )
     _assert_stable_return(
         event,
         route="dispatch_engine",
@@ -179,12 +227,15 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     stored = get_event(event_id)
     assert stored is not None
     assert stored["status"] == "dispatch_deferred"
-    assert stored["receipts"][-2]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert stored["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert stored["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert stored["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert stored["decision_journal"][-1]["kind"] == "reactor.dispatch.attempted"
     status = reactor_status()
     assert status["status_counts"] == {"dispatch_deferred": 1}
     assert status["retry_candidate_counts"] == {}
+    assert status["verification_counts"] == {"not_available": 1}
+    assert status["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
     assert status["stable_return_counts"] == {"settled": 1}
 
 
@@ -236,6 +287,14 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
     assert retry_candidate["execution_started"] is False
     assert retry_candidate["applied"] is False
     assert event["latest_retry_candidate"]["candidate_id"] == retry_candidate["candidate_id"]
+    _assert_verification(
+        event,
+        route="retry_backoff",
+        stable_state="awaiting_dispatch_engine",
+        source_kind="reactor.retry_candidate.receipt",
+        verification_status="not_available",
+        verification_outcome="retry_scheduler_not_implemented",
+    )
     _assert_stable_return(
         event,
         route="retry_backoff",
@@ -244,8 +303,9 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
         retry_candidate=True,
     )
     assert event["latest_dispatch_attempt_receipt"]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-2]["kind"] == "reactor.retry_candidate.receipt"
+    assert event["receipts"][-4]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.retry_candidate.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert event["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert event["decision_journal"][-1]["retry_candidate_id"] == retry_candidate["candidate_id"]
     assert event["governance"]["dispatch_authority"] is False
@@ -257,6 +317,8 @@ def test_reactor_dispatch_attempt_records_retry_candidate_without_scheduling(
     status = reactor_status()
     assert status["status_counts"] == {"dispatch_deferred": 1}
     assert status["retry_candidate_counts"] == {"candidate": 1}
+    assert status["verification_counts"] == {"not_available": 1}
+    assert status["verification_outcome_counts"] == {"retry_scheduler_not_implemented": 1}
     assert status["stable_return_counts"] == {"settled": 1}
 
 
@@ -337,6 +399,14 @@ def test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter
     assert event["latest_retry_exhausted"]["exhaustion_id"] == retry_exhausted["exhaustion_id"]
     assert event["latest_deadletter_item"]["deadletter_id"] == deadletter_item["deadletter_id"]
     assert event["latest_deadletter_enqueue"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    _assert_verification(
+        event,
+        route="deadletter_queue",
+        stable_state="retry_budget_exhausted",
+        source_kind="reactor.deadletter.enqueue.receipt",
+        verification_status="not_run",
+        verification_outcome="deadletter_queued_for_review",
+    )
     _assert_stable_return(
         event,
         route="deadletter_queue",
@@ -351,9 +421,10 @@ def test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter
         event["latest_dispatch_attempt_receipt"]["next_step"]
         == "review_retry_exhaustion_before_deadletter_or_dispatch_engine"
     )
-    assert event["receipts"][-4]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-3]["kind"] == "reactor.retry_exhausted.receipt"
-    assert event["receipts"][-2]["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert event["receipts"][-5]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-4]["kind"] == "reactor.retry_exhausted.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert event["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert event["decision_journal"][-1]["retry_exhausted_id"] == retry_exhausted["exhaustion_id"]
     assert event["decision_journal"][-1]["deadletter_id"] == deadletter_item["deadletter_id"]
@@ -375,6 +446,8 @@ def test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter
     assert status["retry_exhausted_counts"] == {"exhausted": 1}
     assert status["deadletter_queue_counts"] == {"queued": 1}
     assert status["deadletter_total"] == 1
+    assert status["verification_counts"] == {"not_run": 1}
+    assert status["verification_outcome_counts"] == {"deadletter_queued_for_review": 1}
     assert status["stable_return_counts"] == {"settled": 1}
 
 
@@ -427,6 +500,11 @@ def test_reactor_event_list_filters_review_routes_and_receipt_kinds(monkeypatch,
     }
     assert {item["event_id"] for item in list_events(stable_state="retry_budget_exhausted")} == {retry_id}
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.retry_exhausted.receipt")} == {retry_id}
+    assert {item["event_id"] for item in list_events(receipt_kind="reactor.verification.receipt")} == {
+        approval_id,
+        budget_id,
+        retry_id,
+    }
     assert {item["event_id"] for item in list_events(receipt_kind="reactor.deadletter_candidate.receipt")} == {
         budget_id
     }
@@ -577,14 +655,23 @@ def test_reactor_dispatch_attempt_queues_missing_approval_request_once(monkeypat
     assert event["dispatch"]["blocker"]["approval_id"] == approval_id
     assert event["dispatch"]["blocker"]["approval_request_queued"] is True
     assert event["latest_approval_request"]["approval_id"] == approval_id
+    _assert_verification(
+        event,
+        route="approval_queue",
+        stable_state="awaiting_approval",
+        source_kind="reactor.approval_request.receipt",
+        verification_status="not_run",
+        verification_outcome="awaiting_approval",
+    )
     _assert_stable_return(
         event,
         route="approval_queue",
         stable_state="awaiting_approval",
         source_kind="reactor.approval_request.receipt",
     )
-    assert event["receipts"][-3]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-2]["kind"] == "reactor.approval_request.receipt"
+    assert event["receipts"][-4]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.approval_request.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert event["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert event["decision_journal"][-1]["approval_id"] == approval_id
     assert event["governance"]["approval_authority"] is False
@@ -658,6 +745,14 @@ def test_reactor_dispatch_attempt_resumes_after_approval_without_execution(monke
     assert approval_decision["execution_started"] is False
     assert approval_decision["applied"] is False
     assert event["latest_approval_decision"]["approval_id"] == approval_id
+    _assert_verification(
+        event,
+        route="dispatch_engine",
+        stable_state="awaiting_dispatch_engine",
+        source_kind="reactor.approval_decision.receipt",
+        verification_status="not_available",
+        verification_outcome="dispatch_engine_not_implemented",
+    )
     _assert_stable_return(
         event,
         route="dispatch_engine",
@@ -730,6 +825,14 @@ def test_reactor_dispatch_attempt_blocks_rejected_approval_without_execution(mon
     assert approval_decision["approval_allows_dispatch"] is False
     assert approval_decision["execution_started"] is False
     assert approval_decision["applied"] is False
+    _assert_verification(
+        event,
+        route="operator_review",
+        stable_state="approval_rejected",
+        source_kind="reactor.approval_decision.receipt",
+        verification_status="not_run",
+        verification_outcome="approval_denied",
+    )
     _assert_stable_return(
         event,
         route="operator_review",
@@ -785,6 +888,14 @@ def test_reactor_dispatch_attempt_blocks_when_event_requires_approval(monkeypatc
     assert event["latest_dispatch_attempt_receipt"]["outcome"] == "awaiting_approval"
     assert event["latest_dispatch_attempt_receipt"]["blocker"]["route"] == "approval_queue"
     assert event["latest_dispatch_attempt_receipt"]["next_step"] == "request_or_attach_approval_before_dispatch"
+    _assert_verification(
+        event,
+        route="approval_queue",
+        stable_state="awaiting_approval",
+        source_kind="reactor.dispatch_attempt.receipt",
+        verification_status="not_run",
+        verification_outcome="approval_required",
+    )
     _assert_stable_return(
         event,
         route="approval_queue",
@@ -822,6 +933,14 @@ def test_reactor_dispatch_attempt_routes_mode_blocker_to_operator_review(monkeyp
     assert event["dispatch"]["blocker"]["gate"] == "mode_boundary"
     assert event["dispatch"]["blocker"]["status"] == "waiting_for_mode_change"
     assert event["latest_dispatch_attempt_receipt"]["blocker"]["route"] == "operator_review"
+    _assert_verification(
+        event,
+        route="operator_review",
+        stable_state="blocked_by_mode",
+        source_kind="reactor.dispatch_attempt.receipt",
+        verification_status="not_run",
+        verification_outcome="mode_boundary",
+    )
     _assert_stable_return(
         event,
         route="operator_review",
@@ -890,6 +1009,14 @@ def test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget(
     )
     assert event["latest_deadletter_item"]["deadletter_id"] == deadletter_item["deadletter_id"]
     assert event["latest_deadletter_enqueue"]["deadletter_id"] == deadletter_item["deadletter_id"]
+    _assert_verification(
+        event,
+        route="deadletter_queue",
+        stable_state="blocked_by_budget",
+        source_kind="reactor.deadletter.enqueue.receipt",
+        verification_status="not_run",
+        verification_outcome="deadletter_queued_for_review",
+    )
     _assert_stable_return(
         event,
         route="deadletter_queue",
@@ -902,9 +1029,10 @@ def test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget(
         event["latest_dispatch_attempt_receipt"]["blocker"]["deadletter_candidate_receipt_id"]
         == event["latest_deadletter_candidate"]["candidate_id"]
     )
-    assert event["receipts"][-4]["kind"] == "reactor.dispatch_attempt.receipt"
-    assert event["receipts"][-3]["kind"] == "reactor.deadletter_candidate.receipt"
-    assert event["receipts"][-2]["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert event["receipts"][-5]["kind"] == "reactor.dispatch_attempt.receipt"
+    assert event["receipts"][-4]["kind"] == "reactor.deadletter_candidate.receipt"
+    assert event["receipts"][-3]["kind"] == "reactor.deadletter.enqueue.receipt"
+    assert event["receipts"][-2]["kind"] == "reactor.verification.receipt"
     assert event["receipts"][-1]["kind"] == "reactor.stable_return.receipt"
     assert (
         event["decision_journal"][-1]["deadletter_candidate_id"] == event["latest_deadletter_candidate"]["candidate_id"]
@@ -921,6 +1049,8 @@ def test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget(
     assert status["deadletter_candidate_counts"] == {"candidate": 1}
     assert status["deadletter_queue_counts"] == {"queued": 1}
     assert status["deadletter_total"] == 1
+    assert status["verification_counts"] == {"not_run": 1}
+    assert status["verification_outcome_counts"] == {"deadletter_queued_for_review": 1}
     assert status["stable_return_counts"] == {"settled": 1}
 
     second_attempt = record_dispatch_attempt(str(created["event_id"]), {"actor": "reactor.test"})
