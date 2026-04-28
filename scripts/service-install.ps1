@@ -6,7 +6,7 @@ Purpose
 
 Features
   - Supports a single service via parameters OR multiple services via -ConfigPath (JSON/YAML).
-  - Modes: Status, Install, Update, Uninstall, Start, Stop, Restart
+  - Modes: Status, Plan, Install, Update, Uninstall, Start, Stop, Restart
   - Optional wrapper run.cmd to:
       - enforce WorkingDirectory (services don't have a native "cwd")
       - optionally redirect stdout/stderr to files
@@ -60,6 +60,9 @@ Examples
   # Status of a service
   pwsh -File D:\francis\scripts\service-install.ps1 -Mode Status -ServiceName Francis-Worker-1
 
+  # Read-only install/update plan from config; performs no service mutation.
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Plan -ConfigPath D:\francis\config\runtime\services\lens-host.json
+
   # Install a service directly (no wrapper)
   pwsh -File D:\francis\scripts\service-install.ps1 -Mode Install `
     -ServiceName Francis-Plugin `
@@ -87,7 +90,7 @@ Examples
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
-  [ValidateSet('Status','Install','Update','Uninstall','Start','Stop','Restart')]
+  [ValidateSet('Status','Plan','Install','Update','Uninstall','Start','Stop','Restart')]
   [string]$Mode = 'Status',
 
   [string]$Root = 'D:\francis',
@@ -144,6 +147,7 @@ $JsonPath = Join-Path $OpsDir "service_install_report_$Now.json"
 try { Start-Transcript -Path $LogPath -Force | Out-Null } catch {}
 
 $script:Actions = New-Object System.Collections.Generic.List[object]
+$script:Plans = New-Object System.Collections.Generic.List[object]
 
 function Add-Action {
   param(
@@ -230,9 +234,98 @@ function Quote-Arg([string]$s){
   return $s
 }
 
-function Join-Args([string[]]$args){
-  if(-not $args -or $args.Count -eq 0){ return '' }
-  return ($args | ForEach-Object { Quote-Arg ([string]$_) }) -join ' '
+function Join-Args([string[]]$Items){
+  if(-not $Items -or $Items.Count -eq 0){ return '' }
+  return ($Items | ForEach-Object { Quote-Arg ([string]$_) }) -join ' '
+}
+
+function Resolve-ExecutableForPlan([string]$Exe){
+  if([string]::IsNullOrWhiteSpace($Exe)){
+    return [pscustomobject]@{
+      value = ''
+      resolved = ''
+      exists = $false
+      source = 'missing'
+      reason = 'service executable is missing'
+    }
+  }
+
+  $full = Resolve-FullPath $Exe
+  if(Test-Path -LiteralPath $full -PathType Leaf){
+    return [pscustomobject]@{
+      value = $Exe
+      resolved = $full
+      exists = $true
+      source = 'path'
+      reason = ''
+    }
+  }
+
+  try {
+    $cmd = Get-Command $Exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    if($cmd -and -not [string]::IsNullOrWhiteSpace([string]$cmd.Source)){
+      return [pscustomobject]@{
+        value = $Exe
+        resolved = [string]$cmd.Source
+        exists = $true
+        source = 'command'
+        reason = ''
+      }
+    }
+  } catch {}
+
+  return [pscustomobject]@{
+    value = $Exe
+    resolved = $full
+    exists = $false
+    source = 'unresolved'
+    reason = 'service executable could not be resolved'
+  }
+}
+
+function Build-BinaryPathPlan {
+  param(
+    [Parameter(Mandatory=$true)][string]$SvcName,
+    [Parameter(Mandatory=$true)][string]$Exe,
+    [string[]]$CommandArgs,
+    [string]$WorkDir,
+    [switch]$WantWrapper,
+    [string]$StdOut,
+    [string]$StdErr
+  )
+
+  $argsS = Join-Args $CommandArgs
+  $serviceCmd = Quote-Arg $Exe
+  if(-not [string]::IsNullOrWhiteSpace($argsS)){ $serviceCmd += " $argsS" }
+
+  $usesWrapper = [bool]($WantWrapper -or -not [string]::IsNullOrWhiteSpace($WorkDir) -or -not [string]::IsNullOrWhiteSpace($StdOut) -or -not [string]::IsNullOrWhiteSpace($StdErr))
+  if($usesWrapper){
+    $runtimeBase = Join-Path $Root "data\runtime\services"
+    $runtimeBase = Ensure-OkPath -Path $runtimeBase -Label "Runtime base"
+    $svcDir = Join-Path $runtimeBase $SvcName
+    $svcDir = Ensure-OkPath -Path $svcDir -Label "Service runtime"
+    $cmdPath = Join-Path $svcDir "run.cmd"
+    $cmdExe = if([string]::IsNullOrWhiteSpace($env:SystemRoot)){ "cmd.exe" } else { Join-Path $env:SystemRoot "System32\cmd.exe" }
+    return [pscustomobject]@{
+      binary_path = ('"' + $cmdExe + '" /c "' + (Resolve-FullPath $cmdPath) + '"')
+      service_command = $serviceCmd
+      wrapper = [pscustomobject]@{
+        enabled = $true
+        path = (Resolve-FullPath $cmdPath)
+        would_write = $false
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    binary_path = $serviceCmd
+    service_command = $serviceCmd
+    wrapper = [pscustomobject]@{
+      enabled = $false
+      path = ''
+      would_write = $false
+    }
+  }
 }
 
 function Get-ServiceSafe([string]$Name){
@@ -541,33 +634,55 @@ function Stop-ServiceSafe([string]$Name){
 # -----------------------------
 # Normalize input -> service definitions
 # -----------------------------
+function Get-ObjectPropertyValue {
+  param(
+    [object]$Object,
+    [string[]]$Names,
+    $Default = $null
+  )
+
+  if($null -eq $Object){ return $Default }
+  foreach($name in $Names){
+    $prop = $Object.PSObject.Properties[$name]
+    if($prop -and $null -ne $prop.Value){
+      return $prop.Value
+    }
+  }
+  return $Default
+}
+
 function Normalize-ServiceDef {
   param($obj)
 
+  $rawArgs = Get-ObjectPropertyValue -Object $obj -Names @('args', 'Arguments', 'service_arguments') -Default $null
+
   $def = [pscustomobject]@{
-    name        = [string]($obj.name ?? $obj.ServiceName ?? $obj.serviceName ?? '')
-    displayName = [string]($obj.displayName ?? $obj.DisplayName ?? '')
-    description = [string]($obj.description ?? $obj.Description ?? '')
-    exe         = [string]($obj.exe ?? $obj.Executable ?? $obj.binary ?? '')
+    name        = [string](Get-ObjectPropertyValue -Object $obj -Names @('name', 'ServiceName', 'serviceName', 'service_name') -Default '')
+    displayName = [string](Get-ObjectPropertyValue -Object $obj -Names @('displayName', 'DisplayName', 'display_name') -Default '')
+    description = [string](Get-ObjectPropertyValue -Object $obj -Names @('description', 'Description') -Default '')
+    exe         = [string](Get-ObjectPropertyValue -Object $obj -Names @('exe', 'Executable', 'binary', 'service_executable') -Default '')
     args        = @()
-    workingDir  = [string]($obj.workingDir ?? $obj.WorkingDirectory ?? '')
-    startType   = [string]($obj.startType ?? $StartType)
-    useWrapper  = [bool]($obj.useWrapper ?? $false)
-    stdout      = [string]($obj.stdout ?? '')
-    stderr      = [string]($obj.stderr ?? '')
-    recovery    = $obj.recovery
-    startAfter  = [bool]($obj.startAfter ?? $false)
+    workingDir  = [string](Get-ObjectPropertyValue -Object $obj -Names @('workingDir', 'WorkingDirectory', 'working_dir') -Default '')
+    startType   = [string](Get-ObjectPropertyValue -Object $obj -Names @('startType', 'start_type') -Default $StartType)
+    useWrapper  = [bool](Get-ObjectPropertyValue -Object $obj -Names @('useWrapper', 'use_wrapper') -Default $false)
+    stdout      = [string](Get-ObjectPropertyValue -Object $obj -Names @('stdout', 'stdout_path') -Default '')
+    stderr      = [string](Get-ObjectPropertyValue -Object $obj -Names @('stderr', 'stderr_path') -Default '')
+    recovery    = Get-ObjectPropertyValue -Object $obj -Names @('recovery') -Default $null
+    startAfter  = [bool](Get-ObjectPropertyValue -Object $obj -Names @('startAfter', 'start_after_install') -Default $false)
+    installable = [bool](Get-ObjectPropertyValue -Object $obj -Names @('installable') -Default $true)
+    installAuthority = [bool](Get-ObjectPropertyValue -Object $obj -Names @('install_authority') -Default $true)
+    serviceInstallAuthority = [bool](Get-ObjectPropertyValue -Object $obj -Names @('service_install_authority') -Default $true)
+    serviceControlAuthority = [bool](Get-ObjectPropertyValue -Object $obj -Names @('service_control_authority') -Default $true)
+    blockedReason = [string](Get-ObjectPropertyValue -Object $obj -Names @('blocked_reason') -Default '')
   }
 
   # args can be string or array
-  if($null -ne $obj.args){
-    if($obj.args -is [string]){
-      $def.args = @([string]$obj.args)
+  if($null -ne $rawArgs){
+    if($rawArgs -is [string]){
+      $def.args = @([string]$rawArgs)
     } else {
-      $def.args = @($obj.args | ForEach-Object { [string]$_ })
+      $def.args = @($rawArgs | ForEach-Object { [string]$_ })
     }
-  } elseif($null -ne $obj.Arguments){
-    $def.args = @($obj.Arguments | ForEach-Object { [string]$_ })
   }
 
   return $def
@@ -578,14 +693,17 @@ function Get-ServiceDefs {
   if(-not [string]::IsNullOrWhiteSpace($ConfigPath)){
     $cfg = Read-ConfigFile -Path $ConfigPath
 
-    # Accept either an array or an object with "services"
+    # Accept an array, an object with "services", or one service definition object.
     $items = $null
     if($cfg -is [System.Collections.IEnumerable] -and -not ($cfg -is [string])){
       $items = @($cfg)
-    } elseif($cfg.services){
-      $items = @($cfg.services)
     } else {
-      throw "Config file parsed but did not look like a list of services (array) or object with .services"
+      $services = $cfg.PSObject.Properties['services']
+      if($services -and $null -ne $services.Value){
+        $items = @($services.Value)
+      } else {
+        $items = @($cfg)
+      }
     }
 
     return @($items | ForEach-Object { Normalize-ServiceDef $_ })
@@ -605,6 +723,11 @@ function Get-ServiceDefs {
     stderr      = $StdErrPath
     recovery    = @{ enabled = [bool]$SetRecovery; restartDelaySec=$RecoveryRestartDelaySec; maxRestarts=$RecoveryMaxRestarts; resetDays=$RecoveryResetDays }
     startAfter  = [bool]$StartAfterInstall
+    installable = $true
+    installAuthority = $true
+    serviceInstallAuthority = $true
+    serviceControlAuthority = $true
+    blockedReason = ''
   }
 
   return @($def)
@@ -640,11 +763,116 @@ try {
     }
   }
 
+  if($Mode -eq 'Plan'){
+    foreach($d in $defs){
+      $name = [string]$d.name
+      Write-Section ("Plan: {0}" -f $name)
+
+      $blockedBy = New-Object System.Collections.Generic.List[string]
+      if(-not [bool]$d.installable){ $blockedBy.Add("installable_false") | Out-Null }
+      if(-not [bool]$d.installAuthority){ $blockedBy.Add("install_authority_false") | Out-Null }
+      if(-not [bool]$d.serviceInstallAuthority){ $blockedBy.Add("service_install_authority_false") | Out-Null }
+      if(-not [bool]$d.serviceControlAuthority){ $blockedBy.Add("service_control_authority_false") | Out-Null }
+
+      $exePlan = Resolve-ExecutableForPlan ([string]$d.exe)
+      if(-not [bool]$exePlan.exists){ $blockedBy.Add("service_executable_unresolved") | Out-Null }
+
+      $workDirStatus = "not_requested"
+      $workDirResolved = ""
+      if(-not [string]::IsNullOrWhiteSpace([string]$d.workingDir)){
+        $workDirResolved = Resolve-FullPath ([string]$d.workingDir)
+        if(Test-Path -LiteralPath $workDirResolved -PathType Container){
+          if(Test-DangerousPath $workDirResolved){
+            $workDirStatus = "dangerous"
+            $blockedBy.Add("working_directory_dangerous") | Out-Null
+          } elseif(-not $OverrideSafety){
+            $rootFull = Resolve-FullPath $Root
+            $wLower = $workDirResolved.TrimEnd('\').ToLowerInvariant()
+            $rLower = $rootFull.TrimEnd('\').ToLowerInvariant()
+            if(-not ($wLower -eq $rLower -or $wLower.StartsWith($rLower + "\"))){
+              $workDirStatus = "outside_root"
+              $blockedBy.Add("working_directory_outside_root") | Out-Null
+            } else {
+              $workDirStatus = "ready"
+            }
+          } else {
+            $workDirStatus = "ready"
+          }
+        } else {
+          $workDirStatus = "missing"
+          $blockedBy.Add("working_directory_missing") | Out-Null
+        }
+      }
+
+      $binaryPlan = [pscustomobject]@{
+        binary_path = ''
+        service_command = ''
+        wrapper = [pscustomobject]@{
+          enabled = $false
+          path = ''
+          would_write = $false
+        }
+      }
+      if([bool]$exePlan.exists -and $workDirStatus -notin @("missing", "dangerous", "outside_root")){
+        $binaryPlan = Build-BinaryPathPlan -SvcName $name -Exe ([string]$exePlan.resolved) -CommandArgs @($d.args) -WorkDir ([string]$d.workingDir) -WantWrapper:([bool]$d.useWrapper) -StdOut ([string]$d.stdout) -StdErr ([string]$d.stderr)
+      }
+
+      $ready = $blockedBy.Count -eq 0
+      $plan = [pscustomobject]@{
+        kind = 'service_install.plan'
+        service = $name
+        status = $(if($ready){ 'ready' } else { 'blocked' })
+        ready = $ready
+        would_install = $ready
+        would_start = [bool]$d.startAfter
+        mode = 'Plan'
+        display_name = [string]$d.displayName
+        description = [string]$d.description
+        start_type = [string]$d.startType
+        executable = [pscustomobject]@{
+          value = [string]$d.exe
+          resolved = [string]$exePlan.resolved
+          exists = [bool]$exePlan.exists
+          source = [string]$exePlan.source
+          reason = [string]$exePlan.reason
+        }
+        arguments = @($d.args)
+        working_directory = [pscustomobject]@{
+          value = [string]$d.workingDir
+          resolved = $workDirResolved
+          status = $workDirStatus
+        }
+        binary_path = [string]$binaryPlan.binary_path
+        service_command = [string]$binaryPlan.service_command
+        wrapper = $binaryPlan.wrapper
+        blocked_by = @($blockedBy)
+        blocked_reason = [string]$d.blockedReason
+        governance = [pscustomobject]@{
+          read_only_contract = $true
+          execution_authority = $false
+          approval_decision_authority = $false
+          memory_write = $false
+          local_process_launch_authority = $false
+          service_install_authority = $false
+          service_control_authority = $false
+          mutation_authority_granted = $false
+        }
+      }
+
+      $script:Plans.Add($plan) | Out-Null
+      Add-Action $name "Plan" "OK" ("status={0}; would_install={1}; blockers={2}" -f $plan.status, $plan.would_install, (($plan.blocked_by | Sort-Object) -join ','))
+      Write-Host ("Plan status : {0}" -f $plan.status)
+      Write-Host ("Would install: {0}" -f $plan.would_install)
+      Write-Host ("Blocked by   : {0}" -f (($plan.blocked_by | Sort-Object) -join ', '))
+    }
+  }
+
   $mutating = $Mode -in @('Install','Update','Uninstall')
   if($mutating){
     Require-Admin $Mode
   }
 
+  if($Mode -ne 'Plan'){
   foreach($d in $defs){
     $name = [string]$d.name
 
@@ -868,6 +1096,7 @@ try {
       continue
     }
   }
+  }
 
   # -----------------------------
   # Write outputs
@@ -882,7 +1111,8 @@ try {
     config    = $ConfigPath
     log       = $LogPath
     csv       = $CsvPath
-    actions   = @($script:Actions)
+    actions   = @($script:Actions.ToArray())
+    plans     = @($script:Plans.ToArray())
   }
 
   $report | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $JsonPath -Encoding UTF8 -Force

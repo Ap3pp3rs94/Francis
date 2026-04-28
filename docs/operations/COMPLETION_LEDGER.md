@@ -11543,6 +11543,51 @@ supervision readiness gate:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens service manager dry-run plan
+
+Stage 6/Lens now has a non-mutating service-manager plan proof for the future
+resident Lens host. `scripts/service-install.ps1` supports `-Mode Plan`, accepts
+the single-object Lens service config shape, normalizes snake_case service
+fields, resolves the planned PowerShell foreground host command, computes the
+planned wrapper/binary path, and writes the existing service-install JSON report
+with a `service_install.plan` record. The tracked Lens host service config now
+declares the intended foreground command for future service supervision while
+remaining disabled and non-installable.
+
+The validated baseline plan is still `blocked`: `installable`,
+`install_authority`, `service_install_authority`, and
+`service_control_authority` remain false, and the plan reports
+`would_install: false`, `would_start: false`, `wrapper.would_write: false`, and
+`mutation_authority_granted: false`.
+
+This is dry-run/readback-only. It does not install, update, start, stop, restart,
+delete, supervise, or write a Windows service wrapper; create a resident host
+process; register tray presence; bind a global hotkey; open or focus an overlay
+window; summon Francis anywhere; capture screen content; write memory; decide
+approvals; execute operator actions; or grant overlay-control, window-management,
+summon, capture, sensing, telemetry, promotion, policy, service-install,
+service-control, wrapper-write, or API local-process-launch authority.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens service manager
+dry-run plan:
+
+- `python -m pytest tests\test_service_install_plan_script.py -q`
+  Result: `passed`
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\service-install.ps1 -Mode Plan -Root D:\Francis -ConfigPath config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_preflight_script.py tests\test_service_install_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_service_install_plan_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_service_install_plan_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_service_install_plan_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11554,8 +11599,9 @@ These remain true and should block any "finished" claim:
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session with live foreground process
   readback proof plus API live process readback, disabled tracked service config
-  baseline, resident supervision readiness gate, and non-starting process
-  readback boundary plus read-only Windows service status
+  baseline, resident supervision readiness gate, read-only service-manager
+  dry-run plan proof, and non-starting process readback boundary plus read-only
+  Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus a disabled tray/presence preflight baseline and
   disabled overlay/window preflight baseline, but no OS-wide summon, resident
