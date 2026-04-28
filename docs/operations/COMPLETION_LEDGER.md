@@ -701,6 +701,17 @@ proof/readback only; no runtime code, UI, approval authority, memory-write
 authority, promotion authority, deadletter resolution/escalation, or new
 dispatch action class changed in this slice.
 
+As of `2026-04-28`, Reactor `mission_tick` execution also has focused API proof
+for the existing mission-write authority boundary. The API test proves that an
+actor with `reactor.write` but without `missions.write` can enqueue and attempt
+a Reactor `mission_tick`, but the dispatch remains `dispatch_blocked` /
+`mission_tick_permission_denied`, routes verification and stable-return readback
+to operator review, preserves a blocked `reactor.dispatch.execution.receipt`,
+does not start mission execution, and leaves the queued mission unchanged. This
+is test-only evidence for the existing scope gate; it adds no route, no runtime
+behavior, no mission execution authority, no approval authority, no memory-write
+authority, no retry/deadletter behavior, and no UI claim.
+
 As of `2026-04-28`, Reactor deadletter items can record bounded disposition
 receipts after review. `POST /reactor/deadletters/resolve` requires the existing
 `reactor.write` API scope, accepts an existing reviewed deadletter id, and
@@ -10056,6 +10067,23 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor mission tick
+permission-denial API proof slice:
+
+- `python -m pytest tests\test_api_reactor.py::test_reactor_mission_tick_dispatch_route_blocks_without_missions_scope -q`
+  Result: `failed before correcting the expected verification route to match
+  the existing operator-review contract; passed after test correction`
+- `python -m pytest tests\test_api_reactor.py::test_reactor_mission_tick_dispatch_route_blocks_without_missions_scope tests\test_api_reactor.py::test_reactor_mission_tick_dispatch_route_runs_bounded_queue tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_mission_tick_without_missions_scope tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_runs_mission_tick_with_receipts -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_reactor.py`
+  Result: `passed with Ruff cache write warning`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10082,7 +10110,7 @@ These remain true and should block any "finished" claim:
   readback. It also supports one bounded `mission_tick` dispatch through the
   existing mission queue runtime guarded by `missions.write` and operator
   posture, with execution, verification, stable-return, status readback,
-  permission-denial proof, failure retry scheduling, and retry-exhaustion
+  unit/API permission-denial proof, failure retry scheduling, and retry-exhaustion
   deadletter proof through a `mission_tick_failed` gate. Failed `operation_run`
   dispatches can now schedule bounded retries and deadletter after retry
   exhaustion through the same governed retry handoff path, and successful due

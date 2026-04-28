@@ -583,6 +583,108 @@ def test_reactor_mission_tick_dispatch_route_runs_bounded_queue(monkeypatch, tmp
     assert status.json()["verification_counts"] == {"passed": 1}
 
 
+def test_reactor_mission_tick_dispatch_route_blocks_without_missions_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_REACTOR_ACTOR: ["reactor.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    mission, error = mission_store.create_mission(
+        mission_store.MissionCreateRequest(
+            objective="stay queued when Reactor lacks mission write authority",
+            requester_id=_REACTOR_ACTOR,
+            summary="API mission tick permission boundary proof",
+        )
+    )
+    assert error is None
+    assert mission is not None
+
+    client = TestClient(create_app())
+    enqueued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Mission tick dispatch must require mission write authority.",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "actor": _REACTOR_ACTOR,
+            "max_actions": 1,
+        },
+    )
+    assert enqueued.status_code == 200
+    event_id = str(enqueued.json()["event_id"])
+
+    dispatched = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "attempt mission tick without missions.write",
+        },
+    )
+
+    assert dispatched.status_code == 200
+    body = dispatched.json()
+    assert body["ok"] is True
+    assert body["applied"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "mission_tick_permission_denied"
+    assert event["dispatch"]["engine"] == "mission_tick"
+    assert event["dispatch"]["allowed"] is False
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["blocked_route"] == "operator_review"
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["status"] == "blocked"
+    assert execution["outcome"] == "mission_tick_permission_denied"
+    assert execution["route"] == "mission_tick"
+    assert execution["gate"] == "missions_write_permission_gate"
+    assert execution["execution_started"] is False
+    assert execution["dispatch_applied"] is False
+    assert execution["governance"]["execution_authority"] is False
+    assert execution["governance"]["approval_authority"] is False
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "not_run"
+    assert verification["verification_outcome"] == "mission_tick_permission_denied"
+    assert verification["route"] == "operator_review"
+    assert verification["verified"] is False
+    assert verification["completion_claim_allowed"] is False
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "operator_review"
+    assert stable_return["stable_state"] == "mission_tick_permission_denied"
+    assert stable_return["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert stable_return["dispatch_applied"] is False
+    assert stable_return["execution_started"] is False
+    assert event["governance"]["execution_authority"] is False
+    assert event["governance"]["dispatch_authority"] is False
+    assert event["governance"]["memory_write"] is False
+
+    review_queue = client.get("/reactor/review_queue", params={"route": "operator_review"})
+    assert review_queue.status_code == 200
+    assert review_queue.json()["available_total"] == 1
+    assert review_queue.json()["items"][0]["review"]["gate"] == "mission_tick_permission_denied"
+
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["status_counts"] == {"dispatch_blocked": 1}
+    assert status.json()["stable_state_counts"] == {"mission_tick_permission_denied": 1}
+    assert status.json()["dispatch_execution_counts"] == {"blocked": 1}
+    assert status.json()["verification_counts"] == {"not_run": 1}
+    assert status.json()["verification_outcome_counts"] == {"mission_tick_permission_denied": 1}
+
+    stored_mission, read_error = mission_store.read_mission(mission.mission_id)
+    assert read_error is None
+    assert stored_mission is not None
+    assert stored_mission.status == mission_store.MissionStatus.QUEUED
+
+
 def test_reactor_mission_tick_retry_exhaustion_route_queues_deadletter(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
