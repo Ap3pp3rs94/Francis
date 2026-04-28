@@ -277,6 +277,62 @@ def _due_receipt(
     return redacted if isinstance(redacted, dict) else {}
 
 
+def _dispatch_attempt_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    attempted = status in {"attempted", "already_attempted"}
+    receipt = {
+        "kind": "reactor.retry.dispatch_attempt.receipt",
+        "receipt_id": f"{item.get('retry_schedule_id')}_dispatch_attempt",
+        "retry_schedule_id": item.get("retry_schedule_id"),
+        "event_id": item.get("event_id"),
+        "candidate_id": item.get("candidate_id"),
+        "status": status,
+        "route": "dispatch_engine" if attempted else item.get("route"),
+        "gate": item.get("gate"),
+        "stable_state": "awaiting_dispatch_engine" if attempted else item.get("stable_state"),
+        "next_step": "record_dispatch_attempt_outcome_without_completion_claim"
+        if attempted
+        else "wait_until_retry_due_before_dispatch_attempt",
+        "source_receipt_kind": "reactor.retry.due.receipt" if attempted else "reactor.retry_schedule.item",
+        "source_receipt_ref": item.get("retry_schedule_id"),
+        "attempt_count": item.get("attempt_count"),
+        "max_retries": item.get("max_retries"),
+        "remaining_retries": item.get("remaining_retries"),
+        "backoff_seconds": item.get("backoff_seconds"),
+        "due_after_ts": item.get("due_after_ts"),
+        "due_recorded_ts": item.get("due_recorded_ts"),
+        "retry_dispatch_attempted_ts": ts if attempted else 0,
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "retry_due": bool(item.get("retry_due")) or attempted,
+        "retry_dispatch_attempted": attempted,
+        "retry_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_retry_dispatch_attempt",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
 def schedule_retry(
     *,
     event: dict[str, Any],
@@ -380,6 +436,98 @@ def mark_retry_due(
         "ok": True,
         "applied": True,
         "status": "due",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+    }
+
+
+def mark_retry_dispatch_attempted(
+    *,
+    retry_schedule_id: str,
+    actor: str = "",
+    reason: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _retry_schedule_path(retry_schedule_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_retry_schedule", "item": {}, "receipt": {}}
+
+    current_status = _safe_str(item.get("status")).strip() or "scheduled"
+    if current_status == "attempted":
+        receipt = _dispatch_attempt_receipt(
+            item=item,
+            actor=actor,
+            reason=reason,
+            ts=ts,
+            status="already_attempted",
+            applied=False,
+        )
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_attempted",
+            "item": _display(item),
+            "receipt": _display(receipt),
+        }
+    if current_status != "due":
+        receipt = _dispatch_attempt_receipt(
+            item=item,
+            actor=actor,
+            reason=reason,
+            ts=ts,
+            status="not_due",
+            applied=False,
+        )
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "not_due",
+            "item": _display(item),
+            "receipt": _display(receipt),
+        }
+
+    updated = {
+        **item,
+        "status": "attempted",
+        "route": "dispatch_engine",
+        "stable_state": "awaiting_dispatch_engine",
+        "next_step": "record_dispatch_attempt_outcome_without_completion_claim",
+        "retry_dispatch_attempted": True,
+        "retry_dispatch_attempted_ts": ts,
+        "updated_ts": ts,
+        "retry_started": False,
+        "execution_started": False,
+        "dispatch_applied": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_retry_dispatch_attempt",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, updated)
+    receipt = _dispatch_attempt_receipt(
+        item=updated,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        status="attempted",
+        applied=True,
+    )
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "attempted",
         "item": _display(updated),
         "receipt": _display(receipt),
     }

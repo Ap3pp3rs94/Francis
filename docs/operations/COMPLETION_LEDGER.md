@@ -613,6 +613,21 @@ start retry execution, dispatch work, run the dispatch engine, consume execution
 budgets, decide approvals, resolve or escalate deadletters, write memory, or
 grant execution, dispatch, retry-execution, escalation, or approval authority.
 
+As of `2026-04-27`, due Reactor retry schedules can also record a bounded retry
+dispatch-attempt handoff. `POST /reactor/retries/dispatch_attempt` requires
+`reactor.write`, accepts an existing due retry schedule id, marks that schedule
+`attempted`, records `reactor.retry.dispatch_attempt.receipt`, and links the
+source schedule through the Reactor event dispatch state, decision journal,
+receipt history, `latest_retry_dispatch_attempt_receipt`, receipt-kind
+filtering, retry schedule status filtering, and `/reactor/status`
+retry-dispatch-attempt counts. The handoff then uses the existing bounded
+dispatch-attempt path, so with the dispatch engine still absent it can settle
+back into retry backoff or exhaustion/deadletter review according to the
+existing budgets. This is schedule-to-dispatch traceability only: it does not
+run a dispatch engine, start retry execution, execute work, decide approvals,
+resolve or escalate deadletters, write memory, or grant execution, dispatch,
+retry-execution, escalation, or approval authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4486,6 +4501,22 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-27` Stage 5/Reactor due retry
+dispatch-attempt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor retry due
 handoff slice:
@@ -9120,10 +9151,10 @@ These remain true and should block any "finished" claim:
   Reactor deadletter queue items, and every dispatch attempt now records a
   verification-state receipt plus stable-return receipt, retry candidates now
   persist durable retry schedule queue items, and retry schedules can be marked
-  due with a handoff receipt, but bounded dispatch execution, real verification
-  hooks/results, retry execution after due handoff, deadletter
-  resolution/escalation, and broader operator visibility are still remaining
-  work
+  due with a handoff receipt and then feed one bounded retry dispatch-attempt
+  receipt, but bounded dispatch execution, real verification hooks/results,
+  retry execution beyond non-executing due dispatch attempts, deadletter
+  resolution/escalation, and broader operator visibility are still remaining work
 
 ## 6. Update rule
 

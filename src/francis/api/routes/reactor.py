@@ -17,6 +17,7 @@ from francis.reactor import (
     reactor_review_queue,
     reactor_status,
     record_dispatch_attempt,
+    record_retry_dispatch_attempt,
     record_retry_due,
 )
 
@@ -59,6 +60,15 @@ class ReactorDispatchAttemptIn(BaseModel):
 
 
 class ReactorRetryDueIn(BaseModel):
+    retry_schedule_id: str = ""
+    id: str = ""
+    actor: str = ""
+    reason: str = ""
+    summary: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactorRetryDispatchAttemptIn(BaseModel):
     retry_schedule_id: str = ""
     id: str = ""
     actor: str = ""
@@ -234,6 +244,16 @@ def retries_mark_due(payload: ReactorRetryDueIn, request: Request) -> dict[str, 
     data = _payload_dict(payload)
     retry_schedule_id = str(data.get("retry_schedule_id") or data.get("id") or "")
     return record_retry_due(retry_schedule_id, data)
+
+
+@router.post("/retries/dispatch_attempt")
+def retries_dispatch_attempt(payload: ReactorRetryDispatchAttemptIn, request: Request) -> dict[str, Any]:
+    permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(permission)
+    data = _payload_dict(payload)
+    retry_schedule_id = str(data.get("retry_schedule_id") or data.get("id") or "")
+    return record_retry_dispatch_attempt(retry_schedule_id, data)
 
 
 @router.get("/events/get")
