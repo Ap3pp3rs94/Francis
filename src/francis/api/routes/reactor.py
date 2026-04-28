@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.reactor import (
     enqueue_event,
+    external_delivery_sender_contract,
     get_deadletter,
     get_deadletter_history,
     get_deadletter_recovery_receipt,
@@ -699,6 +700,30 @@ def deadletter_external_escalation_delivery_sender_readiness_get(id: str) -> dic
             "approval_authority": False,
             "promotion_authority": False,
             "delivery_processor_claim_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/external_escalation_deliveries/sender_contract")
+def deadletter_external_escalation_delivery_sender_contract() -> dict[str, Any]:
+    item = external_delivery_sender_contract()
+    return {
+        "ok": True,
+        "item": item,
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_sender_contract",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_delivery_sender_attempt_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
             "memory_write": False,
         },
     }

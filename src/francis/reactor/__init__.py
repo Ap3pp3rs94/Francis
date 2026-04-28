@@ -15,6 +15,7 @@ from francis.reactor.deadletters import (
     queue_deadletter,
     resolve_deadletter,
 )
+from francis.reactor.external_escalation import external_delivery_sender_contract
 from francis.reactor.events import (
     VALID_TRIGGER_SOURCES,
     enqueue_event,
@@ -58,6 +59,7 @@ __all__ = [
     "get_external_escalation_delivery_sender_readiness",
     "get_event",
     "get_retry_schedule",
+    "external_delivery_sender_contract",
     "list_approval_resume_history",
     "list_deadletters",
     "list_deadletter_recovery_receipts",

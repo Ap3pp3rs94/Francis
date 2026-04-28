@@ -10575,6 +10575,35 @@ outcome-count UI slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+As of `2026-04-28`, Reactor external delivery sender readiness also has a
+read-only sender contract surface. `GET
+/reactor/deadletters/external_escalation_deliveries/sender_contract` exposes
+the current external-delivery sender contract, including the required future
+fields, the empty supported external sender adapter set, the current
+`external_sender_adapter_contract_missing` blocker, explicit no-send flags, and
+readback governance denying execution, dispatch, retry, external-delivery,
+external-escalation, approval, promotion, and memory-write authority. Existing
+sender preflight/readiness receipts now also carry the supported sender adapter
+list and required sender fields so blocked sender attempts explain the contract
+gap without requiring source inspection. This is backend readback only: it does
+not configure a sender, attempt delivery, send external messages, start
+execution, decide approvals, write memory, promote capabilities, or add UI
+claims.
+
+Latest targeted validation for the `2026-04-28` Reactor external delivery
+sender-contract readback slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_external_delivery_sender_preflight_requires_explicit_sender tests\test_api_reactor.py::test_reactor_external_delivery_sender_contract_route_is_read_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\external_escalation.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\external_escalation.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\external_escalation.py src\francis\reactor\deadletters.py src\francis\api\routes\reactor.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10679,7 +10708,7 @@ These remain true and should block any "finished" claim:
   and actual external escalation send/execution beyond the current non-sending
   local outbox queue, artifact readback, processor-readiness readback, local
   processor-handoff/completion receipt readback, and blocked sender-attempt
-  receipt/readback plus sender-readiness readback
+  receipt/readback plus sender-readiness and sender-contract readback
 
 ## 6. Update rule
 

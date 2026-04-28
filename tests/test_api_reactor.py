@@ -142,6 +142,46 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["stable_return_counts"] == {"settled": 1}
 
 
+def test_reactor_external_delivery_sender_contract_route_is_read_only(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/reactor/deadletters/external_escalation_deliveries/sender_contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    item = body["item"]
+    assert item["kind"] == "reactor.deadletter.external_escalation.delivery_sender_contract"
+    assert item["status"] == "blocked"
+    assert item["external_delivery_sender_ready"] is False
+    assert item["supported_external_sender_adapters"] == []
+    assert item["external_sender_required_fields"] == [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+    ]
+    assert item["external_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert item["missing_requirements"] == ["supported_external_sender_adapter"]
+    assert item["external_delivery_started"] is False
+    assert item["external_message_sent"] is False
+    assert item["external_network_send"] is False
+    assert item["completion_claim_allowed"] is False
+    assert item["governance"]["external_delivery_sender_attempt_authority"] is False
+    assert item["governance"]["external_delivery_authority"] is False
+    assert item["governance"]["external_escalation_authority"] is False
+    assert body["governance"]["external_delivery_sender_attempt_authority"] is False
+    assert body["governance"]["external_delivery_authority"] is False
+    assert body["governance"]["external_escalation_authority"] is False
+
+
 def test_reactor_plugin_run_dispatch_route_blocks_without_execution(
     monkeypatch,
     tmp_path: Path,

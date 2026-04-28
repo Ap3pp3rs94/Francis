@@ -43,6 +43,7 @@ from francis.reactor.events import (
     record_retry_due,
 )
 from francis.reactor.external_escalation import (
+    external_delivery_sender_contract,
     external_delivery_sender_preflight,
     external_escalation_adapter_preflight,
 )
@@ -114,12 +115,35 @@ def test_external_escalation_adapter_preflight_distinguishes_local_outbox() -> N
 
 
 def test_external_delivery_sender_preflight_requires_explicit_sender() -> None:
+    contract = external_delivery_sender_contract()
+    assert contract["kind"] == "reactor.deadletter.external_escalation.delivery_sender_contract"
+    assert contract["status"] == "blocked"
+    assert contract["external_delivery_sender_ready"] is False
+    assert contract["supported_external_sender_adapters"] == []
+    assert contract["external_sender_required_fields"] == [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+    ]
+    assert contract["external_sender_contract_blocker"] == "external_sender_adapter_contract_missing"
+    assert contract["missing_requirements"] == ["supported_external_sender_adapter"]
+    assert contract["external_delivery_started"] is False
+    assert contract["external_message_sent"] is False
+    assert contract["external_network_send"] is False
+    assert contract["completion_claim_allowed"] is False
+    assert contract["governance"]["external_delivery_sender_attempt_authority"] is False
+    assert contract["governance"]["external_delivery_authority"] is False
+    assert contract["governance"]["external_escalation_authority"] is False
+
     missing = external_delivery_sender_preflight(
         "",
         channel="ops_bridge",
         target="on_call",
         processor_completed=True,
     )
+    assert missing["supported_external_sender_adapters"] == []
+    assert missing["external_sender_required_fields"] == contract["external_sender_required_fields"]
     assert missing["external_sender_status"] == "not_configured"
     assert missing["external_sender_ready"] is False
     assert missing["external_sender_blocker"] == "external_sender_adapter_required"

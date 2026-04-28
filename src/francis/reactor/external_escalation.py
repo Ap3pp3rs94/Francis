@@ -5,6 +5,12 @@ from typing import Any
 LOCAL_OUTBOX_ADAPTER = "local_outbox"
 SUPPORTED_EXTERNAL_ESCALATION_ADAPTERS = frozenset({LOCAL_OUTBOX_ADAPTER})
 SUPPORTED_EXTERNAL_DELIVERY_SENDERS: frozenset[str] = frozenset()
+EXTERNAL_DELIVERY_SENDER_REQUIRED_FIELDS = (
+    "local_outbox_processor_completion",
+    "external_sender_adapter",
+    "external_sender_channel",
+    "external_sender_target",
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -135,6 +141,8 @@ def external_delivery_sender_preflight(
         "external_sender_declared": bool(sender_key),
         "external_sender_known": sender_supported,
         "external_sender_configured": ready,
+        "supported_external_sender_adapters": sorted(SUPPORTED_EXTERNAL_DELIVERY_SENDERS),
+        "external_sender_required_fields": list(EXTERNAL_DELIVERY_SENDER_REQUIRED_FIELDS),
         "external_sender_status": status,
         "external_sender_ready": ready,
         "external_sender_blocker": blocker,
@@ -149,4 +157,45 @@ def external_delivery_sender_preflight(
             if ready
             else "configure_explicit_external_delivery_sender_before_marking_sent"
         ),
+    }
+
+
+def external_delivery_sender_contract() -> dict[str, Any]:
+    supported_senders = sorted(SUPPORTED_EXTERNAL_DELIVERY_SENDERS)
+    sender_contract_ready = bool(supported_senders)
+    return {
+        "kind": "reactor.deadletter.external_escalation.delivery_sender_contract",
+        "status": "ready" if sender_contract_ready else "blocked",
+        "route": "deadletter_external_escalation_delivery_sender_contract",
+        "gate": "reactor_external_escalation_delivery_sender_contract",
+        "supported_external_sender_adapters": supported_senders,
+        "external_sender_required_fields": list(EXTERNAL_DELIVERY_SENDER_REQUIRED_FIELDS),
+        "external_delivery_sender_ready": sender_contract_ready,
+        "external_sender_contract_ready": sender_contract_ready,
+        "external_sender_contract_blocker": "" if sender_contract_ready else "external_sender_adapter_contract_missing",
+        "missing_requirements": [] if sender_contract_ready else ["supported_external_sender_adapter"],
+        "external_delivery_started": False,
+        "external_message_sent": False,
+        "external_network_send": False,
+        "completion_claim_allowed": False,
+        "next_step": (
+            "use_explicit_external_delivery_sender_attempt_with_supported_adapter"
+            if sender_contract_ready
+            else "define_and_validate_external_delivery_sender_adapter_before_marking_sent"
+        ),
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_sender_contract",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_delivery_sender_attempt_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
     }
