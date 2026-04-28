@@ -91,6 +91,7 @@ if ($PidValue -gt 0) {
   }
 }
 $ProcessReadbackStatus = if ($ProcessAlive) { 'process_observed' } elseif ($PidPresent -or $ProcessStateExists) { 'state_present_process_not_running' } else { 'missing' }
+$ProcessBlockedReason = if ($ProcessAlive) { 'resident_host_not_supervised' } else { 'resident_host_process_missing' }
 $Blockers = @(
   'tray_host_missing',
   'global_hotkey_binding_missing',
@@ -184,7 +185,7 @@ $payload = [ordered]@{
     stop_supported = $false
     restart_supported = $false
     supervision_authority = $false
-    blocked_reason = 'resident_host_process_missing'
+    blocked_reason = $ProcessBlockedReason
   }
   route = '/lens/host'
   manifest_route = '/lens/host/manifest'

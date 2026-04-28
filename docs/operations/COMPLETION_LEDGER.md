@@ -11441,6 +11441,35 @@ host session:
 - `python -m json.tool config\runtime\services\lens-host.json`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens live foreground host readback proof
+
+Stage 6/Lens now has a validated live-readback proof for the bounded foreground
+host session. While `scripts/lens-host.ps1 -Mode Foreground -RunSeconds N` is
+still running, a separate `scripts/lens-host.ps1 -Mode Status` invocation reads
+the same runtime state/PID files, verifies the process is alive, reports
+`process_readback.status: process_observed`, reports
+`foreground_session: true`, and removes the stale
+`resident_host_process_missing` blocker for that live foreground interval. The
+script now uses `resident_host_not_supervised` as the live process readback
+blocked reason so the status payload no longer claims the foreground process is
+missing when it is actually observed.
+
+This is still a bounded foreground status-session proof only. It does not create
+a resident supervised host; install, start, stop, or restart a Windows service;
+register tray presence; bind a global hotkey; open or focus an overlay window;
+summon Francis anywhere; capture screen content; write memory; decide approvals;
+execute operator actions; or grant overlay-control, window-management, summon,
+capture, sensing, telemetry, promotion, policy, service-control,
+tray-registration, hotkey-registration, or API local-process-launch authority.
+After the foreground session exits, `resident_host_process_missing` remains a
+truthful blocker.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens live foreground
+host readback proof:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11450,8 +11479,9 @@ These remain true and should block any "finished" claim:
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
-  foreground `scripts/lens-host.ps1` status session, disabled tracked service
-  config baseline, and non-starting process readback boundary plus read-only Windows service status
+  foreground `scripts/lens-host.ps1` status session with live foreground process
+  readback proof, disabled tracked service config baseline, and non-starting
+  process readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus a disabled tray/presence preflight baseline and
   disabled overlay/window preflight baseline, but no OS-wide summon, resident
