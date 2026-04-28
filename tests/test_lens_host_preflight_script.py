@@ -51,9 +51,36 @@ def test_lens_host_preflight_reports_blockers_without_authority() -> None:
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["service_config"]["status"] == "present_disabled"
     assert checks["host_entrypoint"]["status"] == "present"
+    assert checks["service_manager"]["status"] == "present"
     assert checks["service_status_readback"]["status"] == "ready"
+    assert checks["service_plan"]["status"] == "blocked"
     assert checks["install_authority"]["status"] == "blocked"
     assert checks["service_control_authority"]["status"] == "blocked"
+    service_plan = payload["service_plan"]
+    assert service_plan["kind"] == "service_install.plan_projection"
+    assert service_plan["status"] == "blocked"
+    assert service_plan["ready"] is False
+    assert service_plan["manager"] == "scripts/service-install.ps1"
+    assert service_plan["manager_exists"] is True
+    assert service_plan["plan_mode"] == "Plan"
+    assert service_plan["would_install"] is False
+    assert service_plan["would_start"] is False
+    assert service_plan["wrapper_would_write"] is False
+    assert "-Mode Foreground" in service_plan["planned_command"]
+    assert "installable_false" in service_plan["blocked_by"]
+    assert "service_install_authority_false" in service_plan["blocked_by"]
+    assert "service_control_authority_false" in service_plan["blocked_by"]
+    assert service_plan["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "wrapper_write_authority": False,
+        "mutation_authority_granted": False,
+    }
     assert payload["governance"] == {
         "read_only_contract": True,
         "execution_authority": False,
