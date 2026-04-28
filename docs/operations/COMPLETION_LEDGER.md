@@ -10804,6 +10804,31 @@ visibility slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, a focused Stage 5/Reactor blocked-action readiness audit
+revalidated the existing approval, blocker, retry, and deadletter paths without
+changing Reactor code, UI code, execution authority, approval authority,
+memory-write behavior, promotion authority, external-delivery authority, or
+operator-facing claims. The tested proof covers missing approval requests being
+queued once, terminal rejected approvals blocking dispatch without execution,
+explicit approval-required dispatch attempts blocking into pending approval,
+mode-boundary blockers routing to operator review, exhausted budget attempts
+queueing deadletter items, retry exhaustion queueing deadletter items,
+`mission_tick` and `operation_run` failure paths scheduling retry and then
+deadlettering, review-queue projection, API approval-queue readback, API
+review-route filtering, and API deadletter queue readback. This narrows the
+Stage 5 closure blocker around "blocked actions queue for approval or
+deadletter appropriately" to the existing supported and boundary dispatch paths;
+it does not close Stage 5 or prove broader dispatch/failure coverage beyond the
+currently implemented Reactor action matrix.
+
+Latest checkpoint validation for the `2026-04-28` Stage 5/Reactor
+blocked-action readiness audit:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_queues_missing_approval_request_once tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_blocks_rejected_approval_without_execution tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_blocks_when_event_requires_approval tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_routes_mode_blocker_to_operator_review tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_queues_deadletter_for_exhausted_budget tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_attempt_records_retry_exhaustion_and_queues_deadletter tests\unit\test_reactor_event_queue.py::test_reactor_failed_mission_tick_dispatch_schedules_retry_then_deadletters tests\unit\test_reactor_event_queue.py::test_reactor_failed_operation_dispatch_schedules_retry_then_deadletters tests\unit\test_reactor_event_queue.py::test_reactor_review_queue_projects_active_review_items tests\test_api_reactor.py::test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue tests\test_api_reactor.py::test_reactor_mission_tick_retry_exhaustion_route_queues_deadletter tests\test_api_reactor.py::test_reactor_event_routes_filter_review_readbacks tests\test_api_reactor.py::test_reactor_review_queue_route_projects_readonly_items tests\test_api_reactor.py::test_reactor_deadletter_queue_readback_routes -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
