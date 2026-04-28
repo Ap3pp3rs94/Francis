@@ -279,6 +279,143 @@ test("ReactorClient.getReviewQueue preserves escalation acknowledgement route fi
   }
 });
 
+test("ReactorClient.listEvents preserves proposal review receipts without authority claims", async () => {
+  const requests: Array<{
+    path: string;
+    method: string;
+    limit: string | null;
+    triggerSource: string | null;
+    stableState: string | null;
+    receiptKind: string | null;
+  }> = [];
+  const restoreFetch = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      limit: parsed.searchParams.get("limit"),
+      triggerSource: parsed.searchParams.get("trigger_source"),
+      stableState: parsed.searchParams.get("stable_state"),
+      receiptKind: parsed.searchParams.get("receipt_kind"),
+    });
+
+    return jsonResponse({
+      ok: true,
+      items: [
+        {
+          event_id: "evt_forge_review",
+          status: "dispatch_completed",
+          stable_state: "proposal_review_inspected",
+          updated_ts: "1770001200",
+          trigger: {
+            source: "forge_proposal",
+            type: "forge_proposal",
+            summary: "Inspect Forge proposal before operator decision.",
+            metadata: {
+              proposal_id: "proposal_reactor_ui",
+            },
+          },
+          classification: {
+            mode: "pilot",
+            risk_tier: "normal",
+            action_class: "proposal_review",
+            approval_required: false,
+          },
+          latest_dispatch_execution_receipt: {
+            kind: "reactor.dispatch.execution.receipt",
+            receipt_id: "evt_forge_review_dispatch_execution_1",
+            event_id: "evt_forge_review",
+            status: "completed",
+            outcome: "proposal_review_ready",
+            route: "proposal_review",
+            stable_state: "proposal_review_inspected",
+            next_step: "eligible_for_operator_review_decision",
+            proposal_id: "proposal_reactor_ui",
+            plugin_id: "generated.reactor_ui",
+            proposal_status: "staged",
+            quality_ready: true,
+            missing_requirements: [],
+            review_status: "staged",
+            validation_receipt_id: "validation_reactor_ui",
+            readback_only: true,
+            proposal_decision_applied: false,
+            promotion_applied: false,
+            execution_started: false,
+            dispatch_applied: true,
+            verified: true,
+            completion_claim_allowed: true,
+            memory_write: false,
+          },
+          latest_verification_receipt: {
+            kind: "reactor.verification.receipt",
+            receipt_id: "evt_forge_review_verification_1",
+            status: "passed",
+            route: "proposal_review",
+            verified: true,
+            execution_started: false,
+            dispatch_applied: true,
+            memory_write: false,
+          },
+          latest_stable_return: {
+            kind: "reactor.stable_return.receipt",
+            receipt_id: "evt_forge_review_stable_return_1",
+            route: "proposal_review",
+            stable_state: "proposal_review_inspected",
+            execution_started: false,
+            dispatch_applied: true,
+            memory_write: false,
+          },
+        },
+      ],
+      total: 1,
+      limit: 6,
+    });
+  });
+
+  try {
+    const client = new ReactorClient("http://127.0.0.1:8000");
+    const snapshot = await client.listEvents({
+      limit: 6,
+      trigger_source: "forge_proposal",
+      stable_state: "proposal_review_inspected",
+      receipt_kind: "reactor.dispatch.execution.receipt",
+    });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/reactor/events/list",
+        method: "GET",
+        limit: "6",
+        triggerSource: "forge_proposal",
+        stableState: "proposal_review_inspected",
+        receiptKind: "reactor.dispatch.execution.receipt",
+      },
+    ]);
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.trigger_source, "forge_proposal");
+    assert.equal(snapshot.stable_state, "proposal_review_inspected");
+    assert.equal(snapshot.receipt_kind, "reactor.dispatch.execution.receipt");
+    assert.equal(snapshot.items[0]?.event_id, "evt_forge_review");
+    assert.equal(snapshot.items[0]?.trigger?.proposal_id, "proposal_reactor_ui");
+    assert.equal(snapshot.items[0]?.classification?.action_class, "proposal_review");
+    const receipt = snapshot.items[0]?.latest_dispatch_execution_receipt;
+    assert.equal(receipt?.kind, "reactor.dispatch.execution.receipt");
+    assert.equal(receipt?.route, "proposal_review");
+    assert.equal(receipt?.proposal_id, "proposal_reactor_ui");
+    assert.equal(receipt?.plugin_id, "generated.reactor_ui");
+    assert.equal(receipt?.quality_ready, true);
+    assert.equal(receipt?.readback_only, true);
+    assert.equal(receipt?.proposal_decision_applied, false);
+    assert.equal(receipt?.promotion_applied, false);
+    assert.equal(receipt?.execution_started, false);
+    assert.equal(receipt?.memory_write, false);
+    assert.equal(snapshot.items[0]?.latest_verification_receipt?.verified, true);
+    assert.equal(snapshot.items[0]?.latest_stable_return?.dispatch_applied, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("ReactorClient.listDeadletters reads disposition history without mutation authority", async () => {
   const requests: Array<{ path: string; method: string; limit: string | null; status: string | null }> = [];
   const restoreFetch = installFetch((url, init) => {

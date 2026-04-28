@@ -23,6 +23,7 @@ export type ReactorReviewTrigger = {
   mission_id?: string;
   operation_id?: string;
   approval_id?: string;
+  proposal_id?: string;
 };
 
 export type ReactorReviewClassification = {
@@ -74,11 +75,21 @@ export type ReactorReceiptSummary = {
   receipt_id?: string;
   deadletter_id?: string;
   event_id?: string;
+  proposal_id?: string;
+  plugin_id?: string;
   status?: string;
+  outcome?: string;
   route?: string;
   gate?: string;
   stable_state?: string;
   next_step?: string;
+  proposal_status?: string;
+  quality_ready?: boolean;
+  missing_requirements?: string[];
+  review_status?: string;
+  review_receipt_id?: string;
+  validation_receipt_id?: string;
+  validation_receipt_path?: string;
   review_decision?: string;
   resolution_decision?: string;
   deadletter_resolved?: boolean;
@@ -91,6 +102,12 @@ export type ReactorReceiptSummary = {
   recovery_event_id?: string;
   recovery_request_receipt_id?: string;
   recovery_started?: boolean;
+  readback_only?: boolean;
+  proposal_decision_applied?: boolean;
+  promotion_applied?: boolean;
+  verified?: boolean;
+  completion_claim_allowed?: boolean;
+  dispatch_applied?: boolean;
   execution_started?: boolean;
   retry_started?: boolean;
   escalation_started?: boolean;
@@ -143,6 +160,34 @@ export type ReactorDeadletterSnapshot = {
   error?: string;
 };
 
+export type ReactorEventItem = {
+  event_id: string;
+  id?: string;
+  status?: string;
+  stable_state?: string;
+  created_ts?: number;
+  updated_ts?: number;
+  trigger?: ReactorReviewTrigger;
+  classification?: ReactorReviewClassification;
+  latest_dispatch_execution_receipt?: ReactorReceiptSummary;
+  latest_verification_receipt?: ReactorReceiptSummary;
+  latest_stable_return?: ReactorReceiptSummary;
+};
+
+export type ReactorEventSnapshot = {
+  ok: boolean;
+  items: ReactorEventItem[];
+  total: number;
+  limit: number;
+  status?: string;
+  trigger_source?: string;
+  stable_state?: string;
+  blocker_route?: string;
+  review_route?: string;
+  receipt_kind?: string;
+  error?: string;
+};
+
 export type ReactorReviewQueueParams = {
   limit?: number;
   route?: string;
@@ -151,6 +196,16 @@ export type ReactorReviewQueueParams = {
 export type ReactorDeadletterListParams = {
   limit?: number;
   status?: string;
+};
+
+export type ReactorEventListParams = {
+  limit?: number;
+  status?: string;
+  trigger_source?: string;
+  stable_state?: string;
+  blocker_route?: string;
+  review_route?: string;
+  receipt_kind?: string;
 };
 
 export class ReactorApiError extends Error {
@@ -214,6 +269,46 @@ export class ReactorClient {
 
     const raw = (await response.json()) as unknown;
     return parseReactorDeadletterSnapshot(raw, { limit, status });
+  }
+
+  async listEvents(
+    params: ReactorEventListParams = {},
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<ReactorEventSnapshot> {
+    const url = new URL(`${this.baseUrl}/reactor/events/list`);
+    const limit = boundedLimit(params.limit, 20);
+    url.searchParams.set("limit", String(limit));
+    const status = safeString(params.status).trim();
+    const triggerSource = safeString(params.trigger_source).trim();
+    const stableState = safeString(params.stable_state).trim();
+    const blockerRoute = safeString(params.blocker_route).trim();
+    const reviewRoute = safeString(params.review_route).trim();
+    const receiptKind = safeString(params.receipt_kind).trim();
+    if (status) url.searchParams.set("status", status);
+    if (triggerSource) url.searchParams.set("trigger_source", triggerSource);
+    if (stableState) url.searchParams.set("stable_state", stableState);
+    if (blockerRoute) url.searchParams.set("blocker_route", blockerRoute);
+    if (reviewRoute) url.searchParams.set("review_route", reviewRoute);
+    if (receiptKind) url.searchParams.set("receipt_kind", receiptKind);
+
+    const response = await fetchWithTimeout(url.toString(), { method: "GET", signal: options.signal }, options.timeoutMs ?? 10_000);
+    if (!response.ok) {
+      throw new ReactorApiError(`Reactor events list request failed with HTTP ${response.status}`, {
+        status: response.status,
+        url: url.toString(),
+      });
+    }
+
+    const raw = (await response.json()) as unknown;
+    return parseReactorEventSnapshot(raw, {
+      limit,
+      status,
+      trigger_source: triggerSource,
+      stable_state: stableState,
+      blocker_route: blockerRoute,
+      review_route: reviewRoute,
+      receipt_kind: receiptKind,
+    });
   }
 }
 
@@ -293,6 +388,53 @@ export function parseReactorDeadletterSnapshot(
   };
 }
 
+export function parseReactorEventSnapshot(
+  raw: unknown,
+  defaults: ReactorEventListParams = {},
+): ReactorEventSnapshot {
+  const record = isRecord(raw) ? raw : {};
+  const rawItems = Array.isArray(record.items) ? record.items : [];
+  const items = rawItems.map(parseReactorEventItem).filter((item): item is ReactorEventItem => Boolean(item));
+  const limit = Math.max(0, safeNumber(record.limit, boundedLimit(defaults.limit, 20)));
+  const total = Math.max(0, safeNumber(record.total, items.length));
+  const error = safeString(record.error).trim();
+
+  return {
+    ok: typeof record.ok === "boolean" ? record.ok : error.length === 0,
+    items,
+    total,
+    limit,
+    status: optionalString(record.status) || optionalString(defaults.status),
+    trigger_source: optionalString(record.trigger_source) || optionalString(defaults.trigger_source),
+    stable_state: optionalString(record.stable_state) || optionalString(defaults.stable_state),
+    blocker_route: optionalString(record.blocker_route) || optionalString(defaults.blocker_route),
+    review_route: optionalString(record.review_route) || optionalString(defaults.review_route),
+    receipt_kind: optionalString(record.receipt_kind) || optionalString(defaults.receipt_kind),
+    error: error || undefined,
+  };
+}
+
+export function parseReactorEventItem(raw: unknown): ReactorEventItem | null {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return null;
+  const eventId = safeString(record.event_id).trim() || safeString(record.id).trim();
+  if (!eventId) return null;
+
+  return {
+    event_id: eventId,
+    id: optionalString(record.id),
+    status: optionalString(record.status),
+    stable_state: optionalString(record.stable_state),
+    created_ts: optionalNumber(record.created_ts),
+    updated_ts: optionalNumber(record.updated_ts),
+    trigger: parseTrigger(record.trigger),
+    classification: parseClassification(record.classification),
+    latest_dispatch_execution_receipt: parseReceipt(record.latest_dispatch_execution_receipt),
+    latest_verification_receipt: parseReceipt(record.latest_verification_receipt),
+    latest_stable_return: parseReceipt(record.latest_stable_return),
+  };
+}
+
 export function parseReactorDeadletterItem(raw: unknown): ReactorDeadletterItem | null {
   const record = isRecord(raw) ? raw : null;
   if (!record) return null;
@@ -343,11 +485,21 @@ function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
     receipt_id: optionalString(record.receipt_id),
     deadletter_id: optionalString(record.deadletter_id),
     event_id: optionalString(record.event_id),
+    proposal_id: optionalString(record.proposal_id),
+    plugin_id: optionalString(record.plugin_id),
     status: optionalString(record.status),
+    outcome: optionalString(record.outcome),
     route: optionalString(record.route),
     gate: optionalString(record.gate),
     stable_state: optionalString(record.stable_state),
     next_step: optionalString(record.next_step),
+    proposal_status: optionalString(record.proposal_status),
+    quality_ready: optionalBoolean(record.quality_ready),
+    missing_requirements: optionalStringList(record.missing_requirements),
+    review_status: optionalString(record.review_status),
+    review_receipt_id: optionalString(record.review_receipt_id),
+    validation_receipt_id: optionalString(record.validation_receipt_id),
+    validation_receipt_path: optionalString(record.validation_receipt_path),
     review_decision: optionalString(record.review_decision),
     resolution_decision: optionalString(record.resolution_decision),
     deadletter_resolved: optionalBoolean(record.deadletter_resolved),
@@ -360,6 +512,12 @@ function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
     recovery_event_id: optionalString(record.recovery_event_id),
     recovery_request_receipt_id: optionalString(record.recovery_request_receipt_id),
     recovery_started: optionalBoolean(record.recovery_started),
+    readback_only: optionalBoolean(record.readback_only),
+    proposal_decision_applied: optionalBoolean(record.proposal_decision_applied),
+    promotion_applied: optionalBoolean(record.promotion_applied),
+    verified: optionalBoolean(record.verified),
+    completion_claim_allowed: optionalBoolean(record.completion_claim_allowed),
+    dispatch_applied: optionalBoolean(record.dispatch_applied),
     execution_started: optionalBoolean(record.execution_started),
     retry_started: optionalBoolean(record.retry_started),
     escalation_started: optionalBoolean(record.escalation_started),
@@ -372,6 +530,7 @@ function parseReceipt(raw: unknown): ReactorReceiptSummary | undefined {
 function parseTrigger(raw: unknown): ReactorReviewTrigger | undefined {
   const record = isRecord(raw) ? raw : null;
   if (!record) return undefined;
+  const metadata = isRecord(record.metadata) ? record.metadata : {};
   const trigger: ReactorReviewTrigger = {
     source: optionalString(record.source),
     type: optionalString(record.type),
@@ -379,6 +538,7 @@ function parseTrigger(raw: unknown): ReactorReviewTrigger | undefined {
     mission_id: optionalString(record.mission_id),
     operation_id: optionalString(record.operation_id),
     approval_id: optionalString(record.approval_id),
+    proposal_id: optionalString(record.proposal_id) || optionalString(metadata.proposal_id) || optionalString(metadata.forge_proposal_id),
   };
   return hasAnyValue(trigger) ? trigger : undefined;
 }
@@ -452,6 +612,15 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function optionalStringList(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => safeString(item).trim()).filter(Boolean);
+    return items.length > 0 ? items : undefined;
+  }
+  const item = safeString(value).trim();
+  return item ? [item] : undefined;
 }
 
 function hasAnyValue(record: Record<string, unknown>): boolean {

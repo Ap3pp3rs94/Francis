@@ -867,6 +867,18 @@ reviews, promote capabilities, execute plugins, write memory, create UI claims,
 or grant execution, approval, promotion, retry, or external-escalation
 authority.
 
+As of `2026-04-28`, the chat UI Reactor readback surface also exposes those
+bounded Forge proposal-review dispatch receipts. `ReactorClient` now consumes
+`GET /reactor/events/list` filtered to `trigger_source=forge_proposal`,
+`stable_state=proposal_review_inspected`, and
+`receipt_kind=reactor.dispatch.execution.receipt`; preserves proposal id,
+plugin id, quality readiness, missing requirements, validation receipt,
+verification, stable-return, and no-decision/no-promotion/no-memory flags; and
+the System/ORB panel renders a read-only Reactor Forge Reviews section. This is
+event-history readback only: it does not add backend routes, proposal decisions,
+review approvals, promotions, plugin execution, memory writes, controls, or new
+execution, approval, promotion, or external-escalation authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -4740,6 +4752,14 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-28` Stage 5/Reactor
+proposal-review UI readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-27` Stage 5/Reactor deadletter
 review receipt slice:
@@ -9699,13 +9719,17 @@ These remain true and should block any "finished" claim:
   into `recovery_dispatched` with a dedicated recovery-dispatch receipt and
   parent-event readback. Chat UI Reactor readback now preserves recovery-request
   and recovery-dispatch filters, badges, and latest receipt handles from the
-  existing read routes.
+  existing read routes, and the System/ORB panel now exposes read-only
+  proposal-review execution receipts from Reactor event history for completed
+  Forge proposal inspections.
   Remaining Stage 5 gaps still include broader dispatch action coverage beyond
-  existing operation runs and bounded mission queue ticks, broader
+  existing operation runs, bounded mission queue ticks, and read-only Forge
+  proposal reviews, broader
   execution-failure routing/deadletter proof beyond the currently tested
   `operation_run` and `mission_tick` dispatch-engine paths, broader operator
-  visibility beyond the current
-  route-filtered review queue and direct deadletter history, and actual
+  visibility beyond the current route-filtered review queue, direct deadletter
+  history, recovery receipt readback, and proposal-review event-history readback,
+  and actual
   external escalation delivery/execution beyond the current non-executing
   attempt receipt
 

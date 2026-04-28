@@ -39,6 +39,7 @@ import {
   ReactorApiError,
   ReactorClient,
   type ReactorDeadletterSnapshot,
+  type ReactorEventSnapshot,
   type ReactorReviewQueueSnapshot,
   type ReactorReviewRoute,
 } from "./reactor";
@@ -3845,6 +3846,9 @@ function SystemPanel(props: {
   const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
   const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
   const [reactorReviewRouteFilter, setReactorReviewRouteFilter] = useState<ReactorReviewRoute | "">("");
+  const [reactorProposalReviews, setReactorProposalReviews] = useState<ReactorEventSnapshot | null>(null);
+  const [reactorProposalReviewsError, setReactorProposalReviewsError] = useState<string | null>(null);
+  const [reactorProposalReviewsLoadedAt, setReactorProposalReviewsLoadedAt] = useState<number | null>(null);
   const [reactorDeadletters, setReactorDeadletters] = useState<ReactorDeadletterSnapshot | null>(null);
   const [reactorDeadlettersError, setReactorDeadlettersError] = useState<string | null>(null);
   const [reactorDeadlettersLoadedAt, setReactorDeadlettersLoadedAt] = useState<number | null>(null);
@@ -3983,6 +3987,7 @@ function SystemPanel(props: {
         nextOrbStatus,
         nextOperations,
         nextReactorReviewQueue,
+        nextReactorProposalReviews,
         nextReactorDeadletters,
       ] =
         await Promise.allSettled([
@@ -3995,6 +4000,12 @@ function SystemPanel(props: {
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
         reactorClient.getReviewQueue({ limit: 8, route: reactorReviewRouteFilter || undefined }),
+        reactorClient.listEvents({
+          limit: 6,
+          trigger_source: "forge_proposal",
+          stable_state: "proposal_review_inspected",
+          receipt_kind: "reactor.dispatch.execution.receipt",
+        }),
         reactorClient.listDeadletters({ limit: 6 }),
       ]);
 
@@ -4072,6 +4083,15 @@ function SystemPanel(props: {
       } else {
         setReactorReviewQueueError(reactorError(nextReactorReviewQueue.reason));
         degradedFeeds.push("reactor review queue");
+      }
+
+      if (nextReactorProposalReviews.status === "fulfilled") {
+        setReactorProposalReviews(nextReactorProposalReviews.value);
+        setReactorProposalReviewsError(null);
+        setReactorProposalReviewsLoadedAt(refreshStartedAt);
+      } else {
+        setReactorProposalReviewsError(reactorError(nextReactorProposalReviews.reason));
+        degradedFeeds.push("reactor proposal reviews");
       }
 
       if (nextReactorDeadletters.status === "fulfilled") {
@@ -4272,6 +4292,9 @@ function SystemPanel(props: {
   const reactorReviewStableBadges = Object.entries(reactorReviewQueue?.stable_state_counts ?? {})
     .filter(([, count]) => count > 0)
     .slice(0, 3);
+  const reactorProposalReviewItems = reactorProposalReviews?.items ?? [];
+  const reactorProposalReviewTotal = reactorProposalReviews?.total ?? reactorProposalReviewItems.length;
+  const reactorProposalReviewRouteError = safeString(reactorProposalReviews?.error).trim();
   const reactorDeadletterItems = reactorDeadletters?.items ?? [];
   const reactorDeadletterTotal = reactorDeadletters?.total ?? reactorDeadletterItems.length;
   const reactorDeadletterRouteError = safeString(reactorDeadletters?.error).trim();
@@ -6681,6 +6704,132 @@ function SystemPanel(props: {
                       </button>
                     ) : null}
                   </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div id="francis-reactor-proposal-reviews" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Reactor Forge Reviews</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Read-only proposal-review execution receipts from Reactor event history.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(reactorProposalReviewTotal > 0 ? "live" : "clear")}>forge reviews {reactorProposalReviewTotal}</span>
+            {reactorProposalReviewsLoadedAt ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Loaded {toLocaleTime(reactorProposalReviewsLoadedAt)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {reactorProposalReviewsError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor proposal-review receipts unavailable: {reactorProposalReviewsError}
+          </div>
+        ) : null}
+
+        {reactorProposalReviewRouteError && !reactorProposalReviewsError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Reactor proposal-review route reported: {reactorProposalReviewRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {reactorProposalReviewItems.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No Reactor proposal-review receipts are persisted. Completed Forge proposal inspections will appear here after dispatch.
+            </div>
+          ) : (
+            reactorProposalReviewItems.slice(0, 4).map((item) => {
+              const execution = item.latest_dispatch_execution_receipt;
+              const verification = item.latest_verification_receipt;
+              const stableReturn = item.latest_stable_return;
+              const trigger = item.trigger;
+              const classification = item.classification;
+              const proposalId = safeString(execution?.proposal_id).trim() || safeString(trigger?.proposal_id).trim();
+              const pluginId = safeString(execution?.plugin_id).trim();
+              const receiptId = safeString(execution?.receipt_id).trim();
+              const status = safeString(execution?.status).trim() || safeString(item.status).trim() || "review";
+              const outcome = safeString(execution?.outcome).trim();
+              const route = safeString(execution?.route).trim();
+              const stableState = safeString(item.stable_state).trim() || safeString(execution?.stable_state).trim();
+              const nextStep = safeString(execution?.next_step).trim();
+              const summary = safeString(trigger?.summary).trim();
+              const reviewStatus = safeString(execution?.review_status).trim();
+              const validationReceiptId = safeString(execution?.validation_receipt_id).trim();
+              const missingRequirements = execution?.missing_requirements ?? [];
+              return (
+                <div
+                  key={`reactor-proposal-review-${item.event_id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>
+                        <code>{item.event_id}</code>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {summary || nextStep || "Reactor inspected a Forge proposal."}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(status)}>{status}</span>
+                      {outcome ? <span style={badgeStyle(outcome)}>{outcome}</span> : null}
+                      {route ? <span style={badgeStyle(route)}>{route}</span> : null}
+                      {stableState ? <span style={badgeStyle(stableState)}>{stableState}</span> : null}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {proposalId ? <span style={badgeStyle("proposal")}>proposal {proposalId}</span> : null}
+                    {pluginId ? <span style={badgeStyle("plugin")}>plugin {pluginId}</span> : null}
+                    {execution?.quality_ready !== undefined ? (
+                      <span style={badgeStyle(execution.quality_ready ? "ready" : "blocked")}>
+                        quality {execution.quality_ready ? "ready" : "blocked"}
+                      </span>
+                    ) : null}
+                    {reviewStatus ? <span style={badgeStyle(reviewStatus)}>review {reviewStatus}</span> : null}
+                    {classification?.risk_tier ? (
+                      <span style={badgeStyle(classification.risk_tier)}>{classification.risk_tier}</span>
+                    ) : null}
+                    {execution?.readback_only ? <span style={badgeStyle("readback")}>readback only</span> : null}
+                    {execution?.proposal_decision_applied === false ? (
+                      <span style={badgeStyle("no_decision")}>no decision</span>
+                    ) : null}
+                    {execution?.promotion_applied === false ? <span style={badgeStyle("no_promotion")}>no promotion</span> : null}
+                    {execution?.memory_write === false ? <span style={badgeStyle("no_memory_write")}>no memory write</span> : null}
+                    {verification?.verified ? <span style={badgeStyle("verified")}>verified</span> : null}
+                    {stableReturn?.dispatch_applied ? <span style={badgeStyle("settled")}>settled</span> : null}
+                  </div>
+
+                  {missingRequirements.length > 0 ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                      Missing: <code>{missingRequirements.join(", ")}</code>
+                    </div>
+                  ) : null}
+                  {nextStep && summary !== nextStep ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>{nextStep}</div>
+                  ) : null}
+                  {receiptId || validationReceiptId ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                      {receiptId ? (
+                        <>
+                          Receipt <code>{receiptId}</code>
+                        </>
+                      ) : null}
+                      {receiptId && validationReceiptId ? " / " : null}
+                      {validationReceiptId ? (
+                        <>
+                          Validation <code>{validationReceiptId}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })
