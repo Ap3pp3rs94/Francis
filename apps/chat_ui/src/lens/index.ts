@@ -12,6 +12,22 @@ export type LensModeOption = {
   active?: boolean;
 };
 
+export type LensHudRuntime = {
+  status?: string;
+  claim?: string;
+  surface?: string;
+  route?: string;
+  window_host?: string;
+  resident_overlay?: boolean;
+  always_on_top?: boolean;
+  global_hotkey?: boolean;
+  tray_presence?: boolean;
+  os_level?: boolean;
+  blockers: string[];
+  message?: string;
+  governance: Record<string, unknown>;
+};
+
 export type LensHud = {
   status?: string;
   headline?: string;
@@ -19,6 +35,9 @@ export type LensHud = {
   primary_plane_label?: string;
   badges: LensBadge[];
   readback_ready?: boolean;
+  runtime_status?: string;
+  resident_overlay?: boolean;
+  runtime: LensHudRuntime;
   route?: string;
 };
 
@@ -111,6 +130,8 @@ export type LensStage6Criterion = {
   reactor_review_queue_total?: number;
   mission_counts?: Record<string, number>;
   reactor_readback_surfaces?: Record<string, string>;
+  resident_overlay?: boolean;
+  blockers: string[];
 };
 
 export type LensStage6Readiness = {
@@ -274,6 +295,25 @@ function parseBadges(value: unknown): LensBadge[] {
   return value.map(parseBadge).filter((item): item is LensBadge => item !== null);
 }
 
+function parseHudRuntime(value: unknown): LensHudRuntime {
+  const raw = safeRecord(value);
+  return {
+    status: safeString(raw.status).trim(),
+    claim: safeString(raw.claim).trim(),
+    surface: safeString(raw.surface).trim(),
+    route: safeString(raw.route).trim(),
+    window_host: safeString(raw.window_host).trim(),
+    resident_overlay: safeBoolean(raw.resident_overlay, false),
+    always_on_top: safeBoolean(raw.always_on_top, false),
+    global_hotkey: safeBoolean(raw.global_hotkey, false),
+    tray_presence: safeBoolean(raw.tray_presence, false),
+    os_level: safeBoolean(raw.os_level, false),
+    blockers: safeStringList(raw.blockers),
+    message: safeString(raw.message).trim(),
+    governance: safeRecord(raw.governance),
+  };
+}
+
 function parseHud(value: unknown): LensHud {
   const raw = safeRecord(value);
   return {
@@ -283,6 +323,9 @@ function parseHud(value: unknown): LensHud {
     primary_plane_label: safeString(raw.primary_plane_label).trim(),
     badges: parseBadges(raw.badges),
     readback_ready: safeBoolean(raw.readback_ready, false),
+    runtime_status: safeString(raw.runtime_status).trim(),
+    resident_overlay: safeBoolean(raw.resident_overlay, false),
+    runtime: parseHudRuntime(raw.runtime),
     route: safeString(raw.route).trim(),
   };
 }
@@ -412,6 +455,9 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
     reactor_review_queue_total: safeOptionalNumber(value.reactor_review_queue_total),
     mission_counts: parseNumberMap(value.mission_counts),
     reactor_readback_surfaces: parseStringMap(value.reactor_readback_surfaces),
+    resident_overlay:
+      typeof value.resident_overlay === "boolean" ? safeBoolean(value.resident_overlay, false) : undefined,
+    blockers: safeStringList(value.blockers),
   };
 }
 

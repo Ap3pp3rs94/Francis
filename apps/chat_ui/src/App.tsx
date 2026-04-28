@@ -2555,7 +2555,7 @@ function ResidentHud(props: {
       </div>
 
       <div style={{ fontSize: 11, color: THEME.muted }}>
-        {controlMode?.summary || "Resident operator HUD active."}
+        {controlMode?.summary || "Operator console HUD readback active."}
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

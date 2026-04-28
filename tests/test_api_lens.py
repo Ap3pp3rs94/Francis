@@ -94,6 +94,39 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "summon_authority": False,
         "mutation_authority_granted": False,
     }
+    assert body["hud"]["readback_ready"] is True
+    assert body["hud"]["runtime_status"] == "readback_only"
+    assert body["hud"]["resident_overlay"] is False
+    assert body["hud"]["runtime"] == {
+        "status": "readback_only",
+        "claim": "chat_ui_hud_readback_only",
+        "surface": "chat_ui.system_orb",
+        "route": "/lens/hud",
+        "window_host": "chat_ui",
+        "resident_overlay": False,
+        "always_on_top": False,
+        "global_hotkey": False,
+        "tray_presence": False,
+        "os_level": False,
+        "blockers": [
+            "resident_overlay_runtime_missing",
+            "global_hotkey_binding_missing",
+            "tray_host_missing",
+            "always_on_top_window_missing",
+        ],
+        "message": "HUD readback exists through chat UI; resident OS overlay runtime is not implemented here.",
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "new_sensing_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
     assert {
         "nav.briefing",
@@ -118,6 +151,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["mode_selector"]["status"] == "readback_ready"
     assert body["pilot_indicator"]["status"] == "standby"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
+    assert _criterion(body, "hud_layer_runtime")["status"] == "readback_only"
+    assert _criterion(body, "hud_layer_runtime")["resident_overlay"] is False
+    assert "resident_overlay_runtime_missing" in _criterion(body, "hud_layer_runtime")["blockers"]
     assert _criterion(body, "command_palette_commands")["status"] == "readback_ready"
     assert _criterion(body, "command_palette_commands")["command_count"] == body["command_palette"]["command_total"]
     assert _criterion(body, "mode_visibility")["status"] == "readback_ready"

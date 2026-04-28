@@ -10980,14 +10980,53 @@ readback list:
 - `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens HUD runtime readiness readback
+
+Stage 6/Lens now makes the HUD runtime boundary explicit instead of relying on
+operator inference. `GET /lens/status` and its `/lens/hud` alias expose a
+read-only `hud.runtime` object that says the current HUD surface is
+`chat_ui.system_orb`, with `resident_overlay`, `always_on_top`,
+`global_hotkey`, `tray_presence`, and `os_level` all false. The readiness
+criteria now include `hud_layer_runtime` as `readback_only` with explicit
+blockers for the missing resident overlay runtime, global hotkey binding, tray
+host, and always-on-top window. The chat UI Lens parser preserves that runtime
+readback, and the existing console HUD fallback copy no longer claims a
+resident operator HUD is active.
+
+This is a truth/readback slice only. It does not create execution authority,
+approval-decision authority, memory-write authority, overlay-control authority,
+summon authority, capture authority, new sensing authority, promotion
+authority, or a resident OS HUD runtime.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens HUD runtime
+readiness readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
 
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
-  binding for Lens primitives, but no OS-wide summon, resident overlay/HUD
-  runtime, OS-level command palette, or live Pilot takeover surface yet
+  binding for Lens primitives, and now explicitly marks the HUD runtime as
+  chat-UI readback only, but no OS-wide summon, resident overlay/HUD runtime,
+  OS-level command palette, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

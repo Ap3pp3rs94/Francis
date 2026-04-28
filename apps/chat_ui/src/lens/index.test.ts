@@ -79,6 +79,29 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           { label: "incidents", value: 0, severity: "neutral" },
         ],
         readback_ready: true,
+        runtime_status: "readback_only",
+        resident_overlay: false,
+        runtime: {
+          status: "readback_only",
+          claim: "chat_ui_hud_readback_only",
+          surface: "chat_ui.system_orb",
+          route: "/lens/hud",
+          window_host: "chat_ui",
+          resident_overlay: false,
+          always_on_top: false,
+          global_hotkey: false,
+          tray_presence: false,
+          os_level: false,
+          blockers: ["resident_overlay_runtime_missing", "global_hotkey_binding_missing"],
+          message: "HUD readback exists through chat UI; resident OS overlay runtime is not implemented here.",
+          governance: {
+            read_only_contract: true,
+            overlay_control_authority: false,
+            summon_authority: false,
+            capture_authority: false,
+            new_sensing_authority: false,
+          },
+        },
         route: "/lens/hud",
       },
       command_palette: {
@@ -203,6 +226,13 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
         claim: "backend_readback_contract_only",
         criteria: [
           {
+            id: "hud_layer_runtime",
+            status: "readback_only",
+            evidence: ["/lens/hud", "/lens/status"],
+            resident_overlay: false,
+            blockers: ["resident_overlay_runtime_missing"],
+          },
+          {
             id: "command_palette_commands",
             status: "readback_ready",
             evidence: ["/lens/status"],
@@ -250,6 +280,16 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.limit, 6);
     assert.equal(snapshot.read_only, true);
     assert.equal(snapshot.hud.badges[0]?.value, 2);
+    assert.equal(snapshot.hud.runtime_status, "readback_only");
+    assert.equal(snapshot.hud.resident_overlay, false);
+    assert.equal(snapshot.hud.runtime.claim, "chat_ui_hud_readback_only");
+    assert.equal(snapshot.hud.runtime.resident_overlay, false);
+    assert.equal(snapshot.hud.runtime.always_on_top, false);
+    assert.equal(snapshot.hud.runtime.global_hotkey, false);
+    assert.equal(snapshot.hud.runtime.tray_presence, false);
+    assert.equal(snapshot.hud.runtime.blockers[0], "resident_overlay_runtime_missing");
+    assert.equal(snapshot.hud.runtime.governance.overlay_control_authority, false);
+    assert.equal(snapshot.hud.runtime.governance.summon_authority, false);
     assert.equal(snapshot.command_palette.status, "readback_ready");
     assert.equal(snapshot.command_palette.availability, "chat_ui_only");
     assert.equal(snapshot.command_palette.summon_anywhere, false);
@@ -277,11 +317,15 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.governance.approval_decision_authority, false);
     assert.equal(snapshot.governance.overlay_control_authority, false);
     assert.equal(snapshot.stage6_readiness.claim, "backend_readback_contract_only");
-    assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "command_palette_commands");
-    assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_ready");
-    assert.equal(snapshot.stage6_readiness.criteria[1]?.pending_count, 2);
-    assert.equal(snapshot.stage6_readiness.criteria[2]?.id, "summon_anywhere");
-    assert.equal(snapshot.stage6_readiness.criteria[2]?.status, "not_implemented");
+    assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
+    assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_only");
+    assert.equal(snapshot.stage6_readiness.criteria[0]?.resident_overlay, false);
+    assert.equal(snapshot.stage6_readiness.criteria[0]?.blockers[0], "resident_overlay_runtime_missing");
+    assert.equal(snapshot.stage6_readiness.criteria[1]?.id, "command_palette_commands");
+    assert.equal(snapshot.stage6_readiness.criteria[1]?.status, "readback_ready");
+    assert.equal(snapshot.stage6_readiness.criteria[2]?.pending_count, 2);
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.id, "summon_anywhere");
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.status, "not_implemented");
   } finally {
     restoreFetch();
   }
@@ -292,6 +336,10 @@ test("parseLensStatus drops malformed nested items and preserves governance defa
     ok: true,
     hud: {
       badges: [{ label: "mode", value: "assist" }, { value: "missing label" }],
+      runtime: {
+        blockers: ["resident_overlay_runtime_missing", 3, ""],
+        governance: { overlay_control_authority: false },
+      },
     },
     available_modes: [{ id: "assist", label: "Assist" }, { no_id: true }],
     mode_selector: {
@@ -316,6 +364,7 @@ test("parseLensStatus drops malformed nested items and preserves governance defa
     stage6_readiness: {
       criteria: [
         { id: "mode_visibility", status: "readback_ready", evidence: ["/lens/status"] },
+        { id: "hud_layer_runtime", status: "readback_only", resident_overlay: false, blockers: ["tray_host_missing"] },
         { status: "missing id" },
       ],
     },
@@ -323,6 +372,9 @@ test("parseLensStatus drops malformed nested items and preserves governance defa
   });
 
   assert.equal(snapshot.hud.badges.length, 1);
+  assert.equal(snapshot.hud.runtime.blockers.length, 1);
+  assert.equal(snapshot.hud.runtime.blockers[0], "resident_overlay_runtime_missing");
+  assert.equal(snapshot.hud.runtime.governance.overlay_control_authority, false);
   assert.equal(snapshot.available_modes.length, 1);
   assert.equal(snapshot.mode_selector.available_modes.length, 1);
   assert.equal(snapshot.command_palette.command_total, 2);
@@ -334,7 +386,9 @@ test("parseLensStatus drops malformed nested items and preserves governance defa
   assert.equal(snapshot.incident_view.observer_counts.active, 2);
   assert.equal(snapshot.incident_view.observer_counts.warning, 3);
   assert.equal(snapshot.mission_feed.counts.active, 1);
-  assert.equal(snapshot.stage6_readiness.criteria.length, 1);
+  assert.equal(snapshot.stage6_readiness.criteria.length, 2);
+  assert.equal(snapshot.stage6_readiness.criteria[1]?.resident_overlay, false);
+  assert.equal(snapshot.stage6_readiness.criteria[1]?.blockers[0], "tray_host_missing");
   assert.equal(snapshot.governance.execution_authority, false);
   assert.equal(snapshot.governance.approval_decision_authority, false);
   assert.equal(snapshot.governance.memory_write, false);

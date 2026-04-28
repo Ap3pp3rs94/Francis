@@ -187,6 +187,40 @@ def _badge(label: str, value: Any, *, severity: str = "neutral") -> dict[str, An
     return {"label": label, "value": value, "severity": severity}
 
 
+def _hud_runtime_surface() -> dict[str, Any]:
+    blockers = [
+        "resident_overlay_runtime_missing",
+        "global_hotkey_binding_missing",
+        "tray_host_missing",
+        "always_on_top_window_missing",
+    ]
+    return {
+        "status": "readback_only",
+        "claim": "chat_ui_hud_readback_only",
+        "surface": "chat_ui.system_orb",
+        "route": "/lens/hud",
+        "window_host": "chat_ui",
+        "resident_overlay": False,
+        "always_on_top": False,
+        "global_hotkey": False,
+        "tray_presence": False,
+        "os_level": False,
+        "blockers": blockers,
+        "message": "HUD readback exists through chat UI; resident OS overlay runtime is not implemented here.",
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "new_sensing_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _hud_surface(
     *,
     mode: dict[str, Any],
@@ -212,6 +246,7 @@ def _hud_surface(
         _badge("incidents", active_incidents, severity="attention" if active_incidents else "neutral"),
         _badge("reactor review", review_queue_total, severity="attention" if review_queue_total else "neutral"),
     ]
+    runtime = _hud_runtime_surface()
 
     return {
         "status": "attention" if pending_approvals or active_incidents or review_queue_total else "ready",
@@ -220,6 +255,9 @@ def _hud_surface(
         "primary_plane_label": _safe_str(focus.get("label")).strip() or "Interface",
         "badges": badges,
         "readback_ready": True,
+        "runtime_status": runtime["status"],
+        "resident_overlay": runtime["resident_overlay"],
+        "runtime": runtime,
         "route": "/lens/hud",
     }
 
@@ -470,16 +508,25 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
 def _stage6_readiness(
     *,
     mode: dict[str, Any],
+    hud: dict[str, Any],
     approvals: dict[str, Any],
     incidents: dict[str, Any],
     missions: dict[str, Any],
     reactor: dict[str, Any],
     command_palette: dict[str, Any],
 ) -> dict[str, Any]:
+    hud_runtime = _as_dict(hud.get("runtime"))
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
         "criteria": [
+            {
+                "id": "hud_layer_runtime",
+                "status": "readback_only",
+                "evidence": ["/lens/hud", "/lens/status"],
+                "resident_overlay": bool(hud_runtime.get("resident_overlay")),
+                "blockers": _as_list(hud_runtime.get("blockers")),
+            },
             {
                 "id": "command_palette_commands",
                 "status": "readback_ready" if _as_list(command_palette.get("commands")) else "missing",
@@ -582,6 +629,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "reactor": reactor,
         "stage6_readiness": _stage6_readiness(
             mode=mode,
+            hud=hud,
             approvals=approvals,
             incidents=incidents,
             missions=missions,
