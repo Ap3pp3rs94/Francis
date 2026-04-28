@@ -18,7 +18,7 @@ _OPERATIONS_RUN_SCOPE = "operations.run"
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _CLASSIFICATION_SOURCES = frozenset({"observer_anomaly", "telemetry_event"})
 SUPPORTED_ACTIONS = ("classify", "mission_tick", "operation_run", "proposal_review", "resume")
-BOUNDARY_ACTIONS = ("plugin_run",)
+BOUNDARY_ACTIONS = ("execute", "plugin_run")
 
 
 def _safe_str(value: Any) -> str:
@@ -303,6 +303,53 @@ def _plugin_run_boundary_receipt(
     )
 
 
+def _execute_boundary_receipt(
+    *,
+    event_id: str,
+    trigger: dict[str, Any],
+    actor: str,
+    reason: str,
+    attempt_count: int,
+    ts: int,
+) -> dict[str, Any]:
+    return _redacted_dict(
+        {
+            "kind": "reactor.dispatch.execution.receipt",
+            "receipt_id": f"{event_id}_dispatch_execution_{attempt_count}",
+            "event_id": event_id,
+            "status": "blocked",
+            "outcome": "execute_dispatch_not_enabled",
+            "route": "execute",
+            "gate": "reactor_execute_boundary",
+            "stable_state": "execute_dispatch_not_enabled",
+            "next_step": "implement_governed_execute_dispatch_before_execution",
+            "actor": actor,
+            "reason": reason,
+            "trigger_source": _safe_str(trigger.get("source")).strip().lower(),
+            "trigger_type": _safe_str(trigger.get("type")).strip().lower(),
+            "trigger_summary": _safe_str(trigger.get("summary")).strip(),
+            "attempt_count": attempt_count,
+            "ts": ts,
+            "execution_started": False,
+            "dispatch_applied": False,
+            "verified": False,
+            "completion_claim_allowed": False,
+            "memory_write": False,
+            "readback_only": True,
+            "governance": {
+                "gate": "reactor_execute_boundary",
+                "execution_authority": False,
+                "dispatch_authority": False,
+                "execute_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+                "authority_source": "reactor.write",
+                "readback_only": True,
+            },
+        }
+    )
+
+
 def _classification_receipt(
     *,
     event_id: str,
@@ -500,6 +547,26 @@ def dispatch_event(
     event_id = _safe_str(event.get("event_id") or event.get("id")).strip()
     trigger = _as_dict(event.get("trigger"))
     bounds = _as_dict(event.get("bounds"))
+
+    if action_class == "execute":
+        receipt = _execute_boundary_receipt(
+            event_id=event_id,
+            trigger=trigger,
+            actor=actor,
+            reason=reason,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
+        return {
+            "handled": True,
+            "applied": False,
+            "blocked": True,
+            "status": "dispatch_blocked",
+            "outcome": "execute_dispatch_not_enabled",
+            "stable_state": "execute_dispatch_not_enabled",
+            "next_step": "implement_governed_execute_dispatch_before_execution",
+            "receipt": receipt,
+        }
 
     if action_class == "plugin_run":
         receipt = _plugin_run_boundary_receipt(

@@ -139,13 +139,14 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert body["event_total"] == 3
     assert body["review_queue_total"] == 2
     assert body["dispatch_engine"] == "partial"
+    assert "execute" in body["dispatch_engine_boundary_actions"]
     assert "plugin_run" in body["dispatch_engine_boundary_actions"]
-    assert body["dispatch_engine_boundary_action_total"] == 1
-    assert body["attention"]["dispatch_engine_boundary_action_total"] == 1
+    assert body["dispatch_engine_boundary_action_total"] == 2
+    assert body["attention"]["dispatch_engine_boundary_action_total"] == 2
     assert body["proposal_review_history_total"] == 1
     assert body["attention"]["proposal_review_ready_total"] == 1
     assert body["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
-    assert body["counts"]["dispatch_engine_boundary_action"] == {"plugin_run": 1}
+    assert body["counts"]["dispatch_engine_boundary_action"] == {"execute": 1, "plugin_run": 1}
     assert body["readback_surfaces"]["review_queue"] == "/reactor/review_queue"
     review_by_event_id = {item["event_id"]: item for item in body["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}

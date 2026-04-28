@@ -113,15 +113,16 @@ def test_reactor_operator_visibility_summary_aggregates_readbacks_without_author
     assert summary["event_total"] == 3
     assert summary["review_queue_total"] == 2
     assert summary["dispatch_engine"] == "partial"
+    assert "execute" in summary["dispatch_engine_boundary_actions"]
     assert "plugin_run" in summary["dispatch_engine_boundary_actions"]
-    assert summary["dispatch_engine_boundary_action_total"] == 1
-    assert summary["attention"]["dispatch_engine_boundary_action_total"] == 1
+    assert summary["dispatch_engine_boundary_action_total"] == 2
+    assert summary["attention"]["dispatch_engine_boundary_action_total"] == 2
     assert summary["proposal_review_history_total"] == 1
     assert summary["attention"]["review_queue_total"] == 2
     assert summary["attention"]["proposal_review_ready_total"] == 1
     assert summary["attention"]["proposal_review_blocked_total"] == 0
     assert summary["counts"]["review_route"] == {"approval_queue": 1, "operator_review": 1}
-    assert summary["counts"]["dispatch_engine_boundary_action"] == {"plugin_run": 1}
+    assert summary["counts"]["dispatch_engine_boundary_action"] == {"execute": 1, "plugin_run": 1}
     assert summary["readback_surfaces"]["proposal_review_history"] == ("/reactor/proposal_reviews/history/list")
     review_by_event_id = {item["event_id"]: item for item in summary["latest_review_items"]}
     assert set(review_by_event_id) == {approval_id, plugin_event_id}

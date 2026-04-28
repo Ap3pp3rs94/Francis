@@ -10332,6 +10332,33 @@ summary slice:
 - `python -m mypy src\francis\reactor\visibility.py`
   Result: `passed`
 
+As of `2026-04-28`, Reactor generic `execute` events now have an explicit
+no-execution dispatch boundary. `action_class=execute` dispatch attempts record
+a blocked `reactor.dispatch.execution.receipt` at the
+`reactor_execute_boundary`, route to operator review with
+`execute_dispatch_not_enabled`, preserve verification and stable-return
+readback, and expose `execute` in `dispatch_engine_boundary_actions` alongside
+`plugin_run`. This is boundary/readback behavior only: it does not implement a
+generic executor, run commands, mutate files, decide approvals, schedule
+retries, enqueue deadletters, send externally, write memory, promote
+capabilities, or add UI claims.
+
+Latest targeted validation for the `2026-04-28` Reactor generic execute
+boundary slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_execute_boundary_without_execution tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_plugin_run_boundary_without_execution tests\test_api_reactor.py::test_reactor_execute_dispatch_route_blocks_without_execution tests\test_api_reactor.py::test_reactor_plugin_run_dispatch_route_blocks_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\dispatch.py src\francis\reactor\events.py src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10413,10 +10440,10 @@ These remain true and should block any "finished" claim:
   `observer_anomaly` triggers with receipts and stable-return proof, and
   approval-decision Reactor events can now record read-only resume receipts
   without dispatching the target event, with direct route-filtered
-  approval-resume history readback. Reactor also has an explicit no-execution
-  plugin-run dispatch boundary with operator-review readback, so plugin-run
-  attempts are blocked by typed receipt instead of generic not-implemented
-  deferment. Remaining Stage 5 gaps still include broader dispatch action
+  approval-resume history readback. Reactor also has explicit no-execution
+  `execute` and `plugin_run` dispatch boundaries with operator-review readback,
+  so those attempts are blocked by typed receipts instead of generic
+  not-implemented deferment. Remaining Stage 5 gaps still include broader dispatch action
   coverage beyond existing
   operation runs, bounded mission queue ticks, read-only Forge proposal reviews,
   read-only telemetry/observer classification, read-only approval-decision
