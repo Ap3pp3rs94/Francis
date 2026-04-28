@@ -314,6 +314,10 @@ def _escalation_handoff_next_step() -> str:
     return "operator_or_external_escalation_must_acknowledge_before_recovery_execution"
 
 
+def _escalation_acknowledgement_next_step() -> str:
+    return "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
+
+
 def _resolution_receipt(
     *,
     item: dict[str, Any],
@@ -413,6 +417,63 @@ def _escalation_handoff_receipt(
         "applied": applied,
         "governance": {
             "gate": "reactor_deadletter_escalation_handoff",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    redacted = redact_governed_value(_filtered_record(receipt))
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _escalation_acknowledgement_receipt(
+    *,
+    item: dict[str, Any],
+    actor: str,
+    reason: str,
+    ts: int,
+    status: str,
+    applied: bool,
+) -> dict[str, Any]:
+    latest_handoff = _as_dict(item.get("latest_escalation_handoff_receipt"))
+    source_ref = (
+        _safe_str(latest_handoff.get("receipt_id")).strip()
+        or _safe_str(latest_handoff.get("deadletter_id")).strip()
+        or _safe_str(item.get("deadletter_id")).strip()
+    )
+    receipt = {
+        "kind": "reactor.deadletter.escalation_acknowledgement.receipt",
+        "receipt_id": f"{item.get('deadletter_id')}_escalation_acknowledgement",
+        "deadletter_id": item.get("deadletter_id"),
+        "event_id": item.get("event_id"),
+        "status": status,
+        "route": "deadletter_escalation_acknowledgement",
+        "gate": "reactor_deadletter_escalation_acknowledgement",
+        "stable_state": "deadletter_escalation_acknowledged",
+        "next_step": _escalation_acknowledgement_next_step(),
+        "source_receipt_kind": _safe_str(latest_handoff.get("kind")).strip(),
+        "source_receipt_ref": source_ref,
+        "source_gate": _safe_str(latest_handoff.get("gate") or item.get("gate")).strip(),
+        "escalation_handoff_receipt_id": latest_handoff.get("receipt_id"),
+        "resolution_decision": latest_handoff.get("resolution_decision") or item.get("resolution_decision"),
+        "actor": actor,
+        "reason": reason,
+        "ts": ts,
+        "escalation_acknowledged": True,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": applied,
+        "governance": {
+            "gate": "reactor_deadletter_escalation_acknowledgement",
             "execution_authority": False,
             "dispatch_authority": False,
             "retry_authority": False,
@@ -731,6 +792,92 @@ def record_escalation_handoff(
         "ok": True,
         "applied": True,
         "status": "deadletter_escalation_handoff_recorded",
+        "item": _display(updated),
+        "receipt": _display(receipt),
+    }
+
+
+def record_escalation_acknowledgement(
+    *,
+    deadletter_id: str,
+    actor: str = "",
+    reason: str = "",
+    ts: int = 0,
+) -> dict[str, Any]:
+    path = _deadletter_path(deadletter_id)
+    if path is None or not path.exists() or not path.is_file():
+        return {"ok": False, "applied": False, "error": "not_found", "item": {}, "receipt": {}}
+
+    item = _read_raw(path)
+    if item is None:
+        return {"ok": False, "applied": False, "error": "unreadable_deadletter", "item": {}, "receipt": {}}
+
+    current_status = _safe_str(item.get("status")).strip()
+    latest_acknowledgement = _as_dict(item.get("latest_escalation_acknowledgement_receipt"))
+    if current_status == "escalation_acknowledged" and latest_acknowledgement:
+        return {
+            "ok": True,
+            "applied": False,
+            "status": "already_escalation_acknowledged",
+            "item": _display(item),
+            "receipt": _display(latest_acknowledgement),
+        }
+    if current_status != "escalation_handoff_recorded":
+        return {
+            "ok": False,
+            "applied": False,
+            "error": "deadletter_escalation_handoff_required",
+            "item": _display(item),
+            "receipt": {},
+        }
+
+    receipt = _escalation_acknowledgement_receipt(
+        item=item,
+        actor=actor,
+        reason=reason,
+        ts=ts,
+        status="acknowledged",
+        applied=True,
+    )
+    raw_acknowledgement_receipts = item.get("escalation_acknowledgement_receipts")
+    acknowledgement_receipts = raw_acknowledgement_receipts if isinstance(raw_acknowledgement_receipts, list) else []
+    acknowledgement_receipts.append(receipt)
+    updated = {
+        **item,
+        "status": "escalation_acknowledged",
+        "route": "deadletter_escalation_acknowledgement",
+        "stable_state": "deadletter_escalation_acknowledged",
+        "next_step": _escalation_acknowledgement_next_step(),
+        "escalation_acknowledged": True,
+        "escalation_acknowledged_ts": ts,
+        "updated_ts": ts,
+        "escalation_acknowledgement_receipts": acknowledgement_receipts,
+        "latest_escalation_acknowledgement_receipt": receipt,
+        "external_escalation_started": False,
+        "recovery_started": False,
+        "execution_started": False,
+        "retry_started": False,
+        "escalation_started": False,
+        "memory_write": False,
+        "applied": False,
+        "governance": {
+            **_as_dict(item.get("governance")),
+            "gate": "reactor_deadletter_escalation_acknowledgement",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+    _atomic_write_json(path, _filtered_record(updated))
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "deadletter_escalation_acknowledged",
         "item": _display(updated),
         "receipt": _display(receipt),
     }

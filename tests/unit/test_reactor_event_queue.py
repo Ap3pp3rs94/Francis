@@ -13,6 +13,7 @@ from francis.reactor.events import (
     list_events,
     reactor_review_queue,
     reactor_status,
+    record_deadletter_escalation_acknowledgement,
     record_deadletter_escalation_handoff,
     record_deadletter_resolution,
     record_deadletter_review,
@@ -2054,6 +2055,17 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     )
     assert escalated["status"] == "deadletter_escalation_pending"
 
+    premature_acknowledgement = record_deadletter_escalation_acknowledgement(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "acknowledgement should require handoff first",
+        },
+    )
+    assert premature_acknowledgement["ok"] is False
+    assert premature_acknowledgement["applied"] is False
+    assert premature_acknowledgement["error"] == "deadletter_escalation_handoff_required"
+
     handoff = record_deadletter_escalation_handoff(
         deadletter_id,
         {
@@ -2134,6 +2146,91 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
     assert second_handoff["applied"] is False
     assert second_handoff["status"] == "already_escalation_handoff_recorded"
     assert len(second_handoff["event"]["deadletter_escalation_handoffs"]) == 1
+
+    acknowledgement = record_deadletter_escalation_acknowledgement(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "operator acknowledged the escalation handoff",
+        },
+    )
+
+    assert acknowledgement["ok"] is True
+    assert acknowledgement["applied"] is True
+    assert acknowledgement["status"] == "deadletter_escalation_acknowledged"
+    acknowledged_event = acknowledgement["event"]
+    assert acknowledged_event["stable_state"] == "deadletter_escalation_acknowledged"
+    assert acknowledged_event["dispatch"]["deadletter_escalation_acknowledged"] is True
+    acknowledgement_receipt = acknowledged_event["latest_deadletter_escalation_acknowledgement_receipt"]
+    assert acknowledgement_receipt["kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert acknowledgement_receipt["deadletter_id"] == deadletter_id
+    assert acknowledgement_receipt["status"] == "acknowledged"
+    assert acknowledgement_receipt["route"] == "deadletter_escalation_acknowledgement"
+    assert acknowledgement_receipt["stable_state"] == "deadletter_escalation_acknowledged"
+    assert acknowledgement_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_handoff.receipt"
+    assert acknowledgement_receipt["escalation_acknowledged"] is True
+    assert acknowledgement_receipt["external_escalation_started"] is False
+    assert acknowledgement_receipt["recovery_started"] is False
+    assert acknowledgement_receipt["retry_started"] is False
+    assert acknowledgement_receipt["execution_started"] is False
+    assert acknowledgement_receipt["escalation_started"] is False
+    assert acknowledgement_receipt["memory_write"] is False
+    assert acknowledgement_receipt["governance"]["execution_authority"] is False
+    assert acknowledgement_receipt["governance"]["retry_authority"] is False
+    assert acknowledgement_receipt["governance"]["escalation_authority"] is False
+    assert acknowledgement_receipt["governance"]["memory_write"] is False
+    assert acknowledged_event["latest_receipt"]["kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert acknowledged_event["latest_deadletter_item"]["status"] == "escalation_acknowledged"
+    assert acknowledged_event["deadletter_escalation_acknowledgements"][0]["deadletter_id"] == deadletter_id
+    assert acknowledged_event["decision_journal"][-1]["kind"] == "reactor.deadletter.escalation_acknowledged"
+    assert acknowledged_event["decision_journal"][-1]["applied"] is True
+    assert acknowledged_event["decision_journal"][-1]["execution_started"] is False
+    assert acknowledged_event["decision_journal"][-1]["escalation_started"] is False
+    assert acknowledged_event["governance"]["deadletter_escalation_acknowledged"] is True
+    assert acknowledged_event["governance"]["execution_authority"] is False
+    assert acknowledged_event["governance"]["escalation_authority"] is False
+
+    acknowledged_deadletter = get_deadletter(deadletter_id)
+    assert acknowledged_deadletter is not None
+    assert acknowledged_deadletter["status"] == "escalation_acknowledged"
+    assert acknowledged_deadletter["latest_escalation_acknowledgement_receipt"]["deadletter_id"] == deadletter_id
+    assert [item["deadletter_id"] for item in list_deadletters(status="escalation_acknowledged")] == [deadletter_id]
+    assert {item["event_id"] for item in list_events(stable_state="deadletter_escalation_acknowledged")} == {
+        str(created["event_id"])
+    }
+    assert {item["event_id"] for item in list_events(review_route="deadletter_escalation_acknowledgement")} == {
+        str(created["event_id"])
+    }
+    assert {
+        item["event_id"] for item in list_events(receipt_kind="reactor.deadletter.escalation_acknowledgement.receipt")
+    } == {str(created["event_id"])}
+
+    acknowledgement_review_queue = reactor_review_queue(route="deadletter_escalation_acknowledgement")
+    assert acknowledgement_review_queue["available_total"] == 1
+    assert (
+        acknowledgement_review_queue["items"][0]["review"]["action"]
+        == "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
+    )
+    acknowledged_status = reactor_status()
+    assert acknowledged_status["stable_state_counts"] == {"deadletter_escalation_acknowledged": 1}
+    assert acknowledged_status["deadletter_queue_counts"] == {"escalation_acknowledged": 1}
+    assert acknowledged_status["deadletter_review_counts"] == {"reviewed": 1}
+    assert acknowledged_status["deadletter_resolution_counts"] == {"escalation_pending": 1}
+    assert acknowledged_status["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
+    assert acknowledged_status["deadletter_escalation_acknowledgement_counts"] == {"acknowledged": 1}
+
+    second_acknowledgement = record_deadletter_escalation_acknowledgement(
+        deadletter_id,
+        {
+            "actor": "reactor.test",
+            "reason": "same acknowledgement should not duplicate receipts",
+        },
+    )
+
+    assert second_acknowledgement["ok"] is True
+    assert second_acknowledgement["applied"] is False
+    assert second_acknowledgement["status"] == "already_escalation_acknowledged"
+    assert len(second_acknowledgement["event"]["deadletter_escalation_acknowledgements"]) == 1
 
 
 def test_reactor_dispatch_attempt_rejects_missing_event(monkeypatch, tmp_path: Path) -> None:

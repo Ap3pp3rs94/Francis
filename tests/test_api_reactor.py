@@ -962,6 +962,19 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_resolution.json()["applied"] is False
     assert second_resolution.json()["status"] == "already_escalation_pending"
 
+    premature_acknowledgement = client.post(
+        "/reactor/deadletters/escalation_acknowledgement",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "acknowledgement should require handoff first",
+        },
+    )
+    assert premature_acknowledgement.status_code == 200
+    assert premature_acknowledgement.json()["ok"] is False
+    assert premature_acknowledgement.json()["applied"] is False
+    assert premature_acknowledgement.json()["error"] == "deadletter_escalation_handoff_required"
+
     handoff = client.post(
         "/reactor/deadletters/escalation_handoff",
         json={
@@ -1019,6 +1032,73 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     assert second_handoff.status_code == 200
     assert second_handoff.json()["applied"] is False
     assert second_handoff.json()["status"] == "already_escalation_handoff_recorded"
+
+    acknowledgement = client.post(
+        "/reactor/deadletters/escalation_acknowledgement",
+        json={
+            "deadletter_id": deadletter_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "acknowledge escalation handoff without starting recovery",
+        },
+    )
+
+    assert acknowledgement.status_code == 200
+    acknowledgement_body = acknowledgement.json()
+    assert acknowledgement_body["ok"] is True
+    assert acknowledgement_body["applied"] is True
+    assert acknowledgement_body["status"] == "deadletter_escalation_acknowledged"
+    acknowledgement_receipt = acknowledgement_body["receipt"]
+    assert acknowledgement_receipt["kind"] == "reactor.deadletter.escalation_acknowledgement.receipt"
+    assert acknowledgement_receipt["deadletter_id"] == deadletter_id
+    assert acknowledgement_receipt["route"] == "deadletter_escalation_acknowledgement"
+    assert acknowledgement_receipt["source_receipt_kind"] == "reactor.deadletter.escalation_handoff.receipt"
+    assert acknowledgement_receipt["execution_started"] is False
+    assert acknowledgement_receipt["retry_started"] is False
+    assert acknowledgement_receipt["escalation_started"] is False
+    assert acknowledgement_receipt["external_escalation_started"] is False
+    assert acknowledgement_receipt["recovery_started"] is False
+    assert acknowledgement_receipt["memory_write"] is False
+    assert acknowledgement_receipt["governance"]["execution_authority"] is False
+    assert acknowledgement_receipt["governance"]["escalation_authority"] is False
+    acknowledgement_event = acknowledgement_body["event"]
+    assert acknowledgement_event["stable_state"] == "deadletter_escalation_acknowledged"
+    assert acknowledgement_event["dispatch"]["deadletter_escalation_acknowledged"] is True
+    assert acknowledgement_event["governance"]["execution_authority"] is False
+    assert acknowledgement_event["governance"]["escalation_authority"] is False
+
+    acknowledgement_list = client.get("/reactor/deadletters/list", params={"status": "escalation_acknowledged"})
+    assert acknowledgement_list.status_code == 200
+    assert {item["deadletter_id"] for item in acknowledgement_list.json()["items"]} == {deadletter_id}
+    acknowledgement_receipts = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.deadletter.escalation_acknowledgement.receipt"},
+    )
+    assert acknowledgement_receipts.status_code == 200
+    assert {item["event_id"] for item in acknowledgement_receipts.json()["items"]} == {event_id}
+    acknowledgement_review = client.get(
+        "/reactor/review_queue",
+        params={"route": "deadletter_escalation_acknowledgement"},
+    )
+    assert acknowledgement_review.status_code == 200
+    assert acknowledgement_review.json()["available_total"] == 1
+    assert (
+        acknowledgement_review.json()["items"][0]["review"]["action"]
+        == "wait_for_explicit_recovery_execution_boundary_after_acknowledgement"
+    )
+    acknowledgement_status = client.get("/reactor/status")
+    assert acknowledgement_status.status_code == 200
+    assert acknowledgement_status.json()["stable_state_counts"] == {"deadletter_escalation_acknowledged": 1}
+    assert acknowledgement_status.json()["deadletter_queue_counts"] == {"escalation_acknowledged": 1}
+    assert acknowledgement_status.json()["deadletter_escalation_handoff_counts"] == {"handoff_recorded": 1}
+    assert acknowledgement_status.json()["deadletter_escalation_acknowledgement_counts"] == {"acknowledged": 1}
+
+    second_acknowledgement = client.post(
+        "/reactor/deadletters/escalation_acknowledgement",
+        json={"deadletter_id": deadletter_id, "actor": _REACTOR_ACTOR},
+    )
+    assert second_acknowledgement.status_code == 200
+    assert second_acknowledgement.json()["applied"] is False
+    assert second_acknowledgement.json()["status"] == "already_escalation_acknowledged"
 
 
 def test_reactor_dispatch_attempt_routes_missing_approval_into_pending_queue(

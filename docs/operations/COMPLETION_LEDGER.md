@@ -758,6 +758,21 @@ readback/UI-only; it does not add backend routes, write controls, execution
 authority, retry authority, approval authority, memory-write behavior,
 external-escalation authority, or recovery execution.
 
+As of `2026-04-28`, Reactor deadletter escalation handoffs can now record a
+durable non-executing acknowledgement receipt. `POST
+/reactor/deadletters/escalation_acknowledgement` requires the existing
+`reactor.write` API scope and only applies after a deadletter has recorded an
+`escalation_handoff_recorded` receipt. The acknowledgement records
+`reactor.deadletter.escalation_acknowledgement.receipt`, updates the durable
+deadletter item to `escalation_acknowledged`, links the receipt through the
+parent Reactor event, decision journal, receipt history, receipt-kind filters,
+review-route filters, review-queue projection, and `/reactor/status`
+`deadletter_escalation_acknowledgement_counts`. This is an acknowledgement and
+readback boundary only: it does not retry work, execute recovery, dispatch
+work, start external escalation, decide approvals, write memory, promote
+capabilities, or grant execution, retry-execution, approval, memory-write,
+promotion, recovery, or external-escalation authority.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9390,6 +9405,24 @@ readback slice:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor escalation
+acknowledgement receipt slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_deadletter_escalation_handoff_records_receipt_without_execution tests\test_api_reactor.py::test_reactor_deadletter_resolve_route_records_escalation_pending_without_execution -q`
+  Result: `passed`
+- `python -m ruff format src\francis\reactor\deadletters.py src\francis\reactor\events.py src\francis\reactor\__init__.py src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `2 files reformatted, 4 files left unchanged`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed after formatting`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9420,12 +9453,14 @@ These remain true and should block any "finished" claim:
   record bounded resolved/no-action or escalation-pending disposition receipts
   without starting recovery, retry, execution, memory writes, approval decisions,
   or external escalation, and escalation-pending deadletters can now record a
-  durable non-executing escalation handoff receipt. Remaining Stage 5 gaps still
-  include broader dispatch action coverage beyond existing operation runs,
-  broader execution-failure routing beyond the current `operation_run` path,
-  broader operator visibility beyond the route-filtered review queue, direct
-  deadletter queue history, and escalation handoff readback, plus actual
-  recovery/escalation execution after disposition and handoff receipts
+  durable non-executing escalation handoff receipt plus acknowledgement receipt.
+  Remaining Stage 5 gaps still include broader dispatch action coverage beyond
+  existing operation runs, broader execution-failure routing beyond the current
+  `operation_run` path, broader operator visibility beyond the route-filtered
+  review queue, direct deadletter queue history, escalation handoff readback,
+  and backend escalation acknowledgement readback, plus actual
+  recovery/escalation execution after disposition, handoff, and acknowledgement
+  receipts
 
 ## 6. Update rule
 
