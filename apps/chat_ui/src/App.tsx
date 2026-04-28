@@ -4315,12 +4315,37 @@ function SystemPanel(props: {
     reactorOperatorVisibility?.external_delivery_sender_readiness_total,
     reactorOperatorVisibilitySenderReadinessItems.length,
   );
+  const reactorOperatorVisibilitySenderContract = reactorOperatorVisibility?.external_delivery_sender_contract;
+  const reactorOperatorVisibilitySenderContractStatus =
+    safeString(reactorOperatorVisibility?.external_delivery_sender_contract_status).trim() ||
+    safeString(reactorOperatorVisibilitySenderContract?.status).trim();
+  const reactorOperatorVisibilitySenderContractReady =
+    reactorOperatorVisibility?.external_delivery_sender_contract_ready ??
+    reactorOperatorVisibilitySenderContract?.external_sender_contract_ready ??
+    reactorOperatorVisibilitySenderContract?.external_delivery_sender_ready;
+  const reactorOperatorVisibilitySenderContractBlocker =
+    safeString(reactorOperatorVisibility?.external_delivery_sender_contract_blocker).trim() ||
+    safeString(reactorOperatorVisibilitySenderContract?.external_sender_contract_blocker).trim();
+  const reactorOperatorVisibilitySupportedSenderAdapters =
+    reactorOperatorVisibility?.supported_external_sender_adapters ??
+    reactorOperatorVisibilitySenderContract?.supported_external_sender_adapters ??
+    [];
+  const reactorOperatorVisibilitySupportedSenderAdapterTotal = safeNumber(
+    reactorOperatorVisibility?.supported_external_sender_adapter_total,
+    reactorOperatorVisibilitySupportedSenderAdapters.length,
+  );
+  const reactorOperatorVisibilitySenderRequiredFields =
+    reactorOperatorVisibility?.external_sender_required_fields ??
+    reactorOperatorVisibilitySenderContract?.external_sender_required_fields ??
+    [];
   const reactorOperatorVisibilityAttentionBadges = [
     ["review", safeNumber(reactorOperatorVisibilityAttention.review_queue_total, 0)] as const,
     ["delivery_ready", safeNumber(reactorOperatorVisibilityAttention.ready_external_delivery_processor_total, 0)] as const,
     ["delivery_blocked", safeNumber(reactorOperatorVisibilityAttention.blocked_external_delivery_processor_total, 0)] as const,
     ["sender_ready", safeNumber(reactorOperatorVisibilityAttention.ready_external_delivery_sender_total, 0)] as const,
     ["sender_blocked", safeNumber(reactorOperatorVisibilityAttention.blocked_external_delivery_sender_total, 0)] as const,
+    ["sender_contract_ready", safeNumber(reactorOperatorVisibilityAttention.external_delivery_sender_contract_ready_total, 0)] as const,
+    ["sender_contract_blocked", safeNumber(reactorOperatorVisibilityAttention.external_delivery_sender_contract_blocked_total, 0)] as const,
     ["due_retry", safeNumber(reactorOperatorVisibilityAttention.due_retry_total, 0)] as const,
     ["proposal_ready", safeNumber(reactorOperatorVisibilityAttention.proposal_review_ready_total, 0)] as const,
     ["proposal_blocked", safeNumber(reactorOperatorVisibilityAttention.proposal_review_blocked_total, 0)] as const,
@@ -6663,6 +6688,11 @@ function SystemPanel(props: {
               <span style={badgeStyle(reactorOperatorVisibilitySenderReadinessTotal > 0 ? "attention" : "clear")}>
                 senders {reactorOperatorVisibilitySenderReadinessTotal}
               </span>
+              {reactorOperatorVisibilitySenderContractStatus ? (
+                <span style={badgeStyle(reactorOperatorVisibilitySenderContractReady ? "ready" : "blocked")}>
+                  sender contract {reactorOperatorVisibilitySenderContractStatus}
+                </span>
+              ) : null}
               <span style={badgeStyle("receipts")}>recovery {reactorOperatorVisibility.recovery_receipt_total}</span>
               <span style={badgeStyle("proposal_review")}>forge reviews {reactorOperatorVisibility.proposal_review_history_total}</span>
             </div>
@@ -6831,6 +6861,48 @@ function SystemPanel(props: {
                     );
                   })
                 )}
+                {reactorOperatorVisibilitySenderContractStatus ||
+                reactorOperatorVisibilitySenderContractBlocker ||
+                reactorOperatorVisibilitySupportedSenderAdapterTotal > 0 ||
+                reactorOperatorVisibilitySenderRequiredFields.length > 0 ? (
+                  <div style={{ marginTop: 10, borderTop: `1px solid ${THEME.panelBorder}`, paddingTop: 8 }}>
+                    <div style={{ fontSize: 11 }}>
+                      <code>external_delivery_sender_contract</code>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                      {reactorOperatorVisibilitySenderContractStatus ? (
+                        <span style={badgeStyle(reactorOperatorVisibilitySenderContractReady ? "ready" : "blocked")}>
+                          contract {reactorOperatorVisibilitySenderContractStatus}
+                        </span>
+                      ) : null}
+                      <span style={badgeStyle(reactorOperatorVisibilitySupportedSenderAdapterTotal > 0 ? "ready" : "blocked")}>
+                        adapters {reactorOperatorVisibilitySupportedSenderAdapterTotal}
+                      </span>
+                      <span style={badgeStyle("fields")}>fields {reactorOperatorVisibilitySenderRequiredFields.length}</span>
+                      {reactorOperatorVisibilitySenderContract?.external_message_sent === false ? (
+                        <span style={badgeStyle("no_send")}>no send</span>
+                      ) : null}
+                      {reactorOperatorVisibilitySenderContract?.completion_claim_allowed === false ? (
+                        <span style={badgeStyle("no_completion_claim")}>no completion claim</span>
+                      ) : null}
+                    </div>
+                    {reactorOperatorVisibilitySenderContractBlocker || reactorOperatorVisibilitySenderContract?.next_step ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {reactorOperatorVisibilitySenderContractBlocker ? (
+                          <>
+                            blocker=<code>{reactorOperatorVisibilitySenderContractBlocker}</code>
+                          </>
+                        ) : null}
+                        {reactorOperatorVisibilitySenderContractBlocker && reactorOperatorVisibilitySenderContract?.next_step ? " / " : null}
+                        {reactorOperatorVisibilitySenderContract?.next_step ? (
+                          <>
+                            next=<code>{reactorOperatorVisibilitySenderContract.next_step}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -6846,6 +6918,11 @@ function SystemPanel(props: {
               ) : null}
               {reactorOperatorVisibilitySurfaces.external_delivery_sender_readiness ? (
                 <span style={badgeStyle("readback")}>sender {reactorOperatorVisibilitySurfaces.external_delivery_sender_readiness}</span>
+              ) : null}
+              {reactorOperatorVisibilitySurfaces.external_delivery_sender_contract ? (
+                <span style={badgeStyle("readback")}>
+                  sender contract {reactorOperatorVisibilitySurfaces.external_delivery_sender_contract}
+                </span>
               ) : null}
             </div>
           </>

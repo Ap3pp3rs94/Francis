@@ -258,6 +258,25 @@ export type ReactorExternalDeliverySenderItem = {
   governance?: Record<string, unknown>;
 };
 
+export type ReactorExternalDeliverySenderContract = {
+  kind?: string;
+  status?: string;
+  route?: string;
+  gate?: string;
+  supported_external_sender_adapters: string[];
+  external_sender_required_fields: string[];
+  external_delivery_sender_ready?: boolean;
+  external_sender_contract_ready?: boolean;
+  external_sender_contract_blocker?: string;
+  missing_requirements?: string[];
+  external_delivery_started?: boolean;
+  external_message_sent?: boolean;
+  external_network_send?: boolean;
+  completion_claim_allowed?: boolean;
+  next_step?: string;
+  governance?: Record<string, unknown>;
+};
+
 export type ReactorOperatorVisibilitySummary = {
   ok: boolean;
   kind?: string;
@@ -270,6 +289,12 @@ export type ReactorOperatorVisibilitySummary = {
   retry_schedule_total: number;
   external_delivery_total: number;
   external_delivery_sender_readiness_total: number;
+  external_delivery_sender_contract_status?: string;
+  external_delivery_sender_contract_ready?: boolean;
+  external_delivery_sender_contract_blocker?: string;
+  supported_external_sender_adapters: string[];
+  supported_external_sender_adapter_total: number;
+  external_sender_required_fields: string[];
   recovery_receipt_total: number;
   proposal_review_history_total: number;
   attention: Record<string, number>;
@@ -280,6 +305,7 @@ export type ReactorOperatorVisibilitySummary = {
   ready_external_delivery_processor_items: ReactorExternalDeliveryProcessorItem[];
   ready_external_delivery_sender_items: ReactorExternalDeliverySenderItem[];
   blocked_external_delivery_sender_items: ReactorExternalDeliverySenderItem[];
+  external_delivery_sender_contract?: ReactorExternalDeliverySenderContract;
   governance?: Record<string, unknown>;
   error?: string;
 };
@@ -493,6 +519,12 @@ export function parseReactorOperatorVisibilitySummary(
       0,
       safeNumber(record.external_delivery_sender_readiness_total, 0),
     ),
+    external_delivery_sender_contract_status: optionalString(record.external_delivery_sender_contract_status),
+    external_delivery_sender_contract_ready: optionalBoolean(record.external_delivery_sender_contract_ready),
+    external_delivery_sender_contract_blocker: optionalString(record.external_delivery_sender_contract_blocker),
+    supported_external_sender_adapters: optionalStringList(record.supported_external_sender_adapters) ?? [],
+    supported_external_sender_adapter_total: Math.max(0, safeNumber(record.supported_external_sender_adapter_total, 0)),
+    external_sender_required_fields: optionalStringList(record.external_sender_required_fields) ?? [],
     recovery_receipt_total: Math.max(0, safeNumber(record.recovery_receipt_total, 0)),
     proposal_review_history_total: Math.max(0, safeNumber(record.proposal_review_history_total, 0)),
     attention: parseCountMap(record.attention),
@@ -513,6 +545,9 @@ export function parseReactorOperatorVisibilitySummary(
     blocked_external_delivery_sender_items: blockedExternalDeliverySenderItemsRaw
       .map(parseReactorExternalDeliverySenderItem)
       .filter((item): item is ReactorExternalDeliverySenderItem => Boolean(item)),
+    external_delivery_sender_contract: parseReactorExternalDeliverySenderContract(
+      record.external_delivery_sender_contract,
+    ),
     governance: isRecord(record.governance) ? record.governance : undefined,
     error: error || undefined,
   };
@@ -687,6 +722,30 @@ export function parseReactorExternalDeliverySenderItem(raw: unknown): ReactorExt
     next_step: optionalString(record.next_step),
     governance: isRecord(record.governance) ? record.governance : undefined,
   };
+}
+
+export function parseReactorExternalDeliverySenderContract(raw: unknown): ReactorExternalDeliverySenderContract | undefined {
+  const record = isRecord(raw) ? raw : null;
+  if (!record) return undefined;
+  const contract = {
+    kind: optionalString(record.kind),
+    status: optionalString(record.status),
+    route: optionalString(record.route),
+    gate: optionalString(record.gate),
+    supported_external_sender_adapters: optionalStringList(record.supported_external_sender_adapters) ?? [],
+    external_sender_required_fields: optionalStringList(record.external_sender_required_fields) ?? [],
+    external_delivery_sender_ready: optionalBoolean(record.external_delivery_sender_ready),
+    external_sender_contract_ready: optionalBoolean(record.external_sender_contract_ready),
+    external_sender_contract_blocker: optionalString(record.external_sender_contract_blocker),
+    missing_requirements: optionalStringList(record.missing_requirements),
+    external_delivery_started: optionalBoolean(record.external_delivery_started),
+    external_message_sent: optionalBoolean(record.external_message_sent),
+    external_network_send: optionalBoolean(record.external_network_send),
+    completion_claim_allowed: optionalBoolean(record.completion_claim_allowed),
+    next_step: optionalString(record.next_step),
+    governance: isRecord(record.governance) ? record.governance : undefined,
+  };
+  return hasAnyValue(contract) ? contract : undefined;
 }
 
 export function parseReactorEventItem(raw: unknown): ReactorEventItem | null {

@@ -200,6 +200,17 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
       retry_schedule_total: 0,
       external_delivery_total: 0,
       external_delivery_sender_readiness_total: "1",
+      external_delivery_sender_contract_status: "blocked",
+      external_delivery_sender_contract_ready: false,
+      external_delivery_sender_contract_blocker: "external_sender_adapter_contract_missing",
+      supported_external_sender_adapters: [],
+      supported_external_sender_adapter_total: "0",
+      external_sender_required_fields: [
+        "local_outbox_processor_completion",
+        "external_sender_adapter",
+        "external_sender_channel",
+        "external_sender_target",
+      ],
       recovery_receipt_total: 0,
       proposal_review_history_total: 1,
       attention: {
@@ -208,6 +219,8 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
         proposal_review_ready_total: 1,
         ready_external_delivery_sender_total: 0,
         blocked_external_delivery_sender_total: "1",
+        external_delivery_sender_contract_ready_total: 0,
+        external_delivery_sender_contract_blocked_total: "1",
       },
       counts: {
         review_route: {
@@ -236,11 +249,15 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
         delivery_sender_status: {
           blocked: "1",
         },
+        external_delivery_sender_contract: {
+          blocked: "1",
+        },
       },
       readback_surfaces: {
         review_queue: "/reactor/review_queue",
         proposal_review_history: "/reactor/proposal_reviews/history/list",
         external_delivery_sender_readiness: "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
+        external_delivery_sender_contract: "/reactor/deadletters/external_escalation_deliveries/sender_contract",
       },
       latest_review_items: [
         {
@@ -312,6 +329,35 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
           },
         },
       ],
+      external_delivery_sender_contract: {
+        kind: "reactor.deadletter.external_escalation.delivery_sender_contract",
+        status: "blocked",
+        route: "deadletter_external_escalation_delivery_sender_contract",
+        gate: "reactor_external_escalation_delivery_sender_contract",
+        supported_external_sender_adapters: [],
+        external_sender_required_fields: [
+          "local_outbox_processor_completion",
+          "external_sender_adapter",
+          "external_sender_channel",
+          "external_sender_target",
+        ],
+        external_delivery_sender_ready: false,
+        external_sender_contract_ready: false,
+        external_sender_contract_blocker: "external_sender_adapter_contract_missing",
+        missing_requirements: ["supported_external_sender_adapter"],
+        external_delivery_started: false,
+        external_message_sent: false,
+        external_network_send: false,
+        completion_claim_allowed: false,
+        next_step: "define_and_validate_external_delivery_sender_adapter_before_marking_sent",
+        governance: {
+          external_delivery_authority: false,
+          external_escalation_authority: false,
+          approval_authority: false,
+          promotion_authority: false,
+          memory_write: false,
+        },
+      },
       governance: {
         execution_authority: false,
         dispatch_authority: false,
@@ -342,8 +388,20 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
     assert.equal(summary.review_queue_total, 1);
     assert.equal(summary.proposal_review_history_total, 1);
     assert.equal(summary.external_delivery_sender_readiness_total, 1);
+    assert.equal(summary.external_delivery_sender_contract_status, "blocked");
+    assert.equal(summary.external_delivery_sender_contract_ready, false);
+    assert.equal(summary.external_delivery_sender_contract_blocker, "external_sender_adapter_contract_missing");
+    assert.deepEqual(summary.supported_external_sender_adapters, []);
+    assert.equal(summary.supported_external_sender_adapter_total, 0);
+    assert.deepEqual(summary.external_sender_required_fields, [
+      "local_outbox_processor_completion",
+      "external_sender_adapter",
+      "external_sender_channel",
+      "external_sender_target",
+    ]);
     assert.equal(summary.attention.review_queue_total, 1);
     assert.equal(summary.attention.blocked_external_delivery_sender_total, 1);
+    assert.equal(summary.attention.external_delivery_sender_contract_blocked_total, 1);
     assert.equal(summary.counts.review_route?.approval_queue, 1);
     assert.equal(summary.counts.blocker_route?.approval_queue, 1);
     assert.equal(summary.counts.dispatch_execution?.blocked, 1);
@@ -353,11 +411,29 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
     assert.equal(summary.counts.retry_schedule?.due, 2);
     assert.equal(summary.counts.deadletter_queue?.queued, 1);
     assert.equal(summary.counts.delivery_sender_status?.blocked, 1);
+    assert.equal(summary.counts.external_delivery_sender_contract?.blocked, 1);
     assert.equal(summary.readback_surfaces.proposal_review_history, "/reactor/proposal_reviews/history/list");
     assert.equal(
       summary.readback_surfaces.external_delivery_sender_readiness,
       "/reactor/deadletters/external_escalation_deliveries/sender_readiness/list",
     );
+    assert.equal(
+      summary.readback_surfaces.external_delivery_sender_contract,
+      "/reactor/deadletters/external_escalation_deliveries/sender_contract",
+    );
+    assert.equal(summary.external_delivery_sender_contract?.external_delivery_sender_ready, false);
+    assert.equal(summary.external_delivery_sender_contract?.external_sender_contract_ready, false);
+    assert.equal(
+      summary.external_delivery_sender_contract?.external_sender_contract_blocker,
+      "external_sender_adapter_contract_missing",
+    );
+    assert.deepEqual(summary.external_delivery_sender_contract?.missing_requirements, [
+      "supported_external_sender_adapter",
+    ]);
+    assert.equal(summary.external_delivery_sender_contract?.external_message_sent, false);
+    assert.equal(summary.external_delivery_sender_contract?.completion_claim_allowed, false);
+    assert.equal(summary.external_delivery_sender_contract?.governance?.external_delivery_authority, false);
+    assert.equal(summary.external_delivery_sender_contract?.governance?.memory_write, false);
     assert.equal(summary.latest_review_items[0]?.event_id, "evt_visibility_review");
     assert.equal(summary.latest_review_items[0]?.trigger?.approval_id, "apr_visibility");
     assert.equal(summary.latest_review_items[0]?.review?.execution_started, false);

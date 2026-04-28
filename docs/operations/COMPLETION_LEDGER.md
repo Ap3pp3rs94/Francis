@@ -10631,6 +10631,25 @@ sender-contract slice:
 - `python -m mypy src\francis\reactor\visibility.py`
   Result: `passed`
 
+As of `2026-04-28`, the chat UI System/ORB panel preserves and renders the
+Reactor operator-visibility sender-contract summary that the backend already
+exposes. The read-only Reactor Operator Visibility card now carries the
+external sender-contract status, ready/blocked attention counts, adapter count,
+required-field count, blocker/next-step evidence, no-send/no-completion-claim
+flags, and the stable readback link to
+`/reactor/deadletters/external_escalation_deliveries/sender_contract`. This is
+UI readback only: it does not configure an external sender, attempt delivery,
+send external messages, start execution, decide approvals, write memory, promote
+capabilities, or add new operator controls.
+
+Latest targeted validation for the `2026-04-28` Reactor sender-contract UI
+readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
