@@ -1736,6 +1736,43 @@ def test_reactor_deadletter_resolve_route_records_escalation_pending_without_exe
     )
     assert recovery_settlement_route.status_code == 200
     assert {item["event_id"] for item in recovery_settlement_route.json()["items"]} == {event_id}
+    direct_recovery_receipts = client.get(
+        "/reactor/deadletters/recovery_receipts/list",
+        params={"deadletter_id": deadletter_id},
+    )
+    assert direct_recovery_receipts.status_code == 200
+    direct_recovery_body = direct_recovery_receipts.json()
+    assert direct_recovery_body["ok"] is True
+    assert direct_recovery_body["total"] == 2
+    assert [item["receipt_kind"] for item in direct_recovery_body["items"]] == [
+        "reactor.deadletter.recovery_dispatch.receipt",
+        "reactor.deadletter.recovery_request.receipt",
+    ]
+    assert {item["recovery_event_id"] for item in direct_recovery_body["items"]} == {recovery_event_id}
+    assert direct_recovery_body["governance"]["execution_authority"] is False
+    direct_dispatch_receipts = client.get(
+        "/reactor/deadletters/recovery_receipts/list",
+        params={"route": "deadletter_recovery_dispatch"},
+    )
+    assert direct_dispatch_receipts.status_code == 200
+    assert [item["receipt_id"] for item in direct_dispatch_receipts.json()["items"]] == [
+        recovery_settlement_receipt["receipt_id"]
+    ]
+    fetched_recovery_receipt = client.get(
+        "/reactor/deadletters/recovery_receipts/get",
+        params={"id": recovery_settlement_receipt["receipt_id"]},
+    )
+    assert fetched_recovery_receipt.status_code == 200
+    assert fetched_recovery_receipt.json()["ok"] is True
+    assert fetched_recovery_receipt.json()["item"]["deadletter_id"] == deadletter_id
+    assert fetched_recovery_receipt.json()["item"]["source_governance"]["execution_authority"] is True
+    assert fetched_recovery_receipt.json()["item"]["governance"]["execution_authority"] is False
+    missing_recovery_receipt = client.get(
+        "/reactor/deadletters/recovery_receipts/get",
+        params={"id": "missing_recovery_receipt"},
+    )
+    assert missing_recovery_receipt.status_code == 200
+    assert missing_recovery_receipt.json() == {"ok": False, "error": "not_found", "item": None}
     recovery_request_review_after_dispatch = client.get(
         "/reactor/review_queue",
         params={"route": "deadletter_recovery_request"},

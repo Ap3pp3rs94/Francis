@@ -10,9 +10,11 @@ from francis.reactor import dispatch as reactor_dispatch
 from francis.reactor.deadletters import (
     get_deadletter,
     get_deadletter_history,
+    get_deadletter_recovery_receipt,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
     list_deadletters,
+    list_deadletter_recovery_receipts,
     list_external_escalation_deliveries,
     list_external_escalation_delivery_processor_readiness,
 )
@@ -3148,6 +3150,26 @@ def test_reactor_deadletter_escalation_handoff_records_receipt_without_execution
         recovered_deadletter["latest_recovery_dispatch_receipt"]["receipt_id"]
         == recovery_settlement_receipt["receipt_id"]
     )
+    recovery_receipts = list_deadletter_recovery_receipts(deadletter_id=deadletter_id)
+    assert [item["receipt_kind"] for item in recovery_receipts] == [
+        "reactor.deadletter.recovery_dispatch.receipt",
+        "reactor.deadletter.recovery_request.receipt",
+    ]
+    assert {item["route"] for item in recovery_receipts} == {
+        "deadletter_recovery_request",
+        "deadletter_recovery_dispatch",
+    }
+    assert {item["recovery_event_id"] for item in recovery_receipts} == {recovery_event_id}
+    assert all(item["governance"]["execution_authority"] is False for item in recovery_receipts)
+    dispatch_receipts = list_deadletter_recovery_receipts(route="deadletter_recovery_dispatch")
+    assert [item["receipt_id"] for item in dispatch_receipts] == [recovery_settlement_receipt["receipt_id"]]
+    fetched_recovery_dispatch = get_deadletter_recovery_receipt(recovery_settlement_receipt["receipt_id"])
+    assert fetched_recovery_dispatch is not None
+    assert fetched_recovery_dispatch["deadletter_id"] == deadletter_id
+    assert fetched_recovery_dispatch["status"] == "recovery_dispatched"
+    assert fetched_recovery_dispatch["source_governance"]["execution_authority"] is True
+    assert fetched_recovery_dispatch["governance"]["execution_authority"] is False
+    assert get_deadletter_recovery_receipt("missing_recovery_receipt") is None
     assert [item["deadletter_id"] for item in list_deadletters(status="recovery_requested")] == []
     assert [item["deadletter_id"] for item in list_deadletters(status="recovery_dispatched")] == [deadletter_id]
     recovery_dispatch_status = reactor_status()

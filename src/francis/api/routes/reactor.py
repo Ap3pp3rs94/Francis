@@ -10,11 +10,13 @@ from francis.reactor import (
     enqueue_event,
     get_deadletter,
     get_deadletter_history,
+    get_deadletter_recovery_receipt,
     get_event,
     get_external_escalation_delivery,
     get_external_escalation_delivery_processor_readiness,
     get_retry_schedule,
     list_deadletters,
+    list_deadletter_recovery_receipts,
     list_events,
     list_external_escalation_deliveries,
     list_external_escalation_delivery_processor_readiness,
@@ -291,11 +293,85 @@ def deadletters_history_get(
             "execution_authority": False,
             "dispatch_authority": False,
             "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
             "deadletter_resolution_authority": False,
             "external_delivery_authority": False,
             "external_escalation_authority": False,
             "escalation_authority": False,
             "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/recovery_receipts/list")
+def deadletters_recovery_receipts_list(
+    limit: int = Query(200, ge=1, le=5000),
+    status: str | None = None,
+    deadletter_id: str | None = None,
+    event_id: str | None = None,
+    recovery_event_id: str | None = None,
+    route: str | None = None,
+) -> dict[str, Any]:
+    items = list_deadletter_recovery_receipts(
+        limit=limit,
+        status=status,
+        deadletter_id=deadletter_id,
+        event_id=event_id,
+        recovery_event_id=recovery_event_id,
+        route=route,
+    )
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "limit": limit,
+        "status": status or "",
+        "deadletter_id": deadletter_id or "",
+        "event_id": event_id or "",
+        "recovery_event_id": recovery_event_id or "",
+        "route": route or "",
+        "governance": {
+            "gate": "reactor_deadletter_recovery_receipt_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/recovery_receipts/get")
+def deadletters_recovery_receipts_get(id: str) -> dict[str, Any]:
+    item = get_deadletter_recovery_receipt(id)
+    if item is None:
+        return {"ok": False, "error": "not_found", "item": None}
+    return {
+        "ok": True,
+        "item": item,
+        "governance": {
+            "gate": "reactor_deadletter_recovery_receipt_readback",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "retry_execution_authority": False,
+            "deadletter_disposition_authority": False,
+            "deadletter_resolution_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "approval_authority": False,
+            "promotion_authority": False,
             "memory_write": False,
         },
     }
