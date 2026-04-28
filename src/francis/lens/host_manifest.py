@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import json
 from pathlib import Path
 from typing import Any
@@ -14,15 +15,18 @@ def _runtime_file_exists(relative_path: str) -> bool:
         return False
 
 
-def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
+def _json_dict_from_path(path: Path) -> dict[str, Any]:
     try:
-        path = repo_root() / Path(relative_path)
         if not path.is_file():
             return {}
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
+    return _json_dict_from_path(repo_root() / Path(relative_path))
 
 
 def _path_exists(path: Path) -> bool:
@@ -49,14 +53,72 @@ def _pid_from_file(path: Path) -> int:
         return 0
 
 
+def _windows_process_alive(pid: int) -> tuple[bool, str]:
+    import ctypes
+    from ctypes import wintypes
+
+    windll_factory = getattr(ctypes, "WinDLL", None)
+    if windll_factory is None:
+        return False, "windows_api_unavailable"
+
+    kernel32 = windll_factory("kernel32", use_last_error=True)
+    process_query_limited_information = 0x1000
+    still_active = 259
+
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False, "windows_open_process_failed"
+
+    try:
+        exit_code = wintypes.DWORD(0)
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return False, "windows_exit_code_failed"
+        return exit_code.value == still_active, "windows_exit_code"
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _process_alive_readback(pid: int) -> tuple[bool, str]:
+    if pid <= 0:
+        return False, "not_attempted_by_api"
+    if os.name == "nt":
+        return _windows_process_alive(pid)
+    if os.name == "posix":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False, "posix_signal_zero"
+        except PermissionError:
+            return True, "posix_signal_zero"
+        except OSError:
+            return False, "posix_signal_zero"
+        return True, "posix_signal_zero"
+    return False, "unsupported_platform"
+
+
 def _lens_host_process_readback() -> dict[str, Any]:
     state_file = data_dir() / "runtime" / "lens-host" / "status.json"
     pid_file = data_dir() / "runtime" / "lens-host" / "lens-host.pid"
     state_exists = _path_exists(state_file)
     pid_present = _path_exists(pid_file)
     pid = _pid_from_file(pid_file) if pid_present else 0
-    state_payload = _runtime_json_dict("data/runtime/lens-host/status.json") if state_exists else {}
-    status = "state_present_process_unverified" if state_exists or pid_present else "missing"
+    process_alive, process_alive_check = _process_alive_readback(pid)
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    status = (
+        "process_observed"
+        if process_alive
+        else "state_present_process_not_running"
+        if state_exists or pid_present
+        else "missing"
+    )
+    blocked_reason = "resident_host_not_supervised" if process_alive else "resident_host_process_missing"
     return {
         "status": status,
         "readback_ready": True,
@@ -67,14 +129,14 @@ def _lens_host_process_readback() -> dict[str, Any]:
         "pid_path": "data/runtime/lens-host/lens-host.pid",
         "pid_present": pid_present,
         "pid": pid,
-        "process_alive": False,
-        "process_alive_check": "not_attempted_by_api",
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
         "supervision_enabled": False,
         "start_supported": False,
         "stop_supported": False,
         "restart_supported": False,
         "supervision_authority": False,
-        "blocked_reason": "resident_host_process_missing",
+        "blocked_reason": blocked_reason,
     }
 
 

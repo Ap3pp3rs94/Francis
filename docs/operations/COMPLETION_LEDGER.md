@@ -11470,6 +11470,44 @@ host readback proof:
 - `python -m pytest tests\test_lens_host_foreground_script.py -q`
   Result: `passed`
 
+### 2026-04-28 - Stage 6/Lens API live process readback
+
+Stage 6/Lens now carries live foreground host process readback through the API
+contract, not only through the PowerShell status runner. `/lens/status`,
+`/lens/host`, and `/lens/host/manifest` read the Lens host runtime state and PID
+files, perform a platform-aware process liveness check, report
+`process_readback.status: process_observed` while the foreground process is
+alive, expose `process_alive: true`, and use
+`resident_host_not_supervised` instead of claiming the resident host process is
+missing during that live foreground interval. The resident host component
+reports `foreground_observed` while preserving `resident: false` and
+`process_supervision: false`.
+
+This is readback-only. It does not create a supervised resident process; install,
+start, stop, or restart a Windows service; register tray presence; bind a global
+hotkey; open or focus an overlay window; summon Francis anywhere; capture screen
+content; write memory; decide approvals; execute operator actions; or grant
+overlay-control, window-management, summon, capture, sensing, telemetry,
+promotion, policy, service-control, tray-registration, hotkey-registration, or
+API local-process-launch authority. After the foreground process is gone, the
+API continues to report `resident_host_process_missing`.
+
+Latest targeted validation for the `2026-04-28` Stage 6/Lens API live process
+readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11480,8 +11518,8 @@ These remain true and should block any "finished" claim:
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session with live foreground process
-  readback proof, disabled tracked service config baseline, and non-starting
-  process readback boundary plus read-only Windows service status
+  readback proof plus API live process readback, disabled tracked service config
+  baseline, and non-starting process readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
   preflight baseline plus a disabled tray/presence preflight baseline and
   disabled overlay/window preflight baseline, but no OS-wide summon, resident

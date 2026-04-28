@@ -229,15 +229,17 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_config_present = bool(service_install.get("config_exists"))
     service_readback = _as_dict(launch_manifest.get("service_readback"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    process_alive = bool(process_readback.get("process_alive"))
     blockers = [
         "lens_host_runtime_not_implemented",
-        "resident_host_process_missing",
         "tray_host_missing",
         "global_hotkey_binding_missing",
         "always_on_top_window_missing",
         "overlay_window_missing",
         "summon_binding_missing",
     ]
+    if not process_alive:
+        blockers.insert(1, "resident_host_process_missing")
     if not status_runner_present:
         blockers.insert(0, "lens_host_entrypoint_missing")
     if not service_config_present:
@@ -271,7 +273,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         {
             "id": "host_process",
             "label": "Resident host process",
-            "status": "missing",
+            "status": "foreground_observed" if process_alive else "missing",
             "required_for": ["resident_presence", "startup_supervision"],
         },
         {

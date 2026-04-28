@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +82,36 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "blocked_reason": "lens_host_runtime_not_implemented"
 }
 """.strip(),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_host_runtime_state(data_root: Path, *, pid: int, status: str = "foreground_running") -> None:
+    runtime_root = data_root / "runtime" / "lens-host"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": status,
+                "mode": "foreground",
+                "pid": pid,
+                "process_alive": status == "foreground_running",
+                "resident": False,
+                "service_managed": False,
+                "tray_presence": False,
+                "global_hotkey": False,
+                "overlay_window": False,
+                "summon_anywhere": False,
+                "updated_at": "2026-04-28T21:30:00Z",
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -444,6 +476,57 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["candidate_command"]["executable"] is True
     assert manifest_body["governance"]["local_process_launch_authority"] is False
     assert manifest_body["governance"]["service_install_authority"] is False
+
+
+def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_lens_host_service_config(repo_root)
+    _write_lens_host_runtime_state(data_root, pid=os.getpid())
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    process_readback = resident_host["process_readback"]
+    assert process_readback["status"] == "process_observed"
+    assert process_readback["state_exists"] is True
+    assert process_readback["state_status"] == "foreground_running"
+    assert process_readback["pid_present"] is True
+    assert process_readback["pid"] == os.getpid()
+    assert process_readback["process_alive"] is True
+    assert process_readback["process_alive_check"] in {"posix_signal_zero", "windows_exit_code"}
+    assert process_readback["blocked_reason"] == "resident_host_not_supervised"
+    assert resident_host["resident"] is False
+    assert resident_host["process_supervision"] is False
+    assert resident_host["components"][4] == {
+        "id": "host_process",
+        "label": "Resident host process",
+        "status": "foreground_observed",
+        "required_for": ["resident_presence", "startup_supervision"],
+    }
+    assert "resident_host_process_missing" not in resident_host["blockers"]
+    assert "lens_host_runtime_not_implemented" in resident_host["blockers"]
+    assert resident_host["governance"]["service_control_authority"] is False
+    assert resident_host["governance"]["local_process_launch_authority"] is False
+
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    manifest_body = manifest.json()
+    assert manifest_body["process_readback"] == process_readback
+    assert manifest_body["governance"]["local_process_launch_authority"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:
