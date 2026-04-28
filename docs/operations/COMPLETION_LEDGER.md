@@ -10531,6 +10531,25 @@ status-count readback slice:
 - `python -m mypy src\francis\reactor\visibility.py`
   Result: `passed`
 
+As of `2026-04-28`, the chat UI System/ORB panel also renders the Reactor
+operator-visibility outcome counts that the backend summary now exposes. The
+existing read-only Reactor Operator Visibility card shows compact badges for
+dispatch execution outcomes, verification outcomes, blocker routes, retry
+schedule/exhaustion states, and deadletter queue states from
+`/reactor/operator_visibility/summary`. The typed Reactor client contract test
+also proves those nested count maps are preserved. This is UI readback only: it
+does not add backend routes, start execution, decide approvals, schedule
+retries, enqueue or resolve deadletters, send externally, promote capabilities,
+write memory, or create new user controls.
+
+Latest targeted validation for the `2026-04-28` Reactor operator visibility
+outcome-count UI slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10608,7 +10627,8 @@ These remain true and should block any "finished" claim:
   retry/deadletter, recovery receipt, proposal-review history, external
   delivery/readiness, and stable route-link readbacks through
   `/reactor/operator_visibility/summary` without new authority, and the chat UI
-  System/ORB panel now renders that summary as read-only operator visibility.
+  System/ORB panel now renders that summary and its outcome/failure-routing
+  count badges as read-only operator visibility.
   Read-only classification dispatch now covers `telemetry_event`,
   `observer_anomaly`, `schedule_window`, `federated_handoff`, `build_failure`,
   `validation_completion`, bare `user_request`, and bare `deadletter_recovery`

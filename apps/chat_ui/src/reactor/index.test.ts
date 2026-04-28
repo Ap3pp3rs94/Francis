@@ -213,6 +213,23 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
         review_route: {
           approval_queue: 1,
         },
+        blocker_route: {
+          approval_queue: "1",
+        },
+        dispatch_execution: {
+          blocked: 1,
+          completed: "1",
+        },
+        verification_outcome: {
+          approval_required: "1",
+          proposal_review_ready: 1,
+        },
+        retry_schedule: {
+          due: "2",
+        },
+        deadletter_queue: {
+          queued: "1",
+        },
         proposal_review_outcome: {
           proposal_review_ready: "1",
         },
@@ -328,6 +345,13 @@ test("ReactorClient.getOperatorVisibilitySummary reads backend visibility withou
     assert.equal(summary.attention.review_queue_total, 1);
     assert.equal(summary.attention.blocked_external_delivery_sender_total, 1);
     assert.equal(summary.counts.review_route?.approval_queue, 1);
+    assert.equal(summary.counts.blocker_route?.approval_queue, 1);
+    assert.equal(summary.counts.dispatch_execution?.blocked, 1);
+    assert.equal(summary.counts.dispatch_execution?.completed, 1);
+    assert.equal(summary.counts.verification_outcome?.approval_required, 1);
+    assert.equal(summary.counts.verification_outcome?.proposal_review_ready, 1);
+    assert.equal(summary.counts.retry_schedule?.due, 2);
+    assert.equal(summary.counts.deadletter_queue?.queued, 1);
     assert.equal(summary.counts.delivery_sender_status?.blocked, 1);
     assert.equal(summary.readback_surfaces.proposal_review_history, "/reactor/proposal_reviews/history/list");
     assert.equal(

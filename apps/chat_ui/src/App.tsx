@@ -4331,6 +4331,32 @@ function SystemPanel(props: {
   const reactorOperatorVisibilityStableBadges = Object.entries(reactorOperatorVisibilityCounts.stable_state ?? {})
     .filter(([, count]) => count > 0)
     .slice(0, 3);
+  const reactorOperatorVisibilityOutcomeBadges = [
+    ...Object.entries(reactorOperatorVisibilityCounts.dispatch_execution ?? {}).map(
+      ([status, count]) => [`exec ${status}`, count] as const,
+    ),
+    ...Object.entries(reactorOperatorVisibilityCounts.verification_outcome ?? {}).map(
+      ([outcome, count]) => [`verify ${outcome}`, count] as const,
+    ),
+  ]
+    .filter(([, count]) => count > 0)
+    .slice(0, 6);
+  const reactorOperatorVisibilityRecoveryBadges = [
+    ...Object.entries(reactorOperatorVisibilityCounts.blocker_route ?? {}).map(
+      ([route, count]) => [`blocker ${route}`, count] as const,
+    ),
+    ...Object.entries(reactorOperatorVisibilityCounts.retry_schedule ?? {}).map(
+      ([status, count]) => [`retry ${status}`, count] as const,
+    ),
+    ...Object.entries(reactorOperatorVisibilityCounts.retry_exhausted ?? {}).map(
+      ([status, count]) => [`retry exhausted ${status}`, count] as const,
+    ),
+    ...Object.entries(reactorOperatorVisibilityCounts.deadletter_queue ?? {}).map(
+      ([status, count]) => [`deadletter ${status}`, count] as const,
+    ),
+  ]
+    .filter(([, count]) => count > 0)
+    .slice(0, 6);
   const reactorReviewItems = reactorReviewQueue?.items ?? [];
   const reactorReviewTotal = reactorReviewQueue?.available_total ?? reactorReviewQueue?.total ?? reactorReviewItems.length;
   const reactorReviewRouteError = safeString(reactorReviewQueue?.error).trim();
@@ -6661,6 +6687,16 @@ function SystemPanel(props: {
               {reactorOperatorVisibilityStableBadges.map(([state, count]) => (
                 <span key={`reactor-operator-state-${state}`} style={badgeStyle(state)}>
                   {state} {count}
+                </span>
+              ))}
+              {reactorOperatorVisibilityOutcomeBadges.map(([label, count]) => (
+                <span key={`reactor-operator-outcome-${label}`} style={badgeStyle(label)}>
+                  {label} {count}
+                </span>
+              ))}
+              {reactorOperatorVisibilityRecoveryBadges.map(([label, count]) => (
+                <span key={`reactor-operator-recovery-${label}`} style={badgeStyle(label)}>
+                  {label} {count}
                 </span>
               ))}
             </div>
