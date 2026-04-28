@@ -11,6 +11,7 @@ from francis.governance import approvals
 from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
 from francis.reactor.deadletters import get_deadletter, list_deadletters, queue_deadletter, review_deadletter
+from francis.reactor.dispatch import dispatch_event
 from francis.reactor.retries import (
     get_retry_schedule,
     list_retry_schedules,
@@ -289,6 +290,7 @@ def _filtered_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
 
 def _receipt_reference(receipt: dict[str, Any]) -> str:
     for key in (
+        "operation_id",
         "deadletter_id",
         "approval_id",
         "candidate_id",
@@ -316,6 +318,10 @@ def _dispatch_attempt_receipt(
     ts: int,
     bounds: dict[str, Any],
     blocker: dict[str, Any] | None = None,
+    applied: bool = False,
+    execution_started: bool = False,
+    engine: str = "not_implemented",
+    dispatch_execution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return _filtered_receipt(
         {
@@ -324,9 +330,9 @@ def _dispatch_attempt_receipt(
             "status": status,
             "outcome": outcome,
             "allowed": allowed,
-            "applied": False,
-            "execution_started": False,
-            "engine": "not_implemented",
+            "applied": applied,
+            "execution_started": execution_started,
+            "engine": engine,
             "actor": actor,
             "reason": reason,
             "ts": ts,
@@ -334,6 +340,11 @@ def _dispatch_attempt_receipt(
             "next_step": next_step,
             "budget_snapshot": bounds,
             "blocker": blocker or {},
+            "dispatch_execution_receipt_id": _safe_str((dispatch_execution or {}).get("receipt_id")).strip(),
+            "operation_id": _safe_str((dispatch_execution or {}).get("operation_id")).strip(),
+            "operation_status": _safe_str((dispatch_execution or {}).get("operation_status")).strip(),
+            "trace_id": _safe_str((dispatch_execution or {}).get("trace_id")).strip(),
+            "run_id": _safe_str((dispatch_execution or {}).get("run_id")).strip(),
         }
     )
 
@@ -505,6 +516,7 @@ def _retry_exhausted_receipt(
 def _stable_return_route(
     *,
     status: str,
+    dispatch_execution: dict[str, Any] | None,
     blocker: dict[str, Any] | None,
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
@@ -513,6 +525,8 @@ def _stable_return_route(
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> str:
+    if dispatch_execution and dispatch_execution.get("dispatch_applied"):
+        return _safe_str(dispatch_execution.get("route")).strip() or "dispatch_engine"
     if deadletter_enqueue:
         return "deadletter_queue"
     if retry_exhausted:
@@ -535,6 +549,7 @@ def _stable_return_route(
 def _stable_return_source_receipt(
     *,
     dispatch_receipt: dict[str, Any],
+    dispatch_execution: dict[str, Any] | None,
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
     deadletter_enqueue: dict[str, Any] | None,
@@ -549,6 +564,7 @@ def _stable_return_source_receipt(
         or retry_exhausted
         or retry_schedule
         or retry_candidate
+        or dispatch_execution
         or dispatch_receipt
     )
 
@@ -565,6 +581,7 @@ def _stable_return_receipt(
     attempt_count: int,
     ts: int,
     dispatch_receipt: dict[str, Any],
+    dispatch_execution: dict[str, Any] | None,
     blocker: dict[str, Any] | None,
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
@@ -576,6 +593,7 @@ def _stable_return_receipt(
 ) -> dict[str, Any]:
     source_receipt = _stable_return_source_receipt(
         dispatch_receipt=dispatch_receipt,
+        dispatch_execution=dispatch_execution,
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
@@ -585,6 +603,7 @@ def _stable_return_receipt(
     )
     route = _stable_return_route(
         status=status,
+        dispatch_execution=dispatch_execution,
         blocker=blocker,
         approval_decision=approval_decision,
         approval_request=approval_request,
@@ -626,20 +645,24 @@ def _stable_return_receipt(
             "retry_candidate": retry_candidate is not None,
             "retry_scheduled": retry_schedule is not None,
             "retry_exhausted": retry_exhausted is not None,
-            "execution_started": False,
-            "dispatch_applied": False,
+            "operation_id": _safe_str((dispatch_execution or {}).get("operation_id")).strip(),
+            "operation_status": _safe_str((dispatch_execution or {}).get("operation_status")).strip(),
+            "trace_id": _safe_str((dispatch_execution or {}).get("trace_id")).strip(),
+            "run_id": _safe_str((dispatch_execution or {}).get("run_id")).strip(),
+            "execution_started": bool((dispatch_execution or {}).get("execution_started")),
+            "dispatch_applied": bool((dispatch_execution or {}).get("dispatch_applied")),
             "retry_started": False,
             "escalation_started": False,
-            "memory_write": False,
+            "memory_write": bool((dispatch_execution or {}).get("memory_write")),
             "governance": {
                 "gate": "reactor_stable_return_receipt",
-                "execution_authority": False,
-                "dispatch_authority": False,
+                "execution_authority": bool((dispatch_execution or {}).get("execution_started")),
+                "dispatch_authority": bool((dispatch_execution or {}).get("dispatch_applied")),
                 "approval_authority": False,
                 "retry_authority": False,
                 "deadletter_resolution_authority": False,
                 "escalation_authority": False,
-                "memory_write": False,
+                "memory_write": bool((dispatch_execution or {}).get("memory_write")),
             },
         }
     )
@@ -649,6 +672,7 @@ def _verification_state(
     *,
     status: str,
     outcome: str,
+    dispatch_execution: dict[str, Any] | None,
     blocker: dict[str, Any] | None,
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
@@ -657,6 +681,13 @@ def _verification_state(
     retry_candidate: dict[str, Any] | None,
     retry_exhausted: dict[str, Any] | None,
 ) -> tuple[str, str, str]:
+    if dispatch_execution:
+        execution_outcome = _safe_str(dispatch_execution.get("outcome")).strip() or outcome
+        if dispatch_execution.get("verified"):
+            return ("passed", execution_outcome, "operation_run_completed_with_execution_receipts")
+        if dispatch_execution.get("execution_started"):
+            return ("failed", execution_outcome, "operation_run_finished_without_success")
+        return ("not_run", execution_outcome, "dispatch_execution_blocked_before_operation_start")
     if deadletter_enqueue:
         return (
             "not_run",
@@ -712,6 +743,7 @@ def _verification_receipt(
     attempt_count: int,
     ts: int,
     dispatch_receipt: dict[str, Any],
+    dispatch_execution: dict[str, Any] | None,
     blocker: dict[str, Any] | None,
     approval_decision: dict[str, Any] | None,
     approval_request: dict[str, Any] | None,
@@ -722,6 +754,7 @@ def _verification_receipt(
 ) -> dict[str, Any]:
     source_receipt = _stable_return_source_receipt(
         dispatch_receipt=dispatch_receipt,
+        dispatch_execution=dispatch_execution,
         approval_decision=approval_decision,
         approval_request=approval_request,
         deadletter_enqueue=deadletter_enqueue,
@@ -731,6 +764,7 @@ def _verification_receipt(
     )
     route = _stable_return_route(
         status=status,
+        dispatch_execution=dispatch_execution,
         blocker=blocker,
         approval_decision=approval_decision,
         approval_request=approval_request,
@@ -742,6 +776,7 @@ def _verification_receipt(
     verification_status, verification_outcome, verification_reason = _verification_state(
         status=status,
         outcome=outcome,
+        dispatch_execution=dispatch_execution,
         blocker=blocker,
         approval_decision=approval_decision,
         approval_request=approval_request,
@@ -765,28 +800,32 @@ def _verification_receipt(
             "next_step": next_step,
             "source_receipt_kind": source_receipt.get("kind"),
             "source_receipt_ref": _receipt_reference(source_receipt),
+            "operation_id": _safe_str((dispatch_execution or {}).get("operation_id")).strip(),
+            "operation_status": _safe_str((dispatch_execution or {}).get("operation_status")).strip(),
+            "trace_id": _safe_str((dispatch_execution or {}).get("trace_id")).strip(),
+            "run_id": _safe_str((dispatch_execution or {}).get("run_id")).strip(),
             "attempt_count": attempt_count,
             "actor": actor,
             "reason": reason,
             "ts": ts,
-            "verified": False,
-            "completion_claimed": False,
-            "completion_claim_allowed": False,
+            "verified": verification_status == "passed",
+            "completion_claimed": verification_status == "passed",
+            "completion_claim_allowed": verification_status == "passed",
             "verification_required_before_completion_claim": True,
-            "execution_started": False,
-            "dispatch_applied": False,
+            "execution_started": bool((dispatch_execution or {}).get("execution_started")),
+            "dispatch_applied": bool((dispatch_execution or {}).get("dispatch_applied")),
             "retry_started": False,
             "escalation_started": False,
-            "memory_write": False,
+            "memory_write": bool((dispatch_execution or {}).get("memory_write")),
             "governance": {
                 "gate": "reactor_verification_receipt",
-                "execution_authority": False,
-                "dispatch_authority": False,
+                "execution_authority": bool((dispatch_execution or {}).get("execution_started")),
+                "dispatch_authority": bool((dispatch_execution or {}).get("dispatch_applied")),
                 "approval_authority": False,
                 "retry_authority": False,
                 "deadletter_resolution_authority": False,
                 "escalation_authority": False,
-                "memory_write": False,
+                "memory_write": bool((dispatch_execution or {}).get("memory_write")),
             },
         }
     )
@@ -1045,13 +1084,46 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     approval_allows_dispatch = approval_gate_state and approval_status == "approved"
     approval_blocks_dispatch = approval_gate_state and approval_status in {"rejected", "emergency"}
     allowed = bool(classification.get("dispatch_allowed")) or approval_allows_dispatch
+    dispatch_execution_result: dict[str, Any] = {}
+    dispatch_execution: dict[str, Any] | None = None
 
     if allowed:
-        status = "dispatch_deferred"
-        outcome = "dispatch_engine_not_implemented"
-        stable_state = "awaiting_dispatch_engine"
-        next_step = "implement_dispatch_engine_before_execution"
-        blocker = None
+        dispatch_execution_result = dispatch_event(
+            record,
+            actor=actor,
+            reason=reason,
+            attempt_count=attempt_count,
+            ts=ts,
+        )
+        if dispatch_execution_result.get("handled"):
+            dispatch_execution = _as_dict(dispatch_execution_result.get("receipt"))
+            status = _safe_str(dispatch_execution_result.get("status")).strip() or "dispatch_blocked"
+            outcome = _safe_str(dispatch_execution_result.get("outcome")).strip() or "dispatch_blocked"
+            stable_state = _safe_str(dispatch_execution_result.get("stable_state")).strip() or outcome
+            next_step = _safe_str(dispatch_execution_result.get("next_step")).strip() or "review_reactor_dispatch"
+            if dispatch_execution_result.get("blocked"):
+                allowed = False
+                blocker = _dispatch_blocker_record(
+                    event_id=event_key,
+                    stable_state=stable_state,
+                    next_step=next_step,
+                    classification=classification,
+                    bounds=bounds,
+                    trigger=trigger,
+                    actor=actor,
+                    reason=reason,
+                    attempt_count=attempt_count,
+                    ts=ts,
+                )
+                blocker["dispatch_execution_receipt_id"] = dispatch_execution.get("receipt_id")
+            else:
+                blocker = None
+        else:
+            status = "dispatch_deferred"
+            outcome = "dispatch_engine_not_implemented"
+            stable_state = "awaiting_dispatch_engine"
+            next_step = "implement_dispatch_engine_before_execution"
+            blocker = None
     else:
         status = "dispatch_blocked"
         outcome = (
@@ -1114,7 +1186,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         blocker["deadletter_candidate_receipt_id"] = deadletter_candidate.get("candidate_id")
     retry_candidate = None
     retry_exhausted = None
-    if allowed:
+    dispatch_execution_applied = bool(dispatch_execution and dispatch_execution.get("dispatch_applied"))
+    if allowed and not dispatch_execution_applied:
         retry_candidate = _retry_candidate_receipt(
             event_id=event_key,
             bounds=bounds,
@@ -1180,6 +1253,10 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         ts=ts,
         bounds=bounds,
         blocker=blocker,
+        applied=dispatch_execution_applied,
+        execution_started=bool(dispatch_execution and dispatch_execution.get("execution_started")),
+        engine=_safe_str((dispatch_execution or {}).get("route")).strip() or "not_implemented",
+        dispatch_execution=dispatch_execution,
     )
     verification = _verification_receipt(
         event_id=event_key,
@@ -1192,6 +1269,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         attempt_count=attempt_count,
         ts=ts,
         dispatch_receipt=receipt,
+        dispatch_execution=dispatch_execution,
         blocker=blocker,
         approval_decision=approval_decision,
         approval_request=approval_request,
@@ -1211,6 +1289,7 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         attempt_count=attempt_count,
         ts=ts,
         dispatch_receipt=receipt,
+        dispatch_execution=dispatch_execution,
         blocker=blocker,
         approval_decision=approval_decision,
         approval_request=approval_request,
@@ -1224,13 +1303,24 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         **dispatch,
         "status": status,
         "allowed": allowed,
-        "applied": False,
-        "engine": "not_implemented",
+        "applied": dispatch_execution_applied,
+        "engine": _safe_str((dispatch_execution or {}).get("route")).strip() or "not_implemented",
         "attempt_count": attempt_count,
         "last_attempt_ts": ts,
         "last_outcome": outcome,
         "last_receipt": receipt,
     }
+    if dispatch_execution:
+        updated_dispatch["execution"] = dispatch_execution
+        updated_dispatch["execution_started"] = bool(dispatch_execution.get("execution_started"))
+        updated_dispatch["dispatch_execution_receipt"] = dispatch_execution
+        updated_dispatch["operation_id"] = dispatch_execution.get("operation_id")
+        updated_dispatch["operation_status"] = dispatch_execution.get("operation_status")
+        updated_dispatch["trace_id"] = dispatch_execution.get("trace_id")
+        updated_dispatch["run_id"] = dispatch_execution.get("run_id")
+    else:
+        updated_dispatch.pop("execution", None)
+        updated_dispatch.pop("dispatch_execution_receipt", None)
     if blocker is not None:
         updated_dispatch["blocker"] = blocker
         updated_dispatch["blocked_route"] = blocker.get("route")
@@ -1281,11 +1371,17 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
         "ts": ts,
         "decision": status,
         "outcome": outcome,
-        "applied": False,
-        "execution_started": False,
+        "applied": dispatch_execution_applied,
+        "execution_started": bool(dispatch_execution and dispatch_execution.get("execution_started")),
         "stable_state": stable_state,
         "next_step": next_step,
     }
+    if dispatch_execution:
+        journal_entry["dispatch_execution_receipt_id"] = dispatch_execution.get("receipt_id")
+        journal_entry["operation_id"] = dispatch_execution.get("operation_id")
+        journal_entry["operation_status"] = dispatch_execution.get("operation_status")
+        journal_entry["trace_id"] = dispatch_execution.get("trace_id")
+        journal_entry["run_id"] = dispatch_execution.get("run_id")
     if blocker is not None:
         journal_entry["blocker_id"] = blocker.get("blocker_id")
         journal_entry["blocked_route"] = blocker.get("route")
@@ -1325,6 +1421,8 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     if not receipts and isinstance(record.get("receipt"), dict):
         receipts.append(record["receipt"])
     receipts.append(receipt)
+    if dispatch_execution:
+        receipts.append(dispatch_execution)
     if retry_dispatch_attempt_receipt:
         receipts.append(retry_dispatch_attempt_receipt)
     if approval_decision is not None:
@@ -1356,6 +1454,12 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     record["decision_journal"] = decision_journal
     record["receipts"] = receipts
     record["latest_dispatch_attempt_receipt"] = receipt
+    if dispatch_execution:
+        raw_dispatch_executions = record.get("dispatch_execution_receipts")
+        dispatch_executions = raw_dispatch_executions if isinstance(raw_dispatch_executions, list) else []
+        dispatch_executions.append(dispatch_execution)
+        record["dispatch_execution_receipts"] = dispatch_executions
+        record["latest_dispatch_execution_receipt"] = dispatch_execution
     record["latest_verification_receipt"] = verification
     record["latest_stable_return"] = stable_return
     record["latest_receipt"] = stable_return
@@ -1468,12 +1572,13 @@ def record_dispatch_attempt(event_id: str, payload: dict[str, Any] | None = None
     governance.update(
         {
             "gate": "reactor_dispatch_attempt",
-            "execution_authority": False,
+            "execution_authority": bool(dispatch_execution and dispatch_execution.get("execution_started")),
             "approval_authority": False,
             "promotion_authority": False,
-            "memory_write": False,
-            "dispatch_authority": False,
-            "attempt_only": True,
+            "memory_write": bool(dispatch_execution and dispatch_execution.get("memory_write")),
+            "dispatch_authority": dispatch_execution_applied,
+            "attempt_only": not dispatch_execution_applied,
+            "dispatch_execution": dispatch_execution_applied,
             "approval_request_queued": approval_request is not None,
             "approval_status": approval_status,
             "approval_allows_dispatch": approval_allows_dispatch,
@@ -1978,6 +2083,8 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
     routes.add(_safe_str(dispatch.get("retry_exhausted_route")).strip().lower())
     for key in (
         "deadletter_candidate",
+        "dispatch_execution_receipt",
+        "execution",
         "retry_candidate",
         "retry_exhausted",
         "retry_due_receipt",
@@ -1990,6 +2097,7 @@ def _review_routes(item: dict[str, Any]) -> set[str]:
     routes.add(_safe_str(retry_schedule.get("route")).strip().lower())
     for key in (
         "latest_blocker",
+        "latest_dispatch_execution_receipt",
         "latest_deadletter_candidate",
         "latest_deadletter_review_receipt",
         "latest_retry_candidate",
@@ -2017,6 +2125,7 @@ def _receipt_kinds(item: dict[str, Any]) -> set[str]:
         "receipt",
         "latest_receipt",
         "latest_dispatch_attempt_receipt",
+        "latest_dispatch_execution_receipt",
         "latest_verification_receipt",
         "latest_approval_decision",
         "latest_stable_return",
@@ -2054,6 +2163,8 @@ def _review_action(route: str, status: str, gate: str) -> str:
         return "review_retry_candidate_before_scheduler_exists"
     if route == "retry_due":
         return "record_dispatch_attempt_for_due_retry"
+    if route == "operation_run":
+        return "review_operation_run_result_before_retry_or_deadletter"
     return f"review_{status or 'pending'}"
 
 
@@ -2106,8 +2217,8 @@ def _review_projection(
                 "receipt_kind": receipt_kind,
                 "receipt_ref": receipt_ref,
                 "blocker_ref": blocker_ref,
-                "execution_started": False,
-                "applied": False,
+                "execution_started": bool(receipt.get("execution_started")),
+                "applied": bool(receipt.get("dispatch_applied") or receipt.get("applied")),
             },
             "governance": {
                 "execution_authority": False,
@@ -2138,7 +2249,19 @@ def _active_review_projection(item: dict[str, Any]) -> dict[str, Any] | None:
     )
     retry_due = _as_dict(dispatch.get("retry_due_receipt")) or _as_dict(item.get("latest_retry_due_receipt"))
     retry_exhausted = _as_dict(dispatch.get("retry_exhausted")) or _as_dict(item.get("latest_retry_exhausted"))
+    dispatch_execution = _as_dict(dispatch.get("dispatch_execution_receipt")) or _as_dict(
+        item.get("latest_dispatch_execution_receipt")
+    )
 
+    if stable_state == "dispatch_failed" and dispatch_execution:
+        return _review_projection(
+            item=item,
+            route="operation_run",
+            status=_safe_str(dispatch_execution.get("status")).strip() or "failed",
+            gate=_safe_str(dispatch_execution.get("gate")).strip() or "reactor_dispatch_engine",
+            receipt=dispatch_execution,
+            blocker=blocker,
+        )
     if stable_state == "retry_due" and retry_due:
         return _review_projection(
             item=item,
@@ -2266,6 +2389,7 @@ def reactor_status() -> dict[str, Any]:
     deadletter_candidate_counts: dict[str, int] = {}
     deadletter_queue_counts: dict[str, int] = {}
     deadletter_review_counts: dict[str, int] = {}
+    dispatch_execution_counts: dict[str, int] = {}
     retry_candidate_counts: dict[str, int] = {}
     retry_schedule_counts: dict[str, int] = {}
     retry_due_counts: dict[str, int] = {}
@@ -2326,6 +2450,15 @@ def reactor_status() -> dict[str, Any]:
             deadletter_review_counts[deadletter_review_status] = (
                 deadletter_review_counts.get(deadletter_review_status, 0) + 1
             )
+        raw_dispatch_execution = dispatch.get("dispatch_execution_receipt") or item.get(
+            "latest_dispatch_execution_receipt"
+        )
+        dispatch_execution = raw_dispatch_execution if isinstance(raw_dispatch_execution, dict) else {}
+        dispatch_execution_status = _safe_str(dispatch_execution.get("status")).strip()
+        if dispatch_execution_status:
+            dispatch_execution_counts[dispatch_execution_status] = (
+                dispatch_execution_counts.get(dispatch_execution_status, 0) + 1
+            )
         raw_retry_candidate = dispatch.get("retry_candidate")
         retry_candidate = raw_retry_candidate if isinstance(raw_retry_candidate, dict) else {}
         retry_status = _safe_str(retry_candidate.get("status")).strip()
@@ -2378,6 +2511,7 @@ def reactor_status() -> dict[str, Any]:
         "deadletter_candidate_counts": deadletter_candidate_counts,
         "deadletter_queue_counts": deadletter_queue_counts,
         "deadletter_review_counts": deadletter_review_counts,
+        "dispatch_execution_counts": dispatch_execution_counts,
         "deadletter_total": len(deadletters),
         "retry_candidate_counts": retry_candidate_counts,
         "retry_schedule_counts": retry_schedule_counts,
@@ -2388,7 +2522,8 @@ def reactor_status() -> dict[str, Any]:
         "verification_counts": verification_counts,
         "verification_outcome_counts": verification_outcome_counts,
         "stable_return_counts": stable_return_counts,
-        "dispatch_engine": "not_implemented",
+        "dispatch_engine": "partial",
+        "dispatch_engine_supported_actions": ["operation_run"],
         "valid_trigger_sources": sorted(VALID_TRIGGER_SOURCES),
         "governance": {
             "gate": "reactor_trigger_intake",

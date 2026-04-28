@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from francis.governance import approvals
+from francis.operations import runtime as operations_runtime
 from francis.reactor.deadletters import get_deadletter, list_deadletters
 from francis.reactor.events import (
     enqueue_event,
@@ -241,6 +242,160 @@ def test_reactor_dispatch_attempt_records_receipt_without_execution(monkeypatch,
     assert status["verification_counts"] == {"not_available": 1}
     assert status["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
     assert status["stable_return_counts"] == {"settled": 1}
+
+
+def test_reactor_dispatch_engine_runs_existing_operation_with_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    actor = "test.reactor.dispatch"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["operations.run"]}))
+
+    created_operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor dispatch should run an existing operation",
+        input={"goal": "prove reactor operation dispatch"},
+        actor=actor,
+    )
+    assert created_operation["ok"] is True
+    operation_id = str(created_operation["operation_id"])
+
+    created_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Reactor can run the linked operation once.",
+            "mode": "pilot",
+            "action_class": "operation_run",
+            "operation_id": operation_id,
+            "max_actions": 1,
+        }
+    )
+    event_id = str(created_event["event_id"])
+
+    dispatched = record_dispatch_attempt(
+        event_id,
+        {"actor": actor, "reason": "run linked operation through the bounded dispatch engine"},
+    )
+
+    assert dispatched["ok"] is True
+    event = dispatched["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "dispatch_succeeded"
+    assert event["dispatch"]["engine"] == "operation_run"
+    assert event["dispatch"]["applied"] is True
+    assert event["dispatch"]["execution_started"] is True
+    execution_receipt = event["latest_dispatch_execution_receipt"]
+    assert execution_receipt["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution_receipt["status"] == "completed"
+    assert execution_receipt["outcome"] == "operation_succeeded"
+    assert execution_receipt["operation_id"] == operation_id
+    assert execution_receipt["operation_status"] == "succeeded"
+    assert execution_receipt["execution_started"] is True
+    assert execution_receipt["dispatch_applied"] is True
+    assert execution_receipt["verified"] is True
+    assert execution_receipt["completion_claim_allowed"] is True
+    assert execution_receipt["governance"]["authority_source"] == "operations.run"
+    assert execution_receipt["governance"]["approval_authority"] is False
+    assert execution_receipt["governance"]["memory_write"] is False
+    assert str(execution_receipt["trace_id"]).startswith("trace_")
+    assert str(execution_receipt["run_id"]).startswith("run_")
+
+    dispatch_receipt = event["latest_dispatch_attempt_receipt"]
+    assert dispatch_receipt["status"] == "dispatch_completed"
+    assert dispatch_receipt["engine"] == "operation_run"
+    assert dispatch_receipt["applied"] is True
+    assert dispatch_receipt["execution_started"] is True
+    assert dispatch_receipt["operation_id"] == operation_id
+
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "operation_succeeded"
+    assert verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert verification["verified"] is True
+    assert verification["completion_claimed"] is True
+    assert verification["completion_claim_allowed"] is True
+    assert verification["operation_id"] == operation_id
+    assert verification["execution_started"] is True
+    assert verification["dispatch_applied"] is True
+    assert verification["governance"]["execution_authority"] is True
+    assert verification["governance"]["approval_authority"] is False
+    assert verification["governance"]["memory_write"] is False
+
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "operation_run"
+    assert stable_return["stable_state"] == "dispatch_succeeded"
+    assert stable_return["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    assert stable_return["execution_started"] is True
+    assert stable_return["dispatch_applied"] is True
+    assert stable_return["governance"]["execution_authority"] is True
+    assert stable_return["governance"]["approval_authority"] is False
+
+    by_receipt = list_events(receipt_kind="reactor.dispatch.execution.receipt")
+    assert [item["event_id"] for item in by_receipt] == [event_id]
+    by_state = list_events(stable_state="dispatch_succeeded")
+    assert [item["event_id"] for item in by_state] == [event_id]
+    status = reactor_status()
+    assert status["status_counts"] == {"dispatch_completed": 1}
+    assert status["dispatch_execution_counts"] == {"completed": 1}
+    assert status["verification_counts"] == {"passed": 1}
+    assert status["verification_outcome_counts"] == {"operation_succeeded": 1}
+
+    operation_detail = operations_runtime.get_operation_detail(operation_id)
+    assert operation_detail["operation"]["status"] == "succeeded"
+
+
+def test_reactor_dispatch_engine_blocks_operation_run_without_operations_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    actor = "test.reactor.dispatch"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["reactor.write"]}))
+
+    created_operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor dispatch should not bypass operations.run",
+        input={"goal": "prove dispatch permission gate"},
+        actor=actor,
+    )
+    assert created_operation["ok"] is True
+    operation_id = str(created_operation["operation_id"])
+
+    created_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Reactor operation dispatch needs operations.run.",
+            "mode": "pilot",
+            "action_class": "operation_run",
+            "operation_id": operation_id,
+            "max_actions": 1,
+        }
+    )
+    event_id = str(created_event["event_id"])
+
+    dispatched = record_dispatch_attempt(
+        event_id,
+        {"actor": actor, "reason": "attempt without operations.run"},
+    )
+
+    assert dispatched["ok"] is True
+    event = dispatched["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "operation_run_permission_denied"
+    assert event["dispatch"]["applied"] is False
+    assert event["dispatch"]["engine"] == "operation_run"
+    execution_receipt = event["latest_dispatch_execution_receipt"]
+    assert execution_receipt["status"] == "blocked"
+    assert execution_receipt["outcome"] == "operation_run_permission_denied"
+    assert execution_receipt["execution_started"] is False
+    assert execution_receipt["dispatch_applied"] is False
+    assert execution_receipt["governance"]["execution_authority"] is False
+    assert execution_receipt["governance"]["approval_authority"] is False
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "not_run"
+    assert verification["verification_outcome"] == "operation_run_permission_denied"
+    assert verification["verified"] is False
+    assert verification["execution_started"] is False
+
+    operation_detail = operations_runtime.get_operation_detail(operation_id)
+    assert operation_detail["operation"]["status"] == "queued"
 
 
 def test_reactor_dispatch_attempt_records_retry_schedule_without_starting_retry(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis.operations import runtime as operations_runtime
+
 _REACTOR_ACTOR = "test.reactor.write"
 _APPROVAL_ACTOR = "test.reactor.approvals.decide"
 
@@ -22,7 +24,8 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert empty_status.status_code == 200
     assert empty_status.json()["ok"] is True
     assert empty_status.json()["total"] == 0
-    assert empty_status.json()["dispatch_engine"] == "not_implemented"
+    assert empty_status.json()["dispatch_engine"] == "partial"
+    assert empty_status.json()["dispatch_engine_supported_actions"] == ["operation_run"]
 
     queued = client.post(
         "/reactor/events/enqueue",
@@ -128,6 +131,89 @@ def test_reactor_event_routes_enqueue_and_readback(monkeypatch, tmp_path: Path) 
     assert status.json()["verification_counts"] == {"not_available": 1}
     assert status.json()["verification_outcome_counts"] == {"dispatch_engine_not_implemented": 1}
     assert status.json()["stable_return_counts"] == {"settled": 1}
+
+
+def test_reactor_operation_dispatch_route_runs_existing_operation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({_REACTOR_ACTOR: ["reactor.write", "operations.run"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    operation = operations_runtime.create_operation(
+        action="plan.create",
+        reason="reactor route dispatch should run an existing operation",
+        input={"goal": "prove reactor API operation dispatch"},
+        actor=_REACTOR_ACTOR,
+    )
+    assert operation["ok"] is True
+    operation_id = str(operation["operation_id"])
+
+    client = TestClient(create_app())
+    enqueued = client.post(
+        "/reactor/events/enqueue",
+        json={
+            "trigger_source": "mission_queue",
+            "summary": "Dispatch this existing operation through Reactor.",
+            "mode": "pilot",
+            "action_class": "operation_run",
+            "operation_id": operation_id,
+            "actor": _REACTOR_ACTOR,
+            "max_actions": 1,
+        },
+    )
+    assert enqueued.status_code == 200
+    event_id = str(enqueued.json()["event_id"])
+
+    dispatched = client.post(
+        "/reactor/events/dispatch_attempt",
+        json={
+            "event_id": event_id,
+            "actor": _REACTOR_ACTOR,
+            "reason": "run existing operation through reactor dispatch",
+        },
+    )
+
+    assert dispatched.status_code == 200
+    body = dispatched.json()
+    assert body["ok"] is True
+    assert body["applied"] is True
+    event = body["event"]
+    assert event["status"] == "dispatch_completed"
+    assert event["stable_state"] == "dispatch_succeeded"
+    assert event["dispatch"]["engine"] == "operation_run"
+    assert event["dispatch"]["applied"] is True
+    execution = event["latest_dispatch_execution_receipt"]
+    assert execution["kind"] == "reactor.dispatch.execution.receipt"
+    assert execution["operation_id"] == operation_id
+    assert execution["status"] == "completed"
+    assert execution["outcome"] == "operation_succeeded"
+    assert execution["governance"]["authority_source"] == "operations.run"
+    assert execution["governance"]["approval_authority"] is False
+    verification = event["latest_verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verified"] is True
+    assert verification["source_receipt_kind"] == "reactor.dispatch.execution.receipt"
+    stable_return = event["latest_stable_return"]
+    assert stable_return["route"] == "operation_run"
+    assert stable_return["dispatch_applied"] is True
+
+    execution_list = client.get(
+        "/reactor/events/list",
+        params={"receipt_kind": "reactor.dispatch.execution.receipt"},
+    )
+    assert execution_list.status_code == 200
+    assert {item["event_id"] for item in execution_list.json()["items"]} == {event_id}
+    status = client.get("/reactor/status")
+    assert status.status_code == 200
+    assert status.json()["status_counts"] == {"dispatch_completed": 1}
+    assert status.json()["dispatch_execution_counts"] == {"completed": 1}
+    assert status.json()["verification_counts"] == {"passed": 1}
 
 
 def test_reactor_event_routes_filter_review_readbacks(monkeypatch, tmp_path: Path) -> None:

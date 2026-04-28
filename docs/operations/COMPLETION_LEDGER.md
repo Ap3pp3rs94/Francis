@@ -640,6 +640,25 @@ run a dispatch engine, start retry execution, execute work, decide approvals,
 resolve or escalate deadletters, write memory, or grant execution, dispatch,
 retry-execution, escalation, or approval authority.
 
+As of `2026-04-27`, Stage 5/Reactor has a first partial dispatch engine for
+existing operation runs. `operation_run` Reactor events with an existing
+operation id can now dispatch through the existing operations runtime only when
+the dispatch actor also has the existing `operations.run` scope and current
+operator posture allows execution. Successful dispatch records
+`reactor.dispatch.execution.receipt`, updates the Reactor event to
+`dispatch_completed` / `dispatch_succeeded`, links operation id, status, trace,
+and run handles into the dispatch, verification, stable-return, receipt-history,
+receipt-kind filtering, and `/reactor/status` execution counts, and marks
+verification as passed only when the operation run succeeds. If the actor lacks
+`operations.run` or posture blocks execution, Reactor records a blocked
+dispatch-execution receipt and leaves the existing operation queued. Unsupported
+action classes still use the prior non-executing deferred/retry/deadletter path.
+This creates bounded Reactor execution only through the already-governed
+operations runtime; it does not add approval-decision authority, promotion
+authority, deadletter resolution/escalation, generic plugin/mission dispatch,
+new memory-write authority beyond any memory receipts already produced by
+operation execution, or UI controls.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9160,6 +9179,20 @@ and staging-quality gate slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-27` Reactor operation dispatch engine
+slice:
+
+- `python -m pytest tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_runs_existing_operation_with_receipts tests\unit\test_reactor_event_queue.py::test_reactor_dispatch_engine_blocks_operation_run_without_operations_scope tests\test_api_reactor.py::test_reactor_operation_dispatch_route_runs_existing_operation -q`
+  Result: `passed`
+- `python -m pytest tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor src\francis\api\routes\reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor src\francis\api\routes\reactor.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9171,21 +9204,24 @@ These remain true and should block any "finished" claim:
   retrieval-backed systems
 - evidence, simulation, and federation remain downstream/gated work, not current
   product-ready surfaces
-- Stage 5/Reactor currently has non-executing trigger intake, readback,
-  dispatch-attempt receipts, blocked-dispatch blocker records, and
-  deadletter-candidate, retry-candidate, retry-exhausted, and review-filter
-  readback plus a read-only review-queue projection with chat UI readback only.
-  Reactor dispatch attempts can create a pending approval request when missing,
-  and reconcile terminal approval decisions back into deferred dispatch or
-  operator-review-blocked state, and deadletter candidates now persist real
-  Reactor deadletter queue items with bounded review receipts, and every
-  dispatch attempt now records a verification-state receipt plus stable-return
-  receipt, retry candidates now persist durable retry schedule queue items, and
-  retry schedules can be marked due with a handoff receipt and then feed one
-  bounded retry dispatch-attempt receipt, but bounded dispatch execution, real
-  verification hooks/results, retry execution beyond non-executing due dispatch
-  attempts, deadletter resolution/escalation beyond non-authoritative review
-  receipts, and broader operator visibility are still remaining work
+- Stage 5/Reactor currently has trigger intake, readback, dispatch-attempt
+  receipts, blocked-dispatch blocker records, and deadletter-candidate,
+  retry-candidate, retry-exhausted, and review-filter readback plus a read-only
+  review-queue projection with chat UI readback only. Reactor dispatch attempts
+  can create a pending approval request when missing, reconcile terminal
+  approval decisions back into deferred dispatch or operator-review-blocked
+  state, persist real Reactor deadletter queue items with bounded review
+  receipts, record verification-state and stable-return receipts, persist retry
+  schedule queue items, mark retry schedules due, and feed one bounded retry
+  dispatch-attempt receipt. Reactor now has a first partial dispatch engine for
+  existing `operation_run` events guarded by the existing `operations.run` scope
+  and operator posture, with execution, verification, stable-return, and status
+  readback. Remaining Stage 5 gaps still include broader dispatch action
+  coverage beyond existing operation runs, retry execution that can actually
+  re-run due schedules through successful execution paths, deadletter
+  resolution/escalation beyond non-authoritative review receipts, stronger
+  failure-to-retry/deadletter routing after real execution failures, and broader
+  operator visibility
 
 ## 6. Update rule
 
