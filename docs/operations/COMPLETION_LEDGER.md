@@ -1195,6 +1195,31 @@ send externally, write memory, promote capabilities, or grant dispatch-action,
 execution, dispatch, approval, promotion, external-delivery, or memory-write
 authority.
 
+As of `2026-04-28`, a focused Stage 5/Reactor checkpoint audit was rerun after
+the recent dispatch-boundary and operator-visibility slices. Current repo truth
+and targeted validation now prove bounded Reactor event intake/readback,
+classification dispatches for known trigger sources, approval request/decision
+and approval-resume readback, explicit generic action boundaries, governed
+`operation_run` dispatch plus failure/retry/deadletter routing, `mission_tick`
+permission-denial proof, read-only Forge proposal-review dispatch/history,
+durable retry/deadletter/recovery/local-outbox handoff receipts, stable-return
+and verification receipts, and backend plus chat UI operator visibility
+summaries. The audit validation was `python -m pytest
+tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py
+tests\test_api_reactor_visibility.py
+tests\unit\test_reactor_operator_visibility.py
+tests\unit\test_reactor_visibility.py -q`, `npm run test` in
+`apps\chat_ui`, and `npm run build` in `apps\chat_ui`. Stage 5 remains active
+and is not ready to close: a real configured external sender contract is still
+blocked/no-send, any execution path beyond the existing governed
+`operation_run` and `mission_tick` surfaces remains intentionally disabled or
+typed as a boundary, and a full Stage 5 completion audit still needs to prove
+the composed trigger -> classify -> bounded run -> verify -> receipt -> stable
+state loop without churn before Stage 6/Lens can start. This checkpoint is
+ledger-only; it changes no execution authority, approval authority,
+memory-write behavior, promotion authority, UI claim behavior, telemetry
+behavior, user-facing controls, or policy/governance behavior.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
