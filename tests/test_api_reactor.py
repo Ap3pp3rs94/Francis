@@ -1906,6 +1906,43 @@ def test_reactor_deadletter_external_delivery_route_queues_local_outbox_without_
     assert fetched_delivery.json()["item"]["delivery_id"] == delivery_id
     assert fetched_delivery.json()["item"]["external_network_send"] is False
     assert fetched_delivery.json()["governance"]["external_escalation_authority"] is False
+    processor_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/processor_readiness/list",
+        params={"status": "queued", "processor_status": "ready"},
+    )
+    assert processor_readiness.status_code == 200
+    processor_readiness_body = processor_readiness.json()
+    assert processor_readiness_body["ok"] is True
+    assert processor_readiness_body["total"] == 1
+    assert processor_readiness_body["ready_total"] == 1
+    assert processor_readiness_body["blocked_total"] == 0
+    assert processor_readiness_body["items"][0]["delivery_id"] == delivery_id
+    assert processor_readiness_body["items"][0]["delivery_processor_ready"] is True
+    assert processor_readiness_body["items"][0]["delivery_processor_blockers"] == []
+    assert processor_readiness_body["items"][0]["external_delivery_started"] is False
+    assert processor_readiness_body["governance"]["external_delivery_authority"] is False
+    assert processor_readiness_body["governance"]["delivery_processor_claim_authority"] is False
+    filtered_processor_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/processor_readiness/list",
+        params={"processor_status": "blocked"},
+    )
+    assert filtered_processor_readiness.status_code == 200
+    assert filtered_processor_readiness.json()["items"] == []
+    fetched_processor_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/processor_readiness/get",
+        params={"id": delivery_id},
+    )
+    assert fetched_processor_readiness.status_code == 200
+    assert fetched_processor_readiness.json()["ok"] is True
+    assert fetched_processor_readiness.json()["item"]["delivery_id"] == delivery_id
+    assert fetched_processor_readiness.json()["item"]["delivery_processor_status"] == "ready"
+    assert fetched_processor_readiness.json()["item"]["governance"]["external_escalation_authority"] is False
+    missing_processor_readiness = client.get(
+        "/reactor/deadletters/external_escalation_deliveries/processor_readiness/get",
+        params={"id": "red_missing"},
+    )
+    assert missing_processor_readiness.status_code == 200
+    assert missing_processor_readiness.json() == {"ok": False, "error": "not_found", "item": None}
     missing_delivery = client.get(
         "/reactor/deadletters/external_escalation_deliveries/get",
         params={"id": "red_missing"},

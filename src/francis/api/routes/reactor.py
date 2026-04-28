@@ -11,10 +11,12 @@ from francis.reactor import (
     get_deadletter,
     get_event,
     get_external_escalation_delivery,
+    get_external_escalation_delivery_processor_readiness,
     get_retry_schedule,
     list_deadletters,
     list_events,
     list_external_escalation_deliveries,
+    list_external_escalation_delivery_processor_readiness,
     list_retry_schedules,
     reactor_review_queue,
     reactor_status,
@@ -320,6 +322,71 @@ def deadletter_external_escalation_deliveries_get(id: str) -> dict[str, Any]:
             "external_delivery_authority": False,
             "external_escalation_authority": False,
             "escalation_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/external_escalation_deliveries/processor_readiness/list")
+def deadletter_external_escalation_delivery_processor_readiness_list(
+    limit: int = Query(200, ge=1, le=5000),
+    status: str | None = None,
+    deadletter_id: str | None = None,
+    event_id: str | None = None,
+    processor_status: str | None = None,
+) -> dict[str, Any]:
+    items = list_external_escalation_delivery_processor_readiness(
+        limit=limit,
+        status=status,
+        deadletter_id=deadletter_id,
+        event_id=event_id,
+        processor_status=processor_status,
+    )
+    ready_total = len([item for item in items if bool(item.get("delivery_processor_ready"))])
+    return {
+        "ok": True,
+        "items": items,
+        "total": len(items),
+        "ready_total": ready_total,
+        "blocked_total": len(items) - ready_total,
+        "limit": limit,
+        "status": status or "",
+        "processor_status": processor_status or "",
+        "deadletter_id": deadletter_id or "",
+        "event_id": event_id or "",
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_processor_readiness",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "delivery_processor_claim_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
+@router.get("/deadletters/external_escalation_deliveries/processor_readiness/get")
+def deadletter_external_escalation_delivery_processor_readiness_get(id: str) -> dict[str, Any]:
+    item = get_external_escalation_delivery_processor_readiness(id)
+    if item is None:
+        return {"ok": False, "error": "not_found", "item": None}
+    return {
+        "ok": True,
+        "item": item,
+        "governance": {
+            "gate": "reactor_external_escalation_delivery_processor_readiness",
+            "execution_authority": False,
+            "dispatch_authority": False,
+            "retry_authority": False,
+            "external_delivery_queue_authority": False,
+            "external_delivery_authority": False,
+            "external_escalation_authority": False,
+            "escalation_authority": False,
+            "delivery_processor_claim_authority": False,
             "memory_write": False,
         },
     }

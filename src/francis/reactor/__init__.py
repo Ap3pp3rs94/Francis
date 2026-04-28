@@ -3,8 +3,10 @@ from __future__ import annotations
 from francis.reactor.deadletters import (
     get_deadletter,
     get_external_escalation_delivery,
+    get_external_escalation_delivery_processor_readiness,
     list_deadletters,
     list_external_escalation_deliveries,
+    list_external_escalation_delivery_processor_readiness,
     queue_deadletter,
     resolve_deadletter,
 )
@@ -39,10 +41,12 @@ __all__ = [
     "enqueue_event",
     "get_deadletter",
     "get_external_escalation_delivery",
+    "get_external_escalation_delivery_processor_readiness",
     "get_event",
     "get_retry_schedule",
     "list_deadletters",
     "list_external_escalation_deliveries",
+    "list_external_escalation_delivery_processor_readiness",
     "list_events",
     "list_retry_schedules",
     "queue_deadletter",

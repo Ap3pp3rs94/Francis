@@ -10,8 +10,10 @@ from francis.reactor import dispatch as reactor_dispatch
 from francis.reactor.deadletters import (
     get_deadletter,
     get_external_escalation_delivery,
+    get_external_escalation_delivery_processor_readiness,
     list_deadletters,
     list_external_escalation_deliveries,
+    list_external_escalation_delivery_processor_readiness,
 )
 from francis.reactor.events import (
     enqueue_event,
@@ -2483,6 +2485,29 @@ def test_reactor_external_escalation_attempt_records_adapter_preflight_without_d
         delivery_id
     ]
     assert list_external_escalation_deliveries(status="sent") == []
+    processor_readiness = get_external_escalation_delivery_processor_readiness(delivery_id)
+    assert processor_readiness is not None
+    assert processor_readiness["kind"] == "reactor.deadletter.external_escalation.delivery_processor_readiness"
+    assert processor_readiness["delivery_id"] == delivery_id
+    assert processor_readiness["status"] == "ready"
+    assert processor_readiness["delivery_status"] == "queued"
+    assert processor_readiness["delivery_processor_ready"] is True
+    assert processor_readiness["delivery_processor_status"] == "ready"
+    assert processor_readiness["delivery_processor_blockers"] == []
+    assert processor_readiness["external_delivery_started"] is False
+    assert processor_readiness["external_message_sent"] is False
+    assert processor_readiness["external_network_send"] is False
+    assert processor_readiness["execution_started"] is False
+    assert processor_readiness["completion_claim_allowed"] is False
+    assert processor_readiness["governance"]["external_delivery_authority"] is False
+    assert processor_readiness["governance"]["external_escalation_authority"] is False
+    assert processor_readiness["governance"]["delivery_processor_claim_authority"] is False
+    assert [item["delivery_id"] for item in list_external_escalation_delivery_processor_readiness()] == [delivery_id]
+    assert [
+        item["delivery_id"] for item in list_external_escalation_delivery_processor_readiness(processor_status="ready")
+    ] == [delivery_id]
+    assert list_external_escalation_delivery_processor_readiness(processor_status="blocked") == []
+    assert get_external_escalation_delivery_processor_readiness("red_missing") is None
 
     delivered_event = delivery["event"]
     assert delivered_event["stable_state"] == "deadletter_external_escalation_delivery_queued"
