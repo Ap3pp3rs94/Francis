@@ -10255,6 +10255,27 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 5/Reactor checkpoint audit as of `2026-04-28`: Stage 5 remains active and
+is not ready to close. The current repo truth proves bounded event intake,
+dispatch-attempt receipts, approval/deadletter/retry readbacks, governed
+`operation_run` dispatch, governed `mission_tick` dispatch, read-only Forge
+proposal review, read-only telemetry/observer classification, read-only
+approval-decision resume receipts, local outbox external-escalation queueing,
+processor handoff/completion, blocked sender-attempt receipt/readback, and chat
+UI sender-readiness readback. The audit did not add execution, approval,
+memory-write, promotion, external-delivery, or external-escalation authority.
+Stage 5 is still blocked from closure by broader dispatch action coverage,
+broader failure-routing/deadletter proof beyond the currently covered
+`operation_run` and `mission_tick` paths, broader operator UI visibility beyond
+the current read-only Reactor surfaces, and real external escalation
+send/execution beyond the current non-sending local outbox and blocked sender
+boundary.
+
+Latest checkpoint validation for the `2026-04-28` Stage 5/Reactor audit:
+
+- `python -m pytest tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
