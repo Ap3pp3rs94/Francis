@@ -35,7 +35,7 @@ import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline"
 import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
-import { ReactorApiError, ReactorClient, type ReactorReviewQueueSnapshot } from "./reactor";
+import { ReactorApiError, ReactorClient, type ReactorReviewQueueSnapshot, type ReactorReviewRoute } from "./reactor";
 import type {
   PluginCapabilityCatalogCoherence,
   PluginCapabilityCatalogEntry,
@@ -183,6 +183,18 @@ const DEFAULT_SETTINGS: UiSettings = {
   voiceRate: 1.0,
   voicePitch: 1.0,
 };
+
+const REACTOR_REVIEW_ROUTE_FILTERS: Array<{ label: string; route: ReactorReviewRoute | "" }> = [
+  { label: "All", route: "" },
+  { label: "Approvals", route: "approval_queue" },
+  { label: "Operator", route: "operator_review" },
+  { label: "Deadletter", route: "deadletter_candidate" },
+  { label: "Reviewed", route: "deadletter_review" },
+  { label: "Escalation", route: "deadletter_escalation" },
+  { label: "Retry", route: "retry_backoff" },
+  { label: "Due", route: "retry_due" },
+  { label: "Operation", route: "operation_run" },
+];
 
 const THEME = {
   bg: "#0a0a0a",
@@ -3822,6 +3834,7 @@ function SystemPanel(props: {
   const [reactorReviewQueue, setReactorReviewQueue] = useState<ReactorReviewQueueSnapshot | null>(null);
   const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
   const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
+  const [reactorReviewRouteFilter, setReactorReviewRouteFilter] = useState<ReactorReviewRoute | "">("");
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -3967,7 +3980,7 @@ function SystemPanel(props: {
         client.getObserverEvents({ limit: 8 }),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
-        reactorClient.getReviewQueue({ limit: 8 }),
+        reactorClient.getReviewQueue({ limit: 8, route: reactorReviewRouteFilter || undefined }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4055,7 +4068,7 @@ function SystemPanel(props: {
       setLastRefreshCompletedAt(nowUnixSeconds());
       setBusy(false);
     }
-  }, [client, operationsClient, operationsError, reactorClient, reactorError, settingsError]);
+  }, [client, operationsClient, operationsError, reactorClient, reactorError, reactorReviewRouteFilter, settingsError]);
 
   const recordObserverScan = useCallback(async () => {
     if (!modeClient) {
@@ -4228,6 +4241,7 @@ function SystemPanel(props: {
   const reactorReviewItems = reactorReviewQueue?.items ?? [];
   const reactorReviewTotal = reactorReviewQueue?.available_total ?? reactorReviewQueue?.total ?? reactorReviewItems.length;
   const reactorReviewRouteError = safeString(reactorReviewQueue?.error).trim();
+  const reactorReviewActiveRoute = safeString(reactorReviewQueue?.route).trim() || reactorReviewRouteFilter;
   const reactorReviewRouteBadges = Object.entries(reactorReviewQueue?.route_counts ?? {})
     .filter(([, count]) => count > 0)
     .slice(0, 4);
@@ -6502,6 +6516,35 @@ function SystemPanel(props: {
         {reactorReviewRouteError && !reactorReviewQueueError ? (
           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
             Reactor review route reported: {reactorReviewRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+          {REACTOR_REVIEW_ROUTE_FILTERS.map((filter) => {
+            const active = reactorReviewRouteFilter === filter.route;
+            return (
+              <button
+                key={`reactor-review-filter-${filter.route || "all"}`}
+                type="button"
+                style={{
+                  ...buttonStyle,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  background: active ? THEME.buttonActive : THEME.buttonBg,
+                  borderColor: active ? "#4a4a4a" : THEME.buttonBorder,
+                }}
+                aria-pressed={active}
+                onClick={() => setReactorReviewRouteFilter(filter.route)}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {reactorReviewActiveRoute ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            route=<code>{reactorReviewActiveRoute}</code>
           </div>
         ) : null}
 

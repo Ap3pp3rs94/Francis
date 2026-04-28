@@ -707,6 +707,19 @@ start external escalation, decide approvals, write memory, promote
 capabilities, or grant execution, retry-execution, approval, memory-write,
 promotion, or external-escalation authority.
 
+As of `2026-04-28`, the chat UI Reactor review queue can also filter the
+read-only queue by backend review route. The System/ORB panel now keeps a local
+route filter, passes it to the existing `GET /reactor/review_queue?route=...`
+read path, and includes the new `deadletter_escalation` route in the operator
+filter set so escalation-pending deadletter dispositions are directly
+inspectable instead of buried in the mixed queue. The Reactor UI client contract
+also proves that `deadletter_escalation` readback preserves
+`reactor.deadletter.resolution.receipt`, `deadletter_escalation_pending`, and
+the non-executing `execution_started: false` flag. This is readback/UI-only; it
+does not add write routes, execution authority, retry authority, approval
+authority, memory-write behavior, external-escalation authority, or new backend
+behavior.
+
 As of `2026-04-25`, credential request metadata has a bounded secret-redaction
 contract at the identity/governance boundary. Sensitive metadata keys and
 secret-like string values are redacted before credential request data reaches
@@ -9297,6 +9310,14 @@ receipt slice:
 - `.\scripts\check.ps1`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-28` Reactor review-route filter UI
+readback slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -9329,8 +9350,8 @@ These remain true and should block any "finished" claim:
   or external escalation. Remaining Stage 5 gaps still
   include broader dispatch action coverage beyond existing operation runs,
   broader execution-failure routing beyond the current `operation_run` path, and
-  broader operator visibility plus actual recovery/escalation execution after
-  disposition receipts
+  broader operator visibility beyond the route-filtered review queue plus actual
+  recovery/escalation execution after disposition receipts
 
 ## 6. Update rule
 

@@ -1,7 +1,14 @@
 export type ReactorReviewRoute =
   | "approval_queue"
   | "deadletter_candidate"
+  | "deadletter_escalation"
+  | "deadletter_resolution"
+  | "deadletter_review"
+  | "operation_run"
+  | "operator_review"
+  | "retry_backoff"
   | "retry_candidate"
+  | "retry_due"
   | "retry_exhausted"
   | string;
 

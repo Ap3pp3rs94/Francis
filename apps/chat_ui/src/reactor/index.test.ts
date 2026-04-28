@@ -130,23 +130,44 @@ test("ReactorClient.getReviewQueue preserves route filters", async () => {
     });
     return jsonResponse({
       ok: true,
-      route: "retry_exhausted",
-      items: [],
-      total: 0,
-      available_total: 0,
+      route: "deadletter_escalation",
+      items: [
+        {
+          event_id: "evt_deadletter_escalation",
+          stable_state: "deadletter_escalation_pending",
+          review: {
+            route: "deadletter_escalation",
+            status: "escalation_pending",
+            gate: "reactor_deadletter_resolution",
+            action: "track_escalation_pending_external_or_operator_followup",
+            next_step: "track_escalation_pending_external_or_operator_followup",
+            receipt_kind: "reactor.deadletter.resolution.receipt",
+            receipt_ref: "rdl_alpha_resolution_escalation_pending",
+            execution_started: false,
+            applied: true,
+          },
+        },
+      ],
+      total: 1,
+      available_total: 1,
       limit: 20,
-      route_counts: {},
-      stable_state_counts: {},
+      route_counts: { deadletter_escalation: 1 },
+      stable_state_counts: { deadletter_escalation_pending: 1 },
     });
   });
 
   try {
     const client = new ReactorClient("http://127.0.0.1:8000");
-    const snapshot = await client.getReviewQueue({ route: "retry_exhausted", limit: 20 });
+    const snapshot = await client.getReviewQueue({ route: "deadletter_escalation", limit: 20 });
 
-    assert.deepEqual(requests, [{ route: "retry_exhausted", limit: "20" }]);
-    assert.equal(snapshot.route, "retry_exhausted");
-    assert.deepEqual(snapshot.items, []);
+    assert.deepEqual(requests, [{ route: "deadletter_escalation", limit: "20" }]);
+    assert.equal(snapshot.route, "deadletter_escalation");
+    assert.equal(snapshot.items[0]?.stable_state, "deadletter_escalation_pending");
+    assert.equal(snapshot.items[0]?.review?.route, "deadletter_escalation");
+    assert.equal(snapshot.items[0]?.review?.receipt_kind, "reactor.deadletter.resolution.receipt");
+    assert.equal(snapshot.items[0]?.review?.execution_started, false);
+    assert.equal(snapshot.items[0]?.review?.applied, true);
+    assert.equal(snapshot.route_counts.deadletter_escalation, 1);
   } finally {
     restoreFetch();
   }
