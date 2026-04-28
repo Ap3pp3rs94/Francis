@@ -153,6 +153,7 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     assert body["bounded_plan_dispatch_linked_total"] == 3
     assert body["bounded_plan_dispatch_pending_total"] == 0
     assert body["bounded_plan_dispatch_unlinked_total"] == 0
+    assert body["reflection_receipt_total"] == 3
     assert body["supported_external_sender_adapters"] == []
     assert body["supported_external_sender_adapter_total"] == 0
     assert body["external_sender_required_fields"] == [
@@ -182,6 +183,11 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
         "plugin_run_dispatch_not_enabled": 1,
         "proposal_review_ready": 1,
     }
+    assert body["counts"]["reflection"] == {"reflected": 3}
+    assert body["counts"]["reflection_outcome"] == {
+        "bounded_work_not_verified": 2,
+        "bounded_work_verified": 1,
+    }
     assert body["counts"]["stable_return"] == {"settled": 3}
     assert body["counts"]["bounded_plan_trace"] == {"dispatch_linked": 3}
     assert body["counts"]["external_delivery_sender_contract"] == {"blocked": 1}
@@ -194,6 +200,9 @@ def test_reactor_operator_visibility_summary_route_is_read_only(
     )
     assert body["readback_surfaces"]["bounded_plan_dispatch_traces"] == (
         "/reactor/events/list?receipt_kind=reactor.dispatch_attempt.receipt"
+    )
+    assert body["readback_surfaces"]["reflection_receipts"] == (
+        "/reactor/events/list?receipt_kind=reactor.reflection.receipt"
     )
     assert body["external_delivery_sender_contract"]["external_delivery_sender_ready"] is False
     assert body["external_delivery_sender_contract"]["completion_claim_allowed"] is False

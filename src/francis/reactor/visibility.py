@@ -155,6 +155,8 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
     external_deliveries = list_external_escalation_deliveries(limit=5000)
     delivery_processor_readiness = list_external_escalation_delivery_processor_readiness(limit=5000)
     delivery_sender_readiness = list_external_escalation_delivery_sender_readiness(limit=5000)
+    reflection_counts = _safe_count_map(status.get("reflection_counts"))
+    reflection_outcome_counts = _safe_count_map(status.get("reflection_outcome_counts"))
     bounded_plan_traces = [
         trace
         for event in list_events(limit=5000, receipt_kind="reactor.bounded_plan.receipt")
@@ -235,6 +237,7 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
         "bounded_plan_dispatch_linked_total": len(linked_bounded_plan_traces),
         "bounded_plan_dispatch_pending_total": len(pending_bounded_plan_traces),
         "bounded_plan_dispatch_unlinked_total": len(unlinked_bounded_plan_traces),
+        "reflection_receipt_total": sum(reflection_counts.values()),
         "supported_external_sender_adapters": supported_external_sender_adapters,
         "supported_external_sender_adapter_total": len(supported_external_sender_adapters),
         "external_sender_required_fields": external_sender_required_fields,
@@ -269,6 +272,8 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             "dispatch_engine_boundary_action": _list_presence_counts(dispatch_engine_boundary_actions),
             "verification": _safe_count_map(status.get("verification_counts")),
             "verification_outcome": _safe_count_map(status.get("verification_outcome_counts")),
+            "reflection": reflection_counts,
+            "reflection_outcome": reflection_outcome_counts,
             "stable_return": _safe_count_map(status.get("stable_return_counts")),
             "bounded_plan_trace": _count_by(bounded_plan_traces, "trace_status"),
             "deadletter_candidate": _safe_count_map(status.get("deadletter_candidate_counts")),
@@ -335,6 +340,7 @@ def reactor_operator_visibility_summary(*, limit: int = 10) -> dict[str, Any]:
             ),
             "bounded_plan_events": "/reactor/events/list?receipt_kind=reactor.bounded_plan.receipt",
             "bounded_plan_dispatch_traces": ("/reactor/events/list?receipt_kind=reactor.dispatch_attempt.receipt"),
+            "reflection_receipts": "/reactor/events/list?receipt_kind=reactor.reflection.receipt",
             "retry_schedules": "/reactor/retries/list",
         },
         "external_delivery_sender_contract": delivery_sender_contract,

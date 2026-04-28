@@ -10780,6 +10780,30 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+As of `2026-04-28`, Reactor operator visibility now projects reflection receipt
+readback from `/reactor/status` into `GET /reactor/operator_visibility/summary`.
+The summary reports `reflection_receipt_total`, reflection status counts,
+reflection outcome counts, and the route-filterable reflection receipt readback
+surface `/reactor/events/list?receipt_kind=reactor.reflection.receipt`. This is
+backend readback-only and grants no execution, dispatch, approval, retry,
+memory-write, promotion, escalation, external-delivery, or UI authority.
+
+Latest targeted validation for the `2026-04-28` Reactor reflection operator
+visibility slice:
+
+- `python -m pytest tests\unit\test_reactor_operator_visibility.py::test_reactor_operator_visibility_summary_aggregates_readbacks_without_authority tests\test_api_reactor_visibility.py::test_reactor_operator_visibility_summary_route_is_read_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_reactor_visibility.py tests\unit\test_reactor_operator_visibility.py tests\unit\test_reactor_visibility.py tests\test_api_reactor.py tests\unit\test_reactor_event_queue.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\reactor\visibility.py tests\unit\test_reactor_operator_visibility.py tests\test_api_reactor_visibility.py`
+  Result: `passed`
+- `python -m mypy src\francis\reactor\visibility.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -10854,7 +10878,7 @@ These remain true and should block any "finished" claim:
   projects completed `forge_proposal` Reactor inspections through a dedicated
   list route with proposal, plugin, quality-ready, and review-status filters.
   Backend operator visibility summary now aggregates status, review queue,
-  dispatch execution, verification/stable-return, blocker/approval,
+  dispatch execution, verification/reflection/stable-return, blocker/approval,
   retry/deadletter, recovery receipt, proposal-review history, external
   delivery/readiness, and stable route-link readbacks through
   `/reactor/operator_visibility/summary` without new authority, and the chat UI
