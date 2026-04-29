@@ -4,7 +4,10 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(2, 30)]
-  [int]$ForegroundRunSeconds = 2
+  [int]$ForegroundRunSeconds = 2,
+
+  [ValidateRange(2, 30)]
+  [int]$HostLaunchRunSeconds = 3
 )
 
 Set-StrictMode -Version 2
@@ -150,12 +153,15 @@ function Get-CheckById {
 $PowerShellPath = Get-PowerShellPath
 $HostPreflightPath = Join-Path $PSScriptRoot 'lens-host-preflight.ps1'
 $ForegroundProofPath = Join-Path $PSScriptRoot 'lens-host-foreground-proof.ps1'
+$HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $ObservedForegroundRunSeconds = [Math]::Max($ForegroundRunSeconds, 5)
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
 $ForegroundProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ForegroundProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$ObservedForegroundRunSeconds)
+$HostLaunchProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds)
 
 $PreflightPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
 $ForegroundPayload = Get-PropertyValue -Payload $ForegroundProof -Name 'payload'
+$HostLaunchPayload = Get-PropertyValue -Payload $HostLaunchProof -Name 'payload'
 $ServicePlan = Get-PropertyValue -Payload $PreflightPayload -Name 'service_plan'
 $Service = Get-PropertyValue -Payload $PreflightPayload -Name 'service'
 $PreflightGovernance = Get-PropertyValue -Payload $PreflightPayload -Name 'governance'
@@ -173,6 +179,15 @@ $ForegroundProofOk = (
   [int](Get-PropertyValue -Payload $ForegroundProof -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $ForegroundPayload -Name 'kind' -Default '') -eq 'lens.host.foreground_readiness_proof' -and
   [string](Get-PropertyValue -Payload $ForegroundPayload -Name 'status' -Default '') -eq 'proof_passed'
+)
+$HostLaunchProofOk = (
+  [int](Get-PropertyValue -Payload $HostLaunchProof -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'kind' -Default '') -eq 'lens.host.launch_readiness_proof' -and
+  [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_authority_boundary' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $ServicePlanBlocked = (
   [string](Get-PropertyValue -Payload $ServicePlan -Name 'status' -Default '') -eq 'blocked' -and
@@ -195,20 +210,22 @@ $NoInstallAuthority = (
 $Checks = @(
   (New-Check -Id 'host_lifecycle_preflight' -Status $(if ($PreflightOk) { 'blocked_readback_ready' } else { 'failed' }) -Passed $PreflightOk -Evidence 'scripts/lens-host-preflight.ps1 -Mode Status' -Reason 'Lifecycle preflight must be readable and blocked.')
   (New-Check -Id 'foreground_readiness_proof' -Status $(if ($ForegroundProofOk) { 'proof_passed' } else { 'failed' }) -Passed $ForegroundProofOk -Evidence 'scripts/lens-host-foreground-proof.ps1 -Mode Status' -Reason 'Bounded foreground process readback must be observable.')
+  (New-Check -Id 'bounded_launch_proof' -Status $(if ($HostLaunchProofOk) { 'bounded_launch_observed' } else { 'failed' }) -Passed $HostLaunchProofOk -Evidence 'scripts/lens-host-launch-proof.ps1 -Mode Status' -Reason 'Bounded launch evidence must show one observed self-stopping host launch without claiming resident supervision.')
   (New-Check -Id 'service_plan_no_install' -Status $(if ($ServicePlanBlocked) { 'blocked_no_install' } else { 'failed' }) -Passed $ServicePlanBlocked -Evidence 'service_plan' -Reason 'Service plan must remain read-only and non-installing.')
   (New-Check -Id 'service_not_installed' -Status $(if ($ServiceNotInstalled) { 'not_installed' } else { 'installed' }) -Passed $ServiceNotInstalled -Evidence 'service.status' -Reason 'Resident host service is not installed by this proof.')
   (New-Check -Id 'process_supervision_disabled' -Status $(if ($SupervisionDisabled) { 'blocked' } else { 'unexpected' }) -Passed $SupervisionDisabled -Evidence 'process_supervision_enabled' -Reason 'Process supervision remains disabled until a later authority-changing slice.')
   (New-Check -Id 'service_control_denied' -Status $(if ($ServiceControlDenied) { 'blocked' } else { 'unexpected' }) -Passed $ServiceControlDenied -Evidence 'service_control_authority' -Reason 'Service start/stop/restart authority remains denied.')
-  (New-Check -Id 'install_authority_denied' -Status $(if ($NoInstallAuthority) { 'blocked' } else { 'unexpected' }) -Passed $NoInstallAuthority -Evidence 'service_install_authority' -Reason 'Service install and local process launch authority remain denied.')
+  (New-Check -Id 'install_authority_denied' -Status $(if ($NoInstallAuthority) { 'blocked' } else { 'unexpected' }) -Passed $NoInstallAuthority -Evidence 'service_install_authority' -Reason 'Service install and service-plan launch authority remain denied.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 $PreflightBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PreflightPayload -Name 'blockers' -Default @())
 $ForegroundBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ForegroundPayload -Name 'blockers' -Default @())
-$AllBlockers = @($PreflightBlockers + $ForegroundBlockers + @(
-    'resident_supervision_disabled',
-    'resident_surface_missing',
-    'operator_experience_proof_missing'
+$HostLaunchBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
+$AllBlockers = @($PreflightBlockers + $ForegroundBlockers + $HostLaunchBlockers + @(
+  'resident_host_process_not_supervised',
+  'resident_supervision_disabled',
+  'resident_surface_missing'
   ) | Sort-Object -Unique)
 
 $Payload = [ordered]@{
@@ -219,9 +236,11 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   foreground_run_seconds = $ObservedForegroundRunSeconds
   requested_foreground_run_seconds = $ForegroundRunSeconds
+  host_launch_run_seconds = $HostLaunchRunSeconds
   supervision_ready = $false
   ready_for_resident_claim = $false
   resident_claim_allowed = $false
+  bounded_host_launch_observed = $HostLaunchProofOk
   resident_host_process = $false
   service_installed = $false
   supervised = $false
@@ -238,6 +257,11 @@ $Payload = [ordered]@{
     foreground_process_observed = [bool](Get-PropertyValue -Payload $ForegroundPayload -Name 'foreground_process_observed' -Default $false)
     foreground_status_readback_matched = [bool](Get-PropertyValue -Payload $ForegroundPayload -Name 'foreground_status_readback_matched' -Default $false)
     foreground_completed = [bool](Get-PropertyValue -Payload $ForegroundPayload -Name 'foreground_completed' -Default $false)
+    host_launch_proof_status = [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'status' -Default '')
+    bounded_host_launch_observed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false)
+    host_launch_completed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false)
+    host_launch_authority_boundary = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_authority_boundary' -Default $false)
+    host_launch_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
     service_plan_status = [string](Get-PropertyValue -Payload $ServicePlan -Name 'status' -Default '')
     service_plan_ready = [bool](Get-PropertyValue -Payload $ServicePlan -Name 'ready' -Default $false)
     service_plan_would_install = [bool](Get-PropertyValue -Payload $ServicePlan -Name 'would_install' -Default $false)
@@ -247,11 +271,13 @@ $Payload = [ordered]@{
     process_supervision_status = [string](Get-PropertyValue -Payload $ProcessSupervisionCheck -Name 'status' -Default '')
     service_control_status = [string](Get-PropertyValue -Payload $ServiceControlCheck -Name 'status' -Default '')
   }
-  next_smallest_truthful_gap = 'resident_surface_or_tray_presence_readiness_proof'
+  next_smallest_truthful_gap = 'resident_host_supervision_or_resident_overlay_runtime'
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     bounded_foreground_session = $true
+    bounded_host_launch = $HostLaunchProofOk
+    bounded_process_launch = $HostLaunchProofOk
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false
@@ -261,7 +287,7 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = $false
+    local_process_launch_authority = $HostLaunchProofOk
     api_local_process_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
