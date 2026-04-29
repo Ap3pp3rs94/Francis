@@ -202,6 +202,7 @@ $HudCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'hud
 $HostCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_runtime'
 $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_activation_plan'
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
+$RuntimePolicyCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_policy_contract'
 $RuntimeBoundaryCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_boundary'
 $PilotIndicator = Get-PropertyValue -Payload $LensStatus -Name 'pilot_indicator'
 
@@ -228,6 +229,21 @@ $RuntimeGrantObserved = (
   $RuntimeGrantStatus -ne 'missing' -and
   -not $RuntimeGrantReady -and
   $RuntimeGrantBlockers -contains 'resident_runtime_authority_grant_not_implemented'
+)
+$RuntimePolicyStatus = [string](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'status' -Default 'missing')
+$RuntimePolicyReady = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'ready' -Default $false)
+$RuntimePolicyContractReady = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'policy_contract_ready' -Default $false)
+$RuntimePolicyGrantReady = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'grant_ready' -Default $false)
+$RuntimePolicyRuntimeReady = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'runtime_ready' -Default $false)
+$RuntimePolicyResidentClaimAllowed = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'resident_claim_allowed' -Default $false)
+$RuntimePolicyEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'evidence' -Default @())
+$RuntimePolicyBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'blockers' -Default @())
+$RuntimePolicyObserved = (
+  $RuntimePolicyStatus -eq 'readback_ready' -and
+  $RuntimePolicyReady -and
+  $RuntimePolicyContractReady -and
+  -not $RuntimePolicyGrantReady -and
+  $RuntimePolicyBlockers -contains 'resident_runtime_execution_authority_not_granted'
 )
 $RuntimeBoundaryStatus = [string](Get-PropertyValue -Payload $RuntimeBoundaryCriterion -Name 'status' -Default 'missing')
 $RuntimeBoundaryApplied = [bool](Get-PropertyValue -Payload $RuntimeBoundaryCriterion -Name 'applied' -Default $true)
@@ -383,7 +399,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
 }
 
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -442,7 +458,7 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-runtime/preflight', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
       -Blockers $SystemResidentBlockers `
       -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
@@ -523,6 +539,32 @@ $Payload = [ordered]@{
     receipt_write_authority = $false
     resident_claim_authority = $false
     blockers = $RuntimeGrantBlockers
+  }
+  resident_runtime_execution_policy_contract = [ordered]@{
+    status = $RuntimePolicyStatus
+    ok = $RuntimePolicyObserved
+    evidence = $RuntimePolicyEvidence
+    ready = $RuntimePolicyReady
+    policy_contract_ready = $RuntimePolicyContractReady
+    execution_policy_ready = [bool](Get-PropertyValue -Payload $RuntimePolicyCriterion -Name 'execution_policy_ready' -Default $false)
+    grant_ready = $RuntimePolicyGrantReady
+    authority_grant_ready = $RuntimePolicyGrantReady
+    runtime_ready = $RuntimePolicyRuntimeReady
+    resident_claim_allowed = $RuntimePolicyResidentClaimAllowed
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $RuntimePolicyBlockers
   }
   resident_runtime_activation_plan = [ordered]@{
     status = $RuntimePlanStatus
@@ -635,7 +677,7 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved) { 'supervised_resident_host_runtime_execution_authority_grant_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -647,6 +689,7 @@ $Payload = [ordered]@{
     resident_overlay_activation_boundary_observed = $ResidentOverlayActivationBoundaryProofPassed
     resident_runtime_authority_boundary_observed = $RuntimeBoundaryObserved
     resident_runtime_authority_grant_preflight_observed = $RuntimeGrantObserved
+    resident_runtime_execution_policy_contract_observed = $RuntimePolicyObserved
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

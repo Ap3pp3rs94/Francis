@@ -13031,6 +13031,53 @@ grant preflight:
 - `git diff --check`
   Result: `passed with PowerShell LF-to-CRLF working-copy warnings only`
 
+### 2026-04-29 - Stage 6/Lens resident runtime execution policy contract
+
+Stage 6/Lens now has a read-only resident-runtime execution policy contract at
+`/lens/resident-runtime/policy`. The contract is deny-by-default and composes
+the resident runtime grant preflight before any future execution authority can
+be considered. It names the required exact Lens activation approval,
+`system.write` actor scope, operator posture, supervision, summon, tray, hotkey,
+overlay, receipt, and resident-claim requirements while reporting
+`policy_contract_ready: true`, `execution_policy_ready: true`,
+`grant_ready: false`, `authority_grant_ready: false`, `runtime_ready: false`,
+and `resident_claim_allowed: false`.
+
+`/lens/status`, `/lens/host`, `/lens/resident-runtime/plan`, and
+`/lens/resident-surface/activation` now embed or link the same policy contract.
+Stage 6 readiness now includes `resident_runtime_execution_policy_contract`,
+and the Stage 6 checkpoint reports
+`resident_runtime_execution_policy_contract_observed: true`. Because the
+authority boundary, grant preflight, and policy contract are now observable, the
+checkpoint's next smallest truthful gap moves from
+`supervised_resident_host_runtime_execution_policy_contract` to
+`supervised_resident_host_runtime_execution_authority_grant_boundary`.
+
+This is backend API/readback, readiness, checkpoint, and test work only. It
+does not grant resident runtime execution authority. It does not launch a Lens
+host, supervise or restart a process, install/start/control a service, register
+tray presence, register or bind a hotkey, open or control an overlay, capture
+screen content, write memory, write runtime receipts, decide approvals, claim
+resident status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident runtime
+execution policy contract:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `failed before formatting, passed after formatting tests\test_lens_stage6_checkpoint_script.py and tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell LF-to-CRLF working-copy warnings only`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13086,7 +13133,9 @@ These remain true and should block any "finished" claim:
   runtime receipts, and resident claims denied, plus a direct
   `/lens/resident-runtime/preflight` grant preflight that makes the approval,
   actor, posture, supervision, summon, tray, overlay, receipt, and resident-claim
-  blockers explicit before the next policy-contract slice,
+  blockers explicit, plus a direct `/lens/resident-runtime/policy` execution
+  policy contract that defines the deny-by-default requirements before any
+  future resident runtime authority grant boundary,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

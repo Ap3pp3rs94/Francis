@@ -17,6 +17,7 @@ from francis.lens import (
     lens_host_supervision_gate,
     lens_overlay_enablement_gate,
     lens_preflight,
+    lens_resident_runtime_execution_policy_contract,
     lens_resident_runtime_activation_preflight,
     lens_resident_runtime_activation_plan,
     lens_resident_surface_activation_boundary,
@@ -115,6 +116,11 @@ def host_activation_plan(approval_id: str = "", actor: str = "") -> dict[str, An
 @router.get("/resident-runtime/preflight")
 def resident_runtime_preflight(approval_id: str = "", actor: str = "") -> dict[str, Any]:
     return lens_resident_runtime_activation_preflight(approval_id=approval_id, actor=actor)
+
+
+@router.get("/resident-runtime/policy")
+def resident_runtime_policy(approval_id: str = "", actor: str = "") -> dict[str, Any]:
+    return lens_resident_runtime_execution_policy_contract(approval_id=approval_id, actor=actor)
 
 
 @router.get("/resident-runtime/plan")
