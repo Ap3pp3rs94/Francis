@@ -11958,6 +11958,34 @@ denial receipt readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens activation denial receipt UI readback
+
+The chat UI Lens readback surface now preserves and renders Lens host activation
+denial receipt evidence from the existing `/lens/status` response. The typed
+Lens client parses `resident_host.activation_denial_receipts`, the
+`/lens/host/activation/denials` route handle, latest receipt id, receipt total,
+receipt blockers, execution no-launch flags, and no-authority governance fields.
+The System/ORB Lens Readback panel now includes a compact host-activation-denials
+card with the denial receipt count, readback status, latest receipt id, and
+readback route.
+
+This is UI/readback-only. It does not call execute routes, create approval
+requests, decide approvals, launch a Lens host process, install/start/control
+services, bind hotkeys, open overlays, write memory, add backend routes, add
+promotion or execution authority, or infer readiness client-side.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens activation denial
+receipt UI readback:
+
+- `node --test --experimental-strip-types src\lens\index.test.ts`
+  Result: `passed`
+- `npm run test`
+  Result: `passed`
+- `npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11978,7 +12006,8 @@ These remain true and should block any "finished" claim:
   preflight baseline plus API preflight readback, and a governed host activation
   approval-request boundary plus read-only activation approval-state readback
   plus read-only activation execution preflight, execution-plan, and
-  execution-denial gates plus durable denial receipt readback, but no OS-wide
+  execution-denial gates plus durable denial receipt readback and chat UI
+  readback of denial receipt totals/latest receipt handles, but no OS-wide
   summon, resident host process, installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly

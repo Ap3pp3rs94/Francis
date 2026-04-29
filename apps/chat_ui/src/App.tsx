@@ -4460,6 +4460,15 @@ function SystemPanel(props: {
   const lensObserverIncidents = safeNumber(lensIncidents?.observer_counts.active, 0);
   const lensReactorReview = safeNumber(lensIncidents?.reactor_review_queue_total, 0);
   const lensMemoryReceipts = safeNumber(lensMissionFeed?.memory_receipt_count, 0);
+  const lensResidentHost = lensStatus?.resident_host;
+  const lensActivationDenialReceipts = lensResidentHost?.activation_denial_receipts;
+  const lensActivationDenialReceiptTotal = safeNumber(lensActivationDenialReceipts?.total, 0);
+  const lensLatestActivationDenialReceipt = lensActivationDenialReceipts?.latest;
+  const lensLatestActivationDenialReceiptId = safeString(lensLatestActivationDenialReceipt?.receipt_id).trim();
+  const lensActivationDenialReceiptRoute =
+    safeString(lensActivationDenialReceipts?.route).trim() ||
+    safeString(lensResidentHost?.activation_denial_receipts_route).trim() ||
+    safeString(lensStatus?.receipts.lens_host_activation_denials_route).trim();
   const lensClaim = safeString(lensStage6Readiness?.claim).trim();
   const lensSummonCriterion = lensStage6Criteria.find((criterion) => safeString(criterion.id).trim() === "summon_anywhere");
   const lensSummonStatus =
@@ -5485,6 +5494,28 @@ function SystemPanel(props: {
               <span style={badgeStyle(lensReactorReview > 0 ? "attention" : "clear")}>reactor {lensReactorReview}</span>
               <span style={badgeStyle(lensMemoryReceipts > 0 ? "memory" : "clear")}>receipts {lensMemoryReceipts}</span>
             </div>
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Host activation denials</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle(lensActivationDenialReceiptTotal > 0 ? "attention" : "clear")}>
+                receipts {lensActivationDenialReceiptTotal}
+              </span>
+              <span style={badgeStyle(lensActivationDenialReceipts?.status || "empty")}>
+                {lensActivationDenialReceipts?.status || "empty"}
+              </span>
+            </div>
+            {lensLatestActivationDenialReceiptId ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                latest <code>{lensLatestActivationDenialReceiptId}</code>
+              </div>
+            ) : null}
+            {lensActivationDenialReceiptRoute ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                route <code>{lensActivationDenialReceiptRoute}</code>
+              </div>
+            ) : null}
           </div>
 
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>

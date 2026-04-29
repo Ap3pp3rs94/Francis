@@ -217,9 +217,91 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
         message: "Pilot is not active; indicator is available as read-only groundwork.",
         route: "/system/operator_mode",
       },
+      resident_host: {
+        route: "/lens/host",
+        status: "not_implemented",
+        contract_status: "readback_ready",
+        availability: "backend_readback_only",
+        activation_denial_receipts_route: "/lens/host/activation/denials",
+        activation_denial_receipts: {
+          ok: true,
+          kind: "lens.host.activation.denial_receipts",
+          status: "readback_ready",
+          route: "/lens/host/activation/denials",
+          execute_route: "/lens/host/activation/execute",
+          limit: "6",
+          approval_id: "",
+          filter_status: "",
+          total: "1",
+          latest: {
+            kind: "lens.host.activation.denial.receipt",
+            receipt_id: "lad_1770001000_alpha",
+            id: "lad_1770001000_alpha",
+            status: "denied_no_execution_authority",
+            route: "/lens/host/activation/execute",
+            method: "POST",
+            source_kind: "lens.host.activation.execution_denial",
+            source_route: "/lens/host/activation/execute",
+            approval_id: "appr_lens_alpha",
+            actor: "chat_ui.lens",
+            reason: "operator asked to prove launch stays blocked",
+            created_ts: "1770001000",
+            blockers: ["local_process_launch_authority_not_granted"],
+            approval: { approved: true, status: "approved" },
+            permission: { ready: true, allowed: true, required_scope: "system.write" },
+            execution: {
+              applied: false,
+              executed: false,
+              would_launch_process: false,
+              would_write_memory: false,
+            },
+            denial: {
+              reason: "local_process_launch_authority_not_granted",
+              would_launch_process: false,
+              denial_receipt_written: true,
+            },
+            governance: {
+              gate: "lens_host_activation_denial_receipt",
+              execution_authority: false,
+              approval_decision_authority: false,
+              local_process_launch_authority: false,
+              memory_write: false,
+              denial_receipt_write_authority: true,
+            },
+          },
+          items: [
+            {
+              receipt_id: "lad_1770001000_alpha",
+              status: "denied_no_execution_authority",
+              route: "/lens/host/activation/execute",
+              approval_id: "appr_lens_alpha",
+              created_ts: "1770001000",
+              blockers: ["local_process_launch_authority_not_granted"],
+              approval: { approved: true },
+              permission: { ready: true },
+              execution: { applied: false, executed: false, would_launch_process: false, would_write_memory: false },
+              denial: { reason: "local_process_launch_authority_not_granted" },
+              governance: {
+                execution_authority: false,
+                approval_decision_authority: false,
+                local_process_launch_authority: false,
+                memory_write: false,
+              },
+            },
+          ],
+          governance: {
+            gate: "lens_host_activation_denial_receipts_readback",
+            read_only_contract: true,
+            execution_authority: false,
+            approval_decision_authority: false,
+            memory_write: false,
+          },
+        },
+      },
       receipts: {
         status: "readback_ready",
         continuity_ledger_route: "/continuity/ledger",
+        lens_host_activation_denials_route: "/lens/host/activation/denials",
       },
       stage6_readiness: {
         stage: "Stage 6 / Lens MVP",
@@ -243,6 +325,17 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             status: "readback_ready",
             evidence: ["/approvals/list?status=pending", "/lens/status"],
             pending_count: "2",
+          },
+          {
+            id: "host_activation_denial_receipt_readback",
+            status: "readback_ready",
+            evidence: ["/lens/host/activation/denials", "/lens/host/activation/execute", "/lens/status"],
+            receipt_count: "1",
+            latest_receipt_id: "lad_1770001000_alpha",
+            execution_authority: false,
+            approval_decision_authority: false,
+            local_process_launch_authority: false,
+            memory_write: false,
           },
           {
             id: "summon_anywhere",
@@ -313,6 +406,18 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.mission_feed.counts.active, 1);
     assert.equal(snapshot.mission_feed.memory_receipt_count, 3);
     assert.equal(snapshot.pilot_indicator.active, false);
+    assert.equal(snapshot.resident_host.activation_denial_receipts_route, "/lens/host/activation/denials");
+    assert.equal(snapshot.resident_host.activation_denial_receipts.total, 1);
+    assert.equal(snapshot.resident_host.activation_denial_receipts.latest?.receipt_id, "lad_1770001000_alpha");
+    assert.equal(snapshot.resident_host.activation_denial_receipts.latest?.approval_id, "appr_lens_alpha");
+    assert.equal(snapshot.resident_host.activation_denial_receipts.latest?.created_ts, 1770001000);
+    assert.equal(
+      snapshot.resident_host.activation_denial_receipts.latest?.blockers[0],
+      "local_process_launch_authority_not_granted",
+    );
+    assert.equal(snapshot.resident_host.activation_denial_receipts.latest?.execution.would_launch_process, false);
+    assert.equal(snapshot.resident_host.activation_denial_receipts.latest?.governance.execution_authority, false);
+    assert.equal(snapshot.receipts.lens_host_activation_denials_route, "/lens/host/activation/denials");
     assert.equal(snapshot.governance.execution_authority, false);
     assert.equal(snapshot.governance.approval_decision_authority, false);
     assert.equal(snapshot.governance.overlay_control_authority, false);
@@ -324,8 +429,12 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.stage6_readiness.criteria[1]?.id, "command_palette_commands");
     assert.equal(snapshot.stage6_readiness.criteria[1]?.status, "readback_ready");
     assert.equal(snapshot.stage6_readiness.criteria[2]?.pending_count, 2);
-    assert.equal(snapshot.stage6_readiness.criteria[3]?.id, "summon_anywhere");
-    assert.equal(snapshot.stage6_readiness.criteria[3]?.status, "not_implemented");
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.id, "host_activation_denial_receipt_readback");
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.receipt_count, 1);
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.latest_receipt_id, "lad_1770001000_alpha");
+    assert.equal(snapshot.stage6_readiness.criteria[3]?.execution_authority, false);
+    assert.equal(snapshot.stage6_readiness.criteria[4]?.id, "summon_anywhere");
+    assert.equal(snapshot.stage6_readiness.criteria[4]?.status, "not_implemented");
   } finally {
     restoreFetch();
   }

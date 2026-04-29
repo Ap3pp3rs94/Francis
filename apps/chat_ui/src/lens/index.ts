@@ -120,17 +120,68 @@ export type LensPilotIndicator = {
   route?: string;
 };
 
+export type LensActivationDenialReceipt = {
+  kind?: string;
+  receipt_id?: string;
+  id?: string;
+  status?: string;
+  route?: string;
+  method?: string;
+  source_kind?: string;
+  source_route?: string;
+  approval_id?: string;
+  actor?: string;
+  reason?: string;
+  created_ts?: number;
+  blockers: string[];
+  approval: Record<string, unknown>;
+  permission: Record<string, unknown>;
+  execution: Record<string, unknown>;
+  denial: Record<string, unknown>;
+  governance: Record<string, unknown>;
+};
+
+export type LensActivationDenialReceipts = {
+  ok: boolean;
+  kind?: string;
+  status?: string;
+  route?: string;
+  execute_route?: string;
+  limit: number;
+  approval_id?: string;
+  filter_status?: string;
+  total: number;
+  latest?: LensActivationDenialReceipt;
+  items: LensActivationDenialReceipt[];
+  governance: Record<string, unknown>;
+};
+
+export type LensResidentHost = {
+  route?: string;
+  status?: string;
+  contract_status?: string;
+  availability?: string;
+  activation_denial_receipts_route?: string;
+  activation_denial_receipts: LensActivationDenialReceipts;
+};
+
 export type LensStage6Criterion = {
   id?: string;
   status?: string;
   evidence: string[];
   command_count?: number;
   pending_count?: number;
+  receipt_count?: number;
+  latest_receipt_id?: string;
   observer_active_count?: number;
   reactor_review_queue_total?: number;
   mission_counts?: Record<string, number>;
   reactor_readback_surfaces?: Record<string, string>;
   resident_overlay?: boolean;
+  execution_authority?: boolean;
+  approval_decision_authority?: boolean;
+  local_process_launch_authority?: boolean;
+  memory_write?: boolean;
   blockers: string[];
 };
 
@@ -162,6 +213,7 @@ export type LensStatus = {
   available_modes: LensModeOption[];
   scope: Record<string, unknown>;
   hud: LensHud;
+  resident_host: LensResidentHost;
   command_palette: LensCommandPalette;
   mode_selector: LensModeSelector;
   approvals_view: LensApprovalView;
@@ -441,6 +493,68 @@ function parsePilotIndicator(value: unknown): LensPilotIndicator {
   };
 }
 
+function parseActivationDenialReceipt(value: unknown): LensActivationDenialReceipt | null {
+  if (!isRecord(value)) return null;
+  const receiptId = safeString(value.receipt_id).trim() || safeString(value.id).trim();
+  const status = safeString(value.status).trim();
+  if (!receiptId && !status) return null;
+  return {
+    kind: safeString(value.kind).trim() || undefined,
+    receipt_id: receiptId || undefined,
+    id: safeString(value.id).trim() || receiptId || undefined,
+    status: status || undefined,
+    route: safeString(value.route).trim() || undefined,
+    method: safeString(value.method).trim() || undefined,
+    source_kind: safeString(value.source_kind).trim() || undefined,
+    source_route: safeString(value.source_route).trim() || undefined,
+    approval_id: safeString(value.approval_id).trim() || undefined,
+    actor: safeString(value.actor).trim() || undefined,
+    reason: safeString(value.reason).trim() || undefined,
+    created_ts: safeOptionalNumber(value.created_ts),
+    blockers: safeStringList(value.blockers),
+    approval: safeRecord(value.approval),
+    permission: safeRecord(value.permission),
+    execution: safeRecord(value.execution),
+    denial: safeRecord(value.denial),
+    governance: safeRecord(value.governance),
+  };
+}
+
+function parseActivationDenialReceipts(value: unknown): LensActivationDenialReceipts {
+  const raw = safeRecord(value);
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map(parseActivationDenialReceipt)
+        .filter((item): item is LensActivationDenialReceipt => item !== null)
+    : [];
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind).trim(),
+    status: safeString(raw.status).trim(),
+    route: safeString(raw.route).trim(),
+    execute_route: safeString(raw.execute_route).trim(),
+    limit: safeNumber(raw.limit, 0),
+    approval_id: safeString(raw.approval_id).trim(),
+    filter_status: safeString(raw.filter_status).trim(),
+    total: safeNumber(raw.total, items.length),
+    latest: parseActivationDenialReceipt(raw.latest) ?? items[0],
+    items,
+    governance: safeRecord(raw.governance),
+  };
+}
+
+function parseResidentHost(value: unknown): LensResidentHost {
+  const raw = safeRecord(value);
+  return {
+    route: safeString(raw.route).trim(),
+    status: safeString(raw.status).trim(),
+    contract_status: safeString(raw.contract_status).trim(),
+    availability: safeString(raw.availability).trim(),
+    activation_denial_receipts_route: safeString(raw.activation_denial_receipts_route).trim(),
+    activation_denial_receipts: parseActivationDenialReceipts(raw.activation_denial_receipts),
+  };
+}
+
 function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
   if (!isRecord(value)) return null;
   const id = safeString(value.id).trim();
@@ -451,12 +565,25 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
     evidence: safeStringList(value.evidence),
     command_count: safeOptionalNumber(value.command_count),
     pending_count: safeOptionalNumber(value.pending_count),
+    receipt_count: safeOptionalNumber(value.receipt_count),
+    latest_receipt_id: safeString(value.latest_receipt_id).trim() || undefined,
     observer_active_count: safeOptionalNumber(value.observer_active_count),
     reactor_review_queue_total: safeOptionalNumber(value.reactor_review_queue_total),
     mission_counts: parseNumberMap(value.mission_counts),
     reactor_readback_surfaces: parseStringMap(value.reactor_readback_surfaces),
     resident_overlay:
       typeof value.resident_overlay === "boolean" ? safeBoolean(value.resident_overlay, false) : undefined,
+    execution_authority:
+      typeof value.execution_authority === "boolean" ? safeBoolean(value.execution_authority, false) : undefined,
+    approval_decision_authority:
+      typeof value.approval_decision_authority === "boolean"
+        ? safeBoolean(value.approval_decision_authority, false)
+        : undefined,
+    local_process_launch_authority:
+      typeof value.local_process_launch_authority === "boolean"
+        ? safeBoolean(value.local_process_launch_authority, false)
+        : undefined,
+    memory_write: typeof value.memory_write === "boolean" ? safeBoolean(value.memory_write, false) : undefined,
     blockers: safeStringList(value.blockers),
   };
 }
@@ -500,6 +627,7 @@ export function parseLensStatus(value: unknown): LensStatus {
     available_modes: parseModeOptions(raw.available_modes),
     scope: safeRecord(raw.scope),
     hud: parseHud(raw.hud),
+    resident_host: parseResidentHost(raw.resident_host),
     command_palette: parseCommandPalette(raw.command_palette),
     mode_selector: parseModeSelector(raw.mode_selector),
     approvals_view: parseApprovalView(raw.approvals_view),
