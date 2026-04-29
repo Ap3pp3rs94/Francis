@@ -212,6 +212,7 @@ $PowerShellPath = Get-PowerShellPath
 $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
+$ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -282,7 +283,35 @@ $HostSupervisorProofPassed = (
   -not [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $HostSupervisorProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorPayload -Name 'blockers' -Default @())
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisorProofBlockers | Sort-Object -Unique)
+
+$ResidentOverlayRuntimeProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds))
+$ResidentOverlayRuntimeProof = if ($ResidentOverlayRuntimeProofResult.Count -gt 0) { $ResidentOverlayRuntimeProofResult[-1] } else { $null }
+$ResidentOverlayRuntimeExitCode = -1
+$ResidentOverlayRuntimePayload = $null
+if ($ResidentOverlayRuntimeProof -is [System.Collections.IDictionary]) {
+  if ($ResidentOverlayRuntimeProof.Contains('exit_code') -and $null -ne $ResidentOverlayRuntimeProof['exit_code']) {
+    $ResidentOverlayRuntimeExitCode = [int]$ResidentOverlayRuntimeProof['exit_code']
+  }
+  if ($ResidentOverlayRuntimeProof.Contains('payload') -and $null -ne $ResidentOverlayRuntimeProof['payload']) {
+    $ResidentOverlayRuntimePayload = $ResidentOverlayRuntimeProof['payload']
+  }
+}
+$ResidentOverlayRuntimeProofPassed = (
+  $ResidentOverlayRuntimeExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'kind' -Default '') -eq 'lens.resident_overlay_runtime.proof' -and
+  [string](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'bounded_supervisor_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'supervisor_observed_running_state' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'supervisor_observed_stopped_state' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_overlay_runtime_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'ready_for_lens_resident_claim' -Default $true)
+)
+$ResidentOverlayRuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'blockers' -Default @())
+if ($LiveOperatorProofPassed) {
+  $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
+}
+
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers | Sort-Object -Unique)
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -291,6 +320,8 @@ if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
 }
 $SystemResidentStatus = if ($HostStatus -eq 'ready') {
   'ready'
+} elseif ($ResidentOverlayRuntimeProofPassed) {
+  'resident_overlay_boundary_observed'
 } elseif ($HostSupervisorProofPassed) {
   'bounded_supervisor_observed'
 } elseif ($HostLaunchProofPassed) {
@@ -337,9 +368,9 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1') `
       -Blockers $SystemResidentBlockers `
-      -Basis $(if ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
+      -Basis $(if ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_['ready'] })
@@ -399,7 +430,22 @@ $Payload = [ordered]@{
     ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $false)
     blockers = $HostSupervisorProofBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  resident_overlay_runtime_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'status' -Default 'missing')
+    ok = $ResidentOverlayRuntimeProofPassed
+    exit_code = $ResidentOverlayRuntimeExitCode
+    evidence = @('scripts/lens-resident-surface-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1')
+    bounded_supervisor_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'bounded_supervisor_observed' -Default $false)
+    resident_overlay_runtime_ready = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_overlay_runtime_ready' -Default $false)
+    resident_overlay_runtime = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_overlay_runtime' -Default $false)
+    overlay_window = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'overlay_window' -Default $false)
+    tray_presence = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'tray_presence' -Default $false)
+    global_hotkey_bound = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'global_hotkey_bound' -Default $false)
+    summon_anywhere = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'summon_anywhere' -Default $false)
+    ready_for_lens_resident_claim = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'ready_for_lens_resident_claim' -Default $false)
+    blockers = $ResidentOverlayRuntimeBlockers
+  }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -407,6 +453,7 @@ $Payload = [ordered]@{
     temporary_api_process = $true
     bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
     bounded_supervisor_observation = $HostSupervisorProofPassed
+    resident_overlay_boundary_observed = $ResidentOverlayRuntimeProofPassed
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

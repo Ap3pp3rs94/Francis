@@ -12489,6 +12489,39 @@ runtime boundary proof:
 - `python -m ruff format --check --no-cache tests\test_lens_resident_overlay_runtime_proof_script.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens checkpoint consumes resident overlay boundary
+
+Stage 6/Lens completion checkpoint now consumes the resident overlay runtime
+boundary proof. `scripts/lens-stage6-checkpoint.ps1 -Mode Status` invokes
+`scripts/lens-resident-overlay-runtime-proof.ps1`, projects it into the
+`system_resident_presence` criterion, and advances that criterion's checkpoint
+status from `bounded_supervisor_observed` to
+`resident_overlay_boundary_observed`.
+
+The checkpoint now exposes a dedicated `resident_overlay_runtime_proof` block
+with `status: proof_passed`, `bounded_supervisor_observed: true`,
+`resident_overlay_runtime_ready: false`, `resident_overlay_runtime: false`,
+`overlay_window: false`, `tray_presence: false`, `global_hotkey_bound: false`,
+`summon_anywhere: false`, and `ready_for_lens_resident_claim: false`. The
+checkpoint remains `status: blocked`, `stage_state: active`, and
+`ready_to_close: false`, and its next smallest truthful gap is now
+`resident_overlay_activation_or_process_supervision_authority_boundary`.
+
+This is checkpoint/readback composition only. It does not change Lens API
+routes, UI surfaces, service configuration, host runner behavior, approval
+decisions, memory writes, process supervision, service control, tray
+registration, hotkey registration, overlay control, or summon-anywhere behavior.
+The checkpoint still performs bounded diagnostic local process launch through the
+existing proof chain and reports that distinction explicitly.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens checkpoint
+resident overlay boundary consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -HostLaunchRunSeconds 3 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
