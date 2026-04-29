@@ -17,6 +17,7 @@ from francis.lens import (
     lens_preflight,
     lens_resident_surface_activation_boundary,
     lens_status,
+    lens_summon_enablement_gate,
     request_lens_host_activation,
 )
 
@@ -44,6 +45,11 @@ def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
 @router.get("/preflight")
 def preflight() -> dict[str, Any]:
     return lens_preflight()
+
+
+@router.get("/summon")
+def summon() -> dict[str, Any]:
+    return lens_summon_enablement_gate()
 
 
 @router.get("/host")

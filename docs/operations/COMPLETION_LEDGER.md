@@ -12697,6 +12697,43 @@ enablement gate readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens summon enablement gate readback
+
+Stage 6/Lens now has a direct read-only summon enablement gate at `/lens/summon`.
+The route projects the existing Lens primitive preflight state for summon,
+resident host, tray, and overlay into one operator-facing gate for the future
+summon-anywhere path.
+
+The gate reports `kind: lens.summon.enablement_gate`, `status: blocked`,
+`ready: false`, `summon_anywhere: false`, `summon_binding_ready: false`,
+`resident_host_ready: false`, `tray_ready: false`, and `overlay_ready: false`.
+It preserves the declared `Ctrl+Alt+Space` hotkey intent and reports blockers
+including disabled global hotkey binding, missing resident host process, missing
+tray/overlay surfaces, missing summon binding, and missing summon/hotkey/overlay
+authority. The Lens status payload now embeds this gate under
+`summon_enablement_gate` and exposes a Stage 6 readiness criterion named
+`summon_enablement_gate` while keeping `summon_anywhere` itself
+`not_implemented`.
+
+This is backend/API readback only. It does not register a global hotkey, launch a
+resident host, open an overlay, create tray presence, grant summon authority, or
+claim OS-wide summon behavior. It does not grant execution authority,
+approval-decision authority, memory-write behavior, local-process-launch
+authority, hotkey-registration authority, tray-registration authority, overlay
+control authority, or any new UI control.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens summon enablement
+gate readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12732,6 +12769,9 @@ These remain true and should block any "finished" claim:
   proof that keeps supervision, restart, service install, and service start
   denied, plus a direct `/lens/host/supervision` read-only resident supervision
   enablement gate that projects the blockers required before a resident claim,
+  plus a direct `/lens/summon` read-only summon enablement gate that projects the
+  blockers required before global hotkey binding and summon-anywhere can be
+  truthfully claimed,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

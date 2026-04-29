@@ -86,6 +86,11 @@ def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _blockers(payload: dict[str, Any]) -> list[str]:
+    value = payload.get("blockers")
+    return _string_list(value)
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -609,4 +614,69 @@ def lens_preflight() -> dict[str, Any]:
             hotkey_registration_authority=False,
         ),
         "message": "Lens preflight API is read-only; host, summon, tray, and overlay lifecycle actions remain blocked.",
+    }
+
+
+def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+    lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
+    surfaces = _dict_value(lens_preflight_payload, "surfaces")
+    host = _dict_value(surfaces, "host")
+    summon = _dict_value(surfaces, "summon")
+    tray = _dict_value(surfaces, "tray")
+    overlay = _dict_value(surfaces, "overlay")
+    blocker_set = {
+        *_blockers(host),
+        *_blockers(summon),
+        *_blockers(tray),
+        *_blockers(overlay),
+    }
+    summon_ready = bool(summon.get("ready"))
+    resident_host_ready = bool(host.get("ready"))
+    tray_ready = bool(tray.get("ready"))
+    overlay_ready = bool(overlay.get("ready"))
+    ready = summon_ready and resident_host_ready and tray_ready and overlay_ready
+    return {
+        "ok": True,
+        "kind": "lens.summon.enablement_gate",
+        "status": "ready_for_operator_review" if ready else "blocked",
+        "route": "/lens/summon",
+        "preflight_route": "/lens/preflight",
+        "status_route": "/lens/status",
+        "host_route": "/lens/host",
+        "ready": ready,
+        "summon_anywhere": ready,
+        "summon_binding_ready": summon_ready,
+        "resident_host_ready": resident_host_ready,
+        "tray_ready": tray_ready,
+        "overlay_ready": overlay_ready,
+        "global_hotkey": _safe_str(summon.get("global_hotkey")),
+        "binding_scope": _safe_str(summon.get("binding_scope"), "global"),
+        "palette_route": _safe_str(summon.get("palette_route"), "/lens/status"),
+        "required_before_enable": _string_list(summon.get("required_before_enable")),
+        "blockers": sorted(blocker_set),
+        "summon_preflight": summon,
+        "surface_dependencies": {
+            "host": {
+                "status": _safe_str(host.get("status"), "missing"),
+                "ready": resident_host_ready,
+                "route": _safe_str(host.get("route"), "/lens/host"),
+                "blockers": _blockers(host),
+            },
+            "tray": {
+                "status": _safe_str(tray.get("status"), "missing"),
+                "ready": tray_ready,
+                "blockers": _blockers(tray),
+            },
+            "overlay": {
+                "status": _safe_str(overlay.get("status"), "missing"),
+                "ready": overlay_ready,
+                "blockers": _blockers(overlay),
+            },
+        },
+        "governance": _base_governance(
+            hotkey_registration_authority=False,
+            tray_registration_authority=False,
+            overlay_control_authority=False,
+        ),
+        "message": "Lens summon enablement is read-only; global hotkey binding and summon-anywhere remain blocked.",
     }
