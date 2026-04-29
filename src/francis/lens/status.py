@@ -22,7 +22,11 @@ from francis.lens.activation import (
     lens_resident_runtime_activation_plan,
     lens_resident_surface_activation_boundary,
 )
-from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
+from francis.lens.host_manifest import (
+    lens_host_launch_manifest,
+    lens_host_supervision_authority_preflight,
+    lens_host_supervision_gate,
+)
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -247,6 +251,7 @@ def _hud_runtime_surface() -> dict[str, Any]:
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any], limit: int = 5) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
+    supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
@@ -388,6 +393,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "launch_manifest": launch_manifest,
         "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
         "supervision_gate": supervision_gate,
+        "supervision_authority_preflight_route": _safe_str(supervision_authority_preflight.get("route")).strip(),
+        "supervision_authority_preflight": supervision_authority_preflight,
         "status_route": "/lens/status",
         "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
@@ -758,6 +765,7 @@ def _stage6_readiness(
     resident_runtime_authority_grant_readiness = _as_dict(
         resident_host.get("resident_runtime_authority_grant_readiness")
     )
+    supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
@@ -1137,6 +1145,40 @@ def _stage6_readiness(
                 "blockers": _as_list(_as_dict(resident_host.get("supervision_gate")).get("blockers")),
             },
             {
+                "id": "resident_host_supervision_authority_preflight",
+                "status": _safe_str(supervision_authority_preflight.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/host/supervision/authority",
+                    "/lens/host/supervision",
+                    "/lens/host/manifest",
+                    "/lens/status",
+                ],
+                "ready": bool(supervision_authority_preflight.get("ready")),
+                "preflight_ready": bool(supervision_authority_preflight.get("preflight_ready")),
+                "authority_ready": bool(supervision_authority_preflight.get("authority_ready")),
+                "resident_claim_allowed": bool(supervision_authority_preflight.get("resident_claim_allowed")),
+                "requirements_total": _safe_int(supervision_authority_preflight.get("requirements_total")),
+                "requirements_ready_total": _safe_int(supervision_authority_preflight.get("requirements_ready_total")),
+                "requirements_blocked_total": _safe_int(
+                    supervision_authority_preflight.get("requirements_blocked_total")
+                ),
+                "blocked_requirements": _as_list(supervision_authority_preflight.get("blocked_requirements")),
+                "blockers": _as_list(supervision_authority_preflight.get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "receipt_write_authority": False,
+                "resident_claim_authority": False,
+            },
+            {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
                 "evidence": ["/lens/summon", "/lens/host", "/lens/preflight", "/lens/status"],
@@ -1301,6 +1343,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "continuity_ledger_route": "/continuity/ledger",
             "reactor_operator_visibility_route": "/reactor/operator_visibility/summary",
             "lens_host_activation_denials_route": "/lens/host/activation/denials",
+            "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (
                 "/lens/resident-runtime/authority-grant/readiness"

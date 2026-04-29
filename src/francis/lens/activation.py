@@ -12,7 +12,11 @@ from francis.governance.approvals import list_requests, request as create_approv
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir
-from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
+from francis.lens.host_manifest import (
+    lens_host_launch_manifest,
+    lens_host_supervision_authority_preflight,
+    lens_host_supervision_gate,
+)
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -1114,6 +1118,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
     manifest = lens_host_launch_manifest()
     preflight = lens_preflight()
     supervision_gate = lens_host_supervision_gate(manifest=manifest)
+    supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=manifest)
     summon_gate = lens_summon_enablement_gate(preflight=preflight)
     tray_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_gate = lens_overlay_enablement_gate(preflight=preflight)
@@ -1138,6 +1143,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(supervision_gate.get("blockers")),
+            *_str_list(supervision_authority_preflight.get("blockers")),
             *_str_list(summon_gate.get("blockers")),
             *_str_list(tray_gate.get("blockers")),
             *_str_list(overlay_gate.get("blockers")),
@@ -1213,6 +1219,16 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             ready=bool(supervision_gate.get("ready")),
             status=supervision_gate.get("status"),
             blockers=supervision_gate.get("blockers"),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "resident_host_supervision_authority_preflight",
+            label="Resident host supervision authority preflight",
+            route="/lens/host/supervision/authority",
+            ready=bool(supervision_authority_preflight.get("ready")),
+            status=supervision_authority_preflight.get("status"),
+            blockers=supervision_authority_preflight.get("blockers"),
             authority_required="process_supervision_and_service_control",
             authority_granted=False,
         ),
@@ -1323,6 +1339,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             "plan_status": _safe_str(runtime_plan.get("status")).strip(),
             "execute_status": _safe_str(runtime_denial.get("status")).strip(),
             "supervision_status": _safe_str(supervision_gate.get("status")).strip(),
+            "supervision_authority_preflight_status": _safe_str(supervision_authority_preflight.get("status")).strip(),
             "summon_status": _safe_str(summon_gate.get("status")).strip(),
             "tray_status": _safe_str(tray_gate.get("status")).strip(),
             "overlay_status": _safe_str(overlay_gate.get("status")).strip(),

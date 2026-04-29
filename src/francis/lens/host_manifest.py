@@ -441,6 +441,145 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
     }
 
 
+def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
+    supervision_readiness = launch_manifest.get("supervision_readiness")
+    supervision_readiness = supervision_readiness if isinstance(supervision_readiness, dict) else {}
+    service_plan = launch_manifest.get("service_plan")
+    service_plan = service_plan if isinstance(service_plan, dict) else {}
+    process_readback = launch_manifest.get("process_readback")
+    process_readback = process_readback if isinstance(process_readback, dict) else {}
+    service_readback = launch_manifest.get("service_readback")
+    service_readback = service_readback if isinstance(service_readback, dict) else {}
+    prerequisites = supervision_readiness.get("prerequisites")
+    prerequisite_items = (
+        [item for item in prerequisites if isinstance(item, dict)] if isinstance(prerequisites, list) else []
+    )
+    authority_requirements = [
+        _readiness_item(
+            "process_supervision_authority",
+            label="Process supervision authority",
+            ready=False,
+            status="blocked",
+            reason="process_supervision_authority_not_granted",
+        ),
+        _readiness_item(
+            "process_restart_authority",
+            label="Process restart authority",
+            ready=False,
+            status="blocked",
+            reason="process_restart_authority_not_granted",
+        ),
+        _readiness_item(
+            "service_install_authority",
+            label="Service install authority",
+            ready=False,
+            status="blocked",
+            reason="service_install_authority_not_granted",
+        ),
+        _readiness_item(
+            "service_control_authority",
+            label="Service control authority",
+            ready=False,
+            status="blocked",
+            reason="service_control_authority_not_granted",
+        ),
+        _readiness_item(
+            "resident_claim_authority",
+            label="Resident claim authority",
+            ready=False,
+            status="blocked",
+            reason="resident_claim_authority_not_granted",
+        ),
+    ]
+    requirements = [
+        *prerequisite_items,
+        _readiness_item(
+            "service_plan_ready",
+            label="Service plan readiness",
+            ready=bool(service_plan.get("ready")),
+            status=str(service_plan.get("status") or "missing"),
+            reason=str(service_plan.get("blocked_reason") or ""),
+        ),
+        *authority_requirements,
+    ]
+    blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
+    blocker_reasons = [str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()]
+    blockers = sorted(
+        {
+            *_as_str_list(supervision_gate.get("blockers")),
+            *_as_str_list(service_plan.get("blocked_by")),
+            *blocker_reasons,
+            "resident_host_supervision_authority_not_granted",
+        }
+    )
+    return {
+        "ok": True,
+        "kind": "lens.host.supervision_authority.preflight",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority",
+        "host_route": "/lens/host",
+        "supervision_route": "/lens/host/supervision",
+        "manifest_route": "/lens/host/manifest",
+        "ready": False,
+        "preflight_ready": True,
+        "authority_ready": False,
+        "supervision_ready": bool(supervision_readiness.get("ready")),
+        "resident_claim_allowed": False,
+        "resident_host_process": bool(process_readback.get("process_alive")),
+        "resident_host_supervised": False,
+        "service_installed": bool(service_readback.get("installed")),
+        "service_managed": False,
+        "service_plan_ready": bool(service_plan.get("ready")),
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "requirements": requirements,
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(requirements) - len(blocked_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "blocked_requirements": blocked_requirements,
+        "blockers": blockers,
+        "source_readbacks": {
+            "manifest": {
+                "route": "/lens/host/manifest",
+                "status": str(launch_manifest.get("status") or ""),
+            },
+            "supervision_gate": {
+                "route": "/lens/host/supervision",
+                "status": str(supervision_gate.get("status") or ""),
+                "ready": bool(supervision_gate.get("ready")),
+            },
+            "service_plan": service_plan,
+            "process_readback": process_readback,
+            "service_readback": service_readback,
+            "supervision_readiness": supervision_readiness,
+        },
+        "governance": {
+            "read_only_contract": True,
+            "preflight_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "receipt_write_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_step": "implement_resident_host_supervision_authority_denial_boundary",
+    }
+
+
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
     service_config = "config/runtime/services/lens-host.json"

@@ -200,6 +200,7 @@ $SummonCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId '
 $ModeCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'mode_visibility'
 $HudCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'hud_layer_runtime'
 $HostCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_runtime'
+$HostSupervisionAuthorityCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_preflight'
 $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_activation_plan'
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
 $RuntimePolicyCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_policy_contract'
@@ -216,6 +217,25 @@ $HudStatus = [string](Get-PropertyValue -Payload $HudCriterion -Name 'status' -D
 $HudBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HudCriterion -Name 'blockers' -Default @())
 $HostStatus = [string](Get-PropertyValue -Payload $HostCriterion -Name 'status' -Default 'missing')
 $HostBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostCriterion -Name 'blockers' -Default @())
+$HostSupervisionAuthorityStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'status' -Default 'missing')
+$HostSupervisionAuthorityReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'ready' -Default $true)
+$HostSupervisionAuthorityPreflightReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'preflight_ready' -Default $false)
+$HostSupervisionAuthorityAuthorityReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'authority_ready' -Default $true)
+$HostSupervisionAuthorityRequirementsTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'requirements_total' -Default 0)
+$HostSupervisionAuthorityRequirementsReadyTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'requirements_ready_total' -Default 0)
+$HostSupervisionAuthorityRequirementsBlockedTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'requirements_blocked_total' -Default 0)
+$HostSupervisionAuthorityBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'blocked_requirements' -Default @())
+$HostSupervisionAuthorityEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'evidence' -Default @())
+$HostSupervisionAuthorityBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'blockers' -Default @())
+$HostSupervisionAuthorityObserved = (
+  $HostSupervisionAuthorityStatus -eq 'blocked' -and
+  $HostSupervisionAuthorityPreflightReady -and
+  -not $HostSupervisionAuthorityReady -and
+  -not $HostSupervisionAuthorityAuthorityReady -and
+  $HostSupervisionAuthorityEvidence -contains '/lens/host/supervision/authority' -and
+  $HostSupervisionAuthorityBlockedRequirements -contains 'process_supervision_authority' -and
+  $HostSupervisionAuthorityBlockers -contains 'resident_host_supervision_authority_not_granted'
+)
 $RuntimePlanStatus = [string](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'status' -Default 'missing')
 $RuntimePlanAvailable = [bool](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'plan_available' -Default $false)
 $RuntimePlanRuntimeReady = [bool](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'runtime_ready' -Default $false)
@@ -456,7 +476,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
 }
 
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -573,6 +593,32 @@ $Payload = [ordered]@{
   criteria = @($Criteria)
   enablement_gates = @($EnablementGates)
   blockers = @($AllBlockers)
+  resident_host_supervision_authority_preflight = [ordered]@{
+    status = $HostSupervisionAuthorityStatus
+    ok = $HostSupervisionAuthorityObserved
+    evidence = $HostSupervisionAuthorityEvidence
+    ready = $HostSupervisionAuthorityReady
+    preflight_ready = $HostSupervisionAuthorityPreflightReady
+    authority_ready = $HostSupervisionAuthorityAuthorityReady
+    requirements_total = $HostSupervisionAuthorityRequirementsTotal
+    requirements_ready_total = $HostSupervisionAuthorityRequirementsReadyTotal
+    requirements_blocked_total = $HostSupervisionAuthorityRequirementsBlockedTotal
+    blocked_requirements = $HostSupervisionAuthorityBlockedRequirements
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $HostSupervisionAuthorityBlockers
+  }
   resident_runtime_authority_grant_preflight = [ordered]@{
     status = $RuntimeGrantStatus
     ok = $RuntimeGrantObserved
@@ -814,7 +860,7 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved) { 'resolve_supervised_resident_host_runtime_authority_grant_blockers' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved) { 'supervised_resident_host_runtime_authority_grant_readiness_audit' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved) { 'supervised_resident_host_runtime_execution_authority_grant_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved) { 'supervised_resident_host_process_supervision_authority_denial_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved) { 'resident_host_supervision_authority_preflight' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved) { 'supervised_resident_host_runtime_authority_grant_readiness_audit' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved) { 'supervised_resident_host_runtime_execution_authority_grant_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -830,6 +876,7 @@ $Payload = [ordered]@{
     resident_runtime_execution_authority_grant_boundary_observed = $RuntimeAuthorityGrantBoundaryObserved
     resident_runtime_execution_authority_grant_denial_receipt_readback_observed = $RuntimeAuthorityGrantDenialReceiptsObserved
     resident_runtime_execution_authority_grant_readiness_audit_observed = $RuntimeAuthorityGrantReadinessObserved
+    resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

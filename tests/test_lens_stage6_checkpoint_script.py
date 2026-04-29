@@ -254,6 +254,37 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_authority_grant_readiness_audit"]["service_control_authority"] is False
     assert payload["resident_runtime_authority_grant_readiness_audit"]["memory_write"] is False
     assert payload["resident_runtime_authority_grant_readiness_audit"]["receipt_write_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["status"] == "blocked"
+    assert payload["resident_host_supervision_authority_preflight"]["ok"] is True
+    assert "/lens/host/supervision/authority" in payload["resident_host_supervision_authority_preflight"]["evidence"]
+    assert payload["resident_host_supervision_authority_preflight"]["ready"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["preflight_ready"] is True
+    assert payload["resident_host_supervision_authority_preflight"]["authority_ready"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["requirements_total"] >= 10
+    assert payload["resident_host_supervision_authority_preflight"]["requirements_blocked_total"] >= 5
+    assert (
+        "process_supervision_authority"
+        in payload["resident_host_supervision_authority_preflight"]["blocked_requirements"]
+    )
+    assert (
+        "service_control_authority" in payload["resident_host_supervision_authority_preflight"]["blocked_requirements"]
+    )
+    assert (
+        "resident_host_supervision_authority_not_granted"
+        in payload["resident_host_supervision_authority_preflight"]["blockers"]
+    )
+    assert (
+        "process_supervision_authority_not_granted"
+        in payload["resident_host_supervision_authority_preflight"]["blockers"]
+    )
+    assert payload["resident_host_supervision_authority_preflight"]["execution_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["approval_decision_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["process_supervision_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["process_restart_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["service_install_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["service_control_authority"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["memory_write"] is False
+    assert payload["resident_host_supervision_authority_preflight"]["receipt_write_authority"] is False
     assert payload["resident_runtime_activation_plan"]["status"] == "blocked"
     assert payload["resident_runtime_activation_plan"]["ok"] is True
     assert payload["resident_runtime_activation_plan"]["plan_available"] is True
@@ -368,7 +399,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
-    assert payload["next_smallest_truthful_gap"] == "resolve_supervised_resident_host_runtime_authority_grant_blockers"
+    assert (
+        payload["next_smallest_truthful_gap"]
+        == "supervised_resident_host_process_supervision_authority_denial_boundary"
+    )
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -384,6 +418,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_execution_authority_grant_boundary_observed": True,
         "resident_runtime_execution_authority_grant_denial_receipt_readback_observed": True,
         "resident_runtime_execution_authority_grant_readiness_audit_observed": True,
+        "resident_host_supervision_authority_preflight_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

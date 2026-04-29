@@ -787,6 +787,51 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "tray_registration_authority": False,
         "mutation_authority_granted": False,
     }
+    assert resident_host["supervision_authority_preflight_route"] == "/lens/host/supervision/authority"
+    supervision_authority = resident_host["supervision_authority_preflight"]
+    assert supervision_authority["kind"] == "lens.host.supervision_authority.preflight"
+    assert supervision_authority["status"] == "blocked"
+    assert supervision_authority["route"] == "/lens/host/supervision/authority"
+    assert supervision_authority["host_route"] == "/lens/host"
+    assert supervision_authority["supervision_route"] == "/lens/host/supervision"
+    assert supervision_authority["manifest_route"] == "/lens/host/manifest"
+    assert supervision_authority["ready"] is False
+    assert supervision_authority["preflight_ready"] is True
+    assert supervision_authority["authority_ready"] is False
+    assert supervision_authority["supervision_ready"] is False
+    assert supervision_authority["resident_claim_allowed"] is False
+    assert supervision_authority["would_supervise_process"] is False
+    assert supervision_authority["would_restart_process"] is False
+    assert supervision_authority["would_install_service"] is False
+    assert supervision_authority["would_start_service"] is False
+    assert supervision_authority["requirements_total"] >= 10
+    assert supervision_authority["requirements_blocked_total"] >= 5
+    assert "process_supervision_authority" in supervision_authority["blocked_requirements"]
+    assert "process_restart_authority" in supervision_authority["blocked_requirements"]
+    assert "service_install_authority" in supervision_authority["blocked_requirements"]
+    assert "service_control_authority" in supervision_authority["blocked_requirements"]
+    assert "resident_claim_authority" in supervision_authority["blocked_requirements"]
+    assert "resident_host_supervision_authority_not_granted" in supervision_authority["blockers"]
+    assert "process_supervision_authority_not_granted" in supervision_authority["blockers"]
+    assert supervision_authority["governance"] == {
+        "read_only_contract": True,
+        "preflight_only": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "resident_claim_authority": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "receipt_write_authority": False,
+        "mutation_authority_granted": False,
+    }
     assert resident_host["foreground_session"] == {
         "supported": True,
         "default_seconds": 0,
@@ -1373,6 +1418,32 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_authority_grant_readiness_criterion["service_control_authority"] is False
     assert runtime_authority_grant_readiness_criterion["memory_write"] is False
     assert runtime_authority_grant_readiness_criterion["receipt_write_authority"] is False
+    host_supervision_authority_criterion = _criterion(body, "resident_host_supervision_authority_preflight")
+    assert host_supervision_authority_criterion["status"] == "blocked"
+    assert host_supervision_authority_criterion["evidence"] == [
+        "/lens/host/supervision/authority",
+        "/lens/host/supervision",
+        "/lens/host/manifest",
+        "/lens/status",
+    ]
+    assert host_supervision_authority_criterion["ready"] is False
+    assert host_supervision_authority_criterion["preflight_ready"] is True
+    assert host_supervision_authority_criterion["authority_ready"] is False
+    assert host_supervision_authority_criterion["resident_claim_allowed"] is False
+    assert host_supervision_authority_criterion["requirements_total"] >= 10
+    assert host_supervision_authority_criterion["requirements_blocked_total"] >= 5
+    assert "process_supervision_authority" in host_supervision_authority_criterion["blocked_requirements"]
+    assert "service_control_authority" in host_supervision_authority_criterion["blocked_requirements"]
+    assert "resident_host_supervision_authority_not_granted" in host_supervision_authority_criterion["blockers"]
+    assert host_supervision_authority_criterion["execution_authority"] is False
+    assert host_supervision_authority_criterion["approval_decision_authority"] is False
+    assert host_supervision_authority_criterion["local_process_launch_authority"] is False
+    assert host_supervision_authority_criterion["process_supervision_authority"] is False
+    assert host_supervision_authority_criterion["process_restart_authority"] is False
+    assert host_supervision_authority_criterion["service_install_authority"] is False
+    assert host_supervision_authority_criterion["service_control_authority"] is False
+    assert host_supervision_authority_criterion["memory_write"] is False
+    assert host_supervision_authority_criterion["receipt_write_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1663,6 +1734,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     supervision_response = client.get("/lens/host/supervision")
     assert supervision_response.status_code == 200
     assert supervision_response.json() == supervision_gate
+    supervision_authority_response = client.get("/lens/host/supervision/authority")
+    assert supervision_authority_response.status_code == 200
+    assert supervision_authority_response.json() == supervision_authority
     preflight_response = client.get("/lens/preflight")
     assert preflight_response.status_code == 200
     assert preflight_response.json()["kind"] == "lens.preflight"

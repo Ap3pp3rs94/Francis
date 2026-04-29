@@ -15,6 +15,7 @@ from francis.lens import (
     lens_host_activation_readback,
     lens_host_launch_manifest,
     lens_host_status,
+    lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -96,6 +97,11 @@ def host_manifest() -> dict[str, Any]:
 @router.get("/host/supervision")
 def host_supervision() -> dict[str, Any]:
     return lens_host_supervision_gate()
+
+
+@router.get("/host/supervision/authority")
+def host_supervision_authority() -> dict[str, Any]:
+    return lens_host_supervision_authority_preflight()
 
 
 @router.get("/host/activation")
