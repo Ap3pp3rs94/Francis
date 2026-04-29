@@ -32,6 +32,12 @@ def _bool(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
 def _runtime_file_exists(relative_path: str) -> bool:
     try:
         return (repo_root() / Path(relative_path)).is_file()
@@ -170,6 +176,7 @@ def _summon_preflight() -> dict[str, Any]:
     hotkey_registration_authority = _bool(payload.get("hotkey_registration_authority"))
     overlay_control_authority = _bool(payload.get("overlay_control_authority"))
     local_process_launch_authority = _bool(payload.get("local_process_launch_authority"))
+    required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     blockers: list[str] = []
@@ -211,6 +218,7 @@ def _summon_preflight() -> dict[str, Any]:
         "summon_name": summon_name,
         "config_path": config_path,
         "config_exists": exists,
+        "required_before_enable": required_before_enable,
         "global_hotkey": global_hotkey,
         "binding_scope": binding_scope,
         "palette_route": palette_route,
@@ -294,6 +302,7 @@ def _tray_preflight() -> dict[str, Any]:
     local_process_launch_authority = _bool(payload.get("local_process_launch_authority"))
     service_control_authority = _bool(payload.get("service_control_authority"))
     summon_authority = _bool(payload.get("summon_authority"))
+    required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     summon_preflight_exists = _runtime_file_exists(summon_preflight)
@@ -346,6 +355,7 @@ def _tray_preflight() -> dict[str, Any]:
         "presence_name": presence_name,
         "config_path": config_path,
         "config_exists": exists,
+        "required_before_enable": required_before_enable,
         "tray_scope": tray_scope,
         "status_route": status_route,
         "lens_status_route": lens_status_route,
@@ -436,6 +446,7 @@ def _overlay_preflight() -> dict[str, Any]:
     capture_authority = _bool(payload.get("capture_authority"))
     summon_authority = _bool(payload.get("summon_authority"))
     tray_registration_authority = _bool(payload.get("tray_registration_authority"))
+    required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     summon_preflight_exists = _runtime_file_exists(summon_preflight)
@@ -490,6 +501,7 @@ def _overlay_preflight() -> dict[str, Any]:
         "overlay_name": overlay_name,
         "config_path": config_path,
         "config_exists": exists,
+        "required_before_enable": required_before_enable,
         "overlay_scope": overlay_scope,
         "status_route": status_route,
         "host_route": host_route,

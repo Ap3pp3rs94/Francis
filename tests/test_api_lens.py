@@ -92,7 +92,14 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "hotkey_registration_authority": false,
   "overlay_control_authority": false,
   "local_process_launch_authority": false,
-  "blocked_reason": "lens_summon_binding_not_implemented"
+  "blocked_reason": "lens_summon_binding_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_presence",
+    "overlay_window",
+    "global_hotkey_binding",
+    "summon_binding"
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -124,7 +131,15 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "local_process_launch_authority": false,
   "service_control_authority": false,
   "summon_authority": false,
-  "blocked_reason": "lens_tray_presence_not_implemented"
+  "blocked_reason": "lens_tray_presence_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_icon",
+    "user_session_presence",
+    "global_hotkey_binding",
+    "overlay_window",
+    "summon_binding"
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -156,7 +171,15 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "capture_authority": false,
   "summon_authority": false,
   "tray_registration_authority": false,
-  "blocked_reason": "lens_overlay_window_not_implemented"
+  "blocked_reason": "lens_overlay_window_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_presence",
+    "overlay_window",
+    "always_on_top_policy",
+    "global_hotkey_binding",
+    "summon_binding"
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -841,16 +864,39 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert preflight_surfaces["summon"]["status"] == "blocked"
     assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+Space"
     assert preflight_surfaces["summon"]["config_exists"] is True
+    assert preflight_surfaces["summon"]["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
     assert "global_hotkey_binding_disabled" in preflight_surfaces["summon"]["blockers"]
     assert "summon_authority_not_granted" in preflight_surfaces["summon"]["blockers"]
     assert preflight_surfaces["tray"]["kind"] == "lens.tray.api_preflight"
     assert preflight_surfaces["tray"]["status"] == "blocked"
     assert preflight_surfaces["tray"]["config_exists"] is True
+    assert preflight_surfaces["tray"]["required_before_enable"] == [
+        "resident_host_process",
+        "tray_icon",
+        "user_session_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
     assert "tray_host_disabled" in preflight_surfaces["tray"]["blockers"]
     assert "tray_registration_authority_not_granted" in preflight_surfaces["tray"]["blockers"]
     assert preflight_surfaces["overlay"]["kind"] == "lens.overlay.api_preflight"
     assert preflight_surfaces["overlay"]["status"] == "blocked"
     assert preflight_surfaces["overlay"]["config_exists"] is True
+    assert preflight_surfaces["overlay"]["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "always_on_top_policy",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
     assert "overlay_window_disabled" in preflight_surfaces["overlay"]["blockers"]
     assert "overlay_control_authority_not_granted" in preflight_surfaces["overlay"]["blockers"]
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}

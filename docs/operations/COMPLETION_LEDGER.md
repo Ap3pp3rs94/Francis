@@ -11986,6 +11986,38 @@ receipt UI readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens preflight prerequisite readback
+
+Stage 6/Lens preflight now surfaces the explicit prerequisite lists that were
+already declared in the disabled summon, tray, and overlay configs. The
+PowerShell preflight scripts and the `/lens/preflight` API projection expose
+`required_before_enable` for the future global summon binding, tray/presence,
+and overlay/window primitives, so checkpoint audits can distinguish declared
+prerequisites from current blockers without rereading raw config files.
+
+This is readback-only prerequisite traceability. It does not enable summon,
+register a global hotkey, create tray presence, open or focus an overlay, launch
+a Lens host process, install/start/control services, write memory, decide
+approvals, execute operator actions, or grant overlay-control, window-management,
+summon, tray-registration, hotkey-registration, service-control,
+local-process-launch, capture, sensing, telemetry, or policy authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens preflight
+prerequisite readback:
+
+- `python -m pytest tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object -ExpandProperty required_before_enable`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object -ExpandProperty required_before_enable`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object -ExpandProperty required_before_enable`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

@@ -72,6 +72,38 @@ function Get-StringProperty {
   return $Value
 }
 
+function Get-StringListProperty {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  $Items = [System.Collections.ArrayList]::new()
+  if ($null -eq $Payload) {
+    return @($Items.ToArray())
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return @($Items.ToArray())
+  }
+
+  if ($Property.Value -is [System.Array]) {
+    foreach ($Item in $Property.Value) {
+      $Value = [string]$Item
+      if (-not [string]::IsNullOrWhiteSpace($Value)) {
+        [void]$Items.Add($Value)
+      }
+    }
+    return @($Items.ToArray())
+  }
+
+  $SingleValue = [string]$Property.Value
+  if (-not [string]::IsNullOrWhiteSpace($SingleValue)) {
+    [void]$Items.Add($SingleValue)
+  }
+  return @($Items.ToArray())
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -102,6 +134,7 @@ $SummonAuthority = Get-BoolProperty -Payload $Config -Name 'summon_authority' -D
 $HotkeyRegistrationAuthority = Get-BoolProperty -Payload $Config -Name 'hotkey_registration_authority' -Default $false
 $OverlayControlAuthority = Get-BoolProperty -Payload $Config -Name 'overlay_control_authority' -Default $false
 $LocalProcessLaunchAuthority = Get-BoolProperty -Payload $Config -Name 'local_process_launch_authority' -Default $false
+$RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_before_enable'
 
 $HostPreflightPath = Join-Path $RepoRoot $HostPreflight
 $HostPreflightExists = Test-Path -LiteralPath $HostPreflightPath -PathType Leaf
@@ -149,6 +182,7 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   summon_name = $SummonName
   config_path = 'config/runtime/lens/summon.json'
+  required_before_enable = @($RequiredBeforeEnable)
   global_hotkey = $GlobalHotkey
   binding_scope = $BindingScope
   palette_route = $PaletteRoute

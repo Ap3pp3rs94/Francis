@@ -72,6 +72,38 @@ function Get-StringProperty {
   return $Value
 }
 
+function Get-StringListProperty {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  $Items = [System.Collections.ArrayList]::new()
+  if ($null -eq $Payload) {
+    return @($Items.ToArray())
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return @($Items.ToArray())
+  }
+
+  if ($Property.Value -is [System.Array]) {
+    foreach ($Item in $Property.Value) {
+      $Value = [string]$Item
+      if (-not [string]::IsNullOrWhiteSpace($Value)) {
+        [void]$Items.Add($Value)
+      }
+    }
+    return @($Items.ToArray())
+  }
+
+  $SingleValue = [string]$Property.Value
+  if (-not [string]::IsNullOrWhiteSpace($SingleValue)) {
+    [void]$Items.Add($SingleValue)
+  }
+  return @($Items.ToArray())
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -107,6 +139,7 @@ $LocalProcessLaunchAuthority = Get-BoolProperty -Payload $Config -Name 'local_pr
 $CaptureAuthority = Get-BoolProperty -Payload $Config -Name 'capture_authority' -Default $false
 $SummonAuthority = Get-BoolProperty -Payload $Config -Name 'summon_authority' -Default $false
 $TrayRegistrationAuthority = Get-BoolProperty -Payload $Config -Name 'tray_registration_authority' -Default $false
+$RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_before_enable'
 
 $HostPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostPreflight) -PathType Leaf
 $HostStatusRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostStatusRunner) -PathType Leaf
@@ -163,6 +196,7 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   overlay_name = $OverlayName
   config_path = 'config/runtime/lens/overlay.json'
+  required_before_enable = @($RequiredBeforeEnable)
   overlay_scope = $OverlayScope
   status_route = $StatusRoute
   host_route = $HostRoute

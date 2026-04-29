@@ -46,6 +46,14 @@ def test_lens_overlay_preflight_reports_disabled_window_without_authority() -> N
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
     assert payload["overlay_name"] == "Francis Lens Overlay"
+    assert payload["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "always_on_top_policy",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
     assert payload["overlay"]["window_enabled"] is False
     assert payload["overlay"]["always_on_top"] is False
     assert "overlay_window_disabled" in payload["blockers"]

@@ -46,6 +46,14 @@ def test_lens_tray_preflight_reports_disabled_presence_without_authority() -> No
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
     assert payload["presence_name"] == "Francis Lens Tray Presence"
+    assert payload["required_before_enable"] == [
+        "resident_host_process",
+        "tray_icon",
+        "user_session_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
     assert payload["tray"]["tray_host_enabled"] is False
     assert payload["tray"]["tray_icon_enabled"] is False
     assert "tray_host_disabled" in payload["blockers"]

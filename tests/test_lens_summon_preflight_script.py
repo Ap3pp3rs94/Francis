@@ -46,6 +46,13 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
     assert payload["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
     assert payload["binding"]["binding_enabled"] is False
     assert "global_hotkey_binding_disabled" in payload["blockers"]
     assert "summon_authority_not_granted" in payload["blockers"]
