@@ -342,6 +342,51 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             status: "not_implemented",
             evidence: [],
           },
+          {
+            id: "resident_supervision_enablement_gate",
+            status: "blocked",
+            evidence: ["/lens/host/supervision", "/lens/host/manifest", "/lens/status"],
+            ready: false,
+            resident_claim_allowed: false,
+            blockers: ["process_supervision_enabled"],
+            service_control_authority: false,
+          },
+          {
+            id: "summon_enablement_gate",
+            status: "blocked",
+            evidence: ["/lens/summon", "/lens/preflight", "/lens/status"],
+            ready: false,
+            summon_anywhere: false,
+            global_hotkey: "Ctrl+Alt+Space",
+            blockers: ["summon_authority_not_granted"],
+            hotkey_registration_authority: false,
+            summon_authority: false,
+            overlay_control_authority: false,
+          },
+          {
+            id: "tray_enablement_gate",
+            status: "blocked",
+            evidence: ["/lens/tray", "/lens/preflight", "/lens/status"],
+            ready: false,
+            tray_presence: false,
+            presence_name: "Francis Lens Tray Presence",
+            blockers: ["tray_registration_authority_not_granted"],
+            tray_registration_authority: false,
+            tray_icon_authority: false,
+            notification_authority: false,
+          },
+          {
+            id: "overlay_enablement_gate",
+            status: "blocked",
+            evidence: ["/lens/overlay", "/lens/preflight", "/lens/status"],
+            ready: false,
+            overlay_window: false,
+            overlay_name: "Francis Lens Overlay",
+            blockers: ["overlay_control_authority_not_granted"],
+            window_management_authority: false,
+            overlay_control_authority: false,
+            capture_authority: false,
+          },
         ],
       },
       governance: {
@@ -435,6 +480,22 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.stage6_readiness.criteria[3]?.execution_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[4]?.id, "summon_anywhere");
     assert.equal(snapshot.stage6_readiness.criteria[4]?.status, "not_implemented");
+    assert.equal(snapshot.stage6_readiness.criteria[5]?.id, "resident_supervision_enablement_gate");
+    assert.equal(snapshot.stage6_readiness.criteria[5]?.ready, false);
+    assert.equal(snapshot.stage6_readiness.criteria[5]?.resident_claim_allowed, false);
+    assert.equal(snapshot.stage6_readiness.criteria[5]?.service_control_authority, false);
+    assert.equal(snapshot.stage6_readiness.criteria[6]?.id, "summon_enablement_gate");
+    assert.equal(snapshot.stage6_readiness.criteria[6]?.summon_anywhere, false);
+    assert.equal(snapshot.stage6_readiness.criteria[6]?.global_hotkey, "Ctrl+Alt+Space");
+    assert.equal(snapshot.stage6_readiness.criteria[6]?.hotkey_registration_authority, false);
+    assert.equal(snapshot.stage6_readiness.criteria[7]?.id, "tray_enablement_gate");
+    assert.equal(snapshot.stage6_readiness.criteria[7]?.tray_presence, false);
+    assert.equal(snapshot.stage6_readiness.criteria[7]?.presence_name, "Francis Lens Tray Presence");
+    assert.equal(snapshot.stage6_readiness.criteria[7]?.notification_authority, false);
+    assert.equal(snapshot.stage6_readiness.criteria[8]?.id, "overlay_enablement_gate");
+    assert.equal(snapshot.stage6_readiness.criteria[8]?.overlay_window, false);
+    assert.equal(snapshot.stage6_readiness.criteria[8]?.overlay_name, "Francis Lens Overlay");
+    assert.equal(snapshot.stage6_readiness.criteria[8]?.window_management_authority, false);
   } finally {
     restoreFetch();
   }

@@ -177,10 +177,27 @@ export type LensStage6Criterion = {
   reactor_review_queue_total?: number;
   mission_counts?: Record<string, number>;
   reactor_readback_surfaces?: Record<string, string>;
+  ready?: boolean;
   resident_overlay?: boolean;
+  resident_claim_allowed?: boolean;
+  summon_anywhere?: boolean;
+  global_hotkey?: string;
+  tray_presence?: boolean;
+  presence_name?: string;
+  overlay_window?: boolean;
+  overlay_name?: string;
   execution_authority?: boolean;
   approval_decision_authority?: boolean;
   local_process_launch_authority?: boolean;
+  service_control_authority?: boolean;
+  window_management_authority?: boolean;
+  hotkey_registration_authority?: boolean;
+  tray_registration_authority?: boolean;
+  tray_icon_authority?: boolean;
+  notification_authority?: boolean;
+  overlay_control_authority?: boolean;
+  summon_authority?: boolean;
+  capture_authority?: boolean;
   memory_write?: boolean;
   blockers: string[];
 };
@@ -571,8 +588,20 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
     reactor_review_queue_total: safeOptionalNumber(value.reactor_review_queue_total),
     mission_counts: parseNumberMap(value.mission_counts),
     reactor_readback_surfaces: parseStringMap(value.reactor_readback_surfaces),
+    ready: typeof value.ready === "boolean" ? safeBoolean(value.ready, false) : undefined,
     resident_overlay:
       typeof value.resident_overlay === "boolean" ? safeBoolean(value.resident_overlay, false) : undefined,
+    resident_claim_allowed:
+      typeof value.resident_claim_allowed === "boolean"
+        ? safeBoolean(value.resident_claim_allowed, false)
+        : undefined,
+    summon_anywhere:
+      typeof value.summon_anywhere === "boolean" ? safeBoolean(value.summon_anywhere, false) : undefined,
+    global_hotkey: safeString(value.global_hotkey).trim() || undefined,
+    tray_presence: typeof value.tray_presence === "boolean" ? safeBoolean(value.tray_presence, false) : undefined,
+    presence_name: safeString(value.presence_name).trim() || undefined,
+    overlay_window: typeof value.overlay_window === "boolean" ? safeBoolean(value.overlay_window, false) : undefined,
+    overlay_name: safeString(value.overlay_name).trim() || undefined,
     execution_authority:
       typeof value.execution_authority === "boolean" ? safeBoolean(value.execution_authority, false) : undefined,
     approval_decision_authority:
@@ -583,6 +612,34 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
       typeof value.local_process_launch_authority === "boolean"
         ? safeBoolean(value.local_process_launch_authority, false)
         : undefined,
+    service_control_authority:
+      typeof value.service_control_authority === "boolean"
+        ? safeBoolean(value.service_control_authority, false)
+        : undefined,
+    window_management_authority:
+      typeof value.window_management_authority === "boolean"
+        ? safeBoolean(value.window_management_authority, false)
+        : undefined,
+    hotkey_registration_authority:
+      typeof value.hotkey_registration_authority === "boolean"
+        ? safeBoolean(value.hotkey_registration_authority, false)
+        : undefined,
+    tray_registration_authority:
+      typeof value.tray_registration_authority === "boolean"
+        ? safeBoolean(value.tray_registration_authority, false)
+        : undefined,
+    tray_icon_authority:
+      typeof value.tray_icon_authority === "boolean" ? safeBoolean(value.tray_icon_authority, false) : undefined,
+    notification_authority:
+      typeof value.notification_authority === "boolean" ? safeBoolean(value.notification_authority, false) : undefined,
+    overlay_control_authority:
+      typeof value.overlay_control_authority === "boolean"
+        ? safeBoolean(value.overlay_control_authority, false)
+        : undefined,
+    summon_authority:
+      typeof value.summon_authority === "boolean" ? safeBoolean(value.summon_authority, false) : undefined,
+    capture_authority:
+      typeof value.capture_authority === "boolean" ? safeBoolean(value.capture_authority, false) : undefined,
     memory_write: typeof value.memory_write === "boolean" ? safeBoolean(value.memory_write, false) : undefined,
     blockers: safeStringList(value.blockers),
   };

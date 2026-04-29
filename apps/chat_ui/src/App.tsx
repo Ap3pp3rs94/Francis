@@ -4473,6 +4473,44 @@ function SystemPanel(props: {
   const lensSummonCriterion = lensStage6Criteria.find((criterion) => safeString(criterion.id).trim() === "summon_anywhere");
   const lensSummonStatus =
     safeString(lensSummonCriterion?.status).trim() || (lensCommandPalette?.summon_anywhere ? "ready" : "not_implemented");
+  const lensResidentSupervisionGate = lensStage6Criteria.find(
+    (criterion) => safeString(criterion.id).trim() === "resident_supervision_enablement_gate",
+  );
+  const lensSummonEnablementGate = lensStage6Criteria.find(
+    (criterion) => safeString(criterion.id).trim() === "summon_enablement_gate",
+  );
+  const lensTrayEnablementGate = lensStage6Criteria.find(
+    (criterion) => safeString(criterion.id).trim() === "tray_enablement_gate",
+  );
+  const lensOverlayEnablementGate = lensStage6Criteria.find(
+    (criterion) => safeString(criterion.id).trim() === "overlay_enablement_gate",
+  );
+  const lensEnablementGateReadbacks = [
+    {
+      id: "host",
+      label: "host",
+      criterion: lensResidentSupervisionGate,
+      detail: `claim ${lensResidentSupervisionGate?.resident_claim_allowed === true ? "true" : "false"}`,
+    },
+    {
+      id: "summon",
+      label: "summon",
+      criterion: lensSummonEnablementGate,
+      detail: safeString(lensSummonEnablementGate?.global_hotkey).trim() || "hotkey blocked",
+    },
+    {
+      id: "tray",
+      label: "tray",
+      criterion: lensTrayEnablementGate,
+      detail: safeString(lensTrayEnablementGate?.presence_name).trim() || "presence blocked",
+    },
+    {
+      id: "overlay",
+      label: "overlay",
+      criterion: lensOverlayEnablementGate,
+      detail: safeString(lensOverlayEnablementGate?.overlay_name).trim() || "window blocked",
+    },
+  ].filter((item) => item.criterion);
   const lensAuthorityBlocked =
     lensGovernance?.execution_authority === false &&
     lensGovernance?.approval_decision_authority === false &&
@@ -5527,6 +5565,43 @@ function SystemPanel(props: {
             {lensCommandPalette?.message ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{lensCommandPalette.message}</div>
             ) : null}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Resident enablement gates</div>
+            {lensEnablementGateReadbacks.length ? (
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                {lensEnablementGateReadbacks.map((item) => {
+                  const status = safeString(item.criterion?.status).trim() || "unknown";
+                  const ready = item.criterion?.ready === true;
+                  const firstBlocker = item.criterion?.blockers[0] || "";
+                  const evidenceRoute = item.criterion?.evidence[0] || "";
+                  return (
+                    <div key={`lens-enable-${item.id}`} style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={badgeStyle(status)}>{item.label}</span>
+                        <span style={badgeStyle(ready ? "ready" : "blocked")}>ready {ready ? "true" : "false"}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                        {item.detail}
+                        {evidenceRoute ? (
+                          <>
+                            {" / "}route <code>{evidenceRoute}</code>
+                          </>
+                        ) : null}
+                      </div>
+                      {firstBlocker ? (
+                        <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 3 }}>
+                          blocker <code>{firstBlocker}</code>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>No enablement gate readback loaded.</div>
+            )}
           </div>
         </div>
 

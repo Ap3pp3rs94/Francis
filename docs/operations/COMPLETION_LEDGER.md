@@ -12814,6 +12814,39 @@ gate readback:
 - `python -m ruff format --check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens UI enablement gate readback
+
+The chat UI System/ORB Lens Readback panel now preserves and renders the Stage 6
+resident enablement gate criteria from `/lens/status`. The Lens client parser
+keeps typed readback fields for `resident_supervision_enablement_gate`,
+`summon_enablement_gate`, `tray_enablement_gate`, and `overlay_enablement_gate`,
+including readiness booleans, resident claim state, summon hotkey, tray presence
+name, overlay window name, blockers, evidence routes, and authority-denial flags.
+
+The operator surface now shows a compact read-only Resident enablement gates
+block for host, summon, tray, and overlay. Each row is driven by the backend
+criterion status and shows whether the gate is ready, the first evidence route,
+and the leading blocker when one exists. This makes the recent backend gate work
+operator-visible without adding activation controls or claiming resident runtime.
+
+This is UI readback/parser work only. It does not create approvals, decide
+approvals, launch a Lens host, install/start/control a service, register tray
+presence, register a hotkey, open or control an overlay, capture screen content,
+write memory, execute actions, or grant execution, approval-decision,
+local-process-launch, service-control, tray-registration, tray-icon,
+notification, hotkey-registration, overlay-control, window-management, capture,
+summon, telemetry, sensing, or promotion authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens UI enablement gate
+readback:
+
+- `node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `npm run test`
+  Result: `passed`
+- `npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12858,6 +12891,8 @@ These remain true and should block any "finished" claim:
   plus a direct `/lens/overlay` read-only overlay/window enablement gate that
   projects the blockers required before overlay window, always-on-top, focus,
   dock, and capture behavior can be truthfully claimed,
+  plus chat UI System/ORB readback of the host, summon, tray, and overlay
+  enablement gate criteria,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
