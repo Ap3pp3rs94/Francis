@@ -60,9 +60,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" in criteria["summon_anywhere"]["blockers"]
     assert "global_hotkey_binding_missing" in criteria["summon_anywhere"]["blockers"]
     assert "summon_binding_missing" in criteria["summon_anywhere"]["blockers"]
-    assert criteria["helpful_not_noisy"]["status"] == "needs_live_operator_proof"
+    assert criteria["helpful_not_noisy"]["status"] == "operator_readback_proof_ready"
     assert criteria["helpful_not_noisy"]["ready"] is False
-    assert "operator_experience_proof_missing" in criteria["helpful_not_noisy"]["blockers"]
+    assert criteria["helpful_not_noisy"]["blockers"] == ["resident_surface_missing"]
+    assert "scripts/lens-live-operator-proof.ps1" in criteria["helpful_not_noisy"]["evidence"]
     assert criteria["mode_visibility"]["status"] == "readback_ready"
     assert criteria["mode_visibility"]["ready"] is True
     assert criteria["pilot_visibility_groundwork"]["status"] == "readback_ready"
@@ -77,10 +78,23 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-surface/activation" in criteria["system_resident_presence"]["evidence"]
-    assert payload["next_smallest_truthful_gap"] == "live_operator_experience_proof"
+    assert "operator_experience_proof_missing" not in payload["blockers"]
+    assert payload["live_operator_experience_proof"]["status"] == "proof_passed"
+    assert payload["live_operator_experience_proof"]["ok"] is True
+    assert payload["live_operator_experience_proof"]["exit_code"] == 0
+    assert payload["live_operator_experience_proof"]["live_http_status_readback"] is True
+    assert payload["live_operator_experience_proof"]["helpful_not_noisy_readback"] is True
+    assert payload["live_operator_experience_proof"]["operator_experience_proof"] is True
+    assert payload["live_operator_experience_proof"]["live_operator_experience_ready"] is False
+    assert payload["live_operator_experience_proof"]["ready_for_stage6_closure"] is False
+    assert "resident_surface_missing" in payload["live_operator_experience_proof"]["blockers"]
+    assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
+        "live_http_readback": True,
+        "temporary_api_process": True,
+        "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,
         "memory_write": False,

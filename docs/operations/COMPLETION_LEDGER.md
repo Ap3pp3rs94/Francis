@@ -12234,6 +12234,54 @@ activation boundary readback:
   Result: `passed` with the expected PowerShell line-ending warning for
   `scripts/lens-host-supervision-proof.ps1`
 
+### 2026-04-29 - Stage 6/Lens live operator experience readback proof
+
+Stage 6/Lens now has a status-only live operator experience proof diagnostic.
+`scripts/lens-live-operator-proof.ps1 -Mode Status` starts a temporary local
+Francis API process on loopback with an isolated temporary data directory,
+reads `/lens/status?limit=5` over HTTP, and verifies that the operator-facing
+Lens payload carries HUD readback, command palette readback, mode/Pilot
+visibility, approvals/incidents/missions/receipts lanes, resident-surface
+activation boundary state, and governance denial flags through the same route
+the operator UI consumes.
+
+The Stage 6 checkpoint now consumes this proof. The `helpful_not_noisy`
+criterion advances from `needs_live_operator_proof` to
+`operator_readback_proof_ready`, and `operator_experience_proof_missing` is no
+longer a checkpoint blocker. Stage 6 remains active and blocked: the proof
+reports `live_operator_experience_ready: false`, `ready_for_stage6_closure:
+false`, `resident_surface_ready: false`, and `resident_claim_allowed: false`.
+The checkpoint's next smallest truthful gap is now
+`resident_host_or_resident_overlay_runtime`.
+
+This is diagnostic/readback work only. It creates a temporary API process and
+temporary proof logs under an isolated data directory, but it does not create a
+resident Lens host; install, start, stop, restart, supervise, or control a
+Windows service; register tray presence; bind a global hotkey; open, focus, or
+control an overlay; summon Francis anywhere; grant telemetry, sensing, capture,
+execution, approval-decision, memory-write, overlay-control,
+window-management, service-control, service-install, hotkey-registration, or
+tray-registration authority; or claim Stage 6 closure.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens live operator
+experience readback proof:
+
+- `python -m pytest tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_api_lens.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status -StartupTimeoutSeconds 20`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with the expected PowerShell line-ending warning for
+  `scripts/lens-stage6-checkpoint.ps1`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12258,10 +12306,11 @@ These remain true and should block any "finished" claim:
   execution-denial gates plus durable denial receipt readback and chat UI
   readback of denial receipt totals/latest receipt handles, but no OS-wide
   summon, plus a resident-surface activation boundary readback that keeps the
-  resident claim blocked, but no resident host process, installed/started
-  service, resident overlay/HUD runtime, OS-level command palette, tray
-  presence, hotkey binding, live operator experience proof, or live Pilot
-  takeover surface yet
+  resident claim blocked, plus a live HTTP operator-experience readback proof
+  that verifies the Lens status payload through a temporary local API process,
+  but no resident host process, installed/started service, resident overlay/HUD
+  runtime, OS-level command palette, tray presence, hotkey binding, summon-anywhere
+  behavior, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

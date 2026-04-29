@@ -57,6 +57,58 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Get-PowerShellPath {
+  try {
+    $Current = Get-Process -Id $PID -ErrorAction Stop
+    if (-not [string]::IsNullOrWhiteSpace([string]$Current.Path)) {
+      return [string]$Current.Path
+    }
+  } catch {
+  }
+
+  $Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -ne $Pwsh) {
+    return [string]$Pwsh.Source
+  }
+  $WindowsPowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -ne $WindowsPowerShell) {
+    return [string]$WindowsPowerShell.Source
+  }
+  return ''
+}
+
+function Invoke-JsonScript {
+  param(
+    [string]$PowerShellPath,
+    [string]$ScriptPath,
+    [string[]]$ScriptArgs = @()
+  )
+
+  if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+    }
+  }
+
+  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $Payload = $null
+  }
+
+  return [ordered]@{
+    exit_code = $ExitCode
+    payload = $Payload
+    output = $Text
+  }
+}
+
 function Get-LensStatus {
   $Python = Get-Command python -ErrorAction SilentlyContinue
   if ($null -eq $Python) {
@@ -150,6 +202,34 @@ $HostStatus = [string](Get-PropertyValue -Payload $HostCriterion -Name 'status' 
 $HostBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostCriterion -Name 'blockers' -Default @())
 $PilotStatus = [string](Get-PropertyValue -Payload $PilotIndicator -Name 'status' -Default 'missing')
 
+$PowerShellPath = Get-PowerShellPath
+$LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
+$LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
+$LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
+$LiveOperatorExitCode = -1
+$LiveOperatorPayload = $null
+if ($LiveOperatorProof -is [System.Collections.IDictionary]) {
+  if ($LiveOperatorProof.Contains('exit_code') -and $null -ne $LiveOperatorProof['exit_code']) {
+    $LiveOperatorExitCode = [int]$LiveOperatorProof['exit_code']
+  }
+  if ($LiveOperatorProof.Contains('payload') -and $null -ne $LiveOperatorProof['payload']) {
+    $LiveOperatorPayload = $LiveOperatorProof['payload']
+  }
+}
+$LiveOperatorProofPassed = (
+  $LiveOperatorExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'kind' -Default '') -eq 'lens.live_operator_experience.proof' -and
+  [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'operator_experience_proof' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
+)
+$LiveOperatorStatus = if ($LiveOperatorProofPassed) { 'operator_readback_proof_ready' } else { 'needs_live_operator_proof' }
+$LiveOperatorBlockers = if ($LiveOperatorProofPassed) {
+  @('resident_surface_missing')
+} else {
+  @('resident_surface_missing', 'operator_experience_proof_missing')
+}
+
 $Criteria = @(
   (New-Criterion `
       -Id 'summon_anywhere' `
@@ -162,11 +242,11 @@ $Criteria = @(
   (New-Criterion `
       -Id 'helpful_not_noisy' `
       -Label 'Lens is helpful, not noisy' `
-      -Status 'needs_live_operator_proof' `
+      -Status $LiveOperatorStatus `
       -Ready $false `
-      -Evidence @('/lens/status', 'chat_ui.system_orb') `
-      -Blockers @('resident_surface_missing', 'operator_experience_proof_missing') `
-      -Basis 'Current repo has readback surfaces, but no live resident Lens proof.')
+      -Evidence @('/lens/status', 'chat_ui.system_orb', 'scripts/lens-live-operator-proof.ps1') `
+      -Blockers $LiveOperatorBlockers `
+      -Basis 'Live HTTP Lens readback proof exists; resident surface still blocks a finished Lens claim.')
   (New-Criterion `
       -Id 'mode_visibility' `
       -Label 'Mode visibility becomes real' `
@@ -216,10 +296,25 @@ $Payload = [ordered]@{
   }
   criteria = @($Criteria)
   blockers = @($AllBlockers)
-  next_smallest_truthful_gap = 'live_operator_experience_proof'
+  live_operator_experience_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default 'missing')
+    ok = $LiveOperatorProofPassed
+    exit_code = $LiveOperatorExitCode
+    evidence = @('/lens/status?limit=5', 'scripts/lens-live-operator-proof.ps1')
+    live_http_status_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'live_http_status_readback' -Default $false)
+    helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
+    operator_experience_proof = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'operator_experience_proof' -Default $false)
+    live_operator_experience_ready = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'live_operator_experience_ready' -Default $false)
+    ready_for_stage6_closure = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'ready_for_stage6_closure' -Default $false)
+    blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $LiveOperatorPayload -Name 'blockers' -Default @())
+  }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed) { 'resident_host_or_resident_overlay_runtime' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
+    live_http_readback = $true
+    temporary_api_process = $true
+    temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false
     memory_write = $false
