@@ -13512,7 +13512,10 @@ resident host, resident overlay runtime, tray, hotkey, or summon-anywhere
 acceptance criteria by itself.
 
 Latest targeted validation for the `2026-04-29` Stage 6/Lens bounded host
-supervisor runner:
+supervisor runner. The live lifecycle assertion is Windows-hosted because the
+Lens resident host target is Windows-facing and Unix child reaping can keep an
+exited process visible to process readback until the Python test parent reaps
+it; status/read-only coverage remains cross-platform:
 
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor.ps1 -Mode Status`
   Result: `passed`

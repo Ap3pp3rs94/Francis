@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -97,6 +98,9 @@ def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None
 
 
 def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp_path: Path) -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Lens host lifecycle process-exit proof is Windows-hosted.")
+
     data_dir = tmp_path / "data"
     host = subprocess.Popen(
         [
