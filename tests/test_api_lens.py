@@ -1328,6 +1328,24 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_authority_grant_criterion["memory_write"] is False
     assert runtime_authority_grant_criterion["receipt_write_authority"] is False
     assert runtime_authority_grant_criterion["resident_claim_authority"] is False
+    runtime_authority_grant_denials_criterion = _criterion(
+        body, "resident_runtime_authority_grant_denial_receipt_readback"
+    )
+    assert runtime_authority_grant_denials_criterion["status"] == "empty"
+    assert runtime_authority_grant_denials_criterion["evidence"] == [
+        "/lens/resident-runtime/authority-grant/denials",
+        "/lens/resident-runtime/authority-grant",
+        "/lens/status",
+    ]
+    assert runtime_authority_grant_denials_criterion["receipt_count"] == 0
+    assert runtime_authority_grant_denials_criterion["latest_receipt_id"] == ""
+    assert runtime_authority_grant_denials_criterion["execution_authority"] is False
+    assert runtime_authority_grant_denials_criterion["approval_decision_authority"] is False
+    assert runtime_authority_grant_denials_criterion["process_supervision_authority"] is False
+    assert runtime_authority_grant_denials_criterion["service_control_authority"] is False
+    assert runtime_authority_grant_denials_criterion["memory_write"] is False
+    assert runtime_authority_grant_denials_criterion["denial_receipt_write_authority"] is False
+    assert runtime_authority_grant_denials_criterion["receipt_write_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1476,7 +1494,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["resident_runtime_denial"]["executed"] is False
     assert (
         resident_surface_activation["next_smallest_truthful_gap"]
-        == "implement_resident_runtime_authority_grant_denial_receipts"
+        == "review_authority_grant_denial_receipts_before_adding_resident_runtime_authority"
     )
     assert resident_surface_activation["governance"]["gate"] == "lens_resident_surface_activation_boundary"
     assert resident_surface_activation["governance"]["boundary_only"] is True
@@ -1734,6 +1752,23 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_authority_grant_body["governance"]["service_control_authority"] is False
     assert runtime_authority_grant_body["governance"]["resident_claim_authority"] is False
     assert runtime_authority_grant_body["governance"]["memory_write"] is False
+    runtime_authority_grant_denials_response = client.get("/lens/resident-runtime/authority-grant/denials")
+    assert runtime_authority_grant_denials_response.status_code == 200
+    runtime_authority_grant_denials_body = runtime_authority_grant_denials_response.json()
+    assert runtime_authority_grant_denials_body["kind"] == (
+        "lens.resident_runtime.execution_authority_grant.denial_receipts"
+    )
+    assert runtime_authority_grant_denials_body["status"] == "empty"
+    assert runtime_authority_grant_denials_body["route"] == "/lens/resident-runtime/authority-grant/denials"
+    assert runtime_authority_grant_denials_body["authority_grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert runtime_authority_grant_denials_body["total"] == 0
+    assert runtime_authority_grant_denials_body["items"] == []
+    assert runtime_authority_grant_denials_body["governance"]["gate"] == (
+        "lens_resident_runtime_execution_authority_grant_denial_receipts_readback"
+    )
+    assert runtime_authority_grant_denials_body["governance"]["execution_authority"] is False
+    assert runtime_authority_grant_denials_body["governance"]["denial_receipt_write_authority"] is False
+    assert runtime_authority_grant_denials_body["governance"]["memory_write"] is False
     runtime_plan_response = client.get("/lens/resident-runtime/plan")
     assert runtime_plan_response.status_code == 200
     runtime_plan_body = runtime_plan_response.json()
@@ -2320,8 +2355,38 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_receipt_write_authority"] is False
     assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_memory_write"] is False
     assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_resident_claim"] is False
-    assert resident_runtime_authority_grant_body["receipt_written"] is False
-    assert resident_runtime_authority_grant_body["receipt"] == {}
+    assert resident_runtime_authority_grant_body["grant_denial"]["denial_receipt_written"] is True
+    assert resident_runtime_authority_grant_body["receipt_written"] is True
+    assert resident_runtime_authority_grant_body["receipt_route"] == "/lens/resident-runtime/authority-grant/denials"
+    authority_grant_denial_receipt = resident_runtime_authority_grant_body["receipt"]
+    assert authority_grant_denial_receipt["kind"] == ("lens.resident_runtime.execution_authority_grant.denial.receipt")
+    assert authority_grant_denial_receipt["status"] == "denied_no_authority_grant"
+    assert authority_grant_denial_receipt["route"] == "/lens/resident-runtime/authority-grant"
+    assert authority_grant_denial_receipt["source_kind"] == ("lens.resident_runtime.execution_authority_grant.denial")
+    assert authority_grant_denial_receipt["approval_id"] == approval_id
+    assert authority_grant_denial_receipt["actor"] == "test.system.write"
+    assert authority_grant_denial_receipt["approval"]["approved"] is True
+    assert authority_grant_denial_receipt["permission"]["ready"] is True
+    assert authority_grant_denial_receipt["policy"]["policy_contract_ready"] is True
+    assert authority_grant_denial_receipt["authority_grant"]["applied"] is False
+    assert authority_grant_denial_receipt["authority_grant"]["executed"] is False
+    assert authority_grant_denial_receipt["authority_grant"]["authority_granted"] is False
+    assert authority_grant_denial_receipt["grant_denial"]["would_grant_execution_authority"] is False
+    assert authority_grant_denial_receipt["governance"]["gate"] == (
+        "lens_resident_runtime_execution_authority_grant_denial_receipt"
+    )
+    assert authority_grant_denial_receipt["governance"]["denial_receipt_write_authority"] is True
+    assert authority_grant_denial_receipt["governance"]["execution_authority"] is False
+    assert authority_grant_denial_receipt["governance"]["approval_decision_authority"] is False
+    assert authority_grant_denial_receipt["governance"]["process_supervision_authority"] is False
+    assert authority_grant_denial_receipt["governance"]["memory_write"] is False
+    authority_grant_denial_receipt_path = (
+        data_root
+        / "lens"
+        / "resident_runtime_authority_grant_denials"
+        / f"{authority_grant_denial_receipt['receipt_id']}.json"
+    )
+    assert authority_grant_denial_receipt_path.exists()
     assert "activation_approval_not_approved" not in resident_runtime_authority_grant_body["blockers"]
     assert "system_write_scope_not_ready" not in resident_runtime_authority_grant_body["blockers"]
     assert "resident_runtime_authority_grant_not_implemented" in resident_runtime_authority_grant_body["blockers"]
@@ -2334,8 +2399,33 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_runtime_authority_grant_body["governance"]["process_supervision_authority"] is False
     assert resident_runtime_authority_grant_body["governance"]["service_control_authority"] is False
     assert resident_runtime_authority_grant_body["governance"]["receipt_write_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["denial_receipt_write_authority"] is True
     assert resident_runtime_authority_grant_body["governance"]["resident_claim_authority"] is False
     assert resident_runtime_authority_grant_body["governance"]["memory_write"] is False
+
+    authority_grant_denials = client.get(
+        f"/lens/resident-runtime/authority-grant/denials?limit=10&approval_id={approval_id}"
+    )
+    assert authority_grant_denials.status_code == 200
+    authority_grant_denials_body = authority_grant_denials.json()
+    assert authority_grant_denials_body["kind"] == ("lens.resident_runtime.execution_authority_grant.denial_receipts")
+    assert authority_grant_denials_body["status"] == "readback_ready"
+    assert authority_grant_denials_body["route"] == "/lens/resident-runtime/authority-grant/denials"
+    assert authority_grant_denials_body["authority_grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert authority_grant_denials_body["approval_id"] == approval_id
+    assert authority_grant_denials_body["total"] == 1
+    assert authority_grant_denials_body["latest"]["receipt_id"] == authority_grant_denial_receipt["receipt_id"]
+    assert authority_grant_denials_body["items"][0]["approval_id"] == approval_id
+    assert authority_grant_denials_body["items"][0]["authority_grant"]["authority_granted"] is False
+    assert authority_grant_denials_body["items"][0]["governance"]["execution_authority"] is False
+    assert authority_grant_denials_body["governance"]["gate"] == (
+        "lens_resident_runtime_execution_authority_grant_denial_receipts_readback"
+    )
+    assert authority_grant_denials_body["governance"]["read_only_contract"] is True
+    assert authority_grant_denials_body["governance"]["denial_receipt_write_authority"] is False
+    assert authority_grant_denials_body["governance"]["execution_authority"] is False
+    assert authority_grant_denials_body["governance"]["approval_decision_authority"] is False
+    assert authority_grant_denials_body["governance"]["memory_write"] is False
 
     resident_runtime_plan = client.get(f"/lens/resident-runtime/plan?approval_id={approval_id}&actor=test.system.write")
     assert resident_runtime_plan.status_code == 200
@@ -2630,6 +2720,22 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert status_denial_receipt_criterion["approval_decision_authority"] is False
     assert status_denial_receipt_criterion["local_process_launch_authority"] is False
     assert status_denial_receipt_criterion["memory_write"] is False
+    status_authority_grant_denials = status_body["resident_host"]["resident_runtime_authority_grant_denial_receipts"]
+    assert status_authority_grant_denials["status"] == "readback_ready"
+    assert status_authority_grant_denials["total"] == 1
+    assert status_authority_grant_denials["latest"]["receipt_id"] == authority_grant_denial_receipt["receipt_id"]
+    status_authority_grant_denials_criterion = _criterion(
+        status_body, "resident_runtime_authority_grant_denial_receipt_readback"
+    )
+    assert status_authority_grant_denials_criterion["status"] == "readback_ready"
+    assert status_authority_grant_denials_criterion["receipt_count"] == 1
+    assert status_authority_grant_denials_criterion["latest_receipt_id"] == authority_grant_denial_receipt["receipt_id"]
+    assert status_authority_grant_denials_criterion["execution_authority"] is False
+    assert status_authority_grant_denials_criterion["approval_decision_authority"] is False
+    assert status_authority_grant_denials_criterion["process_supervision_authority"] is False
+    assert status_authority_grant_denials_criterion["service_control_authority"] is False
+    assert status_authority_grant_denials_criterion["memory_write"] is False
+    assert status_authority_grant_denials_criterion["denial_receipt_write_authority"] is False
     runtime_authority_criterion = _criterion(status_body, "resident_runtime_authority_boundary")
     assert runtime_authority_criterion["status"] == "blocked"
     assert runtime_authority_criterion["applied"] is False

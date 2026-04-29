@@ -204,6 +204,7 @@ $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -Criterio
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
 $RuntimePolicyCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_policy_contract'
 $RuntimeAuthorityGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_authority_grant_boundary'
+$RuntimeAuthorityGrantDenialReceiptsCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_denial_receipt_readback'
 $RuntimeBoundaryCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_boundary'
 $PilotIndicator = Get-PropertyValue -Payload $LensStatus -Name 'pilot_indicator'
 
@@ -264,6 +265,14 @@ $RuntimeAuthorityGrantBoundaryObserved = (
   -not $RuntimeAuthorityGranted -and
   -not $RuntimeAuthorityGrantReady -and
   $RuntimeAuthorityGrantBlockers -contains 'resident_runtime_authority_grant_not_implemented'
+)
+$RuntimeAuthorityGrantDenialReceiptsStatus = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantDenialReceiptsCriterion -Name 'status' -Default 'missing')
+$RuntimeAuthorityGrantDenialReceiptsCount = [int](Get-PropertyValue -Payload $RuntimeAuthorityGrantDenialReceiptsCriterion -Name 'receipt_count' -Default 0)
+$RuntimeAuthorityGrantDenialReceiptsLatestId = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantDenialReceiptsCriterion -Name 'latest_receipt_id' -Default '')
+$RuntimeAuthorityGrantDenialReceiptsEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimeAuthorityGrantDenialReceiptsCriterion -Name 'evidence' -Default @())
+$RuntimeAuthorityGrantDenialReceiptsObserved = (
+  ($RuntimeAuthorityGrantDenialReceiptsStatus -eq 'empty' -or $RuntimeAuthorityGrantDenialReceiptsStatus -eq 'readback_ready') -and
+  $RuntimeAuthorityGrantDenialReceiptsEvidence -contains '/lens/resident-runtime/authority-grant/denials'
 )
 $RuntimeBoundaryStatus = [string](Get-PropertyValue -Payload $RuntimeBoundaryCriterion -Name 'status' -Default 'missing')
 $RuntimeBoundaryApplied = [bool](Get-PropertyValue -Payload $RuntimeBoundaryCriterion -Name 'applied' -Default $true)
@@ -613,6 +622,27 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     blockers = $RuntimeAuthorityGrantBlockers
   }
+  resident_runtime_authority_grant_denial_receipts = [ordered]@{
+    status = $RuntimeAuthorityGrantDenialReceiptsStatus
+    ok = $RuntimeAuthorityGrantDenialReceiptsObserved
+    evidence = $RuntimeAuthorityGrantDenialReceiptsEvidence
+    receipt_count = $RuntimeAuthorityGrantDenialReceiptsCount
+    latest_receipt_id = $RuntimeAuthorityGrantDenialReceiptsLatestId
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    denial_receipt_write_authority = $false
+    resident_claim_authority = $false
+  }
   resident_runtime_activation_plan = [ordered]@{
     status = $RuntimePlanStatus
     ok = $RuntimePlanStatus -ne 'missing'
@@ -724,7 +754,7 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved) { 'supervised_resident_host_runtime_execution_authority_grant_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved) { 'supervised_resident_host_runtime_authority_grant_readiness_audit' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved) { 'supervised_resident_host_runtime_execution_authority_grant_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved) { 'supervised_resident_host_runtime_execution_policy_contract' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved) { 'supervised_resident_host_runtime_execution_authority_grant' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable) { 'supervised_resident_host_runtime_authority_boundary' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -738,6 +768,7 @@ $Payload = [ordered]@{
     resident_runtime_authority_grant_preflight_observed = $RuntimeGrantObserved
     resident_runtime_execution_policy_contract_observed = $RuntimePolicyObserved
     resident_runtime_execution_authority_grant_boundary_observed = $RuntimeAuthorityGrantBoundaryObserved
+    resident_runtime_execution_authority_grant_denial_receipt_readback_observed = $RuntimeAuthorityGrantDenialReceiptsObserved
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

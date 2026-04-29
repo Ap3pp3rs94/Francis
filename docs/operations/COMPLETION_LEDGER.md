@@ -13124,6 +13124,54 @@ authority grant boundary:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident runtime authority grant denial receipt readback
+
+Stage 6/Lens now has durable denial receipt persistence and readback for
+resident-runtime authority-grant attempts. `POST
+/lens/resident-runtime/authority-grant` still denies resident runtime execution
+authority, but when the exact Lens activation approval, `system.write` actor
+scope, and operator posture gates are ready, the denial now records a bounded
+`lens.resident_runtime.execution_authority_grant.denial.receipt` under the Lens
+data root. `GET /lens/resident-runtime/authority-grant/denials` returns those
+receipts with approval, permission, policy, authority-grant, denial, and
+governance summaries while remaining read-only.
+
+`/lens/status` and `/lens/host` now expose
+`resident_runtime_authority_grant_denial_receipts`, Stage 6 readiness includes
+`resident_runtime_authority_grant_denial_receipt_readback`, and the Stage 6
+checkpoint reports
+`resident_runtime_execution_authority_grant_denial_receipt_readback_observed:
+true`. Because the denial boundary and denial receipt readback are now
+observable, the checkpoint's next smallest truthful gap moves from
+`supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback`
+to `supervised_resident_host_runtime_authority_grant_readiness_audit`.
+
+This is backend API/readback, bounded denial-receipt persistence, readiness,
+checkpoint, and test work only. It does not grant resident runtime execution
+authority, approval decision authority, local process launch authority, process
+supervision or restart authority, service install/control authority, tray,
+hotkey, overlay, summon, capture, memory-write, or resident-claim authority. It
+does not launch a Lens host, supervise or restart a process, install/start/control
+a service, register tray presence, register or bind a hotkey, open or control an
+overlay, capture screen content, write memory, decide approvals, claim resident
+status, or add UI controls. The only new write behavior is the bounded denial
+receipt for a denied authority-grant attempt after the existing approval/scope
+gate is ready.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident runtime
+authority grant denial receipt readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed after formatting`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13183,9 +13231,11 @@ These remain true and should block any "finished" claim:
   policy contract that defines the deny-by-default requirements before any
   future resident runtime authority grant boundary, plus a governed
   `/lens/resident-runtime/authority-grant` denial boundary that keeps execution,
-  process supervision, service control, tray/hotkey/overlay control, receipt
-  writes, memory writes, and resident claims denied before any future grant
-  receipt-readback slice,
+  process supervision, service control, tray/hotkey/overlay control, memory
+  writes, and resident claims denied, plus a read-only
+  `/lens/resident-runtime/authority-grant/denials` receipt readback route that
+  records bounded denial receipts for denied authority-grant attempts after the
+  existing approval/scope/posture gate is ready,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
