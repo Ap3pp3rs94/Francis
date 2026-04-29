@@ -995,6 +995,59 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
     }
+    tray_enablement_gate = body["tray_enablement_gate"]
+    assert tray_enablement_gate["kind"] == "lens.tray.enablement_gate"
+    assert tray_enablement_gate["status"] == "blocked"
+    assert tray_enablement_gate["route"] == "/lens/tray"
+    assert tray_enablement_gate["preflight_route"] == "/lens/preflight"
+    assert tray_enablement_gate["status_route"] == "/lens/status"
+    assert tray_enablement_gate["host_route"] == "/lens/host"
+    assert tray_enablement_gate["ready"] is False
+    assert tray_enablement_gate["tray_presence"] is False
+    assert tray_enablement_gate["tray_preflight_ready"] is False
+    assert tray_enablement_gate["resident_host_ready"] is False
+    assert tray_enablement_gate["summon_binding_ready"] is False
+    assert tray_enablement_gate["overlay_ready"] is False
+    assert tray_enablement_gate["tray_host_enabled"] is False
+    assert tray_enablement_gate["tray_icon_enabled"] is False
+    assert tray_enablement_gate["notification_supported"] is False
+    assert tray_enablement_gate["presence_name"] == "Francis Lens Tray Presence"
+    assert tray_enablement_gate["tray_scope"] == "user_session"
+    assert tray_enablement_gate["required_before_enable"] == [
+        "resident_host_process",
+        "tray_icon",
+        "user_session_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert "tray_host_disabled" in tray_enablement_gate["blockers"]
+    assert "tray_icon_disabled" in tray_enablement_gate["blockers"]
+    assert "tray_registration_authority_not_granted" in tray_enablement_gate["blockers"]
+    assert "tray_icon_authority_not_granted" in tray_enablement_gate["blockers"]
+    assert "notification_authority_not_granted" in tray_enablement_gate["blockers"]
+    assert "resident_host_process_missing" in tray_enablement_gate["blockers"]
+    assert tray_enablement_gate["tray_preflight"] == preflight_surfaces["tray"]
+    assert tray_enablement_gate["surface_dependencies"]["host"]["ready"] is False
+    assert tray_enablement_gate["surface_dependencies"]["summon"]["status"] == "blocked"
+    assert tray_enablement_gate["surface_dependencies"]["overlay"]["status"] == "blocked"
+    assert tray_enablement_gate["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "local_process_launch_authority": False,
+        "mutation_authority_granted": False,
+        "service_control_authority": False,
+        "tray_registration_authority": False,
+        "tray_icon_authority": False,
+        "notification_authority": False,
+        "hotkey_registration_authority": False,
+    }
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
     assert {
         "nav.briefing",
@@ -1197,6 +1250,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_gate_criterion["hotkey_registration_authority"] is False
     assert summon_gate_criterion["summon_authority"] is False
     assert summon_gate_criterion["overlay_control_authority"] is False
+    tray_gate_criterion = _criterion(body, "tray_enablement_gate")
+    assert tray_gate_criterion["status"] == "blocked"
+    assert tray_gate_criterion["ready"] is False
+    assert tray_gate_criterion["tray_presence"] is False
+    assert tray_gate_criterion["evidence"] == ["/lens/tray", "/lens/preflight", "/lens/status"]
+    assert tray_gate_criterion["presence_name"] == "Francis Lens Tray Presence"
+    assert "tray_registration_authority_not_granted" in tray_gate_criterion["blockers"]
+    assert tray_gate_criterion["execution_authority"] is False
+    assert tray_gate_criterion["approval_decision_authority"] is False
+    assert tray_gate_criterion["local_process_launch_authority"] is False
+    assert tray_gate_criterion["service_control_authority"] is False
+    assert tray_gate_criterion["tray_registration_authority"] is False
+    assert tray_gate_criterion["tray_icon_authority"] is False
+    assert tray_gate_criterion["notification_authority"] is False
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
     assert _criterion(body, "summon_preflight")["global_hotkey"] == "Ctrl+Alt+Space"
     assert _criterion(body, "tray_preflight")["status"] == "blocked"
@@ -1246,6 +1313,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     summon_response = client.get("/lens/summon")
     assert summon_response.status_code == 200
     assert summon_response.json() == summon_enablement_gate
+    tray_response = client.get("/lens/tray")
+    assert tray_response.status_code == 200
+    assert tray_response.json() == tray_enablement_gate
     surface_activation_response = client.get("/lens/resident-surface/activation")
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"

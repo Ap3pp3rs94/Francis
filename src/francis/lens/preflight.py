@@ -680,3 +680,74 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         ),
         "message": "Lens summon enablement is read-only; global hotkey binding and summon-anywhere remain blocked.",
     }
+
+
+def lens_tray_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+    lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
+    surfaces = _dict_value(lens_preflight_payload, "surfaces")
+    host = _dict_value(surfaces, "host")
+    summon = _dict_value(surfaces, "summon")
+    tray = _dict_value(surfaces, "tray")
+    overlay = _dict_value(surfaces, "overlay")
+    tray_binding = _dict_value(tray, "tray")
+    blocker_set = {
+        *_blockers(host),
+        *_blockers(summon),
+        *_blockers(tray),
+        *_blockers(overlay),
+    }
+    tray_ready = bool(tray.get("ready"))
+    resident_host_ready = bool(host.get("ready"))
+    summon_ready = bool(summon.get("ready"))
+    overlay_ready = bool(overlay.get("ready"))
+    ready = tray_ready and resident_host_ready and summon_ready and overlay_ready
+    return {
+        "ok": True,
+        "kind": "lens.tray.enablement_gate",
+        "status": "ready_for_operator_review" if ready else "blocked",
+        "route": "/lens/tray",
+        "preflight_route": "/lens/preflight",
+        "status_route": "/lens/status",
+        "host_route": "/lens/host",
+        "ready": ready,
+        "tray_presence": ready,
+        "tray_preflight_ready": tray_ready,
+        "resident_host_ready": resident_host_ready,
+        "summon_binding_ready": summon_ready,
+        "overlay_ready": overlay_ready,
+        "tray_host_enabled": bool(tray_binding.get("tray_host_enabled")),
+        "tray_icon_enabled": bool(tray_binding.get("tray_icon_enabled")),
+        "notification_supported": bool(tray_binding.get("notification_supported")),
+        "presence_name": _safe_str(tray.get("presence_name"), "Francis Lens Tray Presence"),
+        "tray_scope": _safe_str(tray.get("tray_scope"), "user_session"),
+        "required_before_enable": _string_list(tray.get("required_before_enable")),
+        "blockers": sorted(blocker_set),
+        "tray_preflight": tray,
+        "surface_dependencies": {
+            "host": {
+                "status": _safe_str(host.get("status"), "missing"),
+                "ready": resident_host_ready,
+                "route": _safe_str(host.get("route"), "/lens/host"),
+                "blockers": _blockers(host),
+            },
+            "summon": {
+                "status": _safe_str(summon.get("status"), "missing"),
+                "ready": summon_ready,
+                "route": "/lens/summon",
+                "blockers": _blockers(summon),
+            },
+            "overlay": {
+                "status": _safe_str(overlay.get("status"), "missing"),
+                "ready": overlay_ready,
+                "blockers": _blockers(overlay),
+            },
+        },
+        "governance": _base_governance(
+            service_control_authority=False,
+            tray_registration_authority=False,
+            tray_icon_authority=False,
+            notification_authority=False,
+            hotkey_registration_authority=False,
+        ),
+        "message": "Lens tray enablement is read-only; tray registration, tray icon, and user-session presence remain blocked.",
+    }

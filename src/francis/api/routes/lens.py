@@ -18,6 +18,7 @@ from francis.lens import (
     lens_resident_surface_activation_boundary,
     lens_status,
     lens_summon_enablement_gate,
+    lens_tray_enablement_gate,
     request_lens_host_activation,
 )
 
@@ -50,6 +51,11 @@ def preflight() -> dict[str, Any]:
 @router.get("/summon")
 def summon() -> dict[str, Any]:
     return lens_summon_enablement_gate()
+
+
+@router.get("/tray")
+def tray() -> dict[str, Any]:
+    return lens_tray_enablement_gate()
 
 
 @router.get("/host")

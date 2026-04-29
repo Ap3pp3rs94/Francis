@@ -16,7 +16,7 @@ from francis.lens.activation import (
     lens_resident_surface_activation_boundary,
 )
 from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
-from francis.lens.preflight import lens_preflight, lens_summon_enablement_gate
+from francis.lens.preflight import lens_preflight, lens_summon_enablement_gate, lens_tray_enablement_gate
 from francis.reactor import reactor_operator_visibility_summary
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.snapshot import (
@@ -701,6 +701,7 @@ def _stage6_readiness(
     command_palette: dict[str, Any],
     preflight: dict[str, Any],
     summon_enablement_gate: dict[str, Any],
+    tray_enablement_gate: dict[str, Any],
     resident_surface_activation: dict[str, Any],
 ) -> dict[str, Any]:
     hud_runtime = _as_dict(hud.get("runtime"))
@@ -896,6 +897,22 @@ def _stage6_readiness(
                 "overlay_control_authority": False,
             },
             {
+                "id": "tray_enablement_gate",
+                "status": _safe_str(tray_enablement_gate.get("status")).strip() or "missing",
+                "evidence": ["/lens/tray", "/lens/preflight", "/lens/status"],
+                "ready": bool(tray_enablement_gate.get("ready")),
+                "tray_presence": bool(tray_enablement_gate.get("tray_presence")),
+                "presence_name": _safe_str(tray_enablement_gate.get("presence_name")).strip(),
+                "blockers": _as_list(tray_enablement_gate.get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "tray_icon_authority": False,
+                "notification_authority": False,
+            },
+            {
                 "id": "summon_preflight",
                 "status": _safe_str(summon_preflight.get("status")).strip() or "missing",
                 "evidence": ["/lens/preflight", "config/runtime/lens/summon.json"],
@@ -944,6 +961,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
     preflight = lens_preflight()
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
+    tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
 
     return {
@@ -961,6 +979,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_host": resident_host,
         "preflight": preflight,
         "summon_enablement_gate": summon_enablement_gate,
+        "tray_enablement_gate": tray_enablement_gate,
         "resident_surface_activation": resident_surface_activation,
         "command_palette": command_palette,
         "mode_selector": {
@@ -993,6 +1012,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             command_palette=command_palette,
             preflight=preflight,
             summon_enablement_gate=summon_enablement_gate,
+            tray_enablement_gate=tray_enablement_gate,
             resident_surface_activation=resident_surface_activation,
         ),
         "governance": {

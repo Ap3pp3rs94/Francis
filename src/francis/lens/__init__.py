@@ -11,7 +11,7 @@ from francis.lens.activation import (
     request_lens_host_activation,
 )
 from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
-from francis.lens.preflight import lens_preflight, lens_summon_enablement_gate
+from francis.lens.preflight import lens_preflight, lens_summon_enablement_gate, lens_tray_enablement_gate
 from francis.lens.status import lens_host_status, lens_status
 
 __all__ = [
@@ -28,5 +28,6 @@ __all__ = [
     "lens_resident_surface_activation_boundary",
     "lens_status",
     "lens_summon_enablement_gate",
+    "lens_tray_enablement_gate",
     "request_lens_host_activation",
 ]
