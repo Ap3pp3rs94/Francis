@@ -12140,6 +12140,41 @@ readiness proof diagnostic:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident surface readiness proof diagnostic
+
+Stage 6/Lens now has a composed resident-surface readiness proof diagnostic.
+`scripts/lens-resident-surface-proof.ps1 -Mode Status` verifies the existing
+host supervision proof, disabled tray presence preflight, disabled overlay
+window preflight, and disabled summon/hotkey preflight together. The proof
+returns `kind: lens.resident_surface.readiness_proof` with
+`status: proof_passed`, `resident_surface_ready: false`,
+`ready_for_lens_resident_claim: false`, and `resident_claim_allowed: false`.
+
+The Stage 6 checkpoint now names this proof as evidence for the blocked
+`system_resident_presence` criterion and advances the next smallest truthful
+gap to `resident_surface_activation_boundary_or_live_operator_experience_proof`.
+This removes the resident-surface proof gap without claiming tray presence,
+global hotkey binding, overlay window behavior, summon-anywhere behavior, live
+operator experience proof, or resident Lens readiness.
+
+This is diagnostic/proof-only. It does not install, start, stop, restart, or
+control a Windows service; enable process supervision; create a resident host
+process; register tray presence; bind a global hotkey; open, focus, or control
+an overlay; summon Francis anywhere; expose new UI controls; call API execute
+routes; write memory; decide approvals; or grant execution, approval-decision,
+memory-write, overlay-control, window-management, summon, capture, sensing,
+telemetry, policy, service-install, service-control, hotkey-registration,
+tray-registration, tray-icon, notification, API local-process-launch, or product
+local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+readiness proof diagnostic:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status -ForegroundRunSeconds 2`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12151,7 +12186,7 @@ These remain true and should block any "finished" claim:
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session with live foreground process
   readback proof plus API live process readback, a supervision readiness proof
-  diagnostic, disabled tracked service config
+  diagnostic, resident surface readiness proof diagnostic, disabled tracked service config
   baseline, resident supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
   readback boundary plus read-only Windows service status

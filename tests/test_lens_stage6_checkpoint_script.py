@@ -75,7 +75,11 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "overlay_window_missing" in payload["blockers"]
     assert "scripts/lens-host-foreground-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
-    assert payload["next_smallest_truthful_gap"] == "resident_surface_or_tray_presence_readiness_proof"
+    assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
+    assert (
+        payload["next_smallest_truthful_gap"]
+        == "resident_surface_activation_boundary_or_live_operator_experience_proof"
+    )
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
