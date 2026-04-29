@@ -12098,6 +12098,48 @@ proof diagnostic:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens supervision readiness proof diagnostic
+
+Stage 6/Lens now has a composed resident-host supervision readiness proof
+diagnostic. `scripts/lens-host-supervision-proof.ps1 -Mode Status` verifies the
+existing host lifecycle preflight is readable and blocked, composes the bounded
+foreground host proof, confirms the service plan remains non-installing and
+non-starting, confirms the Lens host service is not installed, and confirms
+process supervision, service control, service install, and product local-process
+launch authority remain denied.
+
+The proof returns `kind: lens.host.supervision_readiness_proof` with
+`status: proof_passed`, `supervision_ready: false`,
+`ready_for_resident_claim: false`, and `resident_claim_allowed: false`. The
+Stage 6 checkpoint now names this supervision proof as evidence for the blocked
+`system_resident_presence` criterion and advances the next smallest truthful gap
+to `resident_surface_or_tray_presence_readiness_proof`.
+
+This is diagnostic/proof-only. It does not install, start, stop, restart, or
+control a Windows service; enable process supervision; create a resident host
+process; register tray presence; bind a global hotkey; open or focus an overlay;
+summon Francis anywhere; expose new UI controls; call API execute routes; write
+memory; decide approvals; or grant execution, approval-decision, memory-write,
+overlay-control, window-management, summon, capture, sensing, telemetry, policy,
+service-install, service-control, hotkey-registration, tray-registration, API
+local-process-launch, or product local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens supervision
+readiness proof diagnostic:
+
+- `python -m pytest tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-proof.ps1 -Mode Status -ForegroundRunSeconds 2`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12108,7 +12150,8 @@ These remain true and should block any "finished" claim:
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session with live foreground process
-  readback proof plus API live process readback, disabled tracked service config
+  readback proof plus API live process readback, a supervision readiness proof
+  diagnostic, disabled tracked service config
   baseline, resident supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
   readback boundary plus read-only Windows service status
