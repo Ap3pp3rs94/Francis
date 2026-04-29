@@ -12772,6 +12772,48 @@ gate readback:
 - `python -m ruff format --check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens overlay enablement gate readback
+
+Stage 6/Lens now has a direct read-only overlay/window enablement gate at
+`/lens/overlay`. The route projects the existing Lens primitive preflight state
+for overlay, resident host, summon, and tray into one operator-facing gate for
+the future resident HUD/window path.
+
+The gate reports `kind: lens.overlay.enablement_gate`, `status: blocked`,
+`ready: false`, `overlay_window: false`, `overlay_preflight_ready: false`,
+`resident_host_ready: false`, `summon_binding_ready: false`,
+`tray_presence_ready: false`, `overlay_enabled: false`,
+`window_enabled: false`, `always_on_top: false`, `dock_supported: false`,
+`focus_supported: false`, `click_through_supported: false`, and
+`capture_supported: false`. Its blockers include disabled overlay window and
+always-on-top behavior, missing resident host process, missing summon/tray
+prerequisites, and missing overlay-control, window-management, capture,
+local-process-launch, tray-registration, and summon authority. The Lens status
+payload now embeds this gate under `overlay_enablement_gate` and exposes a Stage
+6 readiness criterion named `overlay_enablement_gate` while keeping resident
+overlay/window behavior itself blocked.
+
+This is backend/API readback only. It does not open, focus, dock, control, or
+capture through an overlay window; launch a resident host; register tray
+presence; register a hotkey; summon Francis anywhere; or claim resident Lens
+runtime. It does not grant execution authority, approval-decision authority,
+memory-write behavior, local-process-launch authority, service-control
+authority, window-management authority, overlay-control authority, capture
+authority, hotkey-registration authority, tray-registration authority, summon
+authority, or any new UI control.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens overlay enablement
+gate readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12813,6 +12855,9 @@ These remain true and should block any "finished" claim:
   plus a direct `/lens/tray` read-only tray/presence enablement gate that projects
   the blockers required before tray icon, notification, and user-session presence
   can be truthfully claimed,
+  plus a direct `/lens/overlay` read-only overlay/window enablement gate that
+  projects the blockers required before overlay window, always-on-top, focus,
+  dock, and capture behavior can be truthfully claimed,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

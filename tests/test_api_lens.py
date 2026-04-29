@@ -1048,6 +1048,62 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "notification_authority": False,
         "hotkey_registration_authority": False,
     }
+    overlay_enablement_gate = body["overlay_enablement_gate"]
+    assert overlay_enablement_gate["kind"] == "lens.overlay.enablement_gate"
+    assert overlay_enablement_gate["status"] == "blocked"
+    assert overlay_enablement_gate["route"] == "/lens/overlay"
+    assert overlay_enablement_gate["preflight_route"] == "/lens/preflight"
+    assert overlay_enablement_gate["status_route"] == "/lens/status"
+    assert overlay_enablement_gate["host_route"] == "/lens/host"
+    assert overlay_enablement_gate["ready"] is False
+    assert overlay_enablement_gate["overlay_window"] is False
+    assert overlay_enablement_gate["overlay_preflight_ready"] is False
+    assert overlay_enablement_gate["resident_host_ready"] is False
+    assert overlay_enablement_gate["summon_binding_ready"] is False
+    assert overlay_enablement_gate["tray_presence_ready"] is False
+    assert overlay_enablement_gate["overlay_enabled"] is False
+    assert overlay_enablement_gate["window_enabled"] is False
+    assert overlay_enablement_gate["always_on_top"] is False
+    assert overlay_enablement_gate["dock_supported"] is False
+    assert overlay_enablement_gate["focus_supported"] is False
+    assert overlay_enablement_gate["click_through_supported"] is False
+    assert overlay_enablement_gate["capture_supported"] is False
+    assert overlay_enablement_gate["overlay_name"] == "Francis Lens Overlay"
+    assert overlay_enablement_gate["overlay_scope"] == "user_session"
+    assert overlay_enablement_gate["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "always_on_top_policy",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
+    assert "overlay_window_disabled" in overlay_enablement_gate["blockers"]
+    assert "always_on_top_disabled" in overlay_enablement_gate["blockers"]
+    assert "overlay_control_authority_not_granted" in overlay_enablement_gate["blockers"]
+    assert "window_management_authority_not_granted" in overlay_enablement_gate["blockers"]
+    assert "capture_authority_not_granted" in overlay_enablement_gate["blockers"]
+    assert "resident_host_process_missing" in overlay_enablement_gate["blockers"]
+    assert overlay_enablement_gate["overlay_preflight"] == preflight_surfaces["overlay"]
+    assert overlay_enablement_gate["surface_dependencies"]["host"]["ready"] is False
+    assert overlay_enablement_gate["surface_dependencies"]["summon"]["status"] == "blocked"
+    assert overlay_enablement_gate["surface_dependencies"]["tray"]["status"] == "blocked"
+    assert overlay_enablement_gate["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "local_process_launch_authority": False,
+        "mutation_authority_granted": False,
+        "window_management_authority": False,
+        "service_control_authority": False,
+        "tray_registration_authority": False,
+        "hotkey_registration_authority": False,
+    }
     command_ids = {item["id"] for item in body["command_palette"]["commands"]}
     assert {
         "nav.briefing",
@@ -1264,6 +1320,22 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert tray_gate_criterion["tray_registration_authority"] is False
     assert tray_gate_criterion["tray_icon_authority"] is False
     assert tray_gate_criterion["notification_authority"] is False
+    overlay_gate_criterion = _criterion(body, "overlay_enablement_gate")
+    assert overlay_gate_criterion["status"] == "blocked"
+    assert overlay_gate_criterion["ready"] is False
+    assert overlay_gate_criterion["overlay_window"] is False
+    assert overlay_gate_criterion["evidence"] == ["/lens/overlay", "/lens/preflight", "/lens/status"]
+    assert overlay_gate_criterion["overlay_name"] == "Francis Lens Overlay"
+    assert "overlay_control_authority_not_granted" in overlay_gate_criterion["blockers"]
+    assert overlay_gate_criterion["execution_authority"] is False
+    assert overlay_gate_criterion["approval_decision_authority"] is False
+    assert overlay_gate_criterion["local_process_launch_authority"] is False
+    assert overlay_gate_criterion["service_control_authority"] is False
+    assert overlay_gate_criterion["window_management_authority"] is False
+    assert overlay_gate_criterion["overlay_control_authority"] is False
+    assert overlay_gate_criterion["capture_authority"] is False
+    assert overlay_gate_criterion["hotkey_registration_authority"] is False
+    assert overlay_gate_criterion["tray_registration_authority"] is False
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
     assert _criterion(body, "summon_preflight")["global_hotkey"] == "Ctrl+Alt+Space"
     assert _criterion(body, "tray_preflight")["status"] == "blocked"
@@ -1316,6 +1388,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     tray_response = client.get("/lens/tray")
     assert tray_response.status_code == 200
     assert tray_response.json() == tray_enablement_gate
+    overlay_response = client.get("/lens/overlay")
+    assert overlay_response.status_code == 200
+    assert overlay_response.json() == overlay_enablement_gate
     surface_activation_response = client.get("/lens/resident-surface/activation")
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"

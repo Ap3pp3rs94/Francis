@@ -14,6 +14,7 @@ from francis.lens import (
     lens_host_launch_manifest,
     lens_host_status,
     lens_host_supervision_gate,
+    lens_overlay_enablement_gate,
     lens_preflight,
     lens_resident_surface_activation_boundary,
     lens_status,
@@ -56,6 +57,11 @@ def summon() -> dict[str, Any]:
 @router.get("/tray")
 def tray() -> dict[str, Any]:
     return lens_tray_enablement_gate()
+
+
+@router.get("/overlay")
+def overlay() -> dict[str, Any]:
+    return lens_overlay_enablement_gate()
 
 
 @router.get("/host")
