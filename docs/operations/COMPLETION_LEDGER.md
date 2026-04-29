@@ -12847,6 +12847,49 @@ readback:
 - `npm run build`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens checkpoint enablement gate audit
+
+The Stage 6/Lens checkpoint now exposes the direct host/summon/tray/overlay
+enablement gates that were added after the earlier process-supervision boundary
+proof. `scripts/lens-stage6-checkpoint.ps1 -Mode Status` reports
+`enablement_gates` for `resident_supervision_enablement_gate`,
+`summon_enablement_gate`, `tray_enablement_gate`, and
+`overlay_enablement_gate`, plus summary counts for total, ready, and blocked
+enablement gates.
+
+The checkpoint remains `status: blocked`, `stage_state: active`, and
+`ready_to_close: false`. It still reports two ready done criteria
+(`mode_visibility` and `pilot_visibility_groundwork`) and three blocked done
+criteria (`summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`). The checkpoint's next smallest truthful gap now
+points at `supervised_resident_host_tray_hotkey_overlay_runtime_plan` instead
+of the already-ledgered process-supervision boundary proof.
+
+This is checkpoint/readback audit work only. It does not launch a resident Lens
+host, supervise or restart a process, install/start/control a service, register
+tray presence, register a hotkey, open or control an overlay, capture screen
+content, write memory, execute actions, decide approvals, or grant execution,
+approval-decision, local-process-launch, process-supervision, process-restart,
+service-install, service-control, tray-registration, tray-icon, notification,
+hotkey-registration, overlay-control, window-management, capture, summon,
+telemetry, sensing, or promotion authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens checkpoint
+enablement gate audit:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed after correcting the new expected blocker assertion`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12892,7 +12935,8 @@ These remain true and should block any "finished" claim:
   projects the blockers required before overlay window, always-on-top, focus,
   dock, and capture behavior can be truthfully claimed,
   plus chat UI System/ORB readback of the host, summon, tray, and overlay
-  enablement gate criteria,
+  enablement gate criteria, plus Stage 6 checkpoint readback of those
+  enablement gates,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

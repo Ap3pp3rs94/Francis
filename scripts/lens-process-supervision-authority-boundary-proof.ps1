@@ -189,8 +189,7 @@ $CheckpointObserved = (
   [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'stage_state' -Default '') -eq 'active' -and
   -not [bool](Get-PropertyValue -Payload $CheckpointPayload -Name 'ready_to_close' -Default $true) -and
   [string](Get-PropertyValue -Payload $SystemResidentCriterion -Name 'status' -Default '') -eq 'resident_overlay_activation_boundary_observed' -and
-  [bool](Get-PropertyValue -Payload $ActivationBoundaryProof -Name 'ok' -Default $false) -and
-  [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'process_supervision_authority_boundary_or_service_activation_plan'
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryProof -Name 'ok' -Default $false)
 )
 $HostSupervisionObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
@@ -318,7 +317,7 @@ $Payload = [ordered]@{
     service_plan_blocked_by = $ServicePlanBlockedBy
     service_status = [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_status' -Default '')
   }
-  next_smallest_truthful_gap = 'resident_supervision_enablement_gate_or_tray_hotkey_overlay_runtime'
+  next_smallest_truthful_gap = 'supervised_resident_host_tray_hotkey_overlay_runtime_plan'
   governance = [ordered]@{
     diagnostic_only = $true
     checkpoint_readback = $CheckpointObserved

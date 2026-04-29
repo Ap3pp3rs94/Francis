@@ -52,9 +52,34 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "criteria_total": 5,
         "ready_total": 2,
         "blocked_total": 3,
+        "enablement_gate_total": 4,
+        "enablement_gate_ready_total": 0,
+        "enablement_gate_blocked_total": 4,
         "blocker_total": len(payload["blockers"]),
     }
     criteria = {item["id"]: item for item in payload["criteria"]}
+    enablement_gates = {item["id"]: item for item in payload["enablement_gates"]}
+    assert enablement_gates["resident_supervision_enablement_gate"]["status"] == "blocked"
+    assert enablement_gates["resident_supervision_enablement_gate"]["ready"] is False
+    assert enablement_gates["resident_supervision_enablement_gate"]["resident_claim_allowed"] is False
+    assert "process_supervision_enabled" in enablement_gates["resident_supervision_enablement_gate"]["blockers"]
+    assert "service_control_authority_false" in enablement_gates["resident_supervision_enablement_gate"]["blockers"]
+    assert "/lens/host/supervision" in enablement_gates["resident_supervision_enablement_gate"]["evidence"]
+    assert enablement_gates["summon_enablement_gate"]["status"] == "blocked"
+    assert enablement_gates["summon_enablement_gate"]["ready"] is False
+    assert enablement_gates["summon_enablement_gate"]["summon_anywhere"] is False
+    assert enablement_gates["summon_enablement_gate"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert "summon_binding_missing" in enablement_gates["summon_enablement_gate"]["blockers"]
+    assert enablement_gates["tray_enablement_gate"]["status"] == "blocked"
+    assert enablement_gates["tray_enablement_gate"]["ready"] is False
+    assert enablement_gates["tray_enablement_gate"]["tray_presence"] is False
+    assert enablement_gates["tray_enablement_gate"]["presence_name"] == "Francis Lens Tray Presence"
+    assert "tray_registration_authority_not_granted" in enablement_gates["tray_enablement_gate"]["blockers"]
+    assert enablement_gates["overlay_enablement_gate"]["status"] == "blocked"
+    assert enablement_gates["overlay_enablement_gate"]["ready"] is False
+    assert enablement_gates["overlay_enablement_gate"]["overlay_window"] is False
+    assert enablement_gates["overlay_enablement_gate"]["overlay_name"] == "Francis Lens Overlay"
+    assert "overlay_control_authority_not_granted" in enablement_gates["overlay_enablement_gate"]["blockers"]
     assert criteria["summon_anywhere"]["status"] == "not_implemented"
     assert criteria["summon_anywhere"]["ready"] is False
     assert "resident_host_process_missing" in criteria["summon_anywhere"]["blockers"]
@@ -158,9 +183,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
-    assert payload["next_smallest_truthful_gap"] == (
-        "process_supervision_authority_boundary_or_service_activation_plan"
-    )
+    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_tray_hotkey_overlay_runtime_plan"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,

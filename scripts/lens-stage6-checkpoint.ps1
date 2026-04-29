@@ -416,8 +416,34 @@ $Criteria = @(
       -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
+$EnablementGateIds = @(
+  'resident_supervision_enablement_gate',
+  'summon_enablement_gate',
+  'tray_enablement_gate',
+  'overlay_enablement_gate'
+)
+$EnablementGates = @($EnablementGateIds | ForEach-Object {
+    $GateId = $_
+    $Gate = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId $GateId
+    [ordered]@{
+      id = $GateId
+      status = [string](Get-PropertyValue -Payload $Gate -Name 'status' -Default 'missing')
+      ready = [bool](Get-PropertyValue -Payload $Gate -Name 'ready' -Default $false)
+      evidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Gate -Name 'evidence' -Default @())
+      blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Gate -Name 'blockers' -Default @())
+      resident_claim_allowed = [bool](Get-PropertyValue -Payload $Gate -Name 'resident_claim_allowed' -Default $false)
+      summon_anywhere = [bool](Get-PropertyValue -Payload $Gate -Name 'summon_anywhere' -Default $false)
+      tray_presence = [bool](Get-PropertyValue -Payload $Gate -Name 'tray_presence' -Default $false)
+      overlay_window = [bool](Get-PropertyValue -Payload $Gate -Name 'overlay_window' -Default $false)
+      global_hotkey = [string](Get-PropertyValue -Payload $Gate -Name 'global_hotkey' -Default '')
+      presence_name = [string](Get-PropertyValue -Payload $Gate -Name 'presence_name' -Default '')
+      overlay_name = [string](Get-PropertyValue -Payload $Gate -Name 'overlay_name' -Default '')
+    }
+  })
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_['ready'] })
 $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_['ready'] })
+$ReadyEnablementGates = @($EnablementGates | Where-Object { [bool]$_['ready'] })
+$BlockedEnablementGates = @($EnablementGates | Where-Object { -not [bool]$_['ready'] })
 $AllBlockers = @($Criteria | ForEach-Object { $_['blockers'] } | ForEach-Object { $_ } | Sort-Object -Unique)
 $ReadyToClose = $LensStatusOk -and $BlockedCriteria.Count -eq 0
 
@@ -435,9 +461,13 @@ $Payload = [ordered]@{
     criteria_total = $Criteria.Count
     ready_total = $ReadyCriteria.Count
     blocked_total = $BlockedCriteria.Count
+    enablement_gate_total = $EnablementGates.Count
+    enablement_gate_ready_total = $ReadyEnablementGates.Count
+    enablement_gate_blocked_total = $BlockedEnablementGates.Count
     blocker_total = $AllBlockers.Count
   }
   criteria = @($Criteria)
+  enablement_gates = @($EnablementGates)
   blockers = @($AllBlockers)
   live_operator_experience_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default 'missing')
@@ -510,7 +540,7 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'process_supervision_authority_boundary_or_service_activation_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'supervised_resident_host_tray_hotkey_overlay_runtime_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
