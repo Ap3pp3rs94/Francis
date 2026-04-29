@@ -1241,6 +1241,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert execution_plan_criterion["execution_authority"] is False
     assert execution_plan_criterion["approval_decision_authority"] is False
     assert execution_plan_criterion["local_process_launch_authority"] is False
+    runtime_preflight_criterion = _criterion(body, "resident_runtime_authority_grant_preflight")
+    assert runtime_preflight_criterion["status"] == "blocked"
+    assert runtime_preflight_criterion["ready"] is False
+    assert runtime_preflight_criterion["grant_ready"] is False
+    assert runtime_preflight_criterion["authority_grant_ready"] is False
+    assert runtime_preflight_criterion["runtime_ready"] is False
+    assert runtime_preflight_criterion["resident_claim_allowed"] is False
+    assert runtime_preflight_criterion["evidence"] == [
+        "/lens/resident-runtime/preflight",
+        "/lens/host/activation/preflight",
+        "/lens/status",
+    ]
+    assert "approval_id_required" in runtime_preflight_criterion["blockers"]
+    assert "resident_runtime_authority_grant_not_implemented" in runtime_preflight_criterion["blockers"]
+    assert "process_supervision_authority_not_granted" in runtime_preflight_criterion["blockers"]
+    assert runtime_preflight_criterion["execution_authority"] is False
+    assert runtime_preflight_criterion["approval_decision_authority"] is False
+    assert runtime_preflight_criterion["local_process_launch_authority"] is False
+    assert runtime_preflight_criterion["process_supervision_authority"] is False
+    assert runtime_preflight_criterion["process_restart_authority"] is False
+    assert runtime_preflight_criterion["service_install_authority"] is False
+    assert runtime_preflight_criterion["service_control_authority"] is False
+    assert runtime_preflight_criterion["tray_registration_authority"] is False
+    assert runtime_preflight_criterion["hotkey_registration_authority"] is False
+    assert runtime_preflight_criterion["overlay_control_authority"] is False
+    assert runtime_preflight_criterion["memory_write"] is False
+    assert runtime_preflight_criterion["receipt_write_authority"] is False
+    assert runtime_preflight_criterion["resident_claim_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1331,6 +1359,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["activation_ready"] is False
     assert resident_surface_activation["resident_surface_ready"] is False
     assert resident_surface_activation["resident_claim_allowed"] is False
+    assert resident_surface_activation["execution"]["runtime_preflight_route"] == "/lens/resident-runtime/preflight"
+    assert resident_surface_activation["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation["execution"]["runtime_execute_route"] == "/lens/resident-runtime/execute"
     assert resident_surface_activation["execution"]["runtime_denial_status"] == "blocked"
     assert resident_surface_activation["execution"]["would_launch_process"] is False
@@ -1357,6 +1387,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["resident_runtime_plan"]["kind"] == "lens.resident_runtime.activation_plan"
     assert resident_surface_activation["resident_runtime_plan"]["runtime_ready"] is False
     assert (
+        resident_surface_activation["resident_runtime_preflight"]["kind"]
+        == "lens.resident_runtime.activation_preflight"
+    )
+    assert resident_surface_activation["resident_runtime_preflight"]["grant_ready"] is False
+    assert (
         resident_surface_activation["resident_runtime_denial"]["kind"]
         == "lens.resident_runtime.activation.execution_denial"
     )
@@ -1379,6 +1414,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "status": "blocked_readback_ready",
         "evidence": [
             "/lens/resident-surface/activation",
+            "/lens/resident-runtime/preflight",
             "/lens/resident-runtime/plan",
             "/lens/host/activation/plan",
             "/lens/preflight",
@@ -1519,6 +1555,31 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"
     assert surface_activation_response.json()["resident_surface_ready"] is False
+    runtime_preflight_response = client.get("/lens/resident-runtime/preflight?actor=test.system.write")
+    assert runtime_preflight_response.status_code == 200
+    runtime_preflight_body = runtime_preflight_response.json()
+    assert runtime_preflight_body["kind"] == "lens.resident_runtime.activation_preflight"
+    assert runtime_preflight_body["route"] == "/lens/resident-runtime/preflight"
+    assert runtime_preflight_body["plan_route"] == "/lens/resident-runtime/plan"
+    assert runtime_preflight_body["execute_route"] == "/lens/resident-runtime/execute"
+    assert runtime_preflight_body["status"] == "blocked"
+    assert runtime_preflight_body["grant_ready"] is False
+    assert runtime_preflight_body["authority_grant_ready"] is False
+    assert runtime_preflight_body["runtime_ready"] is False
+    assert runtime_preflight_body["resident_claim_allowed"] is False
+    assert runtime_preflight_body["permission"]["ready"] is True
+    assert "approval_id_required" in runtime_preflight_body["blockers"]
+    assert "system_write_scope_not_ready" not in runtime_preflight_body["blockers"]
+    assert "resident_runtime_authority_grant_not_implemented" in runtime_preflight_body["blockers"]
+    assert runtime_preflight_body["governance"]["gate"] == "lens_resident_runtime_activation_preflight"
+    assert runtime_preflight_body["governance"]["preflight_only"] is True
+    assert runtime_preflight_body["governance"]["authority_grant_preflight"] is True
+    assert runtime_preflight_body["governance"]["execution_authority"] is False
+    assert runtime_preflight_body["governance"]["approval_decision_authority"] is False
+    assert runtime_preflight_body["governance"]["process_supervision_authority"] is False
+    assert runtime_preflight_body["governance"]["service_control_authority"] is False
+    assert runtime_preflight_body["governance"]["resident_claim_authority"] is False
+    assert runtime_preflight_body["governance"]["memory_write"] is False
     runtime_plan_response = client.get("/lens/resident-runtime/plan")
     assert runtime_plan_response.status_code == 200
     runtime_plan_body = runtime_plan_response.json()
@@ -1999,6 +2060,36 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert approved_plan_body["governance"]["local_process_launch_authority"] is False
     assert approved_plan_body["governance"]["receipt_write_authority"] is False
 
+    resident_runtime_preflight = client.get(
+        f"/lens/resident-runtime/preflight?approval_id={approval_id}&actor=test.system.write"
+    )
+    assert resident_runtime_preflight.status_code == 200
+    resident_runtime_preflight_body = resident_runtime_preflight.json()
+    assert resident_runtime_preflight_body["kind"] == "lens.resident_runtime.activation_preflight"
+    assert resident_runtime_preflight_body["status"] == "blocked"
+    assert resident_runtime_preflight_body["approval_id"] == approval_id
+    assert resident_runtime_preflight_body["approval"]["status"] == "approved"
+    assert resident_runtime_preflight_body["approval"]["approved"] is True
+    assert resident_runtime_preflight_body["permission"]["ready"] is True
+    assert resident_runtime_preflight_body["operator_posture"]["ready"] is True
+    assert resident_runtime_preflight_body["grant_ready"] is False
+    assert resident_runtime_preflight_body["authority_grant_ready"] is False
+    assert resident_runtime_preflight_body["runtime_ready"] is False
+    assert resident_runtime_preflight_body["resident_claim_allowed"] is False
+    assert "activation_approval_not_approved" not in resident_runtime_preflight_body["blockers"]
+    assert "system_write_scope_not_ready" not in resident_runtime_preflight_body["blockers"]
+    assert "resident_runtime_authority_grant_not_implemented" in resident_runtime_preflight_body["blockers"]
+    assert "process_supervision_authority_not_granted" in resident_runtime_preflight_body["blockers"]
+    assert "tray_registration_authority_not_granted" in resident_runtime_preflight_body["blockers"]
+    assert "overlay_control_authority_not_granted" in resident_runtime_preflight_body["blockers"]
+    assert resident_runtime_preflight_body["governance"]["gate"] == "lens_resident_runtime_activation_preflight"
+    assert resident_runtime_preflight_body["governance"]["preflight_only"] is True
+    assert resident_runtime_preflight_body["governance"]["execution_authority"] is False
+    assert resident_runtime_preflight_body["governance"]["process_supervision_authority"] is False
+    assert resident_runtime_preflight_body["governance"]["service_control_authority"] is False
+    assert resident_runtime_preflight_body["governance"]["resident_claim_authority"] is False
+    assert resident_runtime_preflight_body["governance"]["memory_write"] is False
+
     resident_runtime_plan = client.get(f"/lens/resident-runtime/plan?approval_id={approval_id}&actor=test.system.write")
     assert resident_runtime_plan.status_code == 200
     resident_runtime_plan_body = resident_runtime_plan.json()
@@ -2062,6 +2153,7 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["applied"] is False
     assert resident_surface_activation_body["execution"]["preflight_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["plan_status"] == "blocked"
+    assert resident_surface_activation_body["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_denial_status"] == (
         "denied_no_resident_runtime_authority"
@@ -2088,6 +2180,8 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["surface"]["tray_status"] == "blocked"
     assert resident_surface_activation_body["surface"]["overlay_status"] == "blocked"
     surface_components = {item["id"]: item for item in resident_surface_activation_body["components"]}
+    assert surface_components["resident_runtime_preflight"]["status"] == "blocked"
+    assert surface_components["resident_runtime_preflight"]["ready"] is False
     assert surface_components["resident_runtime_plan"]["status"] == "blocked"
     assert surface_components["resident_runtime_activation_denial"]["status"] == "denied_no_resident_runtime_authority"
     assert surface_components["host_activation_denial"]["status"] == "denied_no_execution_authority"

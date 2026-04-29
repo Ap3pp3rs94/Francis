@@ -12982,6 +12982,55 @@ authority boundary:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident runtime grant preflight
+
+Stage 6/Lens now has a read-only resident-runtime grant preflight at
+`/lens/resident-runtime/preflight`. The preflight composes the exact activation
+approval, actor permission, operator posture, resident supervision gate, summon
+gate, tray gate, and overlay gate before any future resident-runtime execution
+authority can be considered. It reports `grant_ready: false`,
+`authority_grant_ready: false`, `runtime_ready: false`, and
+`resident_claim_allowed: false`, with explicit blockers including
+`resident_runtime_authority_grant_not_implemented`,
+`resident_runtime_execution_authority_not_granted`,
+`process_supervision_authority_not_granted`, service-control denial,
+tray/hotkey/overlay denial, receipt-write denial, and resident-claim denial.
+
+`/lens/resident-runtime/plan`, `/lens/host`, `/lens/status`, and
+`/lens/resident-surface/activation` now embed or link the same preflight
+readback. Stage 6 readiness now includes
+`resident_runtime_authority_grant_preflight`, and the Stage 6 checkpoint now
+reports `resident_runtime_authority_grant_preflight_observed: true`. Because the
+authority boundary and grant preflight are now both observable, the checkpoint's
+next smallest truthful gap moves from
+`supervised_resident_host_runtime_execution_authority_grant` to
+`supervised_resident_host_runtime_execution_policy_contract`.
+
+This is backend API/readback, readiness, and checkpoint projection work only. It
+does not grant resident runtime execution authority. It does not launch a Lens
+host, supervise or restart a process, install/start/control a service, register
+tray presence, register or bind a hotkey, open or control an overlay, capture
+screen content, write memory, write runtime receipts, decide approvals, claim
+resident status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident runtime
+grant preflight:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed after formatting src\francis\lens\activation.py and tests\test_lens_stage6_checkpoint_script.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell LF-to-CRLF working-copy warnings only`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13034,7 +13083,10 @@ These remain true and should block any "finished" claim:
   blocked, plus a governed `/lens/resident-runtime/execute` denial boundary and
   Stage 6 checkpoint readback that keep resident runtime execution, process
   supervision, service control, tray/hotkey/overlay control, memory writes,
-  runtime receipts, and resident claims denied,
+  runtime receipts, and resident claims denied, plus a direct
+  `/lens/resident-runtime/preflight` grant preflight that makes the approval,
+  actor, posture, supervision, summon, tray, overlay, receipt, and resident-claim
+  blockers explicit before the next policy-contract slice,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
