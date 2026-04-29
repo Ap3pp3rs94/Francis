@@ -28,12 +28,14 @@ If you are interested in trustworthy local AI systems, governed automation, audi
 
 ## Current Build Posture
 
-Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product.
+Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product. The active roadmap work is currently Stage 6 / Lens MVP: making Francis visible as an OS-layer presence without claiming resident capability before it exists.
 
 - `P9_OBSERVABILITY` is the strongest plane today.
 - `P3_GOVERNANCE` is materially real.
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
-- Current priority is the end-to-end `plan -> gate -> execute -> trace -> memory` path, then making that path clear in the operator UI.
+- Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
+- Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and a bounded foreground host proof.
+- Stage 6 is not closed: there is still no OS-wide summon, resident host process, installed/started service, tray presence, global hotkey binding, resident overlay/HUD runtime, OS-level command palette, or live Pilot takeover surface.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
