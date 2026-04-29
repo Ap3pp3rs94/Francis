@@ -353,6 +353,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["activation_request"] == {
         "status": "approval_request_ready",
         "route": "/lens/host/activation/request",
+        "readback_route": "/lens/host/activation",
         "method": "POST",
         "action": "lens.host.foreground_activation",
         "mode": "foreground_status_session",
@@ -368,6 +369,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "required_scope": "system.write",
             "approval_action": "lens.host.foreground_activation",
             "approval_request_write": True,
+            "readback_route": "/lens/host/activation",
             "activation_authority": False,
             "execution_authority": False,
             "approval_decision_authority": False,
@@ -382,6 +384,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "next_step": "operator_decides_pending_lens_host_activation_request",
         },
     }
+    assert resident_host["activation_readback_route"] == "/lens/host/activation"
+    activation_state = resident_host["activation_state"]
+    assert activation_state["kind"] == "lens.host.activation.readback"
+    assert activation_state["status"] == "none"
+    assert activation_state["request_route"] == "/lens/host/activation/request"
+    assert activation_state["decision_route"] == "/approvals/decision"
+    assert activation_state["approval_action"] == "lens.host.foreground_activation"
+    assert activation_state["pending_count"] == 0
+    assert activation_state["approved_count"] == 0
+    assert activation_state["rejected_count"] == 0
+    assert activation_state["emergency_count"] == 0
+    assert activation_state["total_count"] == 0
+    assert activation_state["latest"] is None
+    assert activation_state["items"] == []
+    assert activation_state["governance"]["gate"] == "lens_host_activation_readback"
+    assert activation_state["governance"]["read_only_contract"] is True
+    assert activation_state["governance"]["approval_request_write"] is False
+    assert activation_state["governance"]["execution_authority"] is False
+    assert activation_state["governance"]["approval_decision_authority"] is False
+    assert activation_state["governance"]["local_process_launch_authority"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -783,6 +805,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "approval_decision_authority": False,
         "local_process_launch_authority": False,
     }
+    assert _criterion(body, "host_activation_approval_readback") == {
+        "id": "host_activation_approval_readback",
+        "status": "none",
+        "evidence": ["/lens/host/activation", "/approvals/list?status=pending", "/lens/status"],
+        "pending_count": 0,
+        "approved_count": 0,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+    }
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1084,5 +1116,100 @@ def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch,
     status_body = lens_status.json()
     assert status_body["approvals_view"]["pending_count"] == 1
     assert status_body["resident_host"]["activation_request_route"] == "/lens/host/activation/request"
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_activation_readback_tracks_decision_without_execution(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/host/activation/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants to review Lens host activation",
+            "mode": "foreground_status_session",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    pending = client.get("/lens/host/activation?limit=10")
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["kind"] == "lens.host.activation.readback"
+    assert pending_body["status"] == "pending_review"
+    assert pending_body["pending_count"] == 1
+    assert pending_body["approved_count"] == 0
+    assert pending_body["total_count"] == 1
+    assert pending_body["latest"]["id"] == approval_id
+    assert pending_body["latest"]["status"] == "pending"
+    assert pending_body["latest"]["action"] == "lens.host.foreground_activation"
+    assert pending_body["by_status"]["pending"][0]["id"] == approval_id
+    assert pending_body["governance"]["gate"] == "lens_host_activation_readback"
+    assert pending_body["governance"]["read_only_contract"] is True
+    assert pending_body["governance"]["approval_request_write"] is False
+    assert pending_body["governance"]["activation_authority"] is False
+    assert pending_body["governance"]["execution_authority"] is False
+    assert pending_body["governance"]["approval_decision_authority"] is False
+    assert pending_body["governance"]["local_process_launch_authority"] is False
+    assert pending_body["governance"]["next_step"] == "operator_decide_pending_lens_host_activation_request"
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as a review decision",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["ok"] is True
+    assert decided.json()["status"] == "approved"
+
+    approved = client.get("/lens/host/activation?limit=10")
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["status"] == "approved_no_execution"
+    assert approved_body["pending_count"] == 0
+    assert approved_body["approved_count"] == 1
+    assert approved_body["rejected_count"] == 0
+    assert approved_body["total_count"] == 1
+    assert approved_body["latest"]["id"] == approval_id
+    assert approved_body["latest"]["status"] == "approved"
+    assert approved_body["latest"]["decision_actor"] == "test.approvals.decision"
+    assert approved_body["by_status"]["approved"][0]["id"] == approval_id
+    assert approved_body["governance"]["next_step"] == "approved_activation_requires_separate_execution_slice"
+    assert approved_body["governance"]["activation_authority"] is False
+    assert approved_body["governance"]["execution_authority"] is False
+    assert approved_body["governance"]["local_process_launch_authority"] is False
+
+    lens_status = client.get("/lens/status")
+    assert lens_status.status_code == 200
+    status_body = lens_status.json()
+    activation_state = status_body["resident_host"]["activation_state"]
+    assert activation_state["status"] == "approved_no_execution"
+    assert activation_state["approved_count"] == 1
+    assert activation_state["pending_count"] == 0
+    assert _criterion(status_body, "host_activation_approval_readback")["status"] == "approved_no_execution"
+    assert _criterion(status_body, "host_activation_approval_readback")["approved_count"] == 1
+    assert _criterion(status_body, "host_activation_approval_readback")["pending_count"] == 0
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

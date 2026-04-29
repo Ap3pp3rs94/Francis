@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from francis.lens import (
+    lens_host_activation_readback,
     lens_host_launch_manifest,
     lens_host_status,
     lens_preflight,
@@ -41,6 +42,11 @@ def host(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
 @router.get("/host/manifest")
 def host_manifest() -> dict[str, Any]:
     return lens_host_launch_manifest()
+
+
+@router.get("/host/activation")
+def host_activation(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_host_activation_readback(limit=limit)
 
 
 @router.post("/host/activation/request")

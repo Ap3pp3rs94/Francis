@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from francis.governance.approval_projection import approval_projection_fields
-from francis.governance.approvals import request as create_approval_request
+from francis.governance.approvals import list_requests, request as create_approval_request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.lens.host_manifest import lens_host_launch_manifest
@@ -11,11 +11,13 @@ from francis.lens.preflight import lens_preflight
 
 LENS_HOST_ACTIVATION_ACTION = "lens.host.foreground_activation"
 LENS_HOST_ACTIVATION_ROUTE = "/lens/host/activation/request"
+LENS_HOST_ACTIVATION_READBACK_ROUTE = "/lens/host/activation"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
 _DEFAULT_MODE = "foreground_status_session"
 _ALLOWED_MODES = {_DEFAULT_MODE}
+_APPROVAL_STATUSES = ("pending", "approved", "rejected", "emergency")
 
 
 def _safe_str(value: Any) -> str:
@@ -39,18 +41,38 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _safe_limit(value: Any, *, default: int = 5) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(50, parsed))
+
+
+def _record_ts(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _activation_mode(value: Any) -> str:
     mode = _safe_str(value).strip().lower()
     return mode if mode in _ALLOWED_MODES else _DEFAULT_MODE
 
 
-def _activation_governance(*, route: str) -> dict[str, Any]:
+def _activation_governance(*, route: str, approval_request_write: bool = True) -> dict[str, Any]:
     return {
         "gate": "lens_host_activation_request",
         "route": route,
         "required_scope": LENS_HOST_ACTIVATION_SCOPE,
         "approval_action": LENS_HOST_ACTIVATION_ACTION,
-        "approval_request_write": True,
+        "approval_request_write": approval_request_write,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "activation_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -70,6 +92,7 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
     return {
         "status": "approval_request_ready",
         "route": LENS_HOST_ACTIVATION_ROUTE,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "method": "POST",
         "action": LENS_HOST_ACTIVATION_ACTION,
         "mode": _DEFAULT_MODE,
@@ -121,6 +144,82 @@ def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     out = redacted if isinstance(redacted, dict) else {}
     out.update(approval_projection_fields(item))
     return out
+
+
+def _activation_approval_items(
+    *, limit: int
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], dict[str, int]]:
+    by_status: dict[str, list[dict[str, Any]]] = {}
+    counts: dict[str, int] = {}
+    all_items: list[dict[str, Any]] = []
+    for status in _APPROVAL_STATUSES:
+        try:
+            records = list_requests(status=status, limit=5000)
+        except Exception:
+            records = []
+        items = [
+            _approval_item(item)
+            for item in records
+            if isinstance(item, dict) and _safe_str(item.get("action")).strip() == LENS_HOST_ACTIVATION_ACTION
+        ]
+        items.sort(
+            key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+            reverse=True,
+        )
+        counts[status] = len(items)
+        by_status[status] = items[:limit]
+        all_items.extend(items)
+    all_items.sort(
+        key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+        reverse=True,
+    )
+    return by_status, all_items[:limit], counts
+
+
+def _activation_readback_status(counts: dict[str, int]) -> tuple[str, str]:
+    if counts.get("pending", 0) > 0:
+        return "pending_review", "operator_decide_pending_lens_host_activation_request"
+    if counts.get("emergency", 0) > 0:
+        return "emergency_reviewed_no_execution", "operator_review_emergency_activation_decision"
+    if counts.get("approved", 0) > 0:
+        return "approved_no_execution", "approved_activation_requires_separate_execution_slice"
+    if counts.get("rejected", 0) > 0:
+        return "rejected", "operator_may_request_lens_host_activation_again"
+    return "none", "request_lens_host_activation_before_runtime_start"
+
+
+def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    by_status, latest_items, counts = _activation_approval_items(limit=safe_limit)
+    total = sum(counts.values())
+    status, next_step = _activation_readback_status(counts)
+    latest = latest_items[0] if latest_items else None
+    return {
+        "ok": True,
+        "kind": "lens.host.activation.readback",
+        "status": status,
+        "route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "request_route": LENS_HOST_ACTIVATION_ROUTE,
+        "decision_route": "/approvals/decision",
+        "approval_action": LENS_HOST_ACTIVATION_ACTION,
+        "pending_count": counts.get("pending", 0),
+        "approved_count": counts.get("approved", 0),
+        "rejected_count": counts.get("rejected", 0),
+        "emergency_count": counts.get("emergency", 0),
+        "total_count": total,
+        "latest": latest,
+        "items": latest_items,
+        "by_status": by_status,
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_ACTIVATION_READBACK_ROUTE,
+                approval_request_write=False,
+            ),
+            "gate": "lens_host_activation_readback",
+            "read_only_contract": True,
+            "next_step": next_step,
+        },
+    }
 
 
 def _activation_payload(*, actor: Any, mode: str, route: str) -> dict[str, Any]:

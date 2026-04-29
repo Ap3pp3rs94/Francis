@@ -6,7 +6,7 @@ from typing import Any
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
-from francis.lens.activation import lens_host_activation_request_contract
+from francis.lens.activation import lens_host_activation_readback, lens_host_activation_request_contract
 from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.lens.preflight import lens_preflight
 from francis.reactor import reactor_operator_visibility_summary
@@ -224,9 +224,10 @@ def _hud_runtime_surface() -> dict[str, Any]:
     }
 
 
-def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any]) -> dict[str, Any]:
+def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any], limit: int = 5) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
     activation_request = lens_host_activation_request_contract()
+    activation_state = lens_host_activation_readback(limit=limit)
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
@@ -321,6 +322,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "route": "/lens/host",
         "activation_request_route": _safe_str(activation_request.get("route")).strip(),
         "activation_request": activation_request,
+        "activation_readback_route": _safe_str(activation_state.get("route")).strip(),
+        "activation_state": activation_state,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
@@ -745,6 +748,16 @@ def _stage6_readiness(
                 "local_process_launch_authority": False,
             },
             {
+                "id": "host_activation_approval_readback",
+                "status": _safe_str(_as_dict(resident_host.get("activation_state")).get("status")).strip() or "missing",
+                "evidence": ["/lens/host/activation", "/approvals/list?status=pending", "/lens/status"],
+                "pending_count": _safe_int(_as_dict(resident_host.get("activation_state")).get("pending_count")),
+                "approved_count": _safe_int(_as_dict(resident_host.get("activation_state")).get("approved_count")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+            },
+            {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
                 "evidence": ["/lens/host", "/lens/preflight", "/lens/status"],
@@ -801,7 +814,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         reactor=reactor,
     )
     command_palette = _command_palette_surface(approvals=approvals)
-    resident_host = _resident_host_surface(hud=hud, command_palette=command_palette)
+    resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
     preflight = lens_preflight()
 
     return {
