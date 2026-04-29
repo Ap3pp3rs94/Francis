@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from francis.lens.activation import (
+    lens_host_activation_execution_preflight,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
     request_lens_host_activation,
@@ -10,6 +11,7 @@ from francis.lens.preflight import lens_preflight
 from francis.lens.status import lens_host_status, lens_status
 
 __all__ = [
+    "lens_host_activation_execution_preflight",
     "lens_host_activation_request_contract",
     "lens_host_activation_readback",
     "lens_host_launch_manifest",

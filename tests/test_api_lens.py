@@ -354,6 +354,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "status": "approval_request_ready",
         "route": "/lens/host/activation/request",
         "readback_route": "/lens/host/activation",
+        "preflight_route": "/lens/host/activation/preflight",
         "method": "POST",
         "action": "lens.host.foreground_activation",
         "mode": "foreground_status_session",
@@ -370,6 +371,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "approval_action": "lens.host.foreground_activation",
             "approval_request_write": True,
             "readback_route": "/lens/host/activation",
+            "preflight_route": "/lens/host/activation/preflight",
+            "read_only_contract": False,
             "activation_authority": False,
             "execution_authority": False,
             "approval_decision_authority": False,
@@ -404,6 +407,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_state["governance"]["execution_authority"] is False
     assert activation_state["governance"]["approval_decision_authority"] is False
     assert activation_state["governance"]["local_process_launch_authority"] is False
+    assert resident_host["activation_execution_preflight_route"] == "/lens/host/activation/preflight"
+    activation_preflight = resident_host["activation_execution_preflight"]
+    assert activation_preflight["kind"] == "lens.host.activation.execution_preflight"
+    assert activation_preflight["status"] == "blocked"
+    assert activation_preflight["ready"] is False
+    assert activation_preflight["route"] == "/lens/host/activation/preflight"
+    assert activation_preflight["request_route"] == "/lens/host/activation/request"
+    assert activation_preflight["readback_route"] == "/lens/host/activation"
+    assert activation_preflight["approval"]["required"] is True
+    assert activation_preflight["approval"]["found"] is False
+    assert activation_preflight["permission"]["ready"] is False
+    assert activation_preflight["operator_posture"]["status"] == "ready"
+    assert "approval_id_required" in activation_preflight["blockers"]
+    assert "system_write_scope_not_ready" in activation_preflight["blockers"]
+    assert "local_process_launch_authority_not_granted" in activation_preflight["blockers"]
+    assert activation_preflight["governance"]["gate"] == "lens_host_activation_execution_preflight"
+    assert activation_preflight["governance"]["read_only_contract"] is True
+    assert activation_preflight["governance"]["execution_authority"] is False
+    assert activation_preflight["governance"]["approval_decision_authority"] is False
+    assert activation_preflight["governance"]["local_process_launch_authority"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -815,6 +838,19 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "approval_decision_authority": False,
         "local_process_launch_authority": False,
     }
+    execution_preflight_criterion = _criterion(body, "host_activation_execution_preflight")
+    assert execution_preflight_criterion["status"] == "blocked"
+    assert execution_preflight_criterion["ready"] is False
+    assert execution_preflight_criterion["evidence"] == [
+        "/lens/host/activation/preflight",
+        "/lens/host/activation",
+        "/lens/status",
+    ]
+    assert "approval_id_required" in execution_preflight_criterion["blockers"]
+    assert "system_write_scope_not_ready" in execution_preflight_criterion["blockers"]
+    assert execution_preflight_criterion["execution_authority"] is False
+    assert execution_preflight_criterion["approval_decision_authority"] is False
+    assert execution_preflight_criterion["local_process_launch_authority"] is False
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1171,6 +1207,24 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert pending_body["governance"]["local_process_launch_authority"] is False
     assert pending_body["governance"]["next_step"] == "operator_decide_pending_lens_host_activation_request"
 
+    pending_preflight = client.get(f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write")
+    assert pending_preflight.status_code == 200
+    pending_preflight_body = pending_preflight.json()
+    assert pending_preflight_body["kind"] == "lens.host.activation.execution_preflight"
+    assert pending_preflight_body["status"] == "blocked"
+    assert pending_preflight_body["ready"] is False
+    assert pending_preflight_body["approval"]["found"] is True
+    assert pending_preflight_body["approval"]["status"] == "pending"
+    assert pending_preflight_body["approval"]["approved"] is False
+    assert pending_preflight_body["permission"]["ready"] is True
+    assert pending_preflight_body["operator_posture"]["ready"] is True
+    assert "activation_approval_not_approved" in pending_preflight_body["blockers"]
+    assert "local_process_launch_authority_not_granted" in pending_preflight_body["blockers"]
+    assert pending_preflight_body["governance"]["gate"] == "lens_host_activation_execution_preflight"
+    assert pending_preflight_body["governance"]["read_only_contract"] is True
+    assert pending_preflight_body["governance"]["execution_authority"] is False
+    assert pending_preflight_body["governance"]["local_process_launch_authority"] is False
+
     decided = client.post(
         "/approvals/decision",
         json={
@@ -1200,6 +1254,41 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert approved_body["governance"]["activation_authority"] is False
     assert approved_body["governance"]["execution_authority"] is False
     assert approved_body["governance"]["local_process_launch_authority"] is False
+
+    approved_preflight = client.get(
+        f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write"
+    )
+    assert approved_preflight.status_code == 200
+    approved_preflight_body = approved_preflight.json()
+    assert approved_preflight_body["status"] == "blocked"
+    assert approved_preflight_body["ready"] is False
+    assert approved_preflight_body["approval"]["found"] is True
+    assert approved_preflight_body["approval"]["status"] == "approved"
+    assert approved_preflight_body["approval"]["approved"] is True
+    assert approved_preflight_body["permission"]["ready"] is True
+    assert approved_preflight_body["operator_posture"]["ready"] is True
+    assert approved_preflight_body["host"]["candidate_command"]["executable"] is True
+    assert approved_preflight_body["host"]["process_readback"]["process_alive"] is False
+    assert "activation_approval_not_approved" not in approved_preflight_body["blockers"]
+    assert "system_write_scope_not_ready" not in approved_preflight_body["blockers"]
+    assert "operator_posture_not_ready" not in approved_preflight_body["blockers"]
+    assert "lens_preflight_blocked" in approved_preflight_body["blockers"]
+    assert "local_process_launch_authority_not_granted" in approved_preflight_body["blockers"]
+    assert approved_preflight_body["governance"]["execution_authority"] is False
+    assert approved_preflight_body["governance"]["approval_decision_authority"] is False
+    assert approved_preflight_body["governance"]["local_process_launch_authority"] is False
+
+    from francis.world_state.operator_mode import set_control_mode
+
+    set_control_mode("observe", reason="prove Lens activation posture preflight", actor="test.system.write")
+    observe_preflight = client.get(f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write")
+    assert observe_preflight.status_code == 200
+    observe_preflight_body = observe_preflight.json()
+    assert observe_preflight_body["status"] == "blocked"
+    assert observe_preflight_body["operator_posture"]["ready"] is False
+    assert observe_preflight_body["operator_posture"]["reason"] == "observe_mode_blocks_activation"
+    assert "operator_posture_not_ready" in observe_preflight_body["blockers"]
+    assert observe_preflight_body["governance"]["execution_authority"] is False
 
     lens_status = client.get("/lens/status")
     assert lens_status.status_code == 200

@@ -8,10 +8,12 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.lens.preflight import lens_preflight
+from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 LENS_HOST_ACTIVATION_ACTION = "lens.host.foreground_activation"
 LENS_HOST_ACTIVATION_ROUTE = "/lens/host/activation/request"
 LENS_HOST_ACTIVATION_READBACK_ROUTE = "/lens/host/activation"
+LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
@@ -41,6 +43,15 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _str_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [_safe_str(item).strip() for item in value if _safe_str(item).strip()]
+    if isinstance(value, str):
+        item = value.strip()
+        return [item] if item else []
+    return []
+
+
 def _safe_limit(value: Any, *, default: int = 5) -> int:
     if isinstance(value, bool):
         return default
@@ -65,7 +76,12 @@ def _activation_mode(value: Any) -> str:
     return mode if mode in _ALLOWED_MODES else _DEFAULT_MODE
 
 
-def _activation_governance(*, route: str, approval_request_write: bool = True) -> dict[str, Any]:
+def _activation_governance(
+    *,
+    route: str,
+    approval_request_write: bool = True,
+    read_only_contract: bool = False,
+) -> dict[str, Any]:
     return {
         "gate": "lens_host_activation_request",
         "route": route,
@@ -73,6 +89,8 @@ def _activation_governance(*, route: str, approval_request_write: bool = True) -
         "approval_action": LENS_HOST_ACTIVATION_ACTION,
         "approval_request_write": approval_request_write,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "read_only_contract": read_only_contract,
         "activation_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -93,6 +111,7 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
         "status": "approval_request_ready",
         "route": LENS_HOST_ACTIVATION_ROUTE,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "method": "POST",
         "action": LENS_HOST_ACTIVATION_ACTION,
         "mode": _DEFAULT_MODE,
@@ -113,6 +132,17 @@ def _permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision
         route=route,
         method=method,
     )
+
+
+def _permission_readiness(actor: Any, *, route: str, method: str) -> dict[str, Any]:
+    decision = _permission(actor, route=route, method=method)
+    return {
+        "ready": decision.allowed,
+        "allowed": decision.allowed,
+        "reason": decision.reason,
+        "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+        "evidence": decision.evidence,
+    }
 
 
 def _permission_denied(decision: ApiPermissionDecision, *, route: str) -> dict[str, Any]:
@@ -176,6 +206,27 @@ def _activation_approval_items(
     return by_status, all_items[:limit], counts
 
 
+def _activation_approval_by_id(approval_id: Any) -> tuple[dict[str, Any] | None, str]:
+    requested_id = _safe_str(approval_id).strip()
+    if not requested_id:
+        return None, "missing"
+
+    for status in _APPROVAL_STATUSES:
+        try:
+            records = list_requests(status=status, limit=5000)
+        except Exception:
+            records = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            if _safe_str(record.get("id")).strip() != requested_id:
+                continue
+            if _safe_str(record.get("action")).strip() != LENS_HOST_ACTIVATION_ACTION:
+                return None, "wrong_action"
+            return _approval_item(record), status
+    return None, "not_found"
+
+
 def _activation_readback_status(counts: dict[str, int]) -> tuple[str, str]:
     if counts.get("pending", 0) > 0:
         return "pending_review", "operator_decide_pending_lens_host_activation_request"
@@ -214,9 +265,165 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
             **_activation_governance(
                 route=LENS_HOST_ACTIVATION_READBACK_ROUTE,
                 approval_request_write=False,
+                read_only_contract=True,
             ),
             "gate": "lens_host_activation_readback",
             "read_only_contract": True,
+            "next_step": next_step,
+        },
+    }
+
+
+def _operator_posture_readiness() -> dict[str, Any]:
+    try:
+        state = operator_mode_snapshot()
+    except Exception as exc:
+        return {
+            "ready": False,
+            "status": "unavailable",
+            "reason": _safe_str(exc),
+            "control_mode": {},
+            "posture": {},
+        }
+
+    if not bool(state.get("ok")):
+        return {
+            "ready": False,
+            "status": "unavailable",
+            "reason": _safe_str(state.get("error") or "operator_mode_unavailable"),
+            "control_mode": {},
+            "posture": {},
+        }
+
+    control_mode = _as_dict(state.get("control_mode"))
+    posture = _as_dict(state.get("posture"))
+    control_mode_id = _safe_str(control_mode.get("id")).strip().lower()
+    control_writes = _safe_str(control_mode.get("writes")).strip().lower()
+    posture_writes = _safe_str(posture.get("writes")).strip().lower()
+    blocked_reason = ""
+    if control_mode_id == "observe" or control_writes == "blocked":
+        blocked_reason = "observe_mode_blocks_activation"
+    elif posture_writes == "blocked":
+        blocked_reason = "operator_posture_blocks_activation"
+
+    return {
+        "ready": not blocked_reason,
+        "status": "ready" if not blocked_reason else "blocked",
+        "reason": blocked_reason,
+        "control_mode": {
+            "id": control_mode_id,
+            "writes": control_writes,
+            "implementation_status": _safe_str(control_mode.get("implementation_status")).strip(),
+        },
+        "posture": {
+            "writes": posture_writes,
+            "governance_mode": _safe_str(posture.get("governance_mode")).strip(),
+            "trust_posture": _safe_str(posture.get("trust_posture")).strip(),
+        },
+    }
+
+
+def _activation_preflight_status(blockers: list[str]) -> tuple[str, str]:
+    if not blockers:
+        return "ready_for_execution_slice", "implement_separate_lens_host_execution_slice"
+    if "approval_id_required" in blockers:
+        return "blocked", "select_exact_approved_activation_request"
+    if "activation_approval_not_approved" in blockers:
+        return "blocked", "approve_exact_lens_host_activation_request"
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_lens_host_activation"
+    if "operator_posture_not_ready" in blockers:
+        return "blocked", "switch_operator_posture_before_lens_host_activation"
+    return "blocked", "remove_lens_host_activation_blockers_before_execution"
+
+
+def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: Any = "") -> dict[str, Any]:
+    requested_id = _safe_str(approval_id).strip()
+    approval, approval_lookup_status = _activation_approval_by_id(requested_id)
+    approval_status = _safe_str(_as_dict(approval).get("status")).strip() if approval else approval_lookup_status
+    approval_ready = bool(approval) and approval_status == "approved"
+    permission = _permission_readiness(actor, route=LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE, method="GET")
+    posture = _operator_posture_readiness()
+    manifest = lens_host_launch_manifest()
+    preflight = lens_preflight()
+    candidate_command = _as_dict(manifest.get("candidate_command"))
+    foreground_session = _as_dict(manifest.get("foreground_session"))
+    process_readback = _as_dict(manifest.get("process_readback"))
+    service_plan = _as_dict(manifest.get("service_plan"))
+
+    blockers: list[str] = []
+    if not requested_id:
+        blockers.append("approval_id_required")
+    elif approval_lookup_status == "not_found":
+        blockers.append("activation_approval_not_found")
+    elif approval_lookup_status == "wrong_action":
+        blockers.append("activation_approval_wrong_action")
+    elif not approval_ready:
+        blockers.append("activation_approval_not_approved")
+
+    if not bool(permission.get("ready")):
+        blockers.append("system_write_scope_not_ready")
+    if not bool(posture.get("ready")):
+        blockers.append("operator_posture_not_ready")
+    if not bool(candidate_command.get("executable")):
+        blockers.append("lens_host_foreground_command_unavailable")
+    if not bool(foreground_session.get("supported")):
+        blockers.append("foreground_session_not_supported")
+    if bool(process_readback.get("process_alive")):
+        blockers.append("lens_host_process_already_observed")
+    if _safe_str(preflight.get("status")).strip() != "ready":
+        blockers.append("lens_preflight_blocked")
+    blockers.extend(_str_list(preflight.get("blockers")))
+    blockers.append("local_process_launch_authority_not_granted")
+
+    deduped_blockers = sorted({blocker for blocker in blockers if blocker})
+    status, next_step = _activation_preflight_status(deduped_blockers)
+    return {
+        "ok": True,
+        "kind": "lens.host.activation.execution_preflight",
+        "status": status,
+        "ready": not deduped_blockers,
+        "route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "request_route": LENS_HOST_ACTIVATION_ROUTE,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "approval_id": requested_id,
+        "approval": {
+            "required": True,
+            "found": bool(approval),
+            "status": approval_status,
+            "approved": approval_ready,
+            "item": approval,
+        },
+        "permission": permission,
+        "operator_posture": posture,
+        "host": {
+            "candidate_command": candidate_command,
+            "foreground_session": foreground_session,
+            "process_readback": {
+                "status": _safe_str(process_readback.get("status")),
+                "process_alive": bool(process_readback.get("process_alive")),
+                "pid_present": bool(process_readback.get("pid_present")),
+                "supervision_enabled": bool(process_readback.get("supervision_enabled")),
+            },
+            "service_plan": {
+                "status": _safe_str(service_plan.get("status")),
+                "ready": bool(service_plan.get("ready")),
+                "blocked_by": _as_list(service_plan.get("blocked_by")),
+            },
+            "preflight": {
+                "status": _safe_str(preflight.get("status")),
+                "ready": bool(preflight.get("ready")),
+                "blockers": _as_list(preflight.get("blockers")),
+            },
+        },
+        "blockers": deduped_blockers,
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_activation_execution_preflight",
             "next_step": next_step,
         },
     }

@@ -85,6 +85,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/lens/hud"),
         ("GET", "/lens/preflight"),
         ("GET", "/lens/host/activation"),
+        ("GET", "/lens/host/activation/preflight"),
         ("POST", "/lens/host/activation/request"),
         ("GET", "/memory/timeline/list"),
         ("GET", "/memory/timeline/get"),
