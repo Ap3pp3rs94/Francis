@@ -1510,7 +1510,62 @@ def deny_lens_resident_runtime_execution_authority_grant(
     deduped_blockers = sorted({blocker for blocker in blockers if blocker})
     status, next_step = _resident_runtime_authority_grant_boundary_status(deduped_blockers)
     safe_approval_id = _safe_str(runtime_policy.get("approval_id")).strip()
-    response = {
+    grant_denial: dict[str, Any] = {
+        "reason": "resident_runtime_authority_grant_not_implemented",
+        "message": (
+            "Lens resident runtime execution authority is denied until an explicit supervised grant "
+            "implementation and receipt path exist."
+        ),
+        "would_grant_execution_authority": False,
+        "would_grant_local_process_launch_authority": False,
+        "would_grant_process_supervision_authority": False,
+        "would_grant_process_restart_authority": False,
+        "would_grant_service_install_authority": False,
+        "would_grant_service_control_authority": False,
+        "would_grant_tray_registration_authority": False,
+        "would_grant_hotkey_registration_authority": False,
+        "would_grant_overlay_control_authority": False,
+        "would_grant_capture_authority": False,
+        "would_grant_receipt_write_authority": False,
+        "would_grant_memory_write": False,
+        "would_grant_resident_claim": False,
+        "denial_receipt_written": False,
+    }
+    governance: dict[str, Any] = {
+        **_activation_governance(
+            route=safe_route,
+            approval_request_write=False,
+            read_only_contract=False,
+        ),
+        "gate": "lens_resident_runtime_execution_authority_grant_boundary",
+        "authority_grant_boundary": True,
+        "denial_boundary": True,
+        "resident_runtime_boundary": True,
+        "activation_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "tray_registration_authority": False,
+        "tray_icon_authority": False,
+        "notification_authority": False,
+        "hotkey_registration_authority": False,
+        "overlay_control_authority": False,
+        "window_management_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "memory_write": False,
+        "receipt_write_authority": False,
+        "denial_receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "runtime_mutation_authority_granted": False,
+        "authority_granted": False,
+        "next_step": next_step,
+    }
+    response: dict[str, Any] = {
         "ok": True,
         "applied": False,
         "executed": False,
@@ -1539,71 +1594,18 @@ def deny_lens_resident_runtime_execution_authority_grant(
         "preflight": runtime_preflight,
         "policy": runtime_policy,
         "blockers": deduped_blockers,
-        "grant_denial": {
-            "reason": "resident_runtime_authority_grant_not_implemented",
-            "message": (
-                "Lens resident runtime execution authority is denied until an explicit supervised grant "
-                "implementation and receipt path exist."
-            ),
-            "would_grant_execution_authority": False,
-            "would_grant_local_process_launch_authority": False,
-            "would_grant_process_supervision_authority": False,
-            "would_grant_process_restart_authority": False,
-            "would_grant_service_install_authority": False,
-            "would_grant_service_control_authority": False,
-            "would_grant_tray_registration_authority": False,
-            "would_grant_hotkey_registration_authority": False,
-            "would_grant_overlay_control_authority": False,
-            "would_grant_capture_authority": False,
-            "would_grant_receipt_write_authority": False,
-            "would_grant_memory_write": False,
-            "would_grant_resident_claim": False,
-            "denial_receipt_written": False,
-        },
-        "governance": {
-            **_activation_governance(
-                route=safe_route,
-                approval_request_write=False,
-                read_only_contract=False,
-            ),
-            "gate": "lens_resident_runtime_execution_authority_grant_boundary",
-            "authority_grant_boundary": True,
-            "denial_boundary": True,
-            "resident_runtime_boundary": True,
-            "activation_authority": False,
-            "execution_authority": False,
-            "approval_decision_authority": False,
-            "local_process_launch_authority": False,
-            "process_supervision_authority": False,
-            "process_restart_authority": False,
-            "service_install_authority": False,
-            "service_control_authority": False,
-            "tray_registration_authority": False,
-            "tray_icon_authority": False,
-            "notification_authority": False,
-            "hotkey_registration_authority": False,
-            "overlay_control_authority": False,
-            "window_management_authority": False,
-            "summon_authority": False,
-            "capture_authority": False,
-            "memory_write": False,
-            "receipt_write_authority": False,
-            "denial_receipt_write_authority": False,
-            "resident_claim_authority": False,
-            "runtime_mutation_authority_granted": False,
-            "authority_granted": False,
-            "next_step": next_step,
-        },
+        "grant_denial": grant_denial,
+        "governance": governance,
     }
     if record_receipt and bool(permission.get("ready")) and status == "denied_no_authority_grant":
         receipt = _record_resident_runtime_authority_grant_denial_receipt(response)
         if receipt:
             response["receipt_written"] = True
             response["receipt"] = receipt
-            response["grant_denial"]["denial_receipt_written"] = True
-            response["governance"]["denial_receipt_write_authority"] = True
+            grant_denial["denial_receipt_written"] = True
+            governance["denial_receipt_write_authority"] = True
     elif record_receipt:
-        response["governance"]["denial_receipt_write_blocker"] = "resident_runtime_authority_grant_not_ready"
+        governance["denial_receipt_write_blocker"] = "resident_runtime_authority_grant_not_ready"
     return response
 
 
