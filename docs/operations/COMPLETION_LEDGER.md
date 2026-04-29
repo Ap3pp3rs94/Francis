@@ -12656,6 +12656,47 @@ authority boundary proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident supervision enablement gate readback
+
+Stage 6/Lens now has a direct read-only resident supervision enablement gate at
+`/lens/host/supervision`. The route projects the existing Lens host launch
+manifest, process readback, service readback, service install plan, required
+bindings, and supervision readiness prerequisites into one operator-facing gate
+for the future resident host supervision path.
+
+The gate reports `kind: lens.host.supervision_enablement_gate`, `status:
+blocked`, `ready: false`, `supervision_ready: false`,
+`resident_claim_allowed: false`, `resident_host_supervised: false`,
+`service_managed: false`, `would_install_service: false`,
+`would_start_service: false`, `would_supervise_process: false`, and
+`would_restart_process: false`. Its blockers include disabled process
+supervision, missing service install/control authority, the disabled service
+plan, and the remaining Lens runtime blockers. The Lens status payload now embeds
+this gate under `resident_host.supervision_gate` and exposes a Stage 6 readiness
+criterion named `resident_supervision_enablement_gate`.
+
+This is backend/API readback only. It does not start, supervise, restart, install,
+or control a resident Lens host process or Windows service. It does not grant
+execution authority, approval-decision authority, memory-write behavior,
+local-process-launch authority, process-supervision authority, process-restart
+authority, service-install authority, service-control authority, resident-claim
+authority, UI controls, tray registration, hotkey registration, overlay control,
+or summon-anywhere behavior.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident supervision
+enablement gate readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12689,7 +12730,8 @@ These remain true and should block any "finished" claim:
   boundary proof/checkpoint consumption that keep the resident claim blocked,
   plus a composed process-supervision/service-activation authority boundary
   proof that keeps supervision, restart, service install, and service start
-  denied,
+  denied, plus a direct `/lens/host/supervision` read-only resident supervision
+  enablement gate that projects the blockers required before a resident claim,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

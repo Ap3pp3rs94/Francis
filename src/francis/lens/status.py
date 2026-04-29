@@ -15,7 +15,7 @@ from francis.lens.activation import (
     lens_host_activation_request_contract,
     lens_resident_surface_activation_boundary,
 )
-from francis.lens.host_manifest import lens_host_launch_manifest
+from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
 from francis.lens.preflight import lens_preflight
 from francis.reactor import reactor_operator_visibility_summary
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
@@ -234,6 +234,7 @@ def _hud_runtime_surface() -> dict[str, Any]:
 
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any], limit: int = 5) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
+    supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
@@ -346,6 +347,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_denial_receipts": activation_denial_receipts,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
+        "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
+        "supervision_gate": supervision_gate,
         "status_route": "/lens/status",
         "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
@@ -850,6 +853,20 @@ def _stage6_readiness(
                 "overlay_control_authority": False,
                 "summon_authority": False,
                 "memory_write": False,
+            },
+            {
+                "id": "resident_supervision_enablement_gate",
+                "status": _safe_str(_as_dict(resident_host.get("supervision_gate")).get("status")).strip() or "missing",
+                "evidence": ["/lens/host/supervision", "/lens/host/manifest", "/lens/status"],
+                "ready": bool(_as_dict(resident_host.get("supervision_gate")).get("ready")),
+                "resident_claim_allowed": bool(
+                    _as_dict(resident_host.get("supervision_gate")).get("resident_claim_allowed")
+                ),
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "blockers": _as_list(_as_dict(resident_host.get("supervision_gate")).get("blockers")),
             },
             {
                 "id": "summon_anywhere",

@@ -692,6 +692,56 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         ],
     }
     assert resident_host["supervision_readiness"] == expected_supervision_readiness
+    assert resident_host["supervision_gate_route"] == "/lens/host/supervision"
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["kind"] == "lens.host.supervision_enablement_gate"
+    assert supervision_gate["status"] == "blocked"
+    assert supervision_gate["route"] == "/lens/host/supervision"
+    assert supervision_gate["host_route"] == "/lens/host"
+    assert supervision_gate["manifest_route"] == "/lens/host/manifest"
+    assert supervision_gate["ready"] is False
+    assert supervision_gate["supervision_ready"] is False
+    assert supervision_gate["resident_claim_allowed"] is False
+    assert supervision_gate["resident_host_process"] is False
+    assert supervision_gate["resident_host_supervised"] is False
+    assert supervision_gate["service_installed"] is False
+    assert supervision_gate["service_managed"] is False
+    assert supervision_gate["process_supervision_enabled"] is False
+    assert supervision_gate["process_restart_supported"] is False
+    assert supervision_gate["service_plan_ready"] is False
+    assert supervision_gate["would_install_service"] is False
+    assert supervision_gate["would_start_service"] is False
+    assert supervision_gate["would_supervise_process"] is False
+    assert supervision_gate["would_restart_process"] is False
+    assert supervision_gate["next_allowed_transition"] == "foreground_status_session_only"
+    assert "process_supervision_enabled" in supervision_gate["blockers"]
+    assert "service_install_authority" in supervision_gate["blockers"]
+    assert "service_control_authority" in supervision_gate["blockers"]
+    assert "service_install_authority_false" in supervision_gate["blockers"]
+    assert "service_control_authority_false" in supervision_gate["blockers"]
+    assert "lens_host_runtime_not_implemented" in supervision_gate["blockers"]
+    assert supervision_gate["prerequisites"] == expected_supervision_readiness["prerequisites"]
+    assert supervision_gate["process_readback"] == resident_host["process_readback"]
+    assert supervision_gate["service_readback"] == resident_host["service_readback"]
+    assert supervision_gate["service_plan"] == expected_service_plan
+    assert supervision_gate["supervision_readiness"] == expected_supervision_readiness
+    assert supervision_gate["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "resident_claim_authority": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "mutation_authority_granted": False,
+    }
     assert resident_host["foreground_session"] == {
         "supported": True,
         "default_seconds": 0,
@@ -1065,6 +1115,21 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "summon_authority": False,
         "memory_write": False,
     }
+    supervision_gate_criterion = _criterion(body, "resident_supervision_enablement_gate")
+    assert supervision_gate_criterion["status"] == "blocked"
+    assert supervision_gate_criterion["ready"] is False
+    assert supervision_gate_criterion["resident_claim_allowed"] is False
+    assert supervision_gate_criterion["evidence"] == [
+        "/lens/host/supervision",
+        "/lens/host/manifest",
+        "/lens/status",
+    ]
+    assert supervision_gate_criterion["process_supervision_authority"] is False
+    assert supervision_gate_criterion["process_restart_authority"] is False
+    assert supervision_gate_criterion["service_install_authority"] is False
+    assert supervision_gate_criterion["service_control_authority"] is False
+    assert "process_supervision_enabled" in supervision_gate_criterion["blockers"]
+    assert "service_install_authority_false" in supervision_gate_criterion["blockers"]
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1106,6 +1171,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["candidate_command"]["executable"] is True
     assert manifest_body["governance"]["local_process_launch_authority"] is False
     assert manifest_body["governance"]["service_install_authority"] is False
+    supervision_response = client.get("/lens/host/supervision")
+    assert supervision_response.status_code == 200
+    assert supervision_response.json() == supervision_gate
     preflight_response = client.get("/lens/preflight")
     assert preflight_response.status_code == 200
     assert preflight_response.json()["kind"] == "lens.preflight"

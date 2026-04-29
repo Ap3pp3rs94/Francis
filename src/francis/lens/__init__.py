@@ -10,7 +10,7 @@ from francis.lens.activation import (
     lens_resident_surface_activation_boundary,
     request_lens_host_activation,
 )
-from francis.lens.host_manifest import lens_host_launch_manifest
+from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
 from francis.lens.preflight import lens_preflight
 from francis.lens.status import lens_host_status, lens_status
 
@@ -22,6 +22,7 @@ __all__ = [
     "lens_host_activation_request_contract",
     "lens_host_activation_readback",
     "lens_host_launch_manifest",
+    "lens_host_supervision_gate",
     "lens_host_status",
     "lens_preflight",
     "lens_resident_surface_activation_boundary",

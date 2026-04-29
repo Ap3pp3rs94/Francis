@@ -13,6 +13,7 @@ from francis.lens import (
     lens_host_activation_readback,
     lens_host_launch_manifest,
     lens_host_status,
+    lens_host_supervision_gate,
     lens_preflight,
     lens_resident_surface_activation_boundary,
     lens_status,
@@ -53,6 +54,11 @@ def host(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
 @router.get("/host/manifest")
 def host_manifest() -> dict[str, Any]:
     return lens_host_launch_manifest()
+
+
+@router.get("/host/supervision")
+def host_supervision() -> dict[str, Any]:
+    return lens_host_supervision_gate()
 
 
 @router.get("/host/activation")
