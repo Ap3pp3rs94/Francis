@@ -13486,6 +13486,45 @@ proof/live-operator composition:
   Result: `passed` with the expected PowerShell line-ending warning for
   `scripts/lens-resident-surface-proof.ps1`
 
+### 2026-04-29 - Stage 6/Lens bounded host supervisor runner
+
+Stage 6/Lens now has a reusable bounded host-supervisor diagnostic runner at
+`scripts/lens-host-supervisor.ps1`. The runner has a status mode for read-only
+host/supervisor posture readback and an observe mode that watches an
+already-started bounded `scripts/lens-host.ps1 -Mode Foreground` process through
+`foreground_running` and `foreground_stopped` runtime receipts. It writes only a
+temporary diagnostic supervisor status receipt under the selected data root in
+observe mode.
+
+This is diagnostic/proof infrastructure only. It does not launch the host,
+restart a process, supervise a resident process, install/start/stop/control a
+service, register tray presence, bind a global hotkey, open or control an
+overlay, summon Francis anywhere, write memory, decide approvals, create UI
+controls, or grant execution, approval-decision, memory-write,
+process-supervision, process-restart, service-control, overlay-control,
+window-management, summon, hotkey-registration, tray-registration, sensing,
+capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. This slice makes the next resident host/supervision
+work more truthful by separating "observe an existing bounded foreground host"
+from "grant resident supervision or restart authority." It does not satisfy the
+resident host, resident overlay runtime, tray, hotkey, or summon-anywhere
+acceptance criteria by itself.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens bounded host
+supervisor runner:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor.ps1 -Mode Status`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13501,8 +13540,12 @@ These remain true and should block any "finished" claim:
   readiness proof diagnostic that now consumes bounded launch proof, and a
   bounded supervisor-observation proof/checkpoint readback that observes one
   diagnostic host process through running and stopped states without restart,
-  process-supervision, or service-control authority, resident surface readiness
-  proof diagnostic, disabled tracked service config baseline, resident
+  process-supervision, or service-control authority, plus a reusable bounded
+  `scripts/lens-host-supervisor.ps1` diagnostic runner that can observe an
+  already-started bounded foreground host process without launch, restart,
+  resident supervision, service-control, or resident-claim authority, resident
+  surface readiness proof diagnostic, disabled tracked service config baseline,
+  resident
   supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
   readback boundary plus read-only Windows service status
