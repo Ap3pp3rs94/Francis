@@ -12612,6 +12612,50 @@ activation boundary consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens process supervision authority boundary proof
+
+Stage 6/Lens now has a composed process-supervision/service-activation
+authority boundary proof. `scripts/lens-process-supervision-authority-boundary-proof.ps1`
+composes the current Stage 6 checkpoint with the resident-host supervision proof
+and verifies that the latest resident overlay activation boundary remains
+checkpointed while future resident process supervision and service activation
+are still blocked.
+
+The proof reports `status: proof_passed` with `stage6_checkpoint_observed:
+true`, `host_supervision_boundary_observed: true`,
+`process_supervision_boundary_observed: true`, and
+`service_activation_plan_observed: true`. It also reports
+`supervision_ready: false`, `ready_for_resident_claim: false`,
+`resident_claim_allowed: false`, `process_supervision_ready: false`, and
+`service_activation_ready: false`. The proof keeps resident host supervision,
+process restart, service install/start/control, tray presence, hotkey binding,
+overlay window, summon-anywhere, execution, approval decisions, and memory writes
+disabled.
+
+This is a diagnostic/readback composition only. It does not change Lens API
+routes, UI surfaces, service configuration, host runner behavior, approval
+decisions, memory writes, resident process supervision, process restart
+authority, service installation, service control, tray registration, hotkey
+registration, overlay control, or summon-anywhere behavior. The proof still
+observes bounded diagnostic local process launch from the existing host
+supervision proof and reports that distinction explicitly.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens process supervision
+authority boundary proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12643,6 +12687,9 @@ These remain true and should block any "finished" claim:
   summon, plus resident overlay runtime boundary proof/checkpoint consumption,
   plus a resident-surface activation boundary readback and composed activation
   boundary proof/checkpoint consumption that keep the resident claim blocked,
+  plus a composed process-supervision/service-activation authority boundary
+  proof that keeps supervision, restart, service install, and service start
+  denied,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
