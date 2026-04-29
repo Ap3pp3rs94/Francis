@@ -1018,6 +1018,53 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "local_process_launch_authority": False,
         "memory_write": False,
     }
+    resident_surface_activation = body["resident_surface_activation"]
+    assert resident_surface_activation["kind"] == "lens.resident_surface.activation_boundary"
+    assert resident_surface_activation["status"] == "blocked"
+    assert resident_surface_activation["route"] == "/lens/resident-surface/activation"
+    assert resident_surface_activation["boundary_ready"] is True
+    assert resident_surface_activation["activation_ready"] is False
+    assert resident_surface_activation["resident_surface_ready"] is False
+    assert resident_surface_activation["resident_claim_allowed"] is False
+    assert resident_surface_activation["execution"]["would_launch_process"] is False
+    assert resident_surface_activation["execution"]["would_open_overlay"] is False
+    assert resident_surface_activation["execution"]["would_register_hotkey"] is False
+    assert resident_surface_activation["execution"]["would_write_memory"] is False
+    assert resident_surface_activation["surface"]["status"] == "blocked"
+    assert resident_surface_activation["surface"]["summon_status"] == "blocked"
+    assert resident_surface_activation["surface"]["tray_status"] == "blocked"
+    assert resident_surface_activation["surface"]["overlay_status"] == "blocked"
+    assert "resident_surface_missing" in resident_surface_activation["blockers"]
+    assert "local_process_launch_authority_not_granted" in resident_surface_activation["blockers"]
+    assert resident_surface_activation["next_smallest_truthful_gap"] == "live_operator_experience_proof"
+    assert resident_surface_activation["governance"]["gate"] == "lens_resident_surface_activation_boundary"
+    assert resident_surface_activation["governance"]["boundary_only"] is True
+    assert resident_surface_activation["governance"]["execution_authority"] is False
+    assert resident_surface_activation["governance"]["approval_decision_authority"] is False
+    assert resident_surface_activation["governance"]["local_process_launch_authority"] is False
+    assert resident_surface_activation["governance"]["overlay_control_authority"] is False
+    assert resident_surface_activation["governance"]["summon_authority"] is False
+    assert resident_surface_activation["governance"]["memory_write"] is False
+    surface_activation_criterion = _criterion(body, "resident_surface_activation_boundary")
+    assert surface_activation_criterion == {
+        "id": "resident_surface_activation_boundary",
+        "status": "blocked_readback_ready",
+        "evidence": [
+            "/lens/resident-surface/activation",
+            "/lens/host/activation/plan",
+            "/lens/preflight",
+            "/lens/status",
+        ],
+        "activation_ready": False,
+        "resident_surface_ready": False,
+        "resident_claim_allowed": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "memory_write": False,
+    }
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1063,6 +1110,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert preflight_response.status_code == 200
     assert preflight_response.json()["kind"] == "lens.preflight"
     assert preflight_response.json()["surfaces"]["summon"] == preflight_surfaces["summon"]
+    surface_activation_response = client.get("/lens/resident-surface/activation")
+    assert surface_activation_response.status_code == 200
+    assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"
+    assert surface_activation_response.json()["resident_surface_ready"] is False
 
 
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
@@ -1474,6 +1525,57 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert approved_plan_body["governance"]["approval_decision_authority"] is False
     assert approved_plan_body["governance"]["local_process_launch_authority"] is False
     assert approved_plan_body["governance"]["receipt_write_authority"] is False
+
+    resident_surface_activation = client.get(
+        f"/lens/resident-surface/activation?approval_id={approval_id}&actor=test.system.write"
+    )
+    assert resident_surface_activation.status_code == 200
+    resident_surface_activation_body = resident_surface_activation.json()
+    assert resident_surface_activation_body["kind"] == "lens.resident_surface.activation_boundary"
+    assert resident_surface_activation_body["status"] == "blocked"
+    assert resident_surface_activation_body["approval_id"] == approval_id
+    assert resident_surface_activation_body["approval"]["selected_status"] == "approved"
+    assert resident_surface_activation_body["approval"]["selected_approved"] is True
+    assert resident_surface_activation_body["boundary_ready"] is True
+    assert resident_surface_activation_body["activation_ready"] is False
+    assert resident_surface_activation_body["resident_surface_ready"] is False
+    assert resident_surface_activation_body["resident_claim_allowed"] is False
+    assert resident_surface_activation_body["execution_ready"] is False
+    assert resident_surface_activation_body["executed"] is False
+    assert resident_surface_activation_body["applied"] is False
+    assert resident_surface_activation_body["execution"]["preflight_status"] == "blocked"
+    assert resident_surface_activation_body["execution"]["plan_status"] == "blocked"
+    assert resident_surface_activation_body["execution"]["denial_status"] == "denied_no_execution_authority"
+    assert resident_surface_activation_body["execution"]["would_launch_process"] is False
+    assert resident_surface_activation_body["execution"]["would_install_service"] is False
+    assert resident_surface_activation_body["execution"]["would_start_service"] is False
+    assert resident_surface_activation_body["execution"]["would_register_hotkey"] is False
+    assert resident_surface_activation_body["execution"]["would_open_overlay"] is False
+    assert resident_surface_activation_body["execution"]["would_write_memory"] is False
+    assert resident_surface_activation_body["execution"]["would_decide_approval"] is False
+    assert resident_surface_activation_body["surface"]["summon_status"] == "blocked"
+    assert resident_surface_activation_body["surface"]["tray_status"] == "blocked"
+    assert resident_surface_activation_body["surface"]["overlay_status"] == "blocked"
+    surface_components = {item["id"]: item for item in resident_surface_activation_body["components"]}
+    assert surface_components["host_activation_denial"]["status"] == "denied_no_execution_authority"
+    assert surface_components["summon_preflight"]["status"] == "blocked"
+    assert surface_components["tray_preflight"]["status"] == "blocked"
+    assert surface_components["overlay_preflight"]["status"] == "blocked"
+    assert "activation_approval_not_approved" not in resident_surface_activation_body["blockers"]
+    assert "system_write_scope_not_ready" not in resident_surface_activation_body["blockers"]
+    assert "local_process_launch_authority_not_granted" in resident_surface_activation_body["blockers"]
+    assert "resident_surface_missing" in resident_surface_activation_body["blockers"]
+    assert resident_surface_activation_body["governance"]["boundary_only"] is True
+    assert resident_surface_activation_body["governance"]["activation_authority"] is False
+    assert resident_surface_activation_body["governance"]["execution_authority"] is False
+    assert resident_surface_activation_body["governance"]["approval_decision_authority"] is False
+    assert resident_surface_activation_body["governance"]["local_process_launch_authority"] is False
+    assert resident_surface_activation_body["governance"]["service_install_authority"] is False
+    assert resident_surface_activation_body["governance"]["service_control_authority"] is False
+    assert resident_surface_activation_body["governance"]["hotkey_registration_authority"] is False
+    assert resident_surface_activation_body["governance"]["overlay_control_authority"] is False
+    assert resident_surface_activation_body["governance"]["summon_authority"] is False
+    assert resident_surface_activation_body["governance"]["memory_write"] is False
 
     denied_execution = client.post(
         "/lens/host/activation/execute",

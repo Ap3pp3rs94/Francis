@@ -188,7 +188,7 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $HostStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
       -Blockers @($HostBlockers + $HudBlockers | Sort-Object -Unique) `
       -Basis 'Resident host, tray, hotkey, and overlay runtime remain blocked.')
 )
@@ -216,7 +216,7 @@ $Payload = [ordered]@{
   }
   criteria = @($Criteria)
   blockers = @($AllBlockers)
-  next_smallest_truthful_gap = 'resident_surface_activation_boundary_or_live_operator_experience_proof'
+  next_smallest_truthful_gap = 'live_operator_experience_proof'
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true

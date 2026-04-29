@@ -13,6 +13,7 @@ from francis.lens.activation import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
+    lens_resident_surface_activation_boundary,
 )
 from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.lens.preflight import lens_preflight
@@ -696,6 +697,7 @@ def _stage6_readiness(
     reactor: dict[str, Any],
     command_palette: dict[str, Any],
     preflight: dict[str, Any],
+    resident_surface_activation: dict[str, Any],
 ) -> dict[str, Any]:
     hud_runtime = _as_dict(hud.get("runtime"))
     preflight_surfaces = _as_dict(preflight.get("surfaces"))
@@ -829,6 +831,27 @@ def _stage6_readiness(
                 "memory_write": False,
             },
             {
+                "id": "resident_surface_activation_boundary",
+                "status": "blocked_readback_ready"
+                if bool(resident_surface_activation.get("boundary_ready"))
+                else "missing",
+                "evidence": [
+                    "/lens/resident-surface/activation",
+                    "/lens/host/activation/plan",
+                    "/lens/preflight",
+                    "/lens/status",
+                ],
+                "activation_ready": bool(resident_surface_activation.get("activation_ready")),
+                "resident_surface_ready": bool(resident_surface_activation.get("resident_surface_ready")),
+                "resident_claim_allowed": bool(resident_surface_activation.get("resident_claim_allowed")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "memory_write": False,
+            },
+            {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
                 "evidence": ["/lens/host", "/lens/preflight", "/lens/status"],
@@ -887,6 +910,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     command_palette = _command_palette_surface(approvals=approvals)
     resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
     preflight = lens_preflight()
+    resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
 
     return {
         "ok": True,
@@ -902,6 +926,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "hud": hud,
         "resident_host": resident_host,
         "preflight": preflight,
+        "resident_surface_activation": resident_surface_activation,
         "command_palette": command_palette,
         "mode_selector": {
             "status": "readback_ready",
@@ -932,6 +957,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             reactor=reactor,
             command_palette=command_palette,
             preflight=preflight,
+            resident_surface_activation=resident_surface_activation,
         ),
         "governance": {
             "gate": "lens_readback_only",

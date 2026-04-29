@@ -12178,6 +12178,50 @@ readiness proof diagnostic:
 - `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident surface activation boundary readback
+
+Stage 6/Lens now has a backend readback contract for the resident-surface
+activation boundary. `GET /lens/resident-surface/activation` composes the
+existing Lens host activation approval/readback path, execution preflight,
+execution plan, execution denial, and the host/summon/tray/overlay preflight
+surfaces into a single `kind: lens.resident_surface.activation_boundary`
+payload. The payload reports `status: blocked`, `boundary_ready: true`,
+`activation_ready: false`, `resident_surface_ready: false`,
+`ready_for_lens_resident_claim: false`, and `resident_claim_allowed: false`.
+
+`/lens/status` now embeds the same boundary as
+`resident_surface_activation`, and Stage 6 readiness includes a
+`resident_surface_activation_boundary` criterion with
+`status: blocked_readback_ready`. The Stage 6 checkpoint now lists
+`/lens/resident-surface/activation` as evidence under
+`system_resident_presence` and advances the next smallest truthful gap to
+`live_operator_experience_proof`.
+
+This is readback-only and boundary-only. It does not launch a Lens host
+process; install, start, stop, restart, supervise, or control a Windows
+service; register tray presence; bind a global hotkey; open, focus, or
+control an overlay; summon Francis anywhere; create live operator experience
+proof; write runtime state; write memory; decide approvals; or grant
+execution, approval-decision, memory-write, overlay-control,
+window-management, summon, capture, sensing, telemetry, policy,
+service-install, service-control, hotkey-registration, tray-registration,
+tray-icon, notification, API local-process-launch, or product
+local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+activation boundary readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12201,8 +12245,11 @@ These remain true and should block any "finished" claim:
   plus read-only activation execution preflight, execution-plan, and
   execution-denial gates plus durable denial receipt readback and chat UI
   readback of denial receipt totals/latest receipt handles, but no OS-wide
-  summon, resident host process, installed/started service, resident overlay/HUD runtime, OS-level command
-  palette, tray presence, hotkey binding, or live Pilot takeover surface yet
+  summon, plus a resident-surface activation boundary readback that keeps the
+  resident claim blocked, but no resident host process, installed/started
+  service, resident overlay/HUD runtime, OS-level command palette, tray
+  presence, hotkey binding, live operator experience proof, or live Pilot
+  takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,

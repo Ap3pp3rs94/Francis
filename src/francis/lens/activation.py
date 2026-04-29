@@ -23,6 +23,7 @@ LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
+LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE = "/lens/resident-surface/activation"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
@@ -59,6 +60,10 @@ def _str_list(value: Any) -> list[str]:
         item = value.strip()
         return [item] if item else []
     return []
+
+
+def _dedupe_strs(values: list[Any]) -> list[str]:
+    return sorted({_safe_str(item).strip() for item in values if _safe_str(item).strip()})
 
 
 def _safe_limit(value: Any, *, default: int = 5) -> int:
@@ -819,6 +824,208 @@ def lens_host_activation_denial_receipts(
             "denial_receipt_write_authority": False,
             "receipt_write_authority": False,
             "next_step": "review_denial_receipts_before_adding_execution_authority",
+        },
+    }
+
+
+def _surface_component(
+    component_id: str,
+    *,
+    label: str,
+    route: str,
+    status: Any,
+    ready: Any,
+    blockers: Any = None,
+    required_before_enable: Any = None,
+) -> dict[str, Any]:
+    return {
+        "id": component_id,
+        "label": label,
+        "route": route,
+        "status": _safe_str(status).strip() or "missing",
+        "ready": bool(ready),
+        "blockers": _str_list(blockers),
+        "required_before_enable": _str_list(required_before_enable),
+    }
+
+
+def lens_resident_surface_activation_boundary(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    limit: int = 5,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    activation_state = lens_host_activation_readback(limit=safe_limit)
+    execution_preflight = lens_host_activation_execution_preflight(approval_id=safe_approval_id, actor=actor)
+    execution_plan = lens_host_activation_execution_plan(approval_id=safe_approval_id, actor=actor)
+    execution_denial = deny_lens_host_activation_execution(
+        approval_id=safe_approval_id,
+        actor=actor,
+        reason="prove resident surface activation boundary",
+        route=LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=False,
+    )
+    preflight = lens_preflight()
+    surfaces = _as_dict(preflight.get("surfaces"))
+    host_surface = _as_dict(surfaces.get("host"))
+    summon_surface = _as_dict(surfaces.get("summon"))
+    tray_surface = _as_dict(surfaces.get("tray"))
+    overlay_surface = _as_dict(surfaces.get("overlay"))
+    plan_body = _as_dict(execution_plan.get("plan"))
+    denial = _as_dict(execution_denial.get("denial"))
+    approval = _as_dict(execution_preflight.get("approval"))
+    blockers = _dedupe_strs(
+        [
+            *_str_list(preflight.get("blockers")),
+            *_str_list(execution_plan.get("blockers")),
+            *_str_list(execution_denial.get("blockers")),
+            "resident_surface_missing",
+            "live_operator_experience_proof_missing",
+        ]
+    )
+    components = [
+        _surface_component(
+            "host_activation_preflight",
+            label="Host activation preflight",
+            route=LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+            status=execution_preflight.get("status"),
+            ready=execution_preflight.get("ready"),
+            blockers=execution_preflight.get("blockers"),
+        ),
+        _surface_component(
+            "host_activation_plan",
+            label="Host activation execution plan",
+            route=LENS_HOST_ACTIVATION_PLAN_ROUTE,
+            status=execution_plan.get("status"),
+            ready=execution_plan.get("execution_ready"),
+            blockers=execution_plan.get("blockers"),
+        ),
+        _surface_component(
+            "host_activation_denial",
+            label="Host activation execution denial",
+            route=LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+            status=execution_denial.get("status"),
+            ready=execution_denial.get("executed"),
+            blockers=execution_denial.get("blockers"),
+        ),
+        _surface_component(
+            "host_preflight",
+            label="Resident host preflight",
+            route="/lens/preflight",
+            status=host_surface.get("status"),
+            ready=host_surface.get("ready"),
+            blockers=host_surface.get("blockers"),
+            required_before_enable=host_surface.get("required_before_enable"),
+        ),
+        _surface_component(
+            "summon_preflight",
+            label="Summon hotkey preflight",
+            route="/lens/preflight",
+            status=summon_surface.get("status"),
+            ready=summon_surface.get("ready"),
+            blockers=summon_surface.get("blockers"),
+            required_before_enable=summon_surface.get("required_before_enable"),
+        ),
+        _surface_component(
+            "tray_preflight",
+            label="Tray presence preflight",
+            route="/lens/preflight",
+            status=tray_surface.get("status"),
+            ready=tray_surface.get("ready"),
+            blockers=tray_surface.get("blockers"),
+            required_before_enable=tray_surface.get("required_before_enable"),
+        ),
+        _surface_component(
+            "overlay_preflight",
+            label="Overlay window preflight",
+            route="/lens/preflight",
+            status=overlay_surface.get("status"),
+            ready=overlay_surface.get("ready"),
+            blockers=overlay_surface.get("blockers"),
+            required_before_enable=overlay_surface.get("required_before_enable"),
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": "lens.resident_surface.activation_boundary",
+        "status": "blocked",
+        "route": LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE,
+        "approval_id": safe_approval_id,
+        "actor": _redact_free_text(actor),
+        "boundary_ready": True,
+        "activation_ready": False,
+        "resident_surface_ready": False,
+        "ready_for_lens_resident_claim": False,
+        "resident_claim_allowed": False,
+        "execution_ready": False,
+        "executed": False,
+        "applied": False,
+        "operator_experience_proof": False,
+        "approval": {
+            "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+            "status": _safe_str(activation_state.get("status")).strip(),
+            "selected_status": _safe_str(approval.get("status")).strip(),
+            "selected_approved": bool(approval.get("approved")),
+            "pending_count": activation_state.get("pending_count", 0),
+            "approved_count": activation_state.get("approved_count", 0),
+        },
+        "execution": {
+            "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+            "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+            "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+            "preflight_status": _safe_str(execution_preflight.get("status")).strip(),
+            "plan_status": _safe_str(execution_plan.get("status")).strip(),
+            "denial_status": _safe_str(execution_denial.get("status")).strip(),
+            "would_launch_process": bool(plan_body.get("would_launch_process")),
+            "would_install_service": bool(plan_body.get("would_install_service")),
+            "would_start_service": bool(plan_body.get("would_start_service")),
+            "would_register_hotkey": bool(plan_body.get("would_register_hotkey")),
+            "would_open_overlay": bool(plan_body.get("would_open_overlay")),
+            "would_write_memory": bool(plan_body.get("would_write_memory")),
+            "would_decide_approval": bool(plan_body.get("would_decide_approval")),
+            "denial_reason": _safe_str(denial.get("reason")).strip(),
+        },
+        "surface": {
+            "preflight_route": "/lens/preflight",
+            "status": _safe_str(preflight.get("status")).strip(),
+            "ready": bool(preflight.get("ready")),
+            "host_status": _safe_str(host_surface.get("status")).strip(),
+            "summon_status": _safe_str(summon_surface.get("status")).strip(),
+            "tray_status": _safe_str(tray_surface.get("status")).strip(),
+            "overlay_status": _safe_str(overlay_surface.get("status")).strip(),
+        },
+        "components": components,
+        "blockers": blockers,
+        "next_smallest_truthful_gap": "live_operator_experience_proof",
+        "governance": {
+            **_activation_governance(
+                route=LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_resident_surface_activation_boundary",
+            "boundary_only": True,
+            "read_only_contract": True,
+            "activation_authority": False,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "tray_icon_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "runtime_mutation_authority_granted": False,
+            "next_step": "prove_live_operator_experience_before_stage_6_closure",
         },
     }
 
