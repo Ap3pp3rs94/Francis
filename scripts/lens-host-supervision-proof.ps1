@@ -150,8 +150,9 @@ function Get-CheckById {
 $PowerShellPath = Get-PowerShellPath
 $HostPreflightPath = Join-Path $PSScriptRoot 'lens-host-preflight.ps1'
 $ForegroundProofPath = Join-Path $PSScriptRoot 'lens-host-foreground-proof.ps1'
+$ObservedForegroundRunSeconds = [Math]::Max($ForegroundRunSeconds, 5)
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
-$ForegroundProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ForegroundProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$ForegroundRunSeconds)
+$ForegroundProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ForegroundProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$ObservedForegroundRunSeconds)
 
 $PreflightPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
 $ForegroundPayload = Get-PropertyValue -Payload $ForegroundProof -Name 'payload'
@@ -216,7 +217,8 @@ $Payload = [ordered]@{
   status = if ($ProofPassed) { 'proof_passed' } else { 'proof_failed' }
   mode = $Mode.ToLowerInvariant()
   repo_root = $RepoRoot
-  foreground_run_seconds = $ForegroundRunSeconds
+  foreground_run_seconds = $ObservedForegroundRunSeconds
+  requested_foreground_run_seconds = $ForegroundRunSeconds
   supervision_ready = $false
   ready_for_resident_claim = $false
   resident_claim_allowed = $false

@@ -45,6 +45,8 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert payload["kind"] == "lens.host.supervision_readiness_proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
+    assert payload["requested_foreground_run_seconds"] == 2
+    assert payload["foreground_run_seconds"] >= 5
     assert payload["supervision_ready"] is False
     assert payload["ready_for_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False

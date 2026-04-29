@@ -12208,19 +12208,31 @@ service-install, service-control, hotkey-registration, tray-registration,
 tray-icon, notification, API local-process-launch, or product
 local-process-launch authority.
 
+Follow-up CI stabilization kept the proof diagnostic bounded while making the
+foreground child process observation less timing-sensitive on Windows runners:
+`scripts/lens-host-supervision-proof.ps1` now preserves the requested foreground
+run duration in the payload and uses a minimum 5-second observation window for
+the nested foreground proof. This remains diagnostic-only and does not add
+process-launch authority beyond the existing explicit foreground proof harness.
+
 Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
 activation boundary readback:
 
 - `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py -q`
   Result: `passed`
-- `python -m ruff check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+- `python -m ruff check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py`
   Result: `passed`
-- `python -m ruff format --check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py`
   Result: `passed`
 - `python -m mypy src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py`
   Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-proof.ps1 -Mode Status -ForegroundRunSeconds 2`
+  Result: `passed`
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
+- `git diff --check`
+  Result: `passed` with the expected PowerShell line-ending warning for
+  `scripts/lens-host-supervision-proof.ps1`
 
 ## 5. Known truthful gaps
 
