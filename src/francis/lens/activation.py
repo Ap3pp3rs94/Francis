@@ -15,6 +15,7 @@ LENS_HOST_ACTIVATION_ROUTE = "/lens/host/activation/request"
 LENS_HOST_ACTIVATION_READBACK_ROUTE = "/lens/host/activation"
 LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
+LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
@@ -92,6 +93,7 @@ def _activation_governance(
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
         "read_only_contract": read_only_contract,
         "activation_authority": False,
         "execution_authority": False,
@@ -115,6 +117,7 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
         "method": "POST",
         "action": LENS_HOST_ACTIVATION_ACTION,
         "mode": _DEFAULT_MODE,
@@ -388,6 +391,7 @@ def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: An
         "ready": not deduped_blockers,
         "route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
         "request_route": LENS_HOST_ACTIVATION_ROUTE,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "approval_id": requested_id,
@@ -549,6 +553,7 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
         "plan_available": True,
         "execution_ready": False,
         "route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "request_route": LENS_HOST_ACTIVATION_ROUTE,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
@@ -581,6 +586,86 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
             "gate": "lens_host_activation_execution_plan",
             "read_only_contract": True,
             "plan_readback_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "receipt_write_authority": False,
+            "next_step": next_step,
+        },
+    }
+
+
+def _execution_denial_status(blockers: list[str]) -> tuple[str, str]:
+    if "approval_id_required" in blockers:
+        return "blocked", "select_exact_approved_activation_request"
+    if "activation_approval_not_found" in blockers or "activation_approval_wrong_action" in blockers:
+        return "blocked", "select_matching_lens_host_activation_request"
+    if "activation_approval_not_approved" in blockers:
+        return "blocked", "approve_exact_lens_host_activation_request"
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_lens_host_activation"
+    if "operator_posture_not_ready" in blockers:
+        return "blocked", "switch_operator_posture_before_lens_host_activation"
+    return "denied_no_execution_authority", "implement_lens_host_execution_authority_in_separate_slice"
+
+
+def deny_lens_host_activation_execution(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    reason: Any = "attempt Lens host foreground activation",
+    route: str = LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_ACTIVATION_EXECUTE_ROUTE
+    permission = _permission_readiness(actor, route=safe_route, method=method)
+    plan = lens_host_activation_execution_plan(approval_id=approval_id, actor=actor)
+    preflight = _as_dict(plan.get("preflight"))
+    blockers = _str_list(plan.get("blockers"))
+    if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
+        blockers.append("system_write_scope_not_ready")
+    if "local_process_launch_authority_not_granted" not in blockers:
+        blockers.append("local_process_launch_authority_not_granted")
+    deduped_blockers = sorted({blocker for blocker in blockers if blocker})
+    status, next_step = _execution_denial_status(deduped_blockers)
+    return {
+        "ok": True,
+        "applied": False,
+        "executed": False,
+        "kind": "lens.host.activation.execution_denial",
+        "status": status,
+        "route": safe_route,
+        "method": method,
+        "request_route": LENS_HOST_ACTIVATION_ROUTE,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "approval_id": _safe_str(plan.get("approval_id")).strip(),
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "permission": permission,
+        "preflight": preflight,
+        "plan": plan,
+        "blockers": deduped_blockers,
+        "denial": {
+            "reason": "local_process_launch_authority_not_granted",
+            "message": "Lens host activation execution is blocked until explicit local process launch authority exists.",
+            "would_launch_process": False,
+            "would_write_receipt": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+        },
+        "governance": {
+            **_activation_governance(
+                route=safe_route,
+                approval_request_write=False,
+                read_only_contract=False,
+            ),
+            "gate": "lens_host_activation_execution_denial",
+            "execution_boundary": True,
+            "denial_boundary": True,
             "execution_authority": False,
             "approval_decision_authority": False,
             "local_process_launch_authority": False,

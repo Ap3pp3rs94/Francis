@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from francis.lens import (
+    deny_lens_host_activation_execution,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -23,6 +24,12 @@ class LensHostActivationRequestIn(BaseModel):
     actor: str | None = None
     reason: str = "request Lens host foreground activation"
     mode: str = Field(default="foreground_status_session")
+
+
+class LensHostActivationExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens host foreground activation"
 
 
 @router.get("/status")
@@ -59,6 +66,17 @@ def host_activation_preflight(approval_id: str = "", actor: str = "") -> dict[st
 @router.get("/host/activation/plan")
 def host_activation_plan(approval_id: str = "", actor: str = "") -> dict[str, Any]:
     return lens_host_activation_execution_plan(approval_id=approval_id, actor=actor)
+
+
+@router.post("/host/activation/execute")
+def host_activation_execute(request: Request, payload: LensHostActivationExecuteIn) -> dict[str, Any]:
+    return deny_lens_host_activation_execution(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.post("/host/activation/request")

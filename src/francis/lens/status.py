@@ -7,6 +7,7 @@ from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
+    deny_lens_host_activation_execution,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -235,6 +236,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
     activation_execution_plan = lens_host_activation_execution_plan()
+    activation_execution_denial = deny_lens_host_activation_execution()
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
@@ -335,6 +337,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_execution_preflight": activation_execution_preflight,
         "activation_execution_plan_route": _safe_str(activation_execution_plan.get("route")).strip(),
         "activation_execution_plan": activation_execution_plan,
+        "activation_execution_denial_route": _safe_str(activation_execution_denial.get("route")).strip(),
+        "activation_execution_denial": activation_execution_denial,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
@@ -792,6 +796,19 @@ def _stage6_readiness(
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
+            },
+            {
+                "id": "host_activation_execution_denial_boundary",
+                "status": _safe_str(_as_dict(resident_host.get("activation_execution_denial")).get("status")).strip()
+                or "missing",
+                "evidence": ["/lens/host/activation/execute", "/lens/host/activation/plan", "/lens/status"],
+                "applied": bool(_as_dict(resident_host.get("activation_execution_denial")).get("applied")),
+                "executed": bool(_as_dict(resident_host.get("activation_execution_denial")).get("executed")),
+                "blockers": _as_list(_as_dict(resident_host.get("activation_execution_denial")).get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "receipt_write_authority": False,
             },
             {
                 "id": "summon_anywhere",
