@@ -133,16 +133,19 @@ function New-Check {
 $PowerShellPath = Get-PowerShellPath
 $HostPreflightPath = Join-Path $PSScriptRoot 'lens-host-preflight.ps1'
 $SupervisionProofPath = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
+$LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $OverlayPreflightPath = Join-Path $PSScriptRoot 'lens-overlay-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
 
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
+$LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status')
 $TrayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status')
 $OverlayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $OverlayPreflightPath -ScriptArgs @('-Mode', 'Status')
 $SummonPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonPreflightPath -ScriptArgs @('-Mode', 'Status')
 
 $HostPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
+$LiveOperatorPayload = Get-PropertyValue -Payload $LiveOperatorProof -Name 'payload'
 $TrayPayload = Get-PropertyValue -Payload $TrayPreflight -Name 'payload'
 $OverlayPayload = Get-PropertyValue -Payload $OverlayPreflight -Name 'payload'
 $SummonPayload = Get-PropertyValue -Payload $SummonPreflight -Name 'payload'
@@ -184,6 +187,16 @@ $SummonBlocked = (
   -not [bool](Get-PropertyValue -Payload $Binding -Name 'binding_enabled' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Binding -Name 'register_hotkey' -Default $true)
 )
+$LiveOperatorProofPassed = (
+  [int](Get-PropertyValue -Payload $LiveOperatorProof -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'kind' -Default '') -eq 'lens.live_operator_experience.proof' -and
+  [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'live_http_status_readback' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'operator_experience_proof' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'resident_claim_allowed' -Default $true)
+)
 $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_control_authority' -Default $true) -and
@@ -199,6 +212,7 @@ $ResidentClaimBlocked = $HostLifecycleBlocked -and $TrayBlocked -and $OverlayBlo
 $Checks = @(
   (New-Check -Id 'host_lifecycle_boundary' -Status $(if ($HostLifecycleBlocked) { 'blocked_readback_ready' } else { 'failed' }) -Passed $HostLifecycleBlocked -Evidence 'scripts/lens-host-preflight.ps1 -Mode Status' -Reason 'Host lifecycle must be readable and blocked before resident surface work.')
   (New-Check -Id 'supervision_proof_available' -Status $(if ($SupervisionProofAvailable) { 'available' } else { 'missing' }) -Passed $SupervisionProofAvailable -Evidence 'scripts/lens-host-supervision-proof.ps1' -Reason 'The separate foreground/supervision proof remains the bounded process-readiness evidence.')
+  (New-Check -Id 'live_operator_experience_proof' -Status $(if ($LiveOperatorProofPassed) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $LiveOperatorProofPassed -Evidence 'scripts/lens-live-operator-proof.ps1 -Mode Status' -Reason 'Resident surface readiness must consume the live HTTP operator readback proof before it reports operator experience as available.')
   (New-Check -Id 'tray_presence_preflight' -Status $(if ($TrayBlocked) { 'blocked_disabled' } else { 'failed' }) -Passed $TrayBlocked -Evidence 'scripts/lens-tray-preflight.ps1 -Mode Status' -Reason 'Tray presence config must be readable, disabled, and blocked.')
   (New-Check -Id 'overlay_window_preflight' -Status $(if ($OverlayBlocked) { 'blocked_disabled' } else { 'failed' }) -Passed $OverlayBlocked -Evidence 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Reason 'Overlay window config must be readable, disabled, and blocked.')
   (New-Check -Id 'summon_binding_preflight' -Status $(if ($SummonBlocked) { 'blocked_disabled' } else { 'failed' }) -Passed $SummonBlocked -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'Summon binding config must be readable, declared, disabled, and blocked.')
@@ -207,7 +221,7 @@ $Checks = @(
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
-$AllBlockers = @(
+$BaseBlockers = @(
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostPayload -Name 'blockers' -Default @())) +
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $TrayPayload -Name 'blockers' -Default @())) +
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @())) +
@@ -216,10 +230,13 @@ $AllBlockers = @(
     'resident_surface_missing',
     'tray_presence_missing',
     'overlay_window_missing',
-    'summon_anywhere_missing',
-    'operator_experience_proof_missing'
-  ) | Sort-Object -Unique
+    'summon_anywhere_missing'
+  )
 )
+if (-not $LiveOperatorProofPassed) {
+  $BaseBlockers += 'operator_experience_proof_missing'
+}
+$AllBlockers = @($BaseBlockers | Sort-Object -Unique)
 
 $Payload = [ordered]@{
   ok = $ProofPassed
@@ -236,12 +253,19 @@ $Payload = [ordered]@{
   overlay_window = $false
   global_hotkey_bound = $false
   summon_anywhere = $false
-  operator_experience_proof = $false
+  live_http_status_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'live_http_status_readback' -Default $false)
+  operator_experience_proof = $LiveOperatorProofPassed
+  live_operator_experience_proof = $LiveOperatorProofPassed
+  live_operator_experience_ready = $false
   checks = @($Checks)
   blockers = @($AllBlockers)
   proof = [ordered]@{
     host_lifecycle_status = [string](Get-PropertyValue -Payload $HostPayload -Name 'status' -Default '')
     supervision_proof_available = $SupervisionProofAvailable
+    live_operator_status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '')
+    live_operator_helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
+    live_operator_status_route = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status_route' -Default '')
+    live_operator_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $LiveOperatorPayload -Name 'blockers' -Default @())
     tray_status = [string](Get-PropertyValue -Payload $TrayPayload -Name 'status' -Default '')
     overlay_status = [string](Get-PropertyValue -Payload $OverlayPayload -Name 'status' -Default '')
     summon_status = [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '')
@@ -256,12 +280,14 @@ $Payload = [ordered]@{
     overlay_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @())
     summon_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blockers' -Default @())
   }
-  next_smallest_truthful_gap = 'resident_surface_activation_boundary_or_live_operator_experience_proof'
+  next_smallest_truthful_gap = 'resident_host_or_resident_overlay_runtime'
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
+    live_http_readback = $LiveOperatorProofPassed
+    temporary_api_process = $LiveOperatorProofPassed
     bounded_foreground_session = $false
-    temporary_runtime_state_write = $false
+    temporary_runtime_state_write = $LiveOperatorProofPassed
     product_execution_authority = $false
     execution_authority = $false
     approval_decision_authority = $false
@@ -281,7 +307,7 @@ $Payload = [ordered]@{
     notification_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Lens resident surface readiness is observable and still blocked; this proof does not register tray presence, bind a hotkey, open an overlay, spawn a foreground host, or claim summon-anywhere behavior.'
+  message = 'Lens resident surface readiness now consumes the live HTTP operator readback proof and remains blocked; this proof does not register tray presence, bind a hotkey, open an overlay, spawn a foreground host, or claim summon-anywhere behavior.'
 }
 
 $Payload | ConvertTo-Json -Depth 10

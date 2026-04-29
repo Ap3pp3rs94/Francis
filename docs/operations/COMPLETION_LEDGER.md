@@ -13432,6 +13432,60 @@ diagnostic:
 - `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident surface proof consumes live operator proof
+
+Stage 6/Lens resident-surface readiness proof now consumes the existing live
+operator experience proof instead of carrying a stale operator-experience
+blocker after that proof has passed. `scripts/lens-resident-surface-proof.ps1
+-Mode Status` invokes `scripts/lens-live-operator-proof.ps1 -Mode Status`,
+requires the live HTTP `/lens/status?limit=5` readback proof to pass, and
+returns `operator_experience_proof: true`,
+`live_operator_experience_proof: true`, and `live_http_status_readback: true`
+while still reporting `resident_surface_ready: false`,
+`ready_for_lens_resident_claim: false`, and `resident_claim_allowed: false`.
+
+The proof no longer reports `operator_experience_proof_missing` when the live
+operator proof is available. Its next smallest truthful gap is now
+`resident_host_or_resident_overlay_runtime`, matching the current Stage 6
+blocker posture: the operator readback proof exists, but Francis still lacks a
+supervised resident host, resident overlay runtime, tray presence, hotkey
+binding, and summon-anywhere behavior.
+
+This is diagnostic/readback-only. It adds a nested temporary local API proof
+process through the existing live-operator proof, but it does not create a
+resident Lens host; install, start, stop, supervise, or control a service;
+register tray presence; bind a global hotkey; open or control an overlay;
+summon Francis anywhere; write memory; decide approvals; create new UI
+controls; or grant execution, approval-decision, memory-write,
+process-supervision, service-control, overlay-control, window-management,
+summon, hotkey-registration, tray-registration, sensing, capture, telemetry, or
+resident-claim authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+proof/live-operator composition:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_resident_surface_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_resident_surface_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`; Stage 6 remains `blocked` with `ready_total: 2`,
+  `blocked_total: 3`, and `next_smallest_truthful_gap:
+  stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; Stage 6 remains `blocked`, `closure_decision:
+  do_not_close_stage6`, and `next_smallest_truthful_gap:
+  resident_surface_missing`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with the expected PowerShell line-ending warning for
+  `scripts/lens-resident-surface-proof.ps1`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13517,7 +13571,9 @@ These remain true and should block any "finished" claim:
   reports `do_not_close_stage6`, groups closure blockers, and moves the next
   concrete blocker to `resident_surface_missing`,
   plus a live HTTP operator-experience readback proof that verifies the Lens
-  status payload through a temporary local API process, but no supervised
+  status payload through a temporary local API process, plus resident-surface
+  proof consumption of that live operator proof so operator experience is no
+  longer reported as missing there, but no supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, summon-anywhere behavior, or live

@@ -54,15 +54,16 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["overlay_window"] is False
     assert payload["global_hotkey_bound"] is False
     assert payload["summon_anywhere"] is False
-    assert payload["operator_experience_proof"] is False
-    assert (
-        payload["next_smallest_truthful_gap"]
-        == "resident_surface_activation_boundary_or_live_operator_experience_proof"
-    )
+    assert payload["live_http_status_readback"] is True
+    assert payload["operator_experience_proof"] is True
+    assert payload["live_operator_experience_proof"] is True
+    assert payload["live_operator_experience_ready"] is False
+    assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
     assert checks["supervision_proof_available"]["status"] == "available"
+    assert checks["live_operator_experience_proof"]["status"] == "proof_passed"
     assert checks["tray_presence_preflight"]["status"] == "blocked_disabled"
     assert checks["overlay_window_preflight"]["status"] == "blocked_disabled"
     assert checks["summon_binding_preflight"]["status"] == "blocked_disabled"
@@ -73,6 +74,10 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     proof = payload["proof"]
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
+    assert proof["live_operator_status"] == "proof_passed"
+    assert proof["live_operator_helpful_not_noisy_readback"] is True
+    assert proof["live_operator_status_route"] == "/lens/status?limit=5"
+    assert "resident_surface_missing" in proof["live_operator_blockers"]
     assert proof["tray_status"] == "blocked"
     assert proof["overlay_status"] == "blocked"
     assert proof["summon_status"] == "blocked"
@@ -91,13 +96,15 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert "tray_presence_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
     assert "summon_anywhere_missing" in payload["blockers"]
-    assert "operator_experience_proof_missing" in payload["blockers"]
+    assert "operator_experience_proof_missing" not in payload["blockers"]
 
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
+        "live_http_readback": True,
+        "temporary_api_process": True,
         "bounded_foreground_session": False,
-        "temporary_runtime_state_write": False,
+        "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
