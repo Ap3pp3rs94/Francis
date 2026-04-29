@@ -12318,6 +12318,49 @@ diagnostic:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Launch -RunSeconds 3`
   Result: `passed` against an isolated temporary `FRANCIS_DATA_DIR`
 
+### 2026-04-29 - Stage 6/Lens host launch proof checkpoint
+
+Stage 6/Lens now consumes the bounded host launch diagnostic through a repeatable
+proof and checkpoint readback. `scripts/lens-host-launch-proof.ps1 -Mode Status`
+invokes the existing `scripts/lens-host.ps1 -Mode Launch -RunSeconds <n>` path
+against an isolated temporary data directory, verifies that the bounded
+foreground host process is observed, verifies that the host self-stops and leaves
+only stopped runtime readback, and verifies that the launch remains diagnostic:
+`launch_authority: false`, `product_execution_authority: false`, and
+`api_local_process_launch_authority: false`.
+
+The Stage 6 checkpoint now consumes this launch proof. The
+`system_resident_presence` criterion advances from the raw backend
+`not_implemented` status to `bounded_host_launch_observed`, but it remains
+blocked and `ready_to_close: false` because the observed process is not a
+supervised resident host and there is still no tray presence, global hotkey,
+overlay runtime, summon-anywhere behavior, or live Pilot takeover. The
+checkpoint's next smallest truthful gap is now
+`resident_host_supervision_or_resident_overlay_runtime`.
+
+This is proof/checkpoint work only. It does not rework the host runner, add API
+launch authority, install/start/control a service, register tray presence, bind a
+global hotkey, open or control an overlay, grant product execution authority,
+approve anything, write memory, or claim Stage 6 closure.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens host launch proof
+checkpoint:
+
+- `python -m pytest tests\test_lens_host_launch_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_launch_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_launch_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_launch_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-launch-proof.ps1 -Mode Status -RunSeconds 3`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -HostLaunchRunSeconds 3`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12328,8 +12371,8 @@ These remain true and should block any "finished" claim:
   readback only, has a `/lens/host` resident-host readiness contract, and has a
   disabled `/lens/host/manifest` API launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session and bounded diagnostic
-  host-launch mode with live foreground process readback proof plus API live
-  process readback, a supervision readiness proof
+  host-launch mode with live foreground process readback proof, bounded launch
+  proof/checkpoint consumption, plus API live process readback, a supervision readiness proof
   diagnostic, resident surface readiness proof diagnostic, disabled tracked service config
   baseline, resident supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process

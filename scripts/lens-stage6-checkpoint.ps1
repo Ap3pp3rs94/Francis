@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [ValidateRange(2, 30)]
+  [int]$HostLaunchRunSeconds = 3
 )
 
 Set-StrictMode -Version 2
@@ -204,6 +207,7 @@ $PilotStatus = [string](Get-PropertyValue -Payload $PilotIndicator -Name 'status
 
 $PowerShellPath = Get-PowerShellPath
 $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
+$HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -228,6 +232,42 @@ $LiveOperatorBlockers = if ($LiveOperatorProofPassed) {
   @('resident_surface_missing')
 } else {
   @('resident_surface_missing', 'operator_experience_proof_missing')
+}
+
+$HostLaunchProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds))
+$HostLaunchProof = if ($HostLaunchProofResult.Count -gt 0) { $HostLaunchProofResult[-1] } else { $null }
+$HostLaunchExitCode = -1
+$HostLaunchPayload = $null
+if ($HostLaunchProof -is [System.Collections.IDictionary]) {
+  if ($HostLaunchProof.Contains('exit_code') -and $null -ne $HostLaunchProof['exit_code']) {
+    $HostLaunchExitCode = [int]$HostLaunchProof['exit_code']
+  }
+  if ($HostLaunchProof.Contains('payload') -and $null -ne $HostLaunchProof['payload']) {
+    $HostLaunchPayload = $HostLaunchProof['payload']
+  }
+}
+$HostLaunchProofPassed = (
+  $HostLaunchExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'kind' -Default '') -eq 'lens.host.launch_readiness_proof' -and
+  [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
+)
+$HostLaunchProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers | Sort-Object -Unique)
+if ($HostLaunchProofPassed) {
+  $SystemResidentBlockers = @(
+    @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
+    @('resident_host_process_not_supervised')
+  ) | Sort-Object -Unique
+}
+$SystemResidentStatus = if ($HostStatus -eq 'ready') {
+  'ready'
+} elseif ($HostLaunchProofPassed) {
+  'bounded_host_launch_observed'
+} else {
+  $HostStatus
 }
 
 $Criteria = @(
@@ -266,11 +306,11 @@ $Criteria = @(
   (New-Criterion `
       -Id 'system_resident_presence' `
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
-      -Status $HostStatus `
+      -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
-      -Blockers @($HostBlockers + $HudBlockers | Sort-Object -Unique) `
-      -Basis 'Resident host, tray, hotkey, and overlay runtime remain blocked.')
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
+      -Blockers $SystemResidentBlockers `
+      -Basis $(if ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_['ready'] })
@@ -308,12 +348,24 @@ $Payload = [ordered]@{
     ready_for_stage6_closure = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'ready_for_stage6_closure' -Default $false)
     blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $LiveOperatorPayload -Name 'blockers' -Default @())
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed) { 'resident_host_or_resident_overlay_runtime' } else { 'live_operator_experience_proof' }
+  host_launch_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'status' -Default 'missing')
+    ok = $HostLaunchProofPassed
+    exit_code = $HostLaunchExitCode
+    evidence = @('scripts/lens-host.ps1 -Mode Launch', 'scripts/lens-host-launch-proof.ps1')
+    bounded_host_launch_observed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false)
+    launch_authority_boundary = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_authority_boundary' -Default $false)
+    launch_completed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false)
+    ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $false)
+    blockers = $HostLaunchProofBlockers
+  }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     live_http_readback = $true
     temporary_api_process = $true
+    bounded_host_launch = $HostLaunchProofPassed
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false
@@ -322,7 +374,8 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = $false
+    local_process_launch_authority = $HostLaunchProofPassed
+    api_local_process_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     hotkey_registration_authority = $false

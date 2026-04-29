@@ -68,13 +68,15 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert criteria["mode_visibility"]["ready"] is True
     assert criteria["pilot_visibility_groundwork"]["status"] == "readback_ready"
     assert criteria["pilot_visibility_groundwork"]["ready"] is True
-    assert criteria["system_resident_presence"]["status"] == "not_implemented"
+    assert criteria["system_resident_presence"]["status"] == "bounded_host_launch_observed"
     assert criteria["system_resident_presence"]["ready"] is False
-    assert "resident_host_process_missing" in criteria["system_resident_presence"]["blockers"]
+    assert "resident_host_process_missing" not in criteria["system_resident_presence"]["blockers"]
+    assert "resident_host_process_not_supervised" in criteria["system_resident_presence"]["blockers"]
     assert "resident_overlay_runtime_missing" in criteria["system_resident_presence"]["blockers"]
     assert "tray_host_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
     assert "scripts/lens-host-foreground-proof.ps1" in criteria["system_resident_presence"]["evidence"]
+    assert "scripts/lens-host-launch-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-surface/activation" in criteria["system_resident_presence"]["evidence"]
@@ -88,12 +90,21 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["live_operator_experience_proof"]["live_operator_experience_ready"] is False
     assert payload["live_operator_experience_proof"]["ready_for_stage6_closure"] is False
     assert "resident_surface_missing" in payload["live_operator_experience_proof"]["blockers"]
-    assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
+    assert payload["host_launch_proof"]["status"] == "proof_passed"
+    assert payload["host_launch_proof"]["ok"] is True
+    assert payload["host_launch_proof"]["exit_code"] == 0
+    assert payload["host_launch_proof"]["bounded_host_launch_observed"] is True
+    assert payload["host_launch_proof"]["launch_authority_boundary"] is True
+    assert payload["host_launch_proof"]["launch_completed"] is True
+    assert payload["host_launch_proof"]["ready_for_resident_claim"] is False
+    assert "resident_host_process_not_supervised" in payload["host_launch_proof"]["blockers"]
+    assert payload["next_smallest_truthful_gap"] == "resident_host_supervision_or_resident_overlay_runtime"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
         "live_http_readback": True,
         "temporary_api_process": True,
+        "bounded_host_launch": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -102,7 +113,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "summon_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
-        "local_process_launch_authority": False,
+        "local_process_launch_authority": True,
+        "api_local_process_launch_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
         "hotkey_registration_authority": False,
