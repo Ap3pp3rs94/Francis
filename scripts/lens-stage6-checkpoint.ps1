@@ -4,7 +4,10 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(2, 30)]
-  [int]$HostLaunchRunSeconds = 3
+  [int]$HostLaunchRunSeconds = 3,
+
+  [ValidateRange(3, 30)]
+  [int]$SupervisorRunSeconds = 4
 )
 
 Set-StrictMode -Version 2
@@ -208,6 +211,7 @@ $PilotStatus = [string](Get-PropertyValue -Payload $PilotIndicator -Name 'status
 $PowerShellPath = Get-PowerShellPath
 $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
+$HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -255,8 +259,31 @@ $HostLaunchProofPassed = (
   -not [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $HostLaunchProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers | Sort-Object -Unique)
-if ($HostLaunchProofPassed) {
+
+$HostSupervisorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds))
+$HostSupervisorProof = if ($HostSupervisorProofResult.Count -gt 0) { $HostSupervisorProofResult[-1] } else { $null }
+$HostSupervisorExitCode = -1
+$HostSupervisorPayload = $null
+if ($HostSupervisorProof -is [System.Collections.IDictionary]) {
+  if ($HostSupervisorProof.Contains('exit_code') -and $null -ne $HostSupervisorProof['exit_code']) {
+    $HostSupervisorExitCode = [int]$HostSupervisorProof['exit_code']
+  }
+  if ($HostSupervisorProof.Contains('payload') -and $null -ne $HostSupervisorProof['payload']) {
+    $HostSupervisorPayload = $HostSupervisorProof['payload']
+  }
+}
+$HostSupervisorProofPassed = (
+  $HostSupervisorExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_observation_proof' -and
+  [string](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'bounded_supervisor_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'supervisor_observed_running_state' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'supervisor_observed_stopped_state' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $true)
+)
+$HostSupervisorProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorPayload -Name 'blockers' -Default @())
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisorProofBlockers | Sort-Object -Unique)
+if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
     @('resident_host_process_not_supervised')
@@ -264,6 +291,8 @@ if ($HostLaunchProofPassed) {
 }
 $SystemResidentStatus = if ($HostStatus -eq 'ready') {
   'ready'
+} elseif ($HostSupervisorProofPassed) {
+  'bounded_supervisor_observed'
 } elseif ($HostLaunchProofPassed) {
   'bounded_host_launch_observed'
 } else {
@@ -308,9 +337,9 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1') `
       -Blockers $SystemResidentBlockers `
-      -Basis $(if ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
+      -Basis $(if ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_['ready'] })
@@ -359,13 +388,25 @@ $Payload = [ordered]@{
     ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $false)
     blockers = $HostLaunchProofBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  host_supervisor_observation_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'status' -Default 'missing')
+    ok = $HostSupervisorProofPassed
+    exit_code = $HostSupervisorExitCode
+    evidence = @('scripts/lens-host.ps1 -Mode Launch', 'scripts/lens-host-supervisor-observation-proof.ps1')
+    bounded_supervisor_observed = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'bounded_supervisor_observed' -Default $false)
+    supervisor_observed_running_state = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'supervisor_observed_running_state' -Default $false)
+    supervisor_observed_stopped_state = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'supervisor_observed_stopped_state' -Default $false)
+    ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $false)
+    blockers = $HostSupervisorProofBlockers
+  }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     live_http_readback = $true
     temporary_api_process = $true
-    bounded_host_launch = $HostLaunchProofPassed
+    bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
+    bounded_supervisor_observation = $HostSupervisorProofPassed
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false
@@ -374,8 +415,10 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = $HostLaunchProofPassed
+    local_process_launch_authority = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
     api_local_process_launch_authority = $false
+    process_restart_authority = $false
+    process_supervision_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     hotkey_registration_authority = $false

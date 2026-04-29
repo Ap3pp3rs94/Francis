@@ -12403,6 +12403,48 @@ composition:
 - `python -m ruff format --check --no-cache tests\test_lens_host_supervision_proof_script.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens bounded supervisor observation proof
+
+Stage 6/Lens now has a bounded supervisor-observation proof for the future Lens
+resident host. `scripts/lens-host-supervisor-observation-proof.ps1 -Mode Status`
+uses the existing `scripts/lens-host.ps1 -Mode Launch -RunSeconds <n>` path
+against an isolated temporary data directory, observes the launch runner's
+foreground-running process readback, waits for the same process to self-stop,
+then verifies post-stop status readback as `state_present_process_not_running`.
+
+The Stage 6 checkpoint now consumes this proof. The `system_resident_presence`
+criterion advances from `bounded_host_launch_observed` to
+`bounded_supervisor_observed`, but remains blocked and `ready_to_close: false`.
+This is intentionally not a resident/supervised host claim: the proof reports
+`resident_host_process: false`, `supervised: false`,
+`process_restart_authority: false`, `process_supervision_authority: false`, and
+`service_control_authority: false`. The next smallest truthful gap is now
+`resident_host_process_supervision_or_resident_overlay_runtime`.
+
+This is diagnostic proof/checkpoint work only. It grants no product execution
+authority, no API launch authority, no process-restart authority, no process
+supervision authority, no service install/control authority, no approval-decision
+authority, no memory-write authority, no tray registration, no hotkey
+registration, no overlay control, and no summon-anywhere claim. It does perform
+bounded diagnostic local process launch through the existing launch runner and
+records that distinction explicitly.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens bounded supervisor
+observation proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor-observation-proof.ps1 -Mode Status -RunSeconds 4`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -HostLaunchRunSeconds 3 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_host_launch_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_foreground_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12415,9 +12457,12 @@ These remain true and should block any "finished" claim:
   foreground `scripts/lens-host.ps1` status session and bounded diagnostic
   host-launch mode with live foreground process readback proof, bounded launch
   proof/checkpoint consumption, plus API live process readback, a supervision
-  readiness proof diagnostic that now consumes bounded launch proof, resident
-  surface readiness proof diagnostic, disabled tracked service config baseline,
-  resident supervision readiness gate, read-only service-manager
+  readiness proof diagnostic that now consumes bounded launch proof, and a
+  bounded supervisor-observation proof/checkpoint readback that observes one
+  diagnostic host process through running and stopped states without restart,
+  process-supervision, or service-control authority, resident surface readiness
+  proof diagnostic, disabled tracked service config baseline, resident
+  supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
   readback boundary plus read-only Windows service status
   readback plus a read-only host lifecycle preflight and disabled summon hotkey
@@ -12431,9 +12476,10 @@ These remain true and should block any "finished" claim:
   summon, plus a resident-surface activation boundary readback that keeps the
   resident claim blocked, plus a live HTTP operator-experience readback proof
   that verifies the Lens status payload through a temporary local API process,
-  but no supervised resident host process, installed/started service, resident overlay/HUD
-  runtime, OS-level command palette, tray presence, hotkey binding, summon-anywhere
-  behavior, or live Pilot takeover surface yet
+  but no supervised resident host process, process-restart authority,
+  installed/started service, resident overlay/HUD runtime, OS-level command
+  palette, tray presence, hotkey binding, summon-anywhere behavior, or live
+  Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
