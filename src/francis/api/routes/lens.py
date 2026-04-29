@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from francis.lens import (
     deny_lens_host_activation_execution,
     deny_lens_resident_runtime_activation_execution,
+    deny_lens_resident_runtime_execution_authority_grant,
     lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
@@ -46,6 +47,12 @@ class LensResidentRuntimeExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime activation"
+
+
+class LensResidentRuntimeAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens resident runtime execution authority grant"
 
 
 @router.get("/status")
@@ -126,6 +133,20 @@ def resident_runtime_policy(approval_id: str = "", actor: str = "") -> dict[str,
 @router.get("/resident-runtime/plan")
 def resident_runtime_plan(approval_id: str = "", actor: str = "") -> dict[str, Any]:
     return lens_resident_runtime_activation_plan(approval_id=approval_id, actor=actor)
+
+
+@router.post("/resident-runtime/authority-grant")
+def resident_runtime_authority_grant(
+    request: Request,
+    payload: LensResidentRuntimeAuthorityGrantIn,
+) -> dict[str, Any]:
+    return deny_lens_resident_runtime_execution_authority_grant(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.post("/resident-runtime/execute")

@@ -1280,6 +1280,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_criterion["evidence"] == [
         "/lens/resident-runtime/policy",
         "/lens/resident-runtime/preflight",
+        "/lens/resident-runtime/authority-grant",
         "/lens/status",
     ]
     assert "resident_runtime_execution_authority_not_granted" in runtime_policy_criterion["blockers"]
@@ -1297,6 +1298,36 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_criterion["memory_write"] is False
     assert runtime_policy_criterion["receipt_write_authority"] is False
     assert runtime_policy_criterion["resident_claim_authority"] is False
+    runtime_authority_grant_criterion = _criterion(body, "resident_runtime_execution_authority_grant_boundary")
+    assert runtime_authority_grant_criterion["status"] == "blocked"
+    assert runtime_authority_grant_criterion["boundary_ready"] is True
+    assert runtime_authority_grant_criterion["applied"] is False
+    assert runtime_authority_grant_criterion["executed"] is False
+    assert runtime_authority_grant_criterion["authority_granted"] is False
+    assert runtime_authority_grant_criterion["grant_ready"] is False
+    assert runtime_authority_grant_criterion["authority_grant_ready"] is False
+    assert runtime_authority_grant_criterion["runtime_ready"] is False
+    assert runtime_authority_grant_criterion["resident_claim_allowed"] is False
+    assert runtime_authority_grant_criterion["evidence"] == [
+        "/lens/resident-runtime/authority-grant",
+        "/lens/resident-runtime/policy",
+        "/lens/status",
+    ]
+    assert "resident_runtime_authority_grant_not_implemented" in runtime_authority_grant_criterion["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in runtime_authority_grant_criterion["blockers"]
+    assert runtime_authority_grant_criterion["execution_authority"] is False
+    assert runtime_authority_grant_criterion["approval_decision_authority"] is False
+    assert runtime_authority_grant_criterion["local_process_launch_authority"] is False
+    assert runtime_authority_grant_criterion["process_supervision_authority"] is False
+    assert runtime_authority_grant_criterion["process_restart_authority"] is False
+    assert runtime_authority_grant_criterion["service_install_authority"] is False
+    assert runtime_authority_grant_criterion["service_control_authority"] is False
+    assert runtime_authority_grant_criterion["tray_registration_authority"] is False
+    assert runtime_authority_grant_criterion["hotkey_registration_authority"] is False
+    assert runtime_authority_grant_criterion["overlay_control_authority"] is False
+    assert runtime_authority_grant_criterion["memory_write"] is False
+    assert runtime_authority_grant_criterion["receipt_write_authority"] is False
+    assert runtime_authority_grant_criterion["resident_claim_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1391,6 +1422,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation["execution"]["runtime_policy_route"] == "/lens/resident-runtime/policy"
     assert resident_surface_activation["execution"]["runtime_policy_status"] == "readback_ready"
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grant_route"]
+        == "/lens/resident-runtime/authority-grant"
+    )
+    assert resident_surface_activation["execution"]["runtime_authority_grant_status"] == "blocked"
     assert resident_surface_activation["execution"]["runtime_execute_route"] == "/lens/resident-runtime/execute"
     assert resident_surface_activation["execution"]["runtime_denial_status"] == "blocked"
     assert resident_surface_activation["execution"]["would_launch_process"] is False
@@ -1428,13 +1464,19 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["resident_runtime_policy"]["policy_contract_ready"] is True
     assert resident_surface_activation["resident_runtime_policy"]["grant_ready"] is False
     assert (
+        resident_surface_activation["resident_runtime_authority_grant"]["kind"]
+        == "lens.resident_runtime.execution_authority_grant.denial"
+    )
+    assert resident_surface_activation["resident_runtime_authority_grant"]["boundary_ready"] is True
+    assert resident_surface_activation["resident_runtime_authority_grant"]["authority_granted"] is False
+    assert (
         resident_surface_activation["resident_runtime_denial"]["kind"]
         == "lens.resident_runtime.activation.execution_denial"
     )
     assert resident_surface_activation["resident_runtime_denial"]["executed"] is False
     assert (
         resident_surface_activation["next_smallest_truthful_gap"]
-        == "implement_supervised_resident_runtime_authority_grant"
+        == "implement_resident_runtime_authority_grant_denial_receipts"
     )
     assert resident_surface_activation["governance"]["gate"] == "lens_resident_surface_activation_boundary"
     assert resident_surface_activation["governance"]["boundary_only"] is True
@@ -1452,6 +1494,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "/lens/resident-surface/activation",
             "/lens/resident-runtime/preflight",
             "/lens/resident-runtime/policy",
+            "/lens/resident-runtime/authority-grant",
             "/lens/resident-runtime/plan",
             "/lens/host/activation/plan",
             "/lens/preflight",
@@ -1623,6 +1666,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_body["kind"] == "lens.resident_runtime.execution_policy_contract"
     assert runtime_policy_body["route"] == "/lens/resident-runtime/policy"
     assert runtime_policy_body["preflight_route"] == "/lens/resident-runtime/preflight"
+    assert runtime_policy_body["authority_grant_route"] == "/lens/resident-runtime/authority-grant"
     assert runtime_policy_body["plan_route"] == "/lens/resident-runtime/plan"
     assert runtime_policy_body["execute_route"] == "/lens/resident-runtime/execute"
     assert runtime_policy_body["status"] == "readback_ready"
@@ -1645,12 +1689,58 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_body["governance"]["service_control_authority"] is False
     assert runtime_policy_body["governance"]["resident_claim_authority"] is False
     assert runtime_policy_body["governance"]["memory_write"] is False
+    runtime_authority_grant_response = client.post(
+        "/lens/resident-runtime/authority-grant",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator asked to prove resident runtime authority stays blocked",
+        },
+    )
+    assert runtime_authority_grant_response.status_code == 200
+    runtime_authority_grant_body = runtime_authority_grant_response.json()
+    assert runtime_authority_grant_body["kind"] == "lens.resident_runtime.execution_authority_grant.denial"
+    assert runtime_authority_grant_body["status"] == "blocked"
+    assert runtime_authority_grant_body["route"] == "/lens/resident-runtime/authority-grant"
+    assert runtime_authority_grant_body["preflight_route"] == "/lens/resident-runtime/preflight"
+    assert runtime_authority_grant_body["policy_route"] == "/lens/resident-runtime/policy"
+    assert runtime_authority_grant_body["applied"] is False
+    assert runtime_authority_grant_body["executed"] is False
+    assert runtime_authority_grant_body["authority_granted"] is False
+    assert runtime_authority_grant_body["boundary_ready"] is True
+    assert runtime_authority_grant_body["permission"]["ready"] is True
+    assert runtime_authority_grant_body["grant_denial"]["reason"] == "resident_runtime_authority_grant_not_implemented"
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_execution_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_process_supervision_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_service_control_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_tray_registration_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_hotkey_registration_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_overlay_control_authority"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_memory_write"] is False
+    assert runtime_authority_grant_body["grant_denial"]["would_grant_resident_claim"] is False
+    assert runtime_authority_grant_body["receipt_written"] is False
+    assert runtime_authority_grant_body["receipt"] == {}
+    assert "approval_id_required" in runtime_authority_grant_body["blockers"]
+    assert "system_write_scope_not_ready" not in runtime_authority_grant_body["blockers"]
+    assert "resident_runtime_authority_grant_not_implemented" in runtime_authority_grant_body["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in runtime_authority_grant_body["blockers"]
+    assert runtime_authority_grant_body["governance"]["gate"] == (
+        "lens_resident_runtime_execution_authority_grant_boundary"
+    )
+    assert runtime_authority_grant_body["governance"]["authority_grant_boundary"] is True
+    assert runtime_authority_grant_body["governance"]["denial_boundary"] is True
+    assert runtime_authority_grant_body["governance"]["execution_authority"] is False
+    assert runtime_authority_grant_body["governance"]["approval_decision_authority"] is False
+    assert runtime_authority_grant_body["governance"]["process_supervision_authority"] is False
+    assert runtime_authority_grant_body["governance"]["service_control_authority"] is False
+    assert runtime_authority_grant_body["governance"]["resident_claim_authority"] is False
+    assert runtime_authority_grant_body["governance"]["memory_write"] is False
     runtime_plan_response = client.get("/lens/resident-runtime/plan")
     assert runtime_plan_response.status_code == 200
     runtime_plan_body = runtime_plan_response.json()
     assert runtime_plan_body["kind"] == "lens.resident_runtime.activation_plan"
     assert runtime_plan_body["route"] == "/lens/resident-runtime/plan"
     assert runtime_plan_body["policy_route"] == "/lens/resident-runtime/policy"
+    assert runtime_plan_body["authority_grant_route"] == "/lens/resident-runtime/authority-grant"
     assert runtime_plan_body["execute_route"] == "/lens/resident-runtime/execute"
     assert runtime_plan_body["status"] == "blocked"
     assert runtime_plan_body["runtime_ready"] is False
@@ -2181,7 +2271,11 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert policy_requirements["verify_exact_approval"]["status"] == "ready"
     assert policy_requirements["verify_actor_scope"]["status"] == "ready"
     assert policy_requirements["verify_operator_posture"]["status"] == "ready"
-    assert policy_requirements["define_future_authority_grant_boundary"]["status"] == "blocked"
+    assert policy_requirements["define_future_authority_grant_boundary"]["status"] == "ready"
+    assert (
+        policy_requirements["define_future_authority_grant_boundary"]["source"]
+        == "/lens/resident-runtime/authority-grant"
+    )
     assert resident_runtime_policy_body["governance"]["gate"] == "lens_resident_runtime_execution_policy_contract"
     assert resident_runtime_policy_body["governance"]["policy_contract"] is True
     assert resident_runtime_policy_body["governance"]["execution_authority"] is False
@@ -2189,6 +2283,59 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_runtime_policy_body["governance"]["service_control_authority"] is False
     assert resident_runtime_policy_body["governance"]["resident_claim_authority"] is False
     assert resident_runtime_policy_body["governance"]["memory_write"] is False
+
+    resident_runtime_authority_grant = client.post(
+        "/lens/resident-runtime/authority-grant",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator asked to prove authority grant stays blocked",
+        },
+    )
+    assert resident_runtime_authority_grant.status_code == 200
+    resident_runtime_authority_grant_body = resident_runtime_authority_grant.json()
+    assert resident_runtime_authority_grant_body["kind"] == "lens.resident_runtime.execution_authority_grant.denial"
+    assert resident_runtime_authority_grant_body["status"] == "denied_no_authority_grant"
+    assert resident_runtime_authority_grant_body["route"] == "/lens/resident-runtime/authority-grant"
+    assert resident_runtime_authority_grant_body["approval_id"] == approval_id
+    assert resident_runtime_authority_grant_body["authority_granted"] is False
+    assert resident_runtime_authority_grant_body["applied"] is False
+    assert resident_runtime_authority_grant_body["executed"] is False
+    assert resident_runtime_authority_grant_body["boundary_ready"] is True
+    assert resident_runtime_authority_grant_body["permission"]["ready"] is True
+    assert resident_runtime_authority_grant_body["policy"]["approval"]["approved"] is True
+    assert resident_runtime_authority_grant_body["policy"]["policy_contract_ready"] is True
+    assert resident_runtime_authority_grant_body["grant_denial"]["reason"] == (
+        "resident_runtime_authority_grant_not_implemented"
+    )
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_execution_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_local_process_launch_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_process_supervision_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_process_restart_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_service_install_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_service_control_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_tray_registration_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_hotkey_registration_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_overlay_control_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_receipt_write_authority"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_memory_write"] is False
+    assert resident_runtime_authority_grant_body["grant_denial"]["would_grant_resident_claim"] is False
+    assert resident_runtime_authority_grant_body["receipt_written"] is False
+    assert resident_runtime_authority_grant_body["receipt"] == {}
+    assert "activation_approval_not_approved" not in resident_runtime_authority_grant_body["blockers"]
+    assert "system_write_scope_not_ready" not in resident_runtime_authority_grant_body["blockers"]
+    assert "resident_runtime_authority_grant_not_implemented" in resident_runtime_authority_grant_body["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in resident_runtime_authority_grant_body["blockers"]
+    assert "process_supervision_authority_not_granted" in resident_runtime_authority_grant_body["blockers"]
+    assert "service_control_authority_not_granted" in resident_runtime_authority_grant_body["blockers"]
+    assert resident_runtime_authority_grant_body["governance"]["authority_grant_boundary"] is True
+    assert resident_runtime_authority_grant_body["governance"]["execution_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["approval_decision_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["process_supervision_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["service_control_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["receipt_write_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["resident_claim_authority"] is False
+    assert resident_runtime_authority_grant_body["governance"]["memory_write"] is False
 
     resident_runtime_plan = client.get(f"/lens/resident-runtime/plan?approval_id={approval_id}&actor=test.system.write")
     assert resident_runtime_plan.status_code == 200
@@ -2255,6 +2402,9 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["execution"]["plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_policy_status"] == "readback_ready"
+    assert resident_surface_activation_body["execution"]["runtime_authority_grant_status"] == (
+        "denied_no_authority_grant"
+    )
     assert resident_surface_activation_body["execution"]["runtime_plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_denial_status"] == (
         "denied_no_resident_runtime_authority"
@@ -2285,6 +2435,8 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert surface_components["resident_runtime_preflight"]["ready"] is False
     assert surface_components["resident_runtime_policy"]["status"] == "readback_ready"
     assert surface_components["resident_runtime_policy"]["ready"] is True
+    assert surface_components["resident_runtime_authority_grant"]["status"] == "denied_no_authority_grant"
+    assert surface_components["resident_runtime_authority_grant"]["ready"] is False
     assert surface_components["resident_runtime_plan"]["status"] == "blocked"
     assert surface_components["resident_runtime_activation_denial"]["status"] == "denied_no_resident_runtime_authority"
     assert surface_components["host_activation_denial"]["status"] == "denied_no_execution_authority"

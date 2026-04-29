@@ -108,6 +108,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/preflight" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/policy" in criteria["system_resident_presence"]["evidence"]
+    assert "/lens/resident-runtime/authority-grant" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/plan" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/execute" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-overlay-runtime-proof.ps1" in criteria["system_resident_presence"]["evidence"]
@@ -174,6 +175,40 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_execution_policy_contract"]["memory_write"] is False
     assert payload["resident_runtime_execution_policy_contract"]["receipt_write_authority"] is False
     assert payload["resident_runtime_execution_policy_contract"]["resident_claim_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["status"] == "blocked"
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["ok"] is True
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["boundary_ready"] is True
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["applied"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["executed"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["authority_granted"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["grant_ready"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["authority_grant_ready"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["runtime_ready"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["resident_claim_allowed"] is False
+    assert (
+        "/lens/resident-runtime/authority-grant"
+        in payload["resident_runtime_execution_authority_grant_boundary"]["evidence"]
+    )
+    assert (
+        "resident_runtime_authority_grant_not_implemented"
+        in payload["resident_runtime_execution_authority_grant_boundary"]["blockers"]
+    )
+    assert (
+        "resident_runtime_execution_authority_not_granted"
+        in payload["resident_runtime_execution_authority_grant_boundary"]["blockers"]
+    )
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["execution_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["approval_decision_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["local_process_launch_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["process_supervision_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["service_install_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["service_control_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["hotkey_registration_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["tray_registration_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["overlay_control_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["memory_write"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["receipt_write_authority"] is False
+    assert payload["resident_runtime_execution_authority_grant_boundary"]["resident_claim_authority"] is False
     assert payload["resident_runtime_activation_plan"]["status"] == "blocked"
     assert payload["resident_runtime_activation_plan"]["ok"] is True
     assert payload["resident_runtime_activation_plan"]["plan_available"] is True
@@ -289,7 +324,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
     assert (
-        payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_execution_authority_grant_boundary"
+        payload["next_smallest_truthful_gap"]
+        == "supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback"
     )
     assert payload["governance"] == {
         "read_only_contract": True,
@@ -303,6 +339,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_authority_boundary_observed": True,
         "resident_runtime_authority_grant_preflight_observed": True,
         "resident_runtime_execution_policy_contract_observed": True,
+        "resident_runtime_execution_authority_grant_boundary_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

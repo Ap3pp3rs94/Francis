@@ -13078,6 +13078,52 @@ execution policy contract:
 - `git diff --check`
   Result: `passed with PowerShell LF-to-CRLF working-copy warnings only`
 
+### 2026-04-29 - Stage 6/Lens resident runtime authority grant boundary
+
+Stage 6/Lens now has a governed, non-mutating resident-runtime authority grant
+denial boundary at `/lens/resident-runtime/authority-grant`. The boundary
+answers attempted resident-runtime execution authority grants with
+`authority_granted: false`, `applied: false`, `executed: false`,
+`grant_ready: false`, `authority_grant_ready: false`, `runtime_ready: false`,
+and `resident_claim_allowed: false`. It composes the resident-runtime grant
+preflight and execution policy contract, then denies the grant with
+`resident_runtime_authority_grant_not_implemented` while preserving the existing
+process-supervision, service-control, tray, hotkey, overlay, receipt-write, and
+resident-claim blockers.
+
+`/lens/status`, `/lens/host`, `/lens/resident-runtime/policy`,
+`/lens/resident-runtime/plan`, and `/lens/resident-surface/activation` now embed
+or link the authority grant boundary. Stage 6 readiness now includes
+`resident_runtime_execution_authority_grant_boundary`, and the Stage 6
+checkpoint reports
+`resident_runtime_execution_authority_grant_boundary_observed: true`. Because
+the authority boundary, grant preflight, policy contract, and authority-grant
+denial boundary are now observable, the checkpoint's next smallest truthful gap
+moves from `supervised_resident_host_runtime_execution_authority_grant_boundary`
+to
+`supervised_resident_host_runtime_execution_authority_grant_denial_receipt_readback`.
+
+This is backend API/readback, denial-boundary, readiness, checkpoint, and test
+work only. It does not grant resident runtime execution authority. It does not
+launch a Lens host, supervise or restart a process, install/start/control a
+service, register tray presence, register or bind a hotkey, open or control an
+overlay, capture screen content, write memory, write runtime receipts, decide
+approvals, claim resident status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident runtime
+authority grant boundary:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13135,7 +13181,11 @@ These remain true and should block any "finished" claim:
   actor, posture, supervision, summon, tray, overlay, receipt, and resident-claim
   blockers explicit, plus a direct `/lens/resident-runtime/policy` execution
   policy contract that defines the deny-by-default requirements before any
-  future resident runtime authority grant boundary,
+  future resident runtime authority grant boundary, plus a governed
+  `/lens/resident-runtime/authority-grant` denial boundary that keeps execution,
+  process supervision, service control, tray/hotkey/overlay control, receipt
+  writes, memory writes, and resident claims denied before any future grant
+  receipt-readback slice,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
