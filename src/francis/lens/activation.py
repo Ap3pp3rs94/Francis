@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests, request as create_approval_request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
+from francis.kernel.paths import data_dir
 from francis.lens.host_manifest import lens_host_launch_manifest
 from francis.lens.preflight import lens_preflight
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
@@ -16,6 +22,7 @@ LENS_HOST_ACTIVATION_READBACK_ROUTE = "/lens/host/activation"
 LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
+LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
@@ -73,6 +80,51 @@ def _record_ts(value: Any) -> float:
         return 0.0
 
 
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _filtered_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in record.items() if value not in ("", {}, [], None)}
+
+
+def _display(record: dict[str, Any]) -> dict[str, Any]:
+    redacted = redact_governed_display_value(record)
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _activation_denial_receipt_root() -> Path:
+    return data_dir() / "lens" / "host_activation_denials"
+
+
+def _activation_denial_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"lad_{ts}_{digest}"
+
+
+def _activation_denial_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = _safe_str(receipt_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _activation_denial_receipt_root() / f"{cleaned}.json"
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
 def _activation_mode(value: Any) -> str:
     mode = _safe_str(value).strip().lower()
     return mode if mode in _ALLOWED_MODES else _DEFAULT_MODE
@@ -94,6 +146,7 @@ def _activation_governance(
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "denials_route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
         "read_only_contract": read_only_contract,
         "activation_authority": False,
         "execution_authority": False,
@@ -118,6 +171,7 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "denials_route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
         "method": "POST",
         "action": LENS_HOST_ACTIVATION_ACTION,
         "mode": _DEFAULT_MODE,
@@ -609,6 +663,166 @@ def _execution_denial_status(blockers: list[str]) -> tuple[str, str]:
     return "denied_no_execution_authority", "implement_lens_host_execution_authority_in_separate_slice"
 
 
+def _activation_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = _safe_str(denial.get("approval_id")).strip()
+    actor = _safe_str(denial.get("actor")).strip()
+    route = _safe_str(denial.get("route")).strip() or LENS_HOST_ACTIVATION_EXECUTE_ROUTE
+    receipt_id = _activation_denial_receipt_id(approval_id=approval_id, actor=actor, route=route, ts=ts)
+    preflight = _as_dict(denial.get("preflight"))
+    approval = _as_dict(preflight.get("approval"))
+    permission = _as_dict(denial.get("permission"))
+    plan = _as_dict(denial.get("plan"))
+    plan_body = _as_dict(plan.get("plan"))
+    return _filtered_record(
+        {
+            "kind": "lens.host.activation.denial.receipt",
+            "receipt_id": receipt_id,
+            "id": receipt_id,
+            "status": _safe_str(denial.get("status")).strip(),
+            "route": route,
+            "method": _safe_str(denial.get("method")).strip() or "POST",
+            "source_kind": _safe_str(denial.get("kind")).strip(),
+            "source_route": route,
+            "approval_id": approval_id,
+            "actor": actor,
+            "reason": _safe_str(denial.get("reason")).strip(),
+            "created_ts": ts,
+            "blockers": _str_list(denial.get("blockers")),
+            "approval": {
+                "required": bool(approval.get("required")),
+                "found": bool(approval.get("found")),
+                "status": _safe_str(approval.get("status")).strip(),
+                "approved": bool(approval.get("approved")),
+            },
+            "permission": {
+                "ready": bool(permission.get("ready")),
+                "allowed": bool(permission.get("allowed")),
+                "reason": _safe_str(permission.get("reason")).strip(),
+                "required_scope": _safe_str(permission.get("required_scope")).strip(),
+            },
+            "execution": {
+                "applied": bool(denial.get("applied")),
+                "executed": bool(denial.get("executed")),
+                "would_launch_process": bool(plan_body.get("would_launch_process")),
+                "would_install_service": bool(plan_body.get("would_install_service")),
+                "would_start_service": bool(plan_body.get("would_start_service")),
+                "would_register_hotkey": bool(plan_body.get("would_register_hotkey")),
+                "would_open_overlay": bool(plan_body.get("would_open_overlay")),
+                "would_write_memory": bool(plan_body.get("would_write_memory")),
+                "would_decide_approval": bool(plan_body.get("would_decide_approval")),
+            },
+            "denial": _as_dict(denial.get("denial")),
+            "governance": {
+                "gate": "lens_host_activation_denial_receipt",
+                "denial_boundary": True,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "activation_authority": False,
+                "local_process_launch_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "memory_write": False,
+                "denial_receipt_write_authority": True,
+                "receipt_write_authority": False,
+            },
+        }
+    )
+
+
+def _record_activation_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    receipt = _activation_denial_receipt(denial)
+    path = _activation_denial_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    receipt["path"] = str(path)
+    display = _display(receipt)
+    _atomic_write_json(path, display)
+    return display
+
+
+def _read_activation_denial_receipt(path: Path) -> dict[str, Any] | None:
+    raw = _read_json(path)
+    return _display(raw) if raw is not None else None
+
+
+def _matches_filter(item: dict[str, Any], *, approval_id: str, status: str) -> bool:
+    if approval_id and _safe_str(item.get("approval_id")).strip() != approval_id:
+        return False
+    if status and _safe_str(item.get("status")).strip() != status:
+        return False
+    return True
+
+
+def _list_activation_denial_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    root = _activation_denial_receipt_root()
+    if not root.exists():
+        return [], 0
+    items: list[dict[str, Any]] = []
+    for path in root.glob("*.json"):
+        item = _read_activation_denial_receipt(path)
+        if not item:
+            continue
+        if not _matches_filter(item, approval_id=approval_id, status=status):
+            continue
+        items.append(item)
+    items.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), _safe_str(item.get("receipt_id"))),
+        reverse=True,
+    )
+    return items[:limit], len(items)
+
+
+def lens_host_activation_denial_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    safe_status = _safe_str(status).strip()
+    items, total = _list_activation_denial_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+        status=safe_status,
+    )
+    latest = items[0] if items else None
+    return {
+        "ok": True,
+        "kind": "lens.host.activation.denial_receipts",
+        "status": "readback_ready" if items else "empty",
+        "route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "limit": safe_limit,
+        "approval_id": safe_approval_id,
+        "filter_status": safe_status,
+        "total": total,
+        "latest": latest,
+        "items": items,
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_ACTIVATION_DENIALS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_activation_denial_receipts_readback",
+            "read_only_contract": True,
+            "denial_receipt_write_authority": False,
+            "receipt_write_authority": False,
+            "next_step": "review_denial_receipts_before_adding_execution_authority",
+        },
+    }
+
+
 def deny_lens_host_activation_execution(
     *,
     approval_id: Any = "",
@@ -616,6 +830,7 @@ def deny_lens_host_activation_execution(
     reason: Any = "attempt Lens host foreground activation",
     route: str = LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
     method: str = "POST",
+    record_receipt: bool = False,
 ) -> dict[str, Any]:
     safe_route = _safe_str(route).strip() or LENS_HOST_ACTIVATION_EXECUTE_ROUTE
     permission = _permission_readiness(actor, route=safe_route, method=method)
@@ -628,7 +843,7 @@ def deny_lens_host_activation_execution(
         blockers.append("local_process_launch_authority_not_granted")
     deduped_blockers = sorted({blocker for blocker in blockers if blocker})
     status, next_step = _execution_denial_status(deduped_blockers)
-    return {
+    response: dict[str, Any] = {
         "ok": True,
         "applied": False,
         "executed": False,
@@ -643,6 +858,9 @@ def deny_lens_host_activation_execution(
         "approval_id": _safe_str(plan.get("approval_id")).strip(),
         "actor": _redact_free_text(actor),
         "reason": _redact_free_text(reason),
+        "receipt_route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
+        "receipt_written": False,
+        "receipt": {},
         "permission": permission,
         "preflight": preflight,
         "plan": plan,
@@ -656,6 +874,7 @@ def deny_lens_host_activation_execution(
             "would_start_service": False,
             "would_register_hotkey": False,
             "would_open_overlay": False,
+            "denial_receipt_written": False,
         },
         "governance": {
             **_activation_governance(
@@ -670,9 +889,20 @@ def deny_lens_host_activation_execution(
             "approval_decision_authority": False,
             "local_process_launch_authority": False,
             "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
             "next_step": next_step,
         },
     }
+    if record_receipt and bool(permission.get("ready")):
+        receipt = _record_activation_denial_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["denial"]["denial_receipt_written"] = True
+            response["governance"]["denial_receipt_write_authority"] = True
+    elif record_receipt:
+        response["governance"]["denial_receipt_write_blocker"] = "system_write_scope_not_ready"
+    return response
 
 
 def _activation_payload(*, actor: Any, mode: str, route: str) -> dict[str, Any]:

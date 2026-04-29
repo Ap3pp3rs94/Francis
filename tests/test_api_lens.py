@@ -357,6 +357,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "preflight_route": "/lens/host/activation/preflight",
         "plan_route": "/lens/host/activation/plan",
         "execute_route": "/lens/host/activation/execute",
+        "denials_route": "/lens/host/activation/denials",
         "method": "POST",
         "action": "lens.host.foreground_activation",
         "mode": "foreground_status_session",
@@ -376,6 +377,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "preflight_route": "/lens/host/activation/preflight",
             "plan_route": "/lens/host/activation/plan",
             "execute_route": "/lens/host/activation/execute",
+            "denials_route": "/lens/host/activation/denials",
             "read_only_contract": False,
             "activation_authority": False,
             "execution_authority": False,
@@ -485,6 +487,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_denial["governance"]["approval_decision_authority"] is False
     assert activation_denial["governance"]["local_process_launch_authority"] is False
     assert activation_denial["governance"]["receipt_write_authority"] is False
+    assert activation_denial["governance"]["denial_receipt_write_authority"] is False
+    assert activation_denial["receipt_written"] is False
+    assert activation_denial["receipt_route"] == "/lens/host/activation/denials"
+    assert activation_denial["receipt"] == {}
+    assert resident_host["activation_denial_receipts_route"] == "/lens/host/activation/denials"
+    activation_denial_receipts = resident_host["activation_denial_receipts"]
+    assert activation_denial_receipts["kind"] == "lens.host.activation.denial_receipts"
+    assert activation_denial_receipts["status"] == "empty"
+    assert activation_denial_receipts["route"] == "/lens/host/activation/denials"
+    assert activation_denial_receipts["execute_route"] == "/lens/host/activation/execute"
+    assert activation_denial_receipts["total"] == 0
+    assert activation_denial_receipts["latest"] is None
+    assert activation_denial_receipts["items"] == []
+    assert activation_denial_receipts["governance"]["gate"] == "lens_host_activation_denial_receipts_readback"
+    assert activation_denial_receipts["governance"]["read_only_contract"] is True
+    assert activation_denial_receipts["governance"]["denial_receipt_write_authority"] is False
+    assert activation_denial_receipts["governance"]["execution_authority"] is False
+    assert activation_denial_receipts["governance"]["approval_decision_authority"] is False
+    assert activation_denial_receipts["governance"]["local_process_launch_authority"] is False
+    assert activation_denial_receipts["governance"]["memory_write"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -938,6 +960,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert execution_denial_criterion["approval_decision_authority"] is False
     assert execution_denial_criterion["local_process_launch_authority"] is False
     assert execution_denial_criterion["receipt_write_authority"] is False
+    denial_receipt_criterion = _criterion(body, "host_activation_denial_receipt_readback")
+    assert denial_receipt_criterion == {
+        "id": "host_activation_denial_receipt_readback",
+        "status": "empty",
+        "evidence": ["/lens/host/activation/denials", "/lens/host/activation/execute", "/lens/status"],
+        "receipt_count": 0,
+        "latest_receipt_id": "",
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+        "memory_write": False,
+    }
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1416,6 +1450,30 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert denied_execution_body["denial"]["reason"] == "local_process_launch_authority_not_granted"
     assert denied_execution_body["denial"]["would_launch_process"] is False
     assert denied_execution_body["denial"]["would_write_receipt"] is False
+    assert denied_execution_body["denial"]["denial_receipt_written"] is True
+    assert denied_execution_body["receipt_written"] is True
+    assert denied_execution_body["receipt_route"] == "/lens/host/activation/denials"
+    denial_receipt = denied_execution_body["receipt"]
+    assert denial_receipt["kind"] == "lens.host.activation.denial.receipt"
+    assert denial_receipt["status"] == "denied_no_execution_authority"
+    assert denial_receipt["route"] == "/lens/host/activation/execute"
+    assert denial_receipt["source_kind"] == "lens.host.activation.execution_denial"
+    assert denial_receipt["approval_id"] == approval_id
+    assert denial_receipt["actor"] == "test.system.write"
+    assert denial_receipt["approval"]["approved"] is True
+    assert denial_receipt["permission"]["ready"] is True
+    assert denial_receipt["execution"]["applied"] is False
+    assert denial_receipt["execution"]["executed"] is False
+    assert denial_receipt["execution"]["would_launch_process"] is False
+    assert denial_receipt["execution"]["would_write_memory"] is False
+    assert denial_receipt["governance"]["gate"] == "lens_host_activation_denial_receipt"
+    assert denial_receipt["governance"]["denial_receipt_write_authority"] is True
+    assert denial_receipt["governance"]["execution_authority"] is False
+    assert denial_receipt["governance"]["approval_decision_authority"] is False
+    assert denial_receipt["governance"]["local_process_launch_authority"] is False
+    assert denial_receipt["governance"]["memory_write"] is False
+    denial_receipt_path = data_root / "lens" / "host_activation_denials" / f"{denial_receipt['receipt_id']}.json"
+    assert denial_receipt_path.exists()
     assert "activation_approval_not_approved" not in denied_execution_body["blockers"]
     assert "system_write_scope_not_ready" not in denied_execution_body["blockers"]
     assert "local_process_launch_authority_not_granted" in denied_execution_body["blockers"]
@@ -1426,6 +1484,26 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert denied_execution_body["governance"]["approval_decision_authority"] is False
     assert denied_execution_body["governance"]["local_process_launch_authority"] is False
     assert denied_execution_body["governance"]["receipt_write_authority"] is False
+    assert denied_execution_body["governance"]["denial_receipt_write_authority"] is True
+    denial_receipts = client.get(f"/lens/host/activation/denials?limit=10&approval_id={approval_id}")
+    assert denial_receipts.status_code == 200
+    denial_receipts_body = denial_receipts.json()
+    assert denial_receipts_body["kind"] == "lens.host.activation.denial_receipts"
+    assert denial_receipts_body["status"] == "readback_ready"
+    assert denial_receipts_body["route"] == "/lens/host/activation/denials"
+    assert denial_receipts_body["execute_route"] == "/lens/host/activation/execute"
+    assert denial_receipts_body["approval_id"] == approval_id
+    assert denial_receipts_body["total"] == 1
+    assert denial_receipts_body["latest"]["receipt_id"] == denial_receipt["receipt_id"]
+    assert denial_receipts_body["items"][0]["approval_id"] == approval_id
+    assert denial_receipts_body["items"][0]["execution"]["would_launch_process"] is False
+    assert denial_receipts_body["items"][0]["governance"]["execution_authority"] is False
+    assert denial_receipts_body["governance"]["gate"] == "lens_host_activation_denial_receipts_readback"
+    assert denial_receipts_body["governance"]["read_only_contract"] is True
+    assert denial_receipts_body["governance"]["denial_receipt_write_authority"] is False
+    assert denial_receipts_body["governance"]["execution_authority"] is False
+    assert denial_receipts_body["governance"]["approval_decision_authority"] is False
+    assert denial_receipts_body["governance"]["memory_write"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -1451,5 +1529,17 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert _criterion(status_body, "host_activation_approval_readback")["status"] == "approved_no_execution"
     assert _criterion(status_body, "host_activation_approval_readback")["approved_count"] == 1
     assert _criterion(status_body, "host_activation_approval_readback")["pending_count"] == 0
+    status_denial_receipts = status_body["resident_host"]["activation_denial_receipts"]
+    assert status_denial_receipts["status"] == "readback_ready"
+    assert status_denial_receipts["total"] == 1
+    assert status_denial_receipts["latest"]["receipt_id"] == denial_receipt["receipt_id"]
+    status_denial_receipt_criterion = _criterion(status_body, "host_activation_denial_receipt_readback")
+    assert status_denial_receipt_criterion["status"] == "readback_ready"
+    assert status_denial_receipt_criterion["receipt_count"] == 1
+    assert status_denial_receipt_criterion["latest_receipt_id"] == denial_receipt["receipt_id"]
+    assert status_denial_receipt_criterion["execution_authority"] is False
+    assert status_denial_receipt_criterion["approval_decision_authority"] is False
+    assert status_denial_receipt_criterion["local_process_launch_authority"] is False
+    assert status_denial_receipt_criterion["memory_write"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

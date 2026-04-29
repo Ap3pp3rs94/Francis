@@ -11918,6 +11918,46 @@ execution-denial boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens host activation denial receipt readback
+
+Stage 6/Lens host activation denials now produce durable local receipt evidence
+when a scoped execute attempt reaches the existing non-launching denial boundary.
+`POST /lens/host/activation/execute` still refuses local process launch, service,
+hotkey, overlay, approval-decision, and memory-write authority, but scoped
+attempts now persist a typed `lens.host.activation.denial.receipt` under the
+local data directory and return the receipt handle in the denial response.
+
+The denial receipts are readable through `GET /lens/host/activation/denials`
+with bounded limit, approval-id, and status filters. `/lens/status` and
+`/lens/host` embed the same readback as `activation_denial_receipts`, and Stage 6
+readiness now includes `host_activation_denial_receipt_readback`. Readback routes
+remain read-only; unscoped execute attempts do not get denial-receipt write
+authority.
+
+This is receipt/readback work only. It does not launch a Lens host process;
+install, start, stop, restart, supervise, or control a Windows service; register
+tray presence; bind a global hotkey; open or focus an overlay window; summon
+Francis anywhere; capture screen content; write memory; decide approvals; execute
+operator actions; or grant overlay-control, window-management, summon, capture,
+sensing, telemetry, promotion, policy, service-install, service-control,
+wrapper-write, activation-receipt-write, or API local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens host activation
+denial receipt readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_service_install_plan_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py tests\test_api_approvals.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11938,8 +11978,8 @@ These remain true and should block any "finished" claim:
   preflight baseline plus API preflight readback, and a governed host activation
   approval-request boundary plus read-only activation approval-state readback
   plus read-only activation execution preflight, execution-plan, and
-  execution-denial gates, but no OS-wide summon, resident host process,
-  installed/started service, resident overlay/HUD runtime, OS-level command
+  execution-denial gates plus durable denial receipt readback, but no OS-wide
+  summon, resident host process, installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI

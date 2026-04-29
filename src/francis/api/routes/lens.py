@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from francis.lens import (
     deny_lens_host_activation_execution,
+    lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -58,6 +59,15 @@ def host_activation(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
     return lens_host_activation_readback(limit=limit)
 
 
+@router.get("/host/activation/denials")
+def host_activation_denials(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_host_activation_denial_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
 @router.get("/host/activation/preflight")
 def host_activation_preflight(approval_id: str = "", actor: str = "") -> dict[str, Any]:
     return lens_host_activation_execution_preflight(approval_id=approval_id, actor=actor)
@@ -76,6 +86,7 @@ def host_activation_execute(request: Request, payload: LensHostActivationExecute
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+        record_receipt=True,
     )
 
 

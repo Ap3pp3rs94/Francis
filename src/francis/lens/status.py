@@ -8,6 +8,7 @@ from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
+    lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -237,6 +238,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_execution_preflight = lens_host_activation_execution_preflight()
     activation_execution_plan = lens_host_activation_execution_plan()
     activation_execution_denial = deny_lens_host_activation_execution()
+    activation_denial_receipts = lens_host_activation_denial_receipts(limit=limit)
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
@@ -339,6 +341,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_execution_plan": activation_execution_plan,
         "activation_execution_denial_route": _safe_str(activation_execution_denial.get("route")).strip(),
         "activation_execution_denial": activation_execution_denial,
+        "activation_denial_receipts_route": _safe_str(activation_denial_receipts.get("route")).strip(),
+        "activation_denial_receipts": activation_denial_receipts,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
@@ -811,6 +815,20 @@ def _stage6_readiness(
                 "receipt_write_authority": False,
             },
             {
+                "id": "host_activation_denial_receipt_readback",
+                "status": _safe_str(_as_dict(resident_host.get("activation_denial_receipts")).get("status")).strip()
+                or "missing",
+                "evidence": ["/lens/host/activation/denials", "/lens/host/activation/execute", "/lens/status"],
+                "receipt_count": _safe_int(_as_dict(resident_host.get("activation_denial_receipts")).get("total")),
+                "latest_receipt_id": _safe_str(
+                    _as_dict(_as_dict(resident_host.get("activation_denial_receipts")).get("latest")).get("receipt_id")
+                ).strip(),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "memory_write": False,
+            },
+            {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
                 "evidence": ["/lens/host", "/lens/preflight", "/lens/status"],
@@ -900,6 +918,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "status": "readback_ready",
             "continuity_ledger_route": "/continuity/ledger",
             "reactor_operator_visibility_route": "/reactor/operator_visibility/summary",
+            "lens_host_activation_denials_route": "/lens/host/activation/denials",
             "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
         },
         "reactor": reactor,
