@@ -317,7 +317,7 @@ $Payload = [ordered]@{
     service_plan_blocked_by = $ServicePlanBlockedBy
     service_status = [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_status' -Default '')
   }
-  next_smallest_truthful_gap = 'supervised_resident_host_tray_hotkey_overlay_runtime_plan'
+  next_smallest_truthful_gap = 'supervised_resident_host_runtime_authority_boundary'
   governance = [ordered]@{
     diagnostic_only = $true
     checkpoint_readback = $CheckpointObserved

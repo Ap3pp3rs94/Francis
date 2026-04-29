@@ -12,8 +12,13 @@ from francis.governance.approvals import list_requests, request as create_approv
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir
-from francis.lens.host_manifest import lens_host_launch_manifest
-from francis.lens.preflight import lens_preflight
+from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
+from francis.lens.preflight import (
+    lens_overlay_enablement_gate,
+    lens_preflight,
+    lens_summon_enablement_gate,
+    lens_tray_enablement_gate,
+)
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 LENS_HOST_ACTIVATION_ACTION = "lens.host.foreground_activation"
@@ -23,6 +28,7 @@ LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
+LENS_RESIDENT_RUNTIME_PLAN_ROUTE = "/lens/resident-runtime/plan"
 LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE = "/lens/resident-surface/activation"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
@@ -849,6 +855,199 @@ def _surface_component(
     }
 
 
+def lens_resident_runtime_activation_plan(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+) -> dict[str, Any]:
+    safe_approval_id = _safe_str(approval_id).strip()
+    execution_plan = lens_host_activation_execution_plan(approval_id=safe_approval_id, actor=actor)
+    plan_body = _as_dict(execution_plan.get("plan"))
+    manifest = lens_host_launch_manifest()
+    preflight = lens_preflight()
+    supervision_gate = lens_host_supervision_gate(manifest=manifest)
+    summon_gate = lens_summon_enablement_gate(preflight=preflight)
+    tray_gate = lens_tray_enablement_gate(preflight=preflight)
+    overlay_gate = lens_overlay_enablement_gate(preflight=preflight)
+    blockers = _dedupe_strs(
+        [
+            *_str_list(execution_plan.get("blockers")),
+            *_str_list(supervision_gate.get("blockers")),
+            *_str_list(summon_gate.get("blockers")),
+            *_str_list(tray_gate.get("blockers")),
+            *_str_list(overlay_gate.get("blockers")),
+            "resident_runtime_execution_authority_not_granted",
+            "process_supervision_authority_not_granted",
+            "process_restart_authority_not_granted",
+            "service_install_authority_not_granted",
+            "service_control_authority_not_granted",
+            "tray_registration_authority_not_granted",
+            "hotkey_registration_authority_not_granted",
+            "overlay_control_authority_not_granted",
+            "resident_surface_missing",
+        ]
+    )
+    steps = [
+        _plan_step(
+            "verify_exact_host_activation_plan",
+            label="Verify exact host activation plan and approval state",
+            status="ready" if bool(execution_plan.get("plan_available")) else "blocked",
+            source=LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        ),
+        _plan_step(
+            "verify_supervision_gate",
+            label="Verify resident process supervision and service control gates",
+            status="ready" if bool(supervision_gate.get("ready")) else "blocked",
+            source="/lens/host/supervision",
+        ),
+        _plan_step(
+            "verify_summon_gate",
+            label="Verify summon-anywhere hotkey gate",
+            status="ready" if bool(summon_gate.get("ready")) else "blocked",
+            source="/lens/summon",
+        ),
+        _plan_step(
+            "verify_tray_gate",
+            label="Verify tray presence gate",
+            status="ready" if bool(tray_gate.get("ready")) else "blocked",
+            source="/lens/tray",
+        ),
+        _plan_step(
+            "verify_overlay_gate",
+            label="Verify overlay window gate",
+            status="ready" if bool(overlay_gate.get("ready")) else "blocked",
+            source="/lens/overlay",
+        ),
+        _plan_step(
+            "activate_supervised_resident_host",
+            label="Activate supervised resident host",
+            status="blocked",
+            source="future_resident_runtime_slice",
+            authority_required="local_process_launch_and_process_supervision",
+            authority_granted=False,
+        ),
+        _plan_step(
+            "register_tray_hotkey_overlay",
+            label="Register tray presence, global hotkey, and overlay window",
+            status="blocked",
+            source="future_resident_runtime_slice",
+            authority_required="tray_hotkey_overlay_control",
+            authority_granted=False,
+        ),
+        _plan_step(
+            "record_resident_runtime_receipt",
+            label="Record resident runtime activation receipt after activation",
+            status="blocked",
+            source="future_receipt_slice",
+            authority_required="receipt_write",
+            authority_granted=False,
+        ),
+    ]
+    approval = _as_dict(_as_dict(execution_plan.get("preflight")).get("approval"))
+    return {
+        "ok": True,
+        "kind": "lens.resident_runtime.activation_plan",
+        "status": "blocked",
+        "plan_available": True,
+        "runtime_ready": False,
+        "execution_ready": False,
+        "resident_claim_allowed": False,
+        "resident_surface_ready": False,
+        "route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "surface_route": LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE,
+        "host_activation_plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "host_activation_preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "host_activation_execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "approval_id": safe_approval_id,
+        "actor": _redact_free_text(actor),
+        "approval": {
+            "required": True,
+            "selected_status": _safe_str(approval.get("status")).strip(),
+            "selected_approved": bool(approval.get("approved")),
+        },
+        "source_readbacks": {
+            "host_activation_plan": {
+                "route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+                "status": _safe_str(execution_plan.get("status")).strip(),
+                "execution_ready": bool(execution_plan.get("execution_ready")),
+            },
+            "supervision_gate": {
+                "route": "/lens/host/supervision",
+                "status": _safe_str(supervision_gate.get("status")).strip(),
+                "ready": bool(supervision_gate.get("ready")),
+            },
+            "summon_gate": {
+                "route": "/lens/summon",
+                "status": _safe_str(summon_gate.get("status")).strip(),
+                "ready": bool(summon_gate.get("ready")),
+            },
+            "tray_gate": {
+                "route": "/lens/tray",
+                "status": _safe_str(tray_gate.get("status")).strip(),
+                "ready": bool(tray_gate.get("ready")),
+            },
+            "overlay_gate": {
+                "route": "/lens/overlay",
+                "status": _safe_str(overlay_gate.get("status")).strip(),
+                "ready": bool(overlay_gate.get("ready")),
+            },
+        },
+        "plan": {
+            "mode": "supervised_resident_host_with_tray_hotkey_overlay",
+            "launch_kind": "resident_runtime_activation",
+            "steps": steps,
+            "candidate_command": _as_dict(plan_body.get("candidate_command")),
+            "foreground_session": _as_dict(plan_body.get("foreground_session")),
+            "process_readback": _as_dict(plan_body.get("process_readback")),
+            "service_plan": _as_dict(plan_body.get("service_plan")),
+            "would_launch_process": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_register_tray": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+            "would_capture_screen": False,
+            "would_write_memory": False,
+            "would_write_receipt": False,
+            "would_decide_approval": False,
+            "would_claim_resident": False,
+        },
+        "blockers": blockers,
+        "governance": {
+            **_activation_governance(
+                route=LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_resident_runtime_activation_plan",
+            "read_only_contract": True,
+            "plan_readback_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "tray_icon_authority": False,
+            "notification_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "window_management_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "runtime_mutation_authority_granted": False,
+            "next_step": "implement_supervised_resident_runtime_authority_in_separate_slice",
+        },
+    }
+
+
 def lens_resident_surface_activation_boundary(
     *,
     approval_id: Any = "",
@@ -860,6 +1059,7 @@ def lens_resident_surface_activation_boundary(
     activation_state = lens_host_activation_readback(limit=safe_limit)
     execution_preflight = lens_host_activation_execution_preflight(approval_id=safe_approval_id, actor=actor)
     execution_plan = lens_host_activation_execution_plan(approval_id=safe_approval_id, actor=actor)
+    runtime_plan = lens_resident_runtime_activation_plan(approval_id=safe_approval_id, actor=actor)
     execution_denial = deny_lens_host_activation_execution(
         approval_id=safe_approval_id,
         actor=actor,
@@ -881,9 +1081,9 @@ def lens_resident_surface_activation_boundary(
         [
             *_str_list(preflight.get("blockers")),
             *_str_list(execution_plan.get("blockers")),
+            *_str_list(runtime_plan.get("blockers")),
             *_str_list(execution_denial.get("blockers")),
             "resident_surface_missing",
-            "live_operator_experience_proof_missing",
         ]
     )
     components = [
@@ -902,6 +1102,14 @@ def lens_resident_surface_activation_boundary(
             status=execution_plan.get("status"),
             ready=execution_plan.get("execution_ready"),
             blockers=execution_plan.get("blockers"),
+        ),
+        _surface_component(
+            "resident_runtime_plan",
+            label="Supervised resident runtime activation plan",
+            route=LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+            status=runtime_plan.get("status"),
+            ready=runtime_plan.get("runtime_ready"),
+            blockers=runtime_plan.get("blockers"),
         ),
         _surface_component(
             "host_activation_denial",
@@ -975,15 +1183,21 @@ def lens_resident_surface_activation_boundary(
         "execution": {
             "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
             "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+            "runtime_plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
             "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
             "preflight_status": _safe_str(execution_preflight.get("status")).strip(),
             "plan_status": _safe_str(execution_plan.get("status")).strip(),
+            "runtime_plan_status": _safe_str(runtime_plan.get("status")).strip(),
             "denial_status": _safe_str(execution_denial.get("status")).strip(),
             "would_launch_process": bool(plan_body.get("would_launch_process")),
             "would_install_service": bool(plan_body.get("would_install_service")),
             "would_start_service": bool(plan_body.get("would_start_service")),
+            "would_supervise_process": bool(_as_dict(runtime_plan.get("plan")).get("would_supervise_process")),
+            "would_restart_process": bool(_as_dict(runtime_plan.get("plan")).get("would_restart_process")),
+            "would_register_tray": bool(_as_dict(runtime_plan.get("plan")).get("would_register_tray")),
             "would_register_hotkey": bool(plan_body.get("would_register_hotkey")),
             "would_open_overlay": bool(plan_body.get("would_open_overlay")),
+            "would_capture_screen": bool(_as_dict(runtime_plan.get("plan")).get("would_capture_screen")),
             "would_write_memory": bool(plan_body.get("would_write_memory")),
             "would_decide_approval": bool(plan_body.get("would_decide_approval")),
             "denial_reason": _safe_str(denial.get("reason")).strip(),
@@ -997,9 +1211,10 @@ def lens_resident_surface_activation_boundary(
             "tray_status": _safe_str(tray_surface.get("status")).strip(),
             "overlay_status": _safe_str(overlay_surface.get("status")).strip(),
         },
+        "resident_runtime_plan": runtime_plan,
         "components": components,
         "blockers": blockers,
-        "next_smallest_truthful_gap": "live_operator_experience_proof",
+        "next_smallest_truthful_gap": "implement_supervised_resident_runtime_authority",
         "governance": {
             **_activation_governance(
                 route=LENS_RESIDENT_SURFACE_ACTIVATION_ROUTE,
@@ -1025,7 +1240,7 @@ def lens_resident_surface_activation_boundary(
             "receipt_write_authority": False,
             "denial_receipt_write_authority": False,
             "runtime_mutation_authority_granted": False,
-            "next_step": "prove_live_operator_experience_before_stage_6_closure",
+            "next_step": "implement_supervised_resident_runtime_authority_in_separate_slice",
         },
     }
 

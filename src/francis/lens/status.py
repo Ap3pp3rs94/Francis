@@ -13,6 +13,7 @@ from francis.lens.activation import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
+    lens_resident_runtime_activation_plan,
     lens_resident_surface_activation_boundary,
 )
 from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_supervision_gate
@@ -244,6 +245,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
     activation_execution_plan = lens_host_activation_execution_plan()
+    resident_runtime_plan = lens_resident_runtime_activation_plan()
     activation_execution_denial = deny_lens_host_activation_execution()
     activation_denial_receipts = lens_host_activation_denial_receipts(limit=limit)
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
@@ -346,6 +348,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_execution_preflight": activation_execution_preflight,
         "activation_execution_plan_route": _safe_str(activation_execution_plan.get("route")).strip(),
         "activation_execution_plan": activation_execution_plan,
+        "resident_runtime_plan_route": _safe_str(resident_runtime_plan.get("route")).strip(),
+        "resident_runtime_plan": resident_runtime_plan,
         "activation_execution_denial_route": _safe_str(activation_execution_denial.get("route")).strip(),
         "activation_execution_denial": activation_execution_denial,
         "activation_denial_receipts_route": _safe_str(activation_denial_receipts.get("route")).strip(),
@@ -848,6 +852,7 @@ def _stage6_readiness(
                 else "missing",
                 "evidence": [
                     "/lens/resident-surface/activation",
+                    "/lens/resident-runtime/plan",
                     "/lens/host/activation/plan",
                     "/lens/preflight",
                     "/lens/status",
@@ -860,6 +865,35 @@ def _stage6_readiness(
                 "local_process_launch_authority": False,
                 "overlay_control_authority": False,
                 "summon_authority": False,
+                "memory_write": False,
+            },
+            {
+                "id": "resident_runtime_activation_plan",
+                "status": _safe_str(_as_dict(resident_host.get("resident_runtime_plan")).get("status")).strip()
+                or "missing",
+                "evidence": [
+                    "/lens/resident-runtime/plan",
+                    "/lens/host/supervision",
+                    "/lens/summon",
+                    "/lens/tray",
+                    "/lens/overlay",
+                    "/lens/status",
+                ],
+                "plan_available": bool(_as_dict(resident_host.get("resident_runtime_plan")).get("plan_available")),
+                "runtime_ready": bool(_as_dict(resident_host.get("resident_runtime_plan")).get("runtime_ready")),
+                "resident_claim_allowed": bool(
+                    _as_dict(resident_host.get("resident_runtime_plan")).get("resident_claim_allowed")
+                ),
+                "blockers": _as_list(_as_dict(resident_host.get("resident_runtime_plan")).get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
                 "memory_write": False,
             },
             {
@@ -988,6 +1022,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
+    resident_runtime_plan = _as_dict(resident_host.get("resident_runtime_plan"))
 
     return {
         "ok": True,
@@ -1006,6 +1041,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "summon_enablement_gate": summon_enablement_gate,
         "tray_enablement_gate": tray_enablement_gate,
         "overlay_enablement_gate": overlay_enablement_gate,
+        "resident_runtime_plan": resident_runtime_plan,
         "resident_surface_activation": resident_surface_activation,
         "command_palette": command_palette,
         "mode_selector": {

@@ -1196,6 +1196,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert execution_plan_criterion["execution_authority"] is False
     assert execution_plan_criterion["approval_decision_authority"] is False
     assert execution_plan_criterion["local_process_launch_authority"] is False
+    runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
+    assert runtime_plan_criterion["status"] == "blocked"
+    assert runtime_plan_criterion["plan_available"] is True
+    assert runtime_plan_criterion["runtime_ready"] is False
+    assert runtime_plan_criterion["resident_claim_allowed"] is False
+    assert runtime_plan_criterion["evidence"] == [
+        "/lens/resident-runtime/plan",
+        "/lens/host/supervision",
+        "/lens/summon",
+        "/lens/tray",
+        "/lens/overlay",
+        "/lens/status",
+    ]
+    assert "resident_runtime_execution_authority_not_granted" in runtime_plan_criterion["blockers"]
+    assert "process_supervision_authority_not_granted" in runtime_plan_criterion["blockers"]
+    assert "tray_registration_authority_not_granted" in runtime_plan_criterion["blockers"]
+    assert "hotkey_registration_authority_not_granted" in runtime_plan_criterion["blockers"]
+    assert "overlay_control_authority_not_granted" in runtime_plan_criterion["blockers"]
+    assert runtime_plan_criterion["execution_authority"] is False
+    assert runtime_plan_criterion["approval_decision_authority"] is False
+    assert runtime_plan_criterion["local_process_launch_authority"] is False
+    assert runtime_plan_criterion["process_supervision_authority"] is False
+    assert runtime_plan_criterion["service_install_authority"] is False
+    assert runtime_plan_criterion["service_control_authority"] is False
+    assert runtime_plan_criterion["tray_registration_authority"] is False
+    assert runtime_plan_criterion["hotkey_registration_authority"] is False
+    assert runtime_plan_criterion["overlay_control_authority"] is False
+    assert runtime_plan_criterion["memory_write"] is False
     execution_denial_criterion = _criterion(body, "host_activation_execution_denial_boundary")
     assert execution_denial_criterion["status"] == "blocked"
     assert execution_denial_criterion["applied"] is False
@@ -1234,6 +1262,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["execution"]["would_launch_process"] is False
     assert resident_surface_activation["execution"]["would_open_overlay"] is False
     assert resident_surface_activation["execution"]["would_register_hotkey"] is False
+    assert resident_surface_activation["execution"]["would_register_tray"] is False
+    assert resident_surface_activation["execution"]["would_supervise_process"] is False
+    assert resident_surface_activation["execution"]["would_restart_process"] is False
+    assert resident_surface_activation["execution"]["would_capture_screen"] is False
     assert resident_surface_activation["execution"]["would_write_memory"] is False
     assert resident_surface_activation["surface"]["status"] == "blocked"
     assert resident_surface_activation["surface"]["summon_status"] == "blocked"
@@ -1241,7 +1273,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["surface"]["overlay_status"] == "blocked"
     assert "resident_surface_missing" in resident_surface_activation["blockers"]
     assert "local_process_launch_authority_not_granted" in resident_surface_activation["blockers"]
-    assert resident_surface_activation["next_smallest_truthful_gap"] == "live_operator_experience_proof"
+    assert "resident_runtime_execution_authority_not_granted" in resident_surface_activation["blockers"]
+    assert resident_surface_activation["resident_runtime_plan"]["kind"] == "lens.resident_runtime.activation_plan"
+    assert resident_surface_activation["resident_runtime_plan"]["runtime_ready"] is False
+    assert (
+        resident_surface_activation["next_smallest_truthful_gap"] == "implement_supervised_resident_runtime_authority"
+    )
     assert resident_surface_activation["governance"]["gate"] == "lens_resident_surface_activation_boundary"
     assert resident_surface_activation["governance"]["boundary_only"] is True
     assert resident_surface_activation["governance"]["execution_authority"] is False
@@ -1256,6 +1293,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "status": "blocked_readback_ready",
         "evidence": [
             "/lens/resident-surface/activation",
+            "/lens/resident-runtime/plan",
             "/lens/host/activation/plan",
             "/lens/preflight",
             "/lens/status",
@@ -1395,6 +1433,29 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"
     assert surface_activation_response.json()["resident_surface_ready"] is False
+    runtime_plan_response = client.get("/lens/resident-runtime/plan")
+    assert runtime_plan_response.status_code == 200
+    runtime_plan_body = runtime_plan_response.json()
+    assert runtime_plan_body["kind"] == "lens.resident_runtime.activation_plan"
+    assert runtime_plan_body["route"] == "/lens/resident-runtime/plan"
+    assert runtime_plan_body["status"] == "blocked"
+    assert runtime_plan_body["runtime_ready"] is False
+    assert runtime_plan_body["plan"]["would_launch_process"] is False
+    assert runtime_plan_body["plan"]["would_supervise_process"] is False
+    assert runtime_plan_body["plan"]["would_register_tray"] is False
+    assert runtime_plan_body["plan"]["would_register_hotkey"] is False
+    assert runtime_plan_body["plan"]["would_open_overlay"] is False
+    assert runtime_plan_body["plan"]["would_write_memory"] is False
+    assert runtime_plan_body["governance"]["gate"] == "lens_resident_runtime_activation_plan"
+    assert runtime_plan_body["governance"]["plan_readback_only"] is True
+    assert runtime_plan_body["governance"]["execution_authority"] is False
+    assert runtime_plan_body["governance"]["process_supervision_authority"] is False
+    assert runtime_plan_body["governance"]["service_install_authority"] is False
+    assert runtime_plan_body["governance"]["service_control_authority"] is False
+    assert runtime_plan_body["governance"]["tray_registration_authority"] is False
+    assert runtime_plan_body["governance"]["hotkey_registration_authority"] is False
+    assert runtime_plan_body["governance"]["overlay_control_authority"] is False
+    assert runtime_plan_body["governance"]["memory_write"] is False
 
 
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
@@ -1807,6 +1868,49 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert approved_plan_body["governance"]["local_process_launch_authority"] is False
     assert approved_plan_body["governance"]["receipt_write_authority"] is False
 
+    resident_runtime_plan = client.get(f"/lens/resident-runtime/plan?approval_id={approval_id}&actor=test.system.write")
+    assert resident_runtime_plan.status_code == 200
+    resident_runtime_plan_body = resident_runtime_plan.json()
+    assert resident_runtime_plan_body["kind"] == "lens.resident_runtime.activation_plan"
+    assert resident_runtime_plan_body["status"] == "blocked"
+    assert resident_runtime_plan_body["approval_id"] == approval_id
+    assert resident_runtime_plan_body["approval"]["selected_status"] == "approved"
+    assert resident_runtime_plan_body["approval"]["selected_approved"] is True
+    assert resident_runtime_plan_body["plan_available"] is True
+    assert resident_runtime_plan_body["runtime_ready"] is False
+    assert resident_runtime_plan_body["resident_claim_allowed"] is False
+    runtime_steps = {step["id"]: step for step in resident_runtime_plan_body["plan"]["steps"]}
+    assert runtime_steps["verify_exact_host_activation_plan"]["status"] == "ready"
+    assert runtime_steps["verify_supervision_gate"]["status"] == "blocked"
+    assert runtime_steps["verify_summon_gate"]["status"] == "blocked"
+    assert runtime_steps["verify_tray_gate"]["status"] == "blocked"
+    assert runtime_steps["verify_overlay_gate"]["status"] == "blocked"
+    assert runtime_steps["activate_supervised_resident_host"]["status"] == "blocked"
+    assert runtime_steps["activate_supervised_resident_host"]["authority_granted"] is False
+    assert runtime_steps["register_tray_hotkey_overlay"]["authority_granted"] is False
+    assert runtime_steps["record_resident_runtime_receipt"]["authority_granted"] is False
+    assert resident_runtime_plan_body["plan"]["would_launch_process"] is False
+    assert resident_runtime_plan_body["plan"]["would_supervise_process"] is False
+    assert resident_runtime_plan_body["plan"]["would_register_tray"] is False
+    assert resident_runtime_plan_body["plan"]["would_register_hotkey"] is False
+    assert resident_runtime_plan_body["plan"]["would_open_overlay"] is False
+    assert resident_runtime_plan_body["plan"]["would_write_receipt"] is False
+    assert "activation_approval_not_approved" not in resident_runtime_plan_body["blockers"]
+    assert "system_write_scope_not_ready" not in resident_runtime_plan_body["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in resident_runtime_plan_body["blockers"]
+    assert "process_supervision_authority_not_granted" in resident_runtime_plan_body["blockers"]
+    assert "tray_registration_authority_not_granted" in resident_runtime_plan_body["blockers"]
+    assert "overlay_control_authority_not_granted" in resident_runtime_plan_body["blockers"]
+    assert resident_runtime_plan_body["governance"]["gate"] == "lens_resident_runtime_activation_plan"
+    assert resident_runtime_plan_body["governance"]["read_only_contract"] is True
+    assert resident_runtime_plan_body["governance"]["plan_readback_only"] is True
+    assert resident_runtime_plan_body["governance"]["execution_authority"] is False
+    assert resident_runtime_plan_body["governance"]["approval_decision_authority"] is False
+    assert resident_runtime_plan_body["governance"]["process_supervision_authority"] is False
+    assert resident_runtime_plan_body["governance"]["service_control_authority"] is False
+    assert resident_runtime_plan_body["governance"]["resident_claim_authority"] is False
+    assert resident_runtime_plan_body["governance"]["receipt_write_authority"] is False
+
     resident_surface_activation = client.get(
         f"/lens/resident-surface/activation?approval_id={approval_id}&actor=test.system.write"
     )
@@ -1826,18 +1930,24 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["applied"] is False
     assert resident_surface_activation_body["execution"]["preflight_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["plan_status"] == "blocked"
+    assert resident_surface_activation_body["execution"]["runtime_plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["denial_status"] == "denied_no_execution_authority"
     assert resident_surface_activation_body["execution"]["would_launch_process"] is False
     assert resident_surface_activation_body["execution"]["would_install_service"] is False
     assert resident_surface_activation_body["execution"]["would_start_service"] is False
+    assert resident_surface_activation_body["execution"]["would_supervise_process"] is False
+    assert resident_surface_activation_body["execution"]["would_restart_process"] is False
+    assert resident_surface_activation_body["execution"]["would_register_tray"] is False
     assert resident_surface_activation_body["execution"]["would_register_hotkey"] is False
     assert resident_surface_activation_body["execution"]["would_open_overlay"] is False
+    assert resident_surface_activation_body["execution"]["would_capture_screen"] is False
     assert resident_surface_activation_body["execution"]["would_write_memory"] is False
     assert resident_surface_activation_body["execution"]["would_decide_approval"] is False
     assert resident_surface_activation_body["surface"]["summon_status"] == "blocked"
     assert resident_surface_activation_body["surface"]["tray_status"] == "blocked"
     assert resident_surface_activation_body["surface"]["overlay_status"] == "blocked"
     surface_components = {item["id"]: item for item in resident_surface_activation_body["components"]}
+    assert surface_components["resident_runtime_plan"]["status"] == "blocked"
     assert surface_components["host_activation_denial"]["status"] == "denied_no_execution_authority"
     assert surface_components["summon_preflight"]["status"] == "blocked"
     assert surface_components["tray_preflight"]["status"] == "blocked"

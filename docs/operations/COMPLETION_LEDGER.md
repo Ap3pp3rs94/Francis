@@ -12890,6 +12890,52 @@ enablement gate audit:
 - `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens supervised resident runtime plan readback
+
+Lens now exposes a read-only `/lens/resident-runtime/plan` route that composes
+the existing host activation execution plan, resident supervision enablement
+gate, summon gate, tray gate, and overlay gate into one supervised resident
+runtime activation plan. The plan keeps runtime activation blocked and explicitly
+projects that it would not launch a process, supervise or restart a process,
+install/start/control a service, register tray presence, bind a hotkey, open an
+overlay, capture screen content, write memory, write a runtime receipt, decide
+an approval, or claim resident status.
+
+`/lens/status` now embeds this runtime plan and adds a
+`resident_runtime_activation_plan` Stage 6 readiness criterion with evidence
+routes through `/lens/resident-runtime/plan`, `/lens/host/supervision`,
+`/lens/summon`, `/lens/tray`, `/lens/overlay`, and `/lens/status`.
+`/lens/resident-surface/activation` now includes the same runtime plan and uses
+it to make the next smallest truthful gap
+`implement_supervised_resident_runtime_authority`. The Stage 6 checkpoint script
+now reports the runtime plan as observed and moves its next smallest truthful gap
+from the now-shipped runtime-plan readback to
+`supervised_resident_host_runtime_authority_boundary`.
+
+This is backend API/readback and diagnostic projection work only. It does not
+create approvals, decide approvals, launch a Lens host, supervise or restart a
+process, install/start/control a service, register tray presence, register or
+bind a hotkey, open or control an overlay, capture screen content, write memory,
+write runtime receipts, execute actions, claim resident status, or grant
+execution, approval-decision, local-process-launch, process-supervision,
+process-restart, service-install, service-control, tray-registration, tray-icon,
+notification, hotkey-registration, overlay-control, window-management, capture,
+summon, telemetry, sensing, or promotion authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens supervised
+resident runtime plan readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12936,7 +12982,10 @@ These remain true and should block any "finished" claim:
   dock, and capture behavior can be truthfully claimed,
   plus chat UI System/ORB readback of the host, summon, tray, and overlay
   enablement gate criteria, plus Stage 6 checkpoint readback of those
-  enablement gates,
+  enablement gates, plus a direct `/lens/resident-runtime/plan` read-only
+  supervised resident runtime activation plan that composes host activation,
+  supervision, summon, tray, and overlay gates while keeping resident activation
+  blocked,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
