@@ -73,7 +73,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_overlay_runtime_missing" in criteria["system_resident_presence"]["blockers"]
     assert "tray_host_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
-    assert payload["next_smallest_truthful_gap"] == "resident_host_process_or_supervised_foreground_readiness_proof"
+    assert "scripts/lens-host-foreground-proof.ps1" in criteria["system_resident_presence"]["evidence"]
+    assert payload["next_smallest_truthful_gap"] == "resident_host_supervision_or_resident_surface_proof"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,

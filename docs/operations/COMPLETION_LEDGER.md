@@ -12057,6 +12057,47 @@ checkpoint diagnostic:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens foreground host proof diagnostic
+
+Stage 6/Lens now has a repeatable foreground host readiness proof diagnostic.
+`scripts/lens-host-foreground-proof.ps1 -Mode Status` starts the existing
+bounded foreground `scripts/lens-host.ps1` status session against a temporary
+data root, waits for live runtime state, verifies that `scripts/lens-host.ps1
+-Mode Status` observes the same foreground process and PID, then verifies the
+bounded session stops and leaves `foreground_stopped` state. The proof returns
+`kind: lens.host.foreground_readiness_proof`, `status: proof_passed`, and keeps
+`ready_for_resident_claim: false`.
+
+The Stage 6 checkpoint now names this proof as evidence for the blocked
+`system_resident_presence` criterion and advances the next smallest truthful
+gap to `resident_host_supervision_or_resident_surface_proof`. This removes the
+foreground-observation proof gap without claiming a resident host, service
+supervision, tray presence, global hotkey binding, overlay window, command
+palette binding, summon-anywhere behavior, or live operator experience proof.
+
+This is diagnostic/proof-only. It does not install, start, stop, restart, or
+control a Windows service; create resident supervision; register tray presence;
+bind a global hotkey; open or focus an overlay; summon Francis anywhere; expose
+new UI controls; call API execute routes; write memory; decide approvals; or
+grant execution, approval-decision, memory-write, overlay-control,
+window-management, summon, capture, sensing, telemetry, policy,
+service-install, service-control, hotkey-registration, tray-registration, API
+local-process-launch, or product local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens foreground host
+proof diagnostic:
+
+- `python -m pytest tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-foreground-proof.ps1 -Mode Status -RunSeconds 3`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
