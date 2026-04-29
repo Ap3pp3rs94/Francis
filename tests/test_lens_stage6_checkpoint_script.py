@@ -313,6 +313,21 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_denial_boundary"]["memory_write"] is False
     assert payload["resident_host_supervision_authority_denial_boundary"]["receipt_write_authority"] is False
     assert payload["resident_host_supervision_authority_denial_boundary"]["denial_receipt_write_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["status"] == "empty"
+    assert payload["resident_host_supervision_authority_denial_receipts"]["ok"] is True
+    assert (
+        "/lens/host/supervision/authority/denials"
+        in payload["resident_host_supervision_authority_denial_receipts"]["evidence"]
+    )
+    assert payload["resident_host_supervision_authority_denial_receipts"]["receipt_count"] == 0
+    assert payload["resident_host_supervision_authority_denial_receipts"]["latest_receipt_id"] == ""
+    assert payload["resident_host_supervision_authority_denial_receipts"]["execution_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["approval_decision_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["process_supervision_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["service_control_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["memory_write"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["receipt_write_authority"] is False
+    assert payload["resident_host_supervision_authority_denial_receipts"]["denial_receipt_write_authority"] is False
     assert payload["resident_runtime_activation_plan"]["status"] == "blocked"
     assert payload["resident_runtime_activation_plan"]["ok"] is True
     assert payload["resident_runtime_activation_plan"]["plan_available"] is True
@@ -427,7 +442,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
-    assert payload["next_smallest_truthful_gap"] == "resident_host_supervision_authority_denial_receipt_readback"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_supervision_authority_readiness_audit"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -445,6 +460,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_execution_authority_grant_readiness_audit_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
+        "resident_host_supervision_authority_denial_receipt_readback_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

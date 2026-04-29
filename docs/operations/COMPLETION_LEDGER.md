@@ -13303,6 +13303,51 @@ supervision authority denial boundary:
 - `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident host supervision authority denial receipt readback
+
+Stage 6/Lens now has durable denial receipt persistence and readback for
+resident host supervision authority denials. `POST /lens/host/supervision/authority`
+still denies the attempted authority grant, but when the existing `system.write`
+actor gate is ready it now writes a bounded
+`lens.host.supervision_authority.denial.receipt` under local Lens data and returns
+the receipt plus `/lens/host/supervision/authority/denials` as the readback route.
+
+The new `GET /lens/host/supervision/authority/denials` route lists those denial
+receipts with status filtering. `/lens/status` projects the readback under
+`resident_host.supervision_authority_denial_receipts`, Stage 6 readiness includes
+`resident_host_supervision_authority_denial_receipt_readback`, and the Stage 6
+checkpoint now reports
+`resident_host_supervision_authority_denial_receipt_readback_observed: true`.
+Because the host supervision authority denial boundary and denial receipt
+readback are now both observable, the checkpoint's next smallest truthful gap
+moves from `resident_host_supervision_authority_denial_receipt_readback` to
+`resident_host_supervision_authority_readiness_audit`.
+
+This is backend API/readback, bounded receipt-persistence, diagnostic checkpoint,
+and test work only. It does not grant resident runtime execution authority,
+approval decision authority, local process launch authority, process supervision
+or restart authority, service install/control authority, tray, hotkey, overlay,
+summon, capture, memory-write, live resident-claim, or UI authority. It does not
+launch a Lens host, supervise or restart a process, install/start/control a
+service, register tray presence, register or bind a hotkey, open or control an
+overlay, capture screen content, write memory, decide approvals, claim resident
+status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident host
+supervision authority denial receipt readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`; `next_smallest_truthful_gap` is
+  `resident_host_supervision_authority_readiness_audit`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13376,8 +13421,10 @@ These remain true and should block any "finished" claim:
   resident-claim authority, plus a governed
   `POST /lens/host/supervision/authority` denial boundary that keeps attempted
   resident host process supervision authority grants blocked without supervising
-  or restarting a process, installing or controlling a service, writing receipts,
-  or claiming resident status,
+  or restarting a process, installing or controlling a service, or claiming
+  resident status, plus a read-only `/lens/host/supervision/authority/denials`
+  receipt readback route that records bounded denial receipts for denied host
+  supervision authority attempts after the existing `system.write` gate is ready,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

@@ -575,6 +575,25 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_denial_receipts["governance"]["approval_decision_authority"] is False
     assert activation_denial_receipts["governance"]["local_process_launch_authority"] is False
     assert activation_denial_receipts["governance"]["memory_write"] is False
+    assert resident_host["supervision_authority_denial_receipts_route"] == ("/lens/host/supervision/authority/denials")
+    supervision_authority_denial_receipts = resident_host["supervision_authority_denial_receipts"]
+    assert supervision_authority_denial_receipts["kind"] == "lens.host.supervision_authority.denial_receipts"
+    assert supervision_authority_denial_receipts["status"] == "empty"
+    assert supervision_authority_denial_receipts["route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_denial_receipts["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_denial_receipts["total"] == 0
+    assert supervision_authority_denial_receipts["latest"] is None
+    assert supervision_authority_denial_receipts["items"] == []
+    assert supervision_authority_denial_receipts["governance"]["gate"] == (
+        "lens_host_supervision_authority_denial_receipts_readback"
+    )
+    assert supervision_authority_denial_receipts["governance"]["read_only_contract"] is True
+    assert supervision_authority_denial_receipts["governance"]["denial_receipt_write_authority"] is False
+    assert supervision_authority_denial_receipts["governance"]["execution_authority"] is False
+    assert supervision_authority_denial_receipts["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_denial_receipts["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_denial_receipts["governance"]["service_control_authority"] is False
+    assert supervision_authority_denial_receipts["governance"]["memory_write"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -869,7 +888,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "would_claim_resident": False,
         "would_write_receipt": False,
         "would_write_memory": False,
+        "denial_receipt_written": False,
     }
+    assert supervision_authority_denial["receipt_written"] is False
+    assert supervision_authority_denial["receipt_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_denial["receipt"] == {}
     assert supervision_authority_denial["governance"]["gate"] == "lens_host_supervision_authority_denial_boundary"
     assert supervision_authority_denial["governance"]["authority_grant_boundary"] is True
     assert supervision_authority_denial["governance"]["denial_boundary"] is True
@@ -1519,6 +1542,27 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_denial_criterion["memory_write"] is False
     assert host_supervision_denial_criterion["receipt_write_authority"] is False
     assert host_supervision_denial_criterion["denial_receipt_write_authority"] is False
+    host_supervision_denial_receipts_criterion = _criterion(
+        body, "resident_host_supervision_authority_denial_receipt_readback"
+    )
+    assert host_supervision_denial_receipts_criterion["status"] == "empty"
+    assert host_supervision_denial_receipts_criterion["evidence"] == [
+        "/lens/host/supervision/authority/denials",
+        "/lens/host/supervision/authority",
+        "/lens/status",
+    ]
+    assert host_supervision_denial_receipts_criterion["receipt_count"] == 0
+    assert host_supervision_denial_receipts_criterion["latest_receipt_id"] == ""
+    assert host_supervision_denial_receipts_criterion["execution_authority"] is False
+    assert host_supervision_denial_receipts_criterion["approval_decision_authority"] is False
+    assert host_supervision_denial_receipts_criterion["local_process_launch_authority"] is False
+    assert host_supervision_denial_receipts_criterion["process_supervision_authority"] is False
+    assert host_supervision_denial_receipts_criterion["process_restart_authority"] is False
+    assert host_supervision_denial_receipts_criterion["service_install_authority"] is False
+    assert host_supervision_denial_receipts_criterion["service_control_authority"] is False
+    assert host_supervision_denial_receipts_criterion["memory_write"] is False
+    assert host_supervision_denial_receipts_criterion["denial_receipt_write_authority"] is False
+    assert host_supervision_denial_receipts_criterion["receipt_write_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1847,6 +1891,37 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_body["denial"]["would_start_service"] is False
     assert supervision_authority_denial_body["denial"]["would_write_receipt"] is False
     assert supervision_authority_denial_body["denial"]["would_write_memory"] is False
+    assert supervision_authority_denial_body["denial"]["denial_receipt_written"] is True
+    assert supervision_authority_denial_body["receipt_written"] is True
+    assert supervision_authority_denial_body["receipt_route"] == "/lens/host/supervision/authority/denials"
+    supervision_authority_denial_receipt = supervision_authority_denial_body["receipt"]
+    assert supervision_authority_denial_receipt["kind"] == "lens.host.supervision_authority.denial.receipt"
+    assert supervision_authority_denial_receipt["status"] == "denied_no_supervision_authority"
+    assert supervision_authority_denial_receipt["route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_denial_receipt["source_kind"] == "lens.host.supervision_authority.denial"
+    assert supervision_authority_denial_receipt["actor"] == "test.system.write"
+    assert supervision_authority_denial_receipt["permission"]["ready"] is True
+    assert supervision_authority_denial_receipt["preflight"]["preflight_ready"] is True
+    assert supervision_authority_denial_receipt["authority_boundary"]["applied"] is False
+    assert supervision_authority_denial_receipt["authority_boundary"]["executed"] is False
+    assert supervision_authority_denial_receipt["authority_boundary"]["authority_granted"] is False
+    assert supervision_authority_denial_receipt["denial"]["would_grant_process_supervision_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["gate"] == (
+        "lens_host_supervision_authority_denial_receipt"
+    )
+    assert supervision_authority_denial_receipt["governance"]["denial_receipt_write_authority"] is True
+    assert supervision_authority_denial_receipt["governance"]["execution_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["service_control_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["memory_write"] is False
+    supervision_authority_denial_receipt_path = (
+        data_root
+        / "lens"
+        / "host_supervision_authority_denials"
+        / f"{supervision_authority_denial_receipt['receipt_id']}.json"
+    )
+    assert supervision_authority_denial_receipt_path.exists()
     assert supervision_authority_denial_body["governance"]["authority_grant_boundary"] is True
     assert supervision_authority_denial_body["governance"]["denial_boundary"] is True
     assert supervision_authority_denial_body["governance"]["process_supervision_authority"] is False
@@ -1854,7 +1929,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_body["governance"]["service_install_authority"] is False
     assert supervision_authority_denial_body["governance"]["service_control_authority"] is False
     assert supervision_authority_denial_body["governance"]["receipt_write_authority"] is False
-    assert supervision_authority_denial_body["governance"]["denial_receipt_write_authority"] is False
+    assert supervision_authority_denial_body["governance"]["denial_receipt_write_authority"] is True
+    supervision_authority_denials_response = client.get(
+        "/lens/host/supervision/authority/denials?limit=10&status=denied_no_supervision_authority"
+    )
+    assert supervision_authority_denials_response.status_code == 200
+    supervision_authority_denials_body = supervision_authority_denials_response.json()
+    assert supervision_authority_denials_body["kind"] == "lens.host.supervision_authority.denial_receipts"
+    assert supervision_authority_denials_body["status"] == "readback_ready"
+    assert supervision_authority_denials_body["route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_denials_body["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_denials_body["filter_status"] == "denied_no_supervision_authority"
+    assert supervision_authority_denials_body["total"] == 1
+    assert (
+        supervision_authority_denials_body["latest"]["receipt_id"]
+        == (supervision_authority_denial_receipt["receipt_id"])
+    )
+    assert supervision_authority_denials_body["items"][0]["authority_boundary"]["authority_granted"] is False
+    assert supervision_authority_denials_body["items"][0]["governance"]["execution_authority"] is False
+    assert supervision_authority_denials_body["governance"]["gate"] == (
+        "lens_host_supervision_authority_denial_receipts_readback"
+    )
+    assert supervision_authority_denials_body["governance"]["read_only_contract"] is True
+    assert supervision_authority_denials_body["governance"]["denial_receipt_write_authority"] is False
+    assert supervision_authority_denials_body["governance"]["execution_authority"] is False
+    assert supervision_authority_denials_body["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_denials_body["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_denials_body["governance"]["service_control_authority"] is False
+    assert supervision_authority_denials_body["governance"]["memory_write"] is False
     preflight_response = client.get("/lens/preflight")
     assert preflight_response.status_code == 200
     assert preflight_response.json()["kind"] == "lens.preflight"

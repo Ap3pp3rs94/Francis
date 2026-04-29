@@ -16,6 +16,7 @@ from francis.lens.activation import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
+    lens_host_supervision_authority_denial_receipts,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
     lens_resident_runtime_execution_policy_contract,
@@ -254,6 +255,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     supervision_authority_denial = deny_lens_host_supervision_authority_grant()
+    supervision_authority_denial_receipts = lens_host_supervision_authority_denial_receipts(limit=limit)
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
@@ -399,6 +401,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "supervision_authority_preflight": supervision_authority_preflight,
         "supervision_authority_denial_route": _safe_str(supervision_authority_denial.get("route")).strip(),
         "supervision_authority_denial": supervision_authority_denial,
+        "supervision_authority_denial_receipts_route": _safe_str(
+            supervision_authority_denial_receipts.get("route")
+        ).strip(),
+        "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
         "status_route": "/lens/status",
         "local_hud_route": _safe_str(hud.get("route")).strip() or "/lens/hud",
         "local_palette_route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
@@ -770,6 +776,7 @@ def _stage6_readiness(
         resident_host.get("resident_runtime_authority_grant_readiness")
     )
     supervision_authority_denial = _as_dict(resident_host.get("supervision_authority_denial"))
+    supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     return {
         "stage": "Stage 6 / Lens MVP",
@@ -1217,6 +1224,33 @@ def _stage6_readiness(
                 "resident_claim_authority": False,
             },
             {
+                "id": "resident_host_supervision_authority_denial_receipt_readback",
+                "status": _safe_str(supervision_authority_denial_receipts.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/host/supervision/authority/denials",
+                    "/lens/host/supervision/authority",
+                    "/lens/status",
+                ],
+                "receipt_count": _safe_int(supervision_authority_denial_receipts.get("total")),
+                "latest_receipt_id": _safe_str(
+                    _as_dict(supervision_authority_denial_receipts.get("latest")).get("receipt_id")
+                ).strip(),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": False,
+                "receipt_write_authority": False,
+            },
+            {
                 "id": "summon_anywhere",
                 "status": "not_implemented",
                 "evidence": ["/lens/summon", "/lens/host", "/lens/preflight", "/lens/status"],
@@ -1337,6 +1371,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     resident_runtime_authority_grant_readiness = _as_dict(
         resident_host.get("resident_runtime_authority_grant_readiness")
     )
+    supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
     resident_runtime_plan = _as_dict(resident_host.get("resident_runtime_plan"))
 
     return {
@@ -1361,6 +1396,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_runtime_authority_grant": resident_runtime_authority_grant,
         "resident_runtime_authority_grant_denial_receipts": resident_runtime_authority_grant_denial_receipts,
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
+        "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
         "resident_runtime_plan": resident_runtime_plan,
         "resident_runtime_denial": _as_dict(resident_host.get("resident_runtime_denial")),
         "resident_surface_activation": resident_surface_activation,
@@ -1383,6 +1419,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_host_activation_denials_route": "/lens/host/activation/denials",
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
             "lens_host_supervision_authority_denial_route": "/lens/host/supervision/authority",
+            "lens_host_supervision_authority_denials_route": "/lens/host/supervision/authority/denials",
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (
                 "/lens/resident-runtime/authority-grant/readiness"
