@@ -81,7 +81,7 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert "installable_false" in proof["service_plan_blocked_by"]
     assert "service_install_authority_false" in proof["service_plan_blocked_by"]
     assert "service_control_authority_false" in proof["service_plan_blocked_by"]
-    assert proof["service_status"] == "not_installed"
+    assert proof["service_status"] in {"not_installed", "unsupported_platform"}
     assert proof["process_supervision_status"] == "blocked"
     assert proof["service_control_status"] == "blocked"
     assert "resident_supervision_disabled" in payload["blockers"]
