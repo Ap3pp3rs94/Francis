@@ -13393,6 +13393,45 @@ supervision authority readiness audit:
   Result: `passed`; `next_smallest_truthful_gap` is
   `stage6_lens_completion_audit`
 
+### 2026-04-29 - Stage 6/Lens completion audit diagnostic
+
+Stage 6/Lens now has a status-only completion audit diagnostic.
+`scripts/lens-stage6-completion-audit.ps1 -Mode Status` consumes the existing
+Stage 6 checkpoint and turns it into an explicit closure decision. The current
+repo truth is `kind: lens.stage6.completion_audit`, `status: blocked`,
+`audit_status: complete`, `ready_to_close: false`, `can_close_stage6: false`,
+`transition_allowed: false`, and `closure_decision: do_not_close_stage6`.
+
+The audit preserves the checkpoint's two ready criteria (`mode_visibility` and
+`pilot_visibility_groundwork`) and three blocked criteria (`summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence`). It also groups the closure
+blockers by resident surface, summon/hotkey, tray, overlay, host supervision,
+and authority so the next session does not have to infer the remaining Stage 6
+work from a long checkpoint payload. Because the completion audit has now run,
+the next smallest truthful gap moves from `stage6_lens_completion_audit` to the
+concrete blocker `resident_surface_missing`.
+
+This confirms Stage 6/Lens cannot truthfully close yet. Stage 7/Telemetry must
+not begin until Stage 6 has either resolved the resident-surface and resident
+presence blockers or a later audited roadmap decision explicitly narrows the
+Stage 6 closure claim.
+
+This is diagnostic/readback-only. It does not launch a Lens host, supervise or
+restart a process, install/start/control a service, register tray presence,
+register or bind a hotkey, open or control an overlay, capture screen content,
+write memory, write receipts, decide approvals, claim resident status, grant
+execution authority, grant resident runtime authority, grant process-supervision
+authority, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens completion audit
+diagnostic:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; `next_smallest_truthful_gap` is
+  `resident_surface_missing`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13474,6 +13513,9 @@ These remain true and should block any "finished" claim:
   composes the supervision gate, authority preflight, denial boundary, and
   denial-receipt readback into exact remaining process-supervision and
   service-control authority blockers,
+  plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
+  reports `do_not_close_stage6`, groups closure blockers, and moves the next
+  concrete blocker to `resident_surface_missing`,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,
