@@ -12018,6 +12018,45 @@ prerequisite readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object -ExpandProperty required_before_enable`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens completion checkpoint diagnostic
+
+Stage 6/Lens now has a status-only completion checkpoint diagnostic.
+`scripts/lens-stage6-checkpoint.ps1 -Mode Status` imports the existing
+`/lens/status` readiness contract without needing a running API server and maps
+the roadmap's Stage 6 done criteria into a compact checkpoint payload:
+summon-anywhere, helpful/not-noisy, mode visibility, Pilot visibility
+groundwork, and system-resident presence. The current repo truth is
+`status: blocked`, `ready_to_close: false`, with two criteria ready
+(`mode_visibility` and `pilot_visibility_groundwork`) and three criteria still
+blocked (`summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`).
+
+The checkpoint names the next smallest truthful gap as
+`resident_host_process_or_supervised_foreground_readiness_proof` and preserves
+the current blockers for missing resident host process, global hotkey binding,
+summon binding, tray host, overlay window, resident overlay runtime, and live
+operator proof. This turns Stage 6 checkpoint audits into repeatable repo truth
+instead of a prose-only judgment.
+
+This is diagnostic/readback-only. It does not enable summon, register a global
+hotkey, create tray presence, open or focus an overlay, launch a Lens host
+process, install/start/control services, write memory, decide approvals, execute
+operator actions, or grant overlay-control, window-management, summon,
+tray-registration, hotkey-registration, service-control, local-process-launch,
+capture, sensing, telemetry, or policy authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens completion
+checkpoint diagnostic:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
