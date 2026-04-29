@@ -12522,6 +12522,51 @@ resident overlay boundary consumption:
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident overlay activation boundary proof
+
+Stage 6/Lens now has a composed resident overlay activation-boundary proof.
+`scripts/lens-resident-overlay-activation-boundary-proof.ps1 -Mode Status`
+runs the live operator readback proof, the resident overlay runtime boundary
+proof, and the read-only resident-surface activation boundary. It verifies that
+Francis can observe live Lens readback and a bounded resident-overlay runtime
+boundary while the actual resident overlay activation path remains blocked.
+
+The proof reports `kind: lens.resident_overlay_activation_boundary.proof`,
+`status: proof_passed`, `live_operator_experience_proof: true`,
+`resident_overlay_boundary_observed: true`, and
+`activation_boundary_observed: true`, while keeping
+`resident_overlay_activation_ready: false`, `activation_ready: false`,
+`resident_surface_ready: false`, `resident_overlay_runtime_ready: false`,
+`ready_for_lens_resident_claim: false`, `resident_claim_allowed: false`,
+`execution_ready: false`, `executed: false`, and `applied: false`. The proof
+also verifies that the activation plan would not launch a process, install or
+start a service, register a hotkey, open an overlay, write memory, or decide an
+approval.
+
+This is diagnostic proof composition only. It does not change Lens API routes,
+UI surfaces, service configuration, host runner behavior, approval decisions,
+memory writes, process supervision, service control, tray registration, hotkey
+registration, overlay control, or summon-anywhere behavior. It composes existing
+bounded diagnostics that may start a temporary API process and a temporary
+foreground host process, but it grants no resident activation authority and
+writes no denial receipts or memory receipts.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident overlay
+activation boundary proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-overlay-activation-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_live_operator_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12550,10 +12595,12 @@ These remain true and should block any "finished" claim:
   plus read-only activation execution preflight, execution-plan, and
   execution-denial gates plus durable denial receipt readback and chat UI
   readback of denial receipt totals/latest receipt handles, but no OS-wide
-  summon, plus a resident-surface activation boundary readback that keeps the
-  resident claim blocked, plus a live HTTP operator-experience readback proof
-  that verifies the Lens status payload through a temporary local API process,
-  but no supervised resident host process, process-restart authority,
+  summon, plus resident overlay runtime boundary proof/checkpoint consumption,
+  plus a resident-surface activation boundary readback and composed activation
+  boundary proof that keep the resident claim blocked, plus a live HTTP
+  operator-experience readback proof that verifies the Lens status payload
+  through a temporary local API process, but no supervised resident host process,
+  process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, summon-anywhere behavior, or live
   Pilot takeover surface yet
