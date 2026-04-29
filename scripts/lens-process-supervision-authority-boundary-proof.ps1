@@ -329,6 +329,7 @@ $Payload = [ordered]@{
     resident_overlay_activation_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_overlay_activation_boundary_observed' -Default $false)
     resident_host_supervision_authority_denial_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_denial_boundary_observed' -Default $false)
     resident_host_supervision_authority_denial_receipt_readback_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_denial_receipt_readback_observed' -Default $false)
+    resident_host_supervision_authority_readiness_audit_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_readiness_audit_observed' -Default $false)
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false

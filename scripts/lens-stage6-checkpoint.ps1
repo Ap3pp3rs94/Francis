@@ -203,6 +203,7 @@ $HostCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 're
 $HostSupervisionAuthorityCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_preflight'
 $HostSupervisionAuthorityDenialCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_denial_boundary'
 $HostSupervisionAuthorityDenialReceiptsCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_denial_receipt_readback'
+$HostSupervisionAuthorityReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_readiness_audit'
 $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_activation_plan'
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
 $RuntimePolicyCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_policy_contract'
@@ -265,6 +266,37 @@ $HostSupervisionAuthorityDenialReceiptsEvidence = ConvertTo-StringArray -Value (
 $HostSupervisionAuthorityDenialReceiptsObserved = (
   ($HostSupervisionAuthorityDenialReceiptsStatus -eq 'empty' -or $HostSupervisionAuthorityDenialReceiptsStatus -eq 'readback_ready') -and
   $HostSupervisionAuthorityDenialReceiptsEvidence -contains '/lens/host/supervision/authority/denials'
+)
+$HostSupervisionAuthorityReadinessStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'status' -Default 'missing')
+$HostSupervisionAuthorityReadinessAuditStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'audit_status' -Default 'missing')
+$HostSupervisionAuthorityReadinessReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'ready' -Default $true)
+$HostSupervisionAuthorityReadinessPreflightReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'preflight_ready' -Default $false)
+$HostSupervisionAuthorityReadinessAuthorityReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'authority_ready' -Default $true)
+$HostSupervisionAuthorityReadinessSupervisionReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'supervision_ready' -Default $true)
+$HostSupervisionAuthorityReadinessResidentClaimAllowed = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'resident_claim_allowed' -Default $true)
+$HostSupervisionAuthorityReadinessBoundaryObserved = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'boundary_observed' -Default $false)
+$HostSupervisionAuthorityReadinessDenialReceiptReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'denial_receipt_readback_ready' -Default $false)
+$HostSupervisionAuthorityReadinessReceiptCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'receipt_count' -Default 0)
+$HostSupervisionAuthorityReadinessLatestReceiptId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'latest_receipt_id' -Default '')
+$HostSupervisionAuthorityReadinessRequirementsTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_total' -Default 0)
+$HostSupervisionAuthorityReadinessRequirementsReadyTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_ready_total' -Default 0)
+$HostSupervisionAuthorityReadinessRequirementsBlockedTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_blocked_total' -Default 0)
+$HostSupervisionAuthorityReadinessBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blocked_requirements' -Default @())
+$HostSupervisionAuthorityReadinessEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'evidence' -Default @())
+$HostSupervisionAuthorityReadinessBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blockers' -Default @())
+$HostSupervisionAuthorityReadinessObserved = (
+  $HostSupervisionAuthorityReadinessStatus -ne 'missing' -and
+  $HostSupervisionAuthorityReadinessAuditStatus -eq 'complete' -and
+  -not $HostSupervisionAuthorityReadinessReady -and
+  $HostSupervisionAuthorityReadinessPreflightReady -and
+  -not $HostSupervisionAuthorityReadinessAuthorityReady -and
+  -not $HostSupervisionAuthorityReadinessSupervisionReady -and
+  -not $HostSupervisionAuthorityReadinessResidentClaimAllowed -and
+  $HostSupervisionAuthorityReadinessBoundaryObserved -and
+  $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady -and
+  $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/readiness' -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'authority_grant_implementation' -and
+  $HostSupervisionAuthorityReadinessBlockers -contains 'host_supervision_authority_grant_not_implemented'
 )
 $RuntimePlanStatus = [string](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'status' -Default 'missing')
 $RuntimePlanAvailable = [bool](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'plan_available' -Default $false)
@@ -506,7 +538,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
 }
 
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -695,6 +727,41 @@ $Payload = [ordered]@{
     receipt_write_authority = $false
     denial_receipt_write_authority = $false
     resident_claim_authority = $false
+  }
+  resident_host_supervision_authority_readiness_audit = [ordered]@{
+    status = $HostSupervisionAuthorityReadinessStatus
+    audit_status = $HostSupervisionAuthorityReadinessAuditStatus
+    ok = $HostSupervisionAuthorityReadinessObserved
+    evidence = $HostSupervisionAuthorityReadinessEvidence
+    ready = $HostSupervisionAuthorityReadinessReady
+    preflight_ready = $HostSupervisionAuthorityReadinessPreflightReady
+    authority_ready = $HostSupervisionAuthorityReadinessAuthorityReady
+    supervision_ready = $HostSupervisionAuthorityReadinessSupervisionReady
+    resident_claim_allowed = $HostSupervisionAuthorityReadinessResidentClaimAllowed
+    boundary_observed = $HostSupervisionAuthorityReadinessBoundaryObserved
+    denial_receipt_readback_ready = $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady
+    receipt_count = $HostSupervisionAuthorityReadinessReceiptCount
+    latest_receipt_id = $HostSupervisionAuthorityReadinessLatestReceiptId
+    requirements_total = $HostSupervisionAuthorityReadinessRequirementsTotal
+    requirements_ready_total = $HostSupervisionAuthorityReadinessRequirementsReadyTotal
+    requirements_blocked_total = $HostSupervisionAuthorityReadinessRequirementsBlockedTotal
+    blocked_requirements = $HostSupervisionAuthorityReadinessBlockedRequirements
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    denial_receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $HostSupervisionAuthorityReadinessBlockers
   }
   resident_runtime_authority_grant_preflight = [ordered]@{
     status = $RuntimeGrantStatus
@@ -937,7 +1004,9 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved) {
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved) {
+    'stage6_lens_completion_audit'
+  } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved) {
     'resident_host_supervision_authority_readiness_audit'
   } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved) {
     'resident_host_supervision_authority_denial_receipt_readback'
@@ -988,6 +1057,7 @@ $Payload = [ordered]@{
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved
+    resident_host_supervision_authority_readiness_audit_observed = $HostSupervisionAuthorityReadinessObserved
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

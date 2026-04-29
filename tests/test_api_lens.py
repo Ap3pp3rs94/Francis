@@ -594,6 +594,55 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_receipts["governance"]["process_supervision_authority"] is False
     assert supervision_authority_denial_receipts["governance"]["service_control_authority"] is False
     assert supervision_authority_denial_receipts["governance"]["memory_write"] is False
+    assert resident_host["supervision_authority_readiness_route"] == "/lens/host/supervision/authority/readiness"
+    supervision_authority_readiness = resident_host["supervision_authority_readiness"]
+    assert supervision_authority_readiness["kind"] == "lens.host.supervision_authority.readiness_audit"
+    assert supervision_authority_readiness["status"] == "blocked"
+    assert supervision_authority_readiness["audit_status"] == "complete"
+    assert supervision_authority_readiness["route"] == "/lens/host/supervision/authority/readiness"
+    assert supervision_authority_readiness["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_readiness["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_readiness["ready"] is False
+    assert supervision_authority_readiness["preflight_ready"] is True
+    assert supervision_authority_readiness["authority_ready"] is False
+    assert supervision_authority_readiness["supervision_ready"] is False
+    assert supervision_authority_readiness["resident_claim_allowed"] is False
+    assert supervision_authority_readiness["boundary_observed"] is True
+    assert supervision_authority_readiness["denial_receipt_readback_ready"] is True
+    assert supervision_authority_readiness["receipt_count"] == 0
+    assert supervision_authority_readiness["latest_receipt_id"] == ""
+    assert supervision_authority_readiness["requirements_total"] >= 10
+    assert supervision_authority_readiness["requirements_blocked_total"] >= 6
+    supervision_authority_readiness_requirements = {
+        item["id"]: item for item in supervision_authority_readiness["requirements"]
+    }
+    assert supervision_authority_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
+    assert supervision_authority_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
+    assert supervision_authority_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
+    assert supervision_authority_readiness_requirements["authority_grant_implementation"]["ready"] is False
+    assert "actor_scope" in supervision_authority_readiness["blocked_requirements"]
+    assert "process_supervision_authority" in supervision_authority_readiness["blocked_requirements"]
+    assert "service_control_authority" in supervision_authority_readiness["blocked_requirements"]
+    assert "resident_claim_authority" in supervision_authority_readiness["blocked_requirements"]
+    assert "authority_grant_implementation" in supervision_authority_readiness["blocked_requirements"]
+    assert "system_write_scope_not_ready" in supervision_authority_readiness["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_readiness["blockers"]
+    assert "process_supervision_authority_not_granted" in supervision_authority_readiness["blockers"]
+    assert supervision_authority_readiness["governance"]["gate"] == "lens_host_supervision_authority_readiness_audit"
+    assert supervision_authority_readiness["governance"]["read_only_contract"] is True
+    assert supervision_authority_readiness["governance"]["audit_only"] is True
+    assert supervision_authority_readiness["governance"]["preflight_only"] is True
+    assert supervision_authority_readiness["governance"]["authority_grant_boundary"] is True
+    assert supervision_authority_readiness["governance"]["execution_authority"] is False
+    assert supervision_authority_readiness["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_readiness["governance"]["local_process_launch_authority"] is False
+    assert supervision_authority_readiness["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_readiness["governance"]["process_restart_authority"] is False
+    assert supervision_authority_readiness["governance"]["service_install_authority"] is False
+    assert supervision_authority_readiness["governance"]["service_control_authority"] is False
+    assert supervision_authority_readiness["governance"]["memory_write"] is False
+    assert supervision_authority_readiness["governance"]["denial_receipt_write_authority"] is False
+    assert supervision_authority_readiness["governance"]["resident_claim_authority"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -1563,6 +1612,42 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_denial_receipts_criterion["memory_write"] is False
     assert host_supervision_denial_receipts_criterion["denial_receipt_write_authority"] is False
     assert host_supervision_denial_receipts_criterion["receipt_write_authority"] is False
+    host_supervision_readiness_criterion = _criterion(body, "resident_host_supervision_authority_readiness_audit")
+    assert host_supervision_readiness_criterion["status"] == "blocked"
+    assert host_supervision_readiness_criterion["audit_status"] == "complete"
+    assert host_supervision_readiness_criterion["evidence"] == [
+        "/lens/host/supervision/authority/readiness",
+        "/lens/host/supervision/authority/denials",
+        "/lens/host/supervision/authority",
+        "/lens/host/supervision",
+        "/lens/host/manifest",
+        "/lens/status",
+    ]
+    assert host_supervision_readiness_criterion["ready"] is False
+    assert host_supervision_readiness_criterion["preflight_ready"] is True
+    assert host_supervision_readiness_criterion["authority_ready"] is False
+    assert host_supervision_readiness_criterion["supervision_ready"] is False
+    assert host_supervision_readiness_criterion["resident_claim_allowed"] is False
+    assert host_supervision_readiness_criterion["boundary_observed"] is True
+    assert host_supervision_readiness_criterion["denial_receipt_readback_ready"] is True
+    assert host_supervision_readiness_criterion["receipt_count"] == 0
+    assert host_supervision_readiness_criterion["latest_receipt_id"] == ""
+    assert host_supervision_readiness_criterion["requirements_total"] >= 10
+    assert host_supervision_readiness_criterion["requirements_blocked_total"] >= 6
+    assert "authority_grant_implementation" in host_supervision_readiness_criterion["blocked_requirements"]
+    assert "process_supervision_authority" in host_supervision_readiness_criterion["blocked_requirements"]
+    assert "service_control_authority" in host_supervision_readiness_criterion["blocked_requirements"]
+    assert "host_supervision_authority_grant_not_implemented" in host_supervision_readiness_criterion["blockers"]
+    assert host_supervision_readiness_criterion["execution_authority"] is False
+    assert host_supervision_readiness_criterion["approval_decision_authority"] is False
+    assert host_supervision_readiness_criterion["local_process_launch_authority"] is False
+    assert host_supervision_readiness_criterion["process_supervision_authority"] is False
+    assert host_supervision_readiness_criterion["process_restart_authority"] is False
+    assert host_supervision_readiness_criterion["service_install_authority"] is False
+    assert host_supervision_readiness_criterion["service_control_authority"] is False
+    assert host_supervision_readiness_criterion["memory_write"] is False
+    assert host_supervision_readiness_criterion["receipt_write_authority"] is False
+    assert host_supervision_readiness_criterion["denial_receipt_write_authority"] is False
     runtime_plan_criterion = _criterion(body, "resident_runtime_activation_plan")
     assert runtime_plan_criterion["status"] == "blocked"
     assert runtime_plan_criterion["plan_available"] is True
@@ -1957,6 +2042,47 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denials_body["governance"]["process_supervision_authority"] is False
     assert supervision_authority_denials_body["governance"]["service_control_authority"] is False
     assert supervision_authority_denials_body["governance"]["memory_write"] is False
+    supervision_authority_readiness_response = client.get(
+        "/lens/host/supervision/authority/readiness?limit=10&actor=test.system.write"
+    )
+    assert supervision_authority_readiness_response.status_code == 200
+    supervision_authority_readiness_body = supervision_authority_readiness_response.json()
+    assert supervision_authority_readiness_body["kind"] == "lens.host.supervision_authority.readiness_audit"
+    assert supervision_authority_readiness_body["status"] == "blocked"
+    assert supervision_authority_readiness_body["audit_status"] == "complete"
+    assert supervision_authority_readiness_body["route"] == "/lens/host/supervision/authority/readiness"
+    assert supervision_authority_readiness_body["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_readiness_body["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_readiness_body["ready"] is False
+    assert supervision_authority_readiness_body["preflight_ready"] is True
+    assert supervision_authority_readiness_body["authority_ready"] is False
+    assert supervision_authority_readiness_body["supervision_ready"] is False
+    assert supervision_authority_readiness_body["resident_claim_allowed"] is False
+    assert supervision_authority_readiness_body["boundary_observed"] is True
+    assert supervision_authority_readiness_body["denial_receipt_readback_ready"] is True
+    assert supervision_authority_readiness_body["receipt_count"] == 1
+    assert (
+        supervision_authority_readiness_body["latest_receipt_id"] == supervision_authority_denial_receipt["receipt_id"]
+    )
+    direct_readiness_requirements = {item["id"]: item for item in supervision_authority_readiness_body["requirements"]}
+    assert direct_readiness_requirements["actor_scope"]["ready"] is True
+    assert direct_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
+    assert direct_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
+    assert direct_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
+    assert direct_readiness_requirements["authority_grant_implementation"]["ready"] is False
+    assert "actor_scope" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert "process_supervision_authority" in supervision_authority_readiness_body["blocked_requirements"]
+    assert "service_control_authority" in supervision_authority_readiness_body["blocked_requirements"]
+    assert "resident_claim_authority" in supervision_authority_readiness_body["blocked_requirements"]
+    assert "authority_grant_implementation" in supervision_authority_readiness_body["blocked_requirements"]
+    assert "system_write_scope_not_ready" not in supervision_authority_readiness_body["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_readiness_body["blockers"]
+    assert supervision_authority_readiness_body["governance"]["audit_only"] is True
+    assert supervision_authority_readiness_body["governance"]["execution_authority"] is False
+    assert supervision_authority_readiness_body["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_readiness_body["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_readiness_body["governance"]["service_control_authority"] is False
+    assert supervision_authority_readiness_body["governance"]["memory_write"] is False
     preflight_response = client.get("/lens/preflight")
     assert preflight_response.status_code == 200
     assert preflight_response.json()["kind"] == "lens.preflight"

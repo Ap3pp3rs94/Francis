@@ -13348,6 +13348,51 @@ supervision authority denial receipt readback:
   Result: `passed`; `next_smallest_truthful_gap` is
   `resident_host_supervision_authority_readiness_audit`
 
+### 2026-04-29 - Stage 6/Lens resident host supervision authority readiness audit
+
+Stage 6/Lens now has a read-only readiness audit for resident host supervision
+authority at `GET /lens/host/supervision/authority/readiness`. The audit
+composes the existing host supervision enablement gate, supervision authority
+preflight, governed authority-denial boundary, and denial-receipt readback into
+one explicit blocker report before any future process-supervision or service
+control implementation can be considered.
+
+`/lens/status` now projects this audit under
+`resident_host.supervision_authority_readiness`, Stage 6 readiness includes
+`resident_host_supervision_authority_readiness_audit`, and the Stage 6
+checkpoint now reports
+`resident_host_supervision_authority_readiness_audit_observed: true`. Because
+the host supervision authority preflight, denial boundary, denial receipt
+readback, and readiness audit are now all observable, the checkpoint's next
+smallest truthful gap moves from
+`resident_host_supervision_authority_readiness_audit` to
+`stage6_lens_completion_audit`.
+
+This is backend API/readback, diagnostic checkpoint, and test work only. It does
+not grant resident runtime execution authority, approval decision authority,
+local process launch authority, process supervision or restart authority,
+service install/control authority, tray, hotkey, overlay, summon, capture,
+memory-write, receipt-write, live resident-claim, or UI authority. It does not
+launch a Lens host, supervise or restart a process, install/start/control a
+service, register tray presence, register or bind a hotkey, open or control an
+overlay, capture screen content, write memory, decide approvals, claim resident
+status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident host
+supervision authority readiness audit:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`; `next_smallest_truthful_gap` is
+  `stage6_lens_completion_audit`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13425,6 +13470,10 @@ These remain true and should block any "finished" claim:
   resident status, plus a read-only `/lens/host/supervision/authority/denials`
   receipt readback route that records bounded denial receipts for denied host
   supervision authority attempts after the existing `system.write` gate is ready,
+  plus a read-only `/lens/host/supervision/authority/readiness` audit that
+  composes the supervision gate, authority preflight, denial boundary, and
+  denial-receipt readback into exact remaining process-supervision and
+  service-control authority blockers,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

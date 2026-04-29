@@ -34,6 +34,7 @@ LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
 LENS_HOST_SUPERVISION_AUTHORITY_ROUTE = "/lens/host/supervision/authority"
 LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE = "/lens/host/supervision/authority/denials"
+LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE = "/lens/host/supervision/authority/readiness"
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
@@ -1415,6 +1416,241 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             "runtime_mutation_authority_granted": False,
             "authority_granted": False,
             "next_step": "resolve_resident_runtime_authority_grant_readiness_blockers_before_implementation",
+        },
+    }
+
+
+def lens_host_supervision_authority_readiness_audit(
+    *,
+    actor: Any = "",
+    limit: int = 5,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    manifest = lens_host_launch_manifest()
+    supervision_gate = lens_host_supervision_gate(manifest=manifest)
+    preflight = lens_host_supervision_authority_preflight(manifest=manifest)
+    denial = deny_lens_host_supervision_authority_grant(
+        actor=actor,
+        reason="audit Lens host supervision authority readiness",
+        route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        method="POST",
+        record_receipt=False,
+    )
+    denial_receipts = lens_host_supervision_authority_denial_receipts(limit=safe_limit)
+    permission = _as_dict(denial.get("permission"))
+    boundary_observed = (
+        bool(denial.get("boundary_ready"))
+        and not bool(denial.get("applied"))
+        and not bool(denial.get("executed"))
+        and not bool(denial.get("authority_granted"))
+    )
+    denial_receipt_readback_ready = _safe_str(denial_receipts.get("status")).strip() in {
+        "empty",
+        "readback_ready",
+    }
+    blockers = _dedupe_strs(
+        [
+            *_str_list(supervision_gate.get("blockers")),
+            *_str_list(preflight.get("blockers")),
+            *_str_list(denial.get("blockers")),
+            "host_supervision_authority_grant_not_implemented",
+        ]
+    )
+    requirements = [
+        _readiness_requirement(
+            "actor_scope",
+            label="Actor has host supervision write-review scope",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready=bool(permission.get("ready")),
+            status="ready" if bool(permission.get("ready")) else "blocked",
+            blockers=["system_write_scope_not_ready"] if "system_write_scope_not_ready" in blockers else [],
+            authority_required=LENS_HOST_ACTIVATION_SCOPE,
+            authority_granted=bool(permission.get("ready")),
+        ),
+        _readiness_requirement(
+            "resident_supervision_gate",
+            label="Resident host supervision gate",
+            route="/lens/host/supervision",
+            ready=bool(supervision_gate.get("ready")),
+            status=supervision_gate.get("status"),
+            blockers=supervision_gate.get("blockers"),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "host_supervision_authority_preflight",
+            label="Host supervision authority preflight contract",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready=bool(preflight.get("preflight_ready")),
+            status="ready" if bool(preflight.get("preflight_ready")) else preflight.get("status"),
+            blockers=[],
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "host_supervision_authority_denial_boundary",
+            label="Host supervision authority denial boundary is observed",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready=boundary_observed,
+            status=denial.get("status"),
+            blockers=denial.get("blockers"),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "host_supervision_authority_denial_receipts",
+            label="Host supervision authority denial receipt readback",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            ready=denial_receipt_readback_ready,
+            status=denial_receipts.get("status"),
+        ),
+        _readiness_requirement(
+            "process_supervision_authority",
+            label="Process supervision authority",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="process_supervision_authority_not_granted" not in blockers,
+            status="ready" if "process_supervision_authority_not_granted" not in blockers else "blocked",
+            blockers=(
+                ["process_supervision_authority_not_granted"]
+                if "process_supervision_authority_not_granted" in blockers
+                else []
+            ),
+            authority_required="process_supervision_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "process_restart_authority",
+            label="Process restart authority",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="process_restart_authority_not_granted" not in blockers,
+            status="ready" if "process_restart_authority_not_granted" not in blockers else "blocked",
+            blockers=(
+                ["process_restart_authority_not_granted"] if "process_restart_authority_not_granted" in blockers else []
+            ),
+            authority_required="process_restart_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "service_install_authority",
+            label="Service install authority",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="service_install_authority_not_granted" not in blockers,
+            status="ready" if "service_install_authority_not_granted" not in blockers else "blocked",
+            blockers=(
+                ["service_install_authority_not_granted"] if "service_install_authority_not_granted" in blockers else []
+            ),
+            authority_required="service_install_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "service_control_authority",
+            label="Service control authority",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="service_control_authority_not_granted" not in blockers,
+            status="ready" if "service_control_authority_not_granted" not in blockers else "blocked",
+            blockers=(
+                ["service_control_authority_not_granted"] if "service_control_authority_not_granted" in blockers else []
+            ),
+            authority_required="service_control_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "resident_claim_authority",
+            label="Resident claim authority",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="resident_claim_authority_not_granted" not in blockers,
+            status="ready" if "resident_claim_authority_not_granted" not in blockers else "blocked",
+            blockers=(
+                ["resident_claim_authority_not_granted"] if "resident_claim_authority_not_granted" in blockers else []
+            ),
+            authority_required="resident_claim_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "authority_grant_implementation",
+            label="Explicit host supervision authority grant implementation",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready="host_supervision_authority_grant_not_implemented" not in blockers,
+            status=(
+                "ready" if "host_supervision_authority_grant_not_implemented" not in blockers else "not_implemented"
+            ),
+            blockers=(
+                ["host_supervision_authority_grant_not_implemented"]
+                if "host_supervision_authority_grant_not_implemented" in blockers
+                else []
+            ),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+    ]
+    blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
+    ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    ready = not blocked_requirements and not blockers
+    return {
+        "ok": True,
+        "kind": "lens.host.supervision_authority.readiness_audit",
+        "status": "ready" if ready else "blocked",
+        "audit_status": "complete",
+        "route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+        "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "supervision_route": "/lens/host/supervision",
+        "actor": _redact_free_text(actor),
+        "ready": ready,
+        "preflight_ready": bool(preflight.get("preflight_ready")),
+        "authority_ready": bool(preflight.get("authority_ready")) and ready,
+        "supervision_ready": bool(preflight.get("supervision_ready")) and ready,
+        "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")) and ready,
+        "boundary_observed": boundary_observed,
+        "denial_receipt_readback_ready": denial_receipt_readback_ready,
+        "receipt_count": int(denial_receipts.get("total") or 0),
+        "latest_receipt_id": _safe_str(_as_dict(denial_receipts.get("latest")).get("receipt_id")).strip(),
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(ready_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "requirements": requirements,
+        "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "blockers": blockers,
+        "source_readbacks": {
+            "supervision_gate_status": _safe_str(supervision_gate.get("status")).strip(),
+            "preflight_status": _safe_str(preflight.get("status")).strip(),
+            "authority_denial_status": _safe_str(denial.get("status")).strip(),
+            "denial_receipts_status": _safe_str(denial_receipts.get("status")).strip(),
+        },
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_supervision_authority_readiness_audit",
+            "read_only_contract": True,
+            "audit_only": True,
+            "preflight_only": True,
+            "authority_grant_boundary": True,
+            "resident_host_supervision_boundary": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+            "authority_granted": False,
+            "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
         },
     }
 

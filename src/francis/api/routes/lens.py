@@ -18,6 +18,7 @@ from francis.lens import (
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_preflight,
+    lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -109,6 +110,14 @@ def host_supervision() -> dict[str, Any]:
 @router.get("/host/supervision/authority")
 def host_supervision_authority() -> dict[str, Any]:
     return lens_host_supervision_authority_preflight()
+
+
+@router.get("/host/supervision/authority/readiness")
+def host_supervision_authority_readiness(
+    limit: int = Query(5, ge=1, le=50),
+    actor: str = "",
+) -> dict[str, Any]:
+    return lens_host_supervision_authority_readiness_audit(actor=actor, limit=limit)
 
 
 @router.get("/host/supervision/authority/denials")
