@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from francis.lens import (
     deny_lens_host_activation_execution,
+    deny_lens_resident_runtime_activation_execution,
     lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
@@ -37,6 +38,12 @@ class LensHostActivationExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens host foreground activation"
+
+
+class LensResidentRuntimeExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens resident runtime activation"
 
 
 @router.get("/status")
@@ -107,6 +114,17 @@ def host_activation_plan(approval_id: str = "", actor: str = "") -> dict[str, An
 @router.get("/resident-runtime/plan")
 def resident_runtime_plan(approval_id: str = "", actor: str = "") -> dict[str, Any]:
     return lens_resident_runtime_activation_plan(approval_id=approval_id, actor=actor)
+
+
+@router.post("/resident-runtime/execute")
+def resident_runtime_execute(request: Request, payload: LensResidentRuntimeExecuteIn) -> dict[str, Any]:
+    return deny_lens_resident_runtime_activation_execution(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.get("/resident-surface/activation")

@@ -8,6 +8,7 @@ from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
+    deny_lens_resident_runtime_activation_execution,
     lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
@@ -246,6 +247,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_execution_preflight = lens_host_activation_execution_preflight()
     activation_execution_plan = lens_host_activation_execution_plan()
     resident_runtime_plan = lens_resident_runtime_activation_plan()
+    resident_runtime_denial = deny_lens_resident_runtime_activation_execution()
     activation_execution_denial = deny_lens_host_activation_execution()
     activation_denial_receipts = lens_host_activation_denial_receipts(limit=limit)
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
@@ -350,6 +352,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_execution_plan": activation_execution_plan,
         "resident_runtime_plan_route": _safe_str(resident_runtime_plan.get("route")).strip(),
         "resident_runtime_plan": resident_runtime_plan,
+        "resident_runtime_denial_route": _safe_str(resident_runtime_denial.get("route")).strip(),
+        "resident_runtime_denial": resident_runtime_denial,
         "activation_execution_denial_route": _safe_str(activation_execution_denial.get("route")).strip(),
         "activation_execution_denial": activation_execution_denial,
         "activation_denial_receipts_route": _safe_str(activation_denial_receipts.get("route")).strip(),
@@ -897,6 +901,28 @@ def _stage6_readiness(
                 "memory_write": False,
             },
             {
+                "id": "resident_runtime_authority_boundary",
+                "status": _safe_str(_as_dict(resident_host.get("resident_runtime_denial")).get("status")).strip()
+                or "missing",
+                "evidence": ["/lens/resident-runtime/execute", "/lens/resident-runtime/plan", "/lens/status"],
+                "applied": bool(_as_dict(resident_host.get("resident_runtime_denial")).get("applied")),
+                "executed": bool(_as_dict(resident_host.get("resident_runtime_denial")).get("executed")),
+                "blockers": _as_list(_as_dict(resident_host.get("resident_runtime_denial")).get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "receipt_write_authority": False,
+                "resident_claim_authority": False,
+            },
+            {
                 "id": "resident_supervision_enablement_gate",
                 "status": _safe_str(_as_dict(resident_host.get("supervision_gate")).get("status")).strip() or "missing",
                 "evidence": ["/lens/host/supervision", "/lens/host/manifest", "/lens/status"],
@@ -1042,6 +1068,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "tray_enablement_gate": tray_enablement_gate,
         "overlay_enablement_gate": overlay_enablement_gate,
         "resident_runtime_plan": resident_runtime_plan,
+        "resident_runtime_denial": _as_dict(resident_host.get("resident_runtime_denial")),
         "resident_surface_activation": resident_surface_activation,
         "command_palette": command_palette,
         "mode_selector": {

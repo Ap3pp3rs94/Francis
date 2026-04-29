@@ -107,6 +107,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/plan" in criteria["system_resident_presence"]["evidence"]
+    assert "/lens/resident-runtime/execute" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-overlay-runtime-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert (
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
@@ -134,6 +135,30 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_activation_plan"]["tray_registration_authority"] is False
     assert payload["resident_runtime_activation_plan"]["overlay_control_authority"] is False
     assert payload["resident_runtime_activation_plan"]["memory_write"] is False
+    assert payload["resident_runtime_authority_boundary"]["status"] == "blocked"
+    assert payload["resident_runtime_authority_boundary"]["ok"] is True
+    assert payload["resident_runtime_authority_boundary"]["applied"] is False
+    assert payload["resident_runtime_authority_boundary"]["executed"] is False
+    assert "/lens/resident-runtime/execute" in payload["resident_runtime_authority_boundary"]["evidence"]
+    assert (
+        "resident_runtime_execution_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    )
+    assert "process_supervision_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    assert "service_control_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    assert "tray_registration_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    assert "overlay_control_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    assert payload["resident_runtime_authority_boundary"]["execution_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["approval_decision_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["local_process_launch_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["process_supervision_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["service_install_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["service_control_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["hotkey_registration_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["tray_registration_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["overlay_control_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["memory_write"] is False
+    assert payload["resident_runtime_authority_boundary"]["receipt_write_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["resident_claim_authority"] is False
     assert payload["live_operator_experience_proof"]["status"] == "proof_passed"
     assert payload["live_operator_experience_proof"]["ok"] is True
     assert payload["live_operator_experience_proof"]["exit_code"] == 0
@@ -204,7 +229,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
-    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_authority_boundary"
+    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_execution_authority_grant"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -214,6 +239,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "bounded_supervisor_observation": True,
         "resident_overlay_boundary_observed": True,
         "resident_overlay_activation_boundary_observed": True,
+        "resident_runtime_authority_boundary_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

@@ -95,7 +95,9 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert proof["checkpoint_status"] == "blocked"
     assert proof["checkpoint_stage_state"] == "active"
     assert proof["checkpoint_system_resident_status"] == "resident_overlay_activation_boundary_observed"
-    assert proof["checkpoint_next_smallest_truthful_gap"] == "supervised_resident_host_runtime_authority_boundary"
+    assert proof["checkpoint_next_smallest_truthful_gap"] == (
+        "supervised_resident_host_runtime_execution_authority_grant"
+    )
     assert proof["activation_boundary_status"] == "proof_passed"
     assert proof["activation_boundary_ok"] is True
     assert proof["host_supervision_status"] == "proof_passed"
@@ -121,7 +123,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert "resident_overlay_activation_not_authorized" in payload["blockers"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
     assert "live_operator_experience_proof_missing" not in payload["blockers"]
-    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_authority_boundary"
+    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_execution_authority_grant"
 
     assert payload["governance"] == {
         "diagnostic_only": True,
