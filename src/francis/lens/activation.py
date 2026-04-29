@@ -14,6 +14,7 @@ LENS_HOST_ACTIVATION_ACTION = "lens.host.foreground_activation"
 LENS_HOST_ACTIVATION_ROUTE = "/lens/host/activation/request"
 LENS_HOST_ACTIVATION_READBACK_ROUTE = "/lens/host/activation"
 LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
+LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_SCOPE = "system.write"
 
 _DEFAULT_REASON = "request Lens host foreground activation"
@@ -90,6 +91,7 @@ def _activation_governance(
         "approval_request_write": approval_request_write,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "read_only_contract": read_only_contract,
         "activation_authority": False,
         "execution_authority": False,
@@ -112,6 +114,7 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
         "route": LENS_HOST_ACTIVATION_ROUTE,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "method": "POST",
         "action": LENS_HOST_ACTIVATION_ACTION,
         "mode": _DEFAULT_MODE,
@@ -384,6 +387,7 @@ def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: An
         "status": status,
         "ready": not deduped_blockers,
         "route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "request_route": LENS_HOST_ACTIVATION_ROUTE,
         "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
         "approval_id": requested_id,
@@ -424,6 +428,163 @@ def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: An
                 read_only_contract=True,
             ),
             "gate": "lens_host_activation_execution_preflight",
+            "next_step": next_step,
+        },
+    }
+
+
+def _step_status(blockers: list[str], blocker_ids: set[str]) -> str:
+    return "blocked" if blocker_ids.intersection(blockers) else "ready"
+
+
+def _plan_step(
+    step_id: str,
+    *,
+    label: str,
+    status: str,
+    source: str,
+    authority_required: str = "",
+    authority_granted: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": step_id,
+        "label": label,
+        "status": status,
+        "source": source,
+        "authority_required": authority_required,
+        "authority_granted": authority_granted,
+    }
+
+
+def _activation_execution_plan_status(blockers: list[str]) -> tuple[str, str]:
+    if "approval_id_required" in blockers:
+        return "blocked", "select_exact_approved_activation_request"
+    if "activation_approval_not_found" in blockers or "activation_approval_wrong_action" in blockers:
+        return "blocked", "select_matching_lens_host_activation_request"
+    if "activation_approval_not_approved" in blockers:
+        return "blocked", "approve_exact_lens_host_activation_request"
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_lens_host_activation"
+    if "operator_posture_not_ready" in blockers:
+        return "blocked", "switch_operator_posture_before_lens_host_activation"
+    return "blocked", "implement_lens_host_execution_authority_in_separate_slice"
+
+
+def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "") -> dict[str, Any]:
+    preflight = lens_host_activation_execution_preflight(approval_id=approval_id, actor=actor)
+    blockers = _str_list(preflight.get("blockers"))
+    host = _as_dict(preflight.get("host"))
+    candidate_command = _as_dict(host.get("candidate_command"))
+    foreground_session = _as_dict(host.get("foreground_session"))
+    process_readback = _as_dict(host.get("process_readback"))
+    service_plan = _as_dict(host.get("service_plan"))
+    status, next_step = _activation_execution_plan_status(blockers)
+    steps = [
+        _plan_step(
+            "verify_exact_approval",
+            label="Verify exact Lens host activation approval",
+            status=_step_status(
+                blockers,
+                {
+                    "approval_id_required",
+                    "activation_approval_not_found",
+                    "activation_approval_wrong_action",
+                    "activation_approval_not_approved",
+                },
+            ),
+            source=LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        ),
+        _plan_step(
+            "verify_actor_scope",
+            label="Verify actor has system.write for Lens activation",
+            status=_step_status(blockers, {"system_write_scope_not_ready"}),
+            source=LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        ),
+        _plan_step(
+            "verify_operator_posture",
+            label="Verify operator posture allows writes",
+            status=_step_status(blockers, {"operator_posture_not_ready"}),
+            source="operator_mode_snapshot",
+        ),
+        _plan_step(
+            "verify_host_command",
+            label="Verify bounded foreground Lens host command",
+            status=_step_status(
+                blockers,
+                {
+                    "lens_host_foreground_command_unavailable",
+                    "foreground_session_not_supported",
+                    "lens_preflight_blocked",
+                },
+            ),
+            source="/lens/host/manifest",
+        ),
+        _plan_step(
+            "verify_no_existing_host_process",
+            label="Verify no Lens host process is already observed",
+            status=_step_status(blockers, {"lens_host_process_already_observed"}),
+            source="/lens/host/manifest",
+        ),
+        _plan_step(
+            "launch_foreground_status_session",
+            label="Launch bounded foreground Lens host status session",
+            status="blocked",
+            source="future_execution_slice",
+            authority_required="local_process_launch",
+            authority_granted=False,
+        ),
+        _plan_step(
+            "record_activation_receipt",
+            label="Record activation receipt after launch",
+            status="blocked",
+            source="future_receipt_slice",
+            authority_required="receipt_write",
+            authority_granted=False,
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": "lens.host.activation.execution_plan",
+        "status": status,
+        "plan_available": True,
+        "execution_ready": False,
+        "route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "request_route": LENS_HOST_ACTIVATION_ROUTE,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "approval_id": _safe_str(preflight.get("approval_id")).strip(),
+        "actor": _redact_free_text(actor),
+        "preflight": preflight,
+        "plan": {
+            "mode": _DEFAULT_MODE,
+            "launch_kind": "foreground_status_session",
+            "steps": steps,
+            "candidate_command": candidate_command,
+            "foreground_session": foreground_session,
+            "process_readback": process_readback,
+            "service_plan": service_plan,
+            "would_launch_process": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+            "would_write_memory": False,
+            "would_decide_approval": False,
+        },
+        "blockers": blockers,
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_ACTIVATION_PLAN_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_activation_execution_plan",
+            "read_only_contract": True,
+            "plan_readback_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "receipt_write_authority": False,
             "next_step": next_step,
         },
     }

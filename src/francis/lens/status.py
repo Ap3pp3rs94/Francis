@@ -8,6 +8,7 @@ from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
     lens_host_activation_execution_preflight,
+    lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
 )
@@ -233,6 +234,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
+    activation_execution_plan = lens_host_activation_execution_plan()
     status_runner_present = _safe_str(launch_manifest.get("status")).strip() == "status_runner_present"
     service_install = _as_dict(launch_manifest.get("service_install"))
     service_config_present = bool(service_install.get("config_exists"))
@@ -331,6 +333,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_state": activation_state,
         "activation_execution_preflight_route": _safe_str(activation_execution_preflight.get("route")).strip(),
         "activation_execution_preflight": activation_execution_preflight,
+        "activation_execution_plan_route": _safe_str(activation_execution_plan.get("route")).strip(),
+        "activation_execution_plan": activation_execution_plan,
         "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
         "launch_manifest": launch_manifest,
         "status_route": "/lens/status",
@@ -771,6 +775,20 @@ def _stage6_readiness(
                 "evidence": ["/lens/host/activation/preflight", "/lens/host/activation", "/lens/status"],
                 "ready": bool(_as_dict(resident_host.get("activation_execution_preflight")).get("ready")),
                 "blockers": _as_list(_as_dict(resident_host.get("activation_execution_preflight")).get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+            },
+            {
+                "id": "host_activation_execution_plan",
+                "status": _safe_str(_as_dict(resident_host.get("activation_execution_plan")).get("status")).strip()
+                or "missing",
+                "evidence": ["/lens/host/activation/plan", "/lens/host/activation/preflight", "/lens/status"],
+                "plan_available": bool(_as_dict(resident_host.get("activation_execution_plan")).get("plan_available")),
+                "execution_ready": bool(
+                    _as_dict(resident_host.get("activation_execution_plan")).get("execution_ready")
+                ),
+                "blockers": _as_list(_as_dict(resident_host.get("activation_execution_plan")).get("blockers")),
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,

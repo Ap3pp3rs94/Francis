@@ -355,6 +355,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "route": "/lens/host/activation/request",
         "readback_route": "/lens/host/activation",
         "preflight_route": "/lens/host/activation/preflight",
+        "plan_route": "/lens/host/activation/plan",
         "method": "POST",
         "action": "lens.host.foreground_activation",
         "mode": "foreground_status_session",
@@ -372,6 +373,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "approval_request_write": True,
             "readback_route": "/lens/host/activation",
             "preflight_route": "/lens/host/activation/preflight",
+            "plan_route": "/lens/host/activation/plan",
             "read_only_contract": False,
             "activation_authority": False,
             "execution_authority": False,
@@ -413,6 +415,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_preflight["status"] == "blocked"
     assert activation_preflight["ready"] is False
     assert activation_preflight["route"] == "/lens/host/activation/preflight"
+    assert activation_preflight["plan_route"] == "/lens/host/activation/plan"
     assert activation_preflight["request_route"] == "/lens/host/activation/request"
     assert activation_preflight["readback_route"] == "/lens/host/activation"
     assert activation_preflight["approval"]["required"] is True
@@ -427,6 +430,36 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_preflight["governance"]["execution_authority"] is False
     assert activation_preflight["governance"]["approval_decision_authority"] is False
     assert activation_preflight["governance"]["local_process_launch_authority"] is False
+    assert resident_host["activation_execution_plan_route"] == "/lens/host/activation/plan"
+    activation_plan = resident_host["activation_execution_plan"]
+    assert activation_plan["kind"] == "lens.host.activation.execution_plan"
+    assert activation_plan["status"] == "blocked"
+    assert activation_plan["plan_available"] is True
+    assert activation_plan["execution_ready"] is False
+    assert activation_plan["route"] == "/lens/host/activation/plan"
+    assert activation_plan["preflight_route"] == "/lens/host/activation/preflight"
+    assert activation_plan["preflight"]["kind"] == "lens.host.activation.execution_preflight"
+    assert activation_plan["plan"]["would_launch_process"] is False
+    assert activation_plan["plan"]["would_install_service"] is False
+    assert activation_plan["plan"]["would_start_service"] is False
+    assert activation_plan["plan"]["would_register_hotkey"] is False
+    assert activation_plan["plan"]["would_open_overlay"] is False
+    assert activation_plan["plan"]["would_write_memory"] is False
+    assert activation_plan["plan"]["would_decide_approval"] is False
+    plan_steps = {step["id"]: step for step in activation_plan["plan"]["steps"]}
+    assert plan_steps["verify_exact_approval"]["status"] == "blocked"
+    assert plan_steps["launch_foreground_status_session"]["status"] == "blocked"
+    assert plan_steps["launch_foreground_status_session"]["authority_granted"] is False
+    assert plan_steps["record_activation_receipt"]["authority_granted"] is False
+    assert "approval_id_required" in activation_plan["blockers"]
+    assert "local_process_launch_authority_not_granted" in activation_plan["blockers"]
+    assert activation_plan["governance"]["gate"] == "lens_host_activation_execution_plan"
+    assert activation_plan["governance"]["read_only_contract"] is True
+    assert activation_plan["governance"]["plan_readback_only"] is True
+    assert activation_plan["governance"]["execution_authority"] is False
+    assert activation_plan["governance"]["approval_decision_authority"] is False
+    assert activation_plan["governance"]["local_process_launch_authority"] is False
+    assert activation_plan["governance"]["receipt_write_authority"] is False
     assert resident_host["launch_manifest_route"] == "/lens/host/manifest"
     assert resident_host["status_route"] == "/lens/status"
     assert resident_host["local_hud_route"] == "/lens/hud"
@@ -851,6 +884,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert execution_preflight_criterion["execution_authority"] is False
     assert execution_preflight_criterion["approval_decision_authority"] is False
     assert execution_preflight_criterion["local_process_launch_authority"] is False
+    execution_plan_criterion = _criterion(body, "host_activation_execution_plan")
+    assert execution_plan_criterion["status"] == "blocked"
+    assert execution_plan_criterion["plan_available"] is True
+    assert execution_plan_criterion["execution_ready"] is False
+    assert execution_plan_criterion["evidence"] == [
+        "/lens/host/activation/plan",
+        "/lens/host/activation/preflight",
+        "/lens/status",
+    ]
+    assert "approval_id_required" in execution_plan_criterion["blockers"]
+    assert "local_process_launch_authority_not_granted" in execution_plan_criterion["blockers"]
+    assert execution_plan_criterion["execution_authority"] is False
+    assert execution_plan_criterion["approval_decision_authority"] is False
+    assert execution_plan_criterion["local_process_launch_authority"] is False
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert "summon_binding_missing" in _criterion(body, "summon_anywhere")["blockers"]
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
@@ -1277,6 +1324,36 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert approved_preflight_body["governance"]["execution_authority"] is False
     assert approved_preflight_body["governance"]["approval_decision_authority"] is False
     assert approved_preflight_body["governance"]["local_process_launch_authority"] is False
+
+    approved_plan = client.get(f"/lens/host/activation/plan?approval_id={approval_id}&actor=test.system.write")
+    assert approved_plan.status_code == 200
+    approved_plan_body = approved_plan.json()
+    assert approved_plan_body["kind"] == "lens.host.activation.execution_plan"
+    assert approved_plan_body["status"] == "blocked"
+    assert approved_plan_body["plan_available"] is True
+    assert approved_plan_body["execution_ready"] is False
+    assert approved_plan_body["preflight"]["approval"]["status"] == "approved"
+    assert approved_plan_body["preflight"]["permission"]["ready"] is True
+    assert approved_plan_body["preflight"]["operator_posture"]["ready"] is True
+    approved_plan_steps = {step["id"]: step for step in approved_plan_body["plan"]["steps"]}
+    assert approved_plan_steps["verify_exact_approval"]["status"] == "ready"
+    assert approved_plan_steps["verify_actor_scope"]["status"] == "ready"
+    assert approved_plan_steps["verify_operator_posture"]["status"] == "ready"
+    assert approved_plan_steps["launch_foreground_status_session"]["status"] == "blocked"
+    assert approved_plan_steps["launch_foreground_status_session"]["authority_granted"] is False
+    assert approved_plan_steps["record_activation_receipt"]["authority_granted"] is False
+    assert approved_plan_body["plan"]["would_launch_process"] is False
+    assert approved_plan_body["plan"]["would_write_memory"] is False
+    assert "activation_approval_not_approved" not in approved_plan_body["blockers"]
+    assert "system_write_scope_not_ready" not in approved_plan_body["blockers"]
+    assert "local_process_launch_authority_not_granted" in approved_plan_body["blockers"]
+    assert approved_plan_body["governance"]["gate"] == "lens_host_activation_execution_plan"
+    assert approved_plan_body["governance"]["read_only_contract"] is True
+    assert approved_plan_body["governance"]["plan_readback_only"] is True
+    assert approved_plan_body["governance"]["execution_authority"] is False
+    assert approved_plan_body["governance"]["approval_decision_authority"] is False
+    assert approved_plan_body["governance"]["local_process_launch_authority"] is False
+    assert approved_plan_body["governance"]["receipt_write_authority"] is False
 
     from francis.world_state.operator_mode import set_control_mode
 

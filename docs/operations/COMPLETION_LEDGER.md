@@ -11831,6 +11831,49 @@ execution preflight gate:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens host activation execution-plan readback
+
+Stage 6/Lens now has a read-only execution-plan readback for the future Lens
+host activation path. `GET /lens/host/activation/plan` consumes the exact
+activation preflight contract, keeps the selected approval, actor scope,
+operator posture, host command, process readback, service plan, and primitive
+preflight evidence together, and projects the bounded steps that a future
+activation execution slice would need to satisfy before launching anything.
+`/lens/status` and `/lens/host` embed the same contract as
+`activation_execution_plan`, and Stage 6 readiness now includes a
+`host_activation_execution_plan` criterion.
+
+The plan is deliberately non-executing. It can show that an approved activation
+request cleared approval and actor-scope blockers while still blocking launch
+on remaining host preflight blockers and
+`local_process_launch_authority_not_granted`. The launch and receipt steps are
+reported as future-slice steps with authority granted set to false.
+
+This is readback-only and plan-only. It does not launch a Lens host process;
+install, start, stop, restart, supervise, or control a Windows service; register
+tray presence; bind a global hotkey; open or focus an overlay window; summon
+Francis anywhere; capture screen content; write memory; write activation
+receipts; decide approvals; execute operator actions; or grant overlay-control,
+window-management, summon, capture, sensing, telemetry, promotion, policy,
+service-install, service-control, wrapper-write, receipt-write, or API
+local-process-launch authority.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens host activation
+execution-plan readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_contract_chat_ui.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_service_install_plan_script.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py tests\test_api_approvals.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -11850,10 +11893,10 @@ These remain true and should block any "finished" claim:
   preflight baseline plus API preflight readback, and disabled overlay/window
   preflight baseline plus API preflight readback, and a governed host activation
   approval-request boundary plus read-only activation approval-state readback
-  and read-only activation execution preflight gate, but no OS-wide summon, resident
-  host process, installed/started service, resident overlay/HUD runtime,
-  OS-level command palette, tray presence, hotkey binding, or live Pilot takeover
-  surface yet
+  plus read-only activation execution preflight and execution-plan gates, but no
+  OS-wide summon, resident host process, installed/started service, resident
+  overlay/HUD runtime, OS-level command palette, tray presence, hotkey binding,
+  or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly
   exposed end-to-end in the chat UI
 - memory and continuity are materially present but still partial as operator-facing,
