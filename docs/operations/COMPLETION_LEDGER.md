@@ -13267,6 +13267,42 @@ supervision authority preflight:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident host supervision authority denial boundary
+
+Stage 6/Lens now has a governed denial boundary for attempted resident host
+supervision authority grants at `POST /lens/host/supervision/authority`. The
+route is the write-attempt side of the existing read-only preflight: it evaluates
+the actor through the existing `system.write` API permission gate, carries the
+host supervision preflight blockers forward, and always returns a typed
+`lens.host.supervision_authority.denial` response with `boundary_ready: true`,
+`applied: false`, `executed: false`, and `authority_granted: false`.
+
+`/lens/status` now projects `supervision_authority_denial` under
+`resident_host`, Stage 6 readiness includes
+`resident_host_supervision_authority_denial_boundary`, the resident runtime
+authority readiness audit composes the host supervision authority denial boundary,
+and the Stage 6 checkpoint reports
+`resident_host_supervision_authority_denial_boundary_observed: true`. Because the
+denial boundary is now observable, the checkpoint's next smallest truthful gap
+moves from `supervised_resident_host_process_supervision_authority_denial_boundary`
+to `resident_host_supervision_authority_denial_receipt_readback`.
+
+This is backend API/readback, diagnostic checkpoint, and test work only. It does
+not grant resident runtime execution authority, approval decision authority,
+local process launch authority, process supervision or restart authority, service
+install/control authority, tray, hotkey, overlay, summon, capture, memory-write,
+receipt-write, denial-receipt-write, or resident-claim authority. It does not
+launch a Lens host, supervise or restart a process, install/start/control a
+service, register tray presence, register or bind a hotkey, open or control an
+overlay, capture screen content, write memory, write receipts, decide approvals,
+claim resident status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident host
+supervision authority denial boundary:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13337,7 +13373,11 @@ These remain true and should block any "finished" claim:
   plus a direct read-only `/lens/host/supervision/authority` preflight that
   separates resident host operational prerequisites from missing
   process-supervision, restart, service-install, service-control, and
-  resident-claim authority,
+  resident-claim authority, plus a governed
+  `POST /lens/host/supervision/authority` denial boundary that keeps attempted
+  resident host process supervision authority grants blocked without supervising
+  or restarting a process, installing or controlling a service, writing receipts,
+  or claiming resident status,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

@@ -327,6 +327,7 @@ $Payload = [ordered]@{
     bounded_process_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_process_launch' -Default $false)
     bounded_supervisor_observation = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'bounded_supervisor_observation' -Default $false)
     resident_overlay_activation_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_overlay_activation_boundary_observed' -Default $false)
+    resident_host_supervision_authority_denial_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_denial_boundary_observed' -Default $false)
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false

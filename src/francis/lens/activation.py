@@ -32,6 +32,7 @@ LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
+LENS_HOST_SUPERVISION_AUTHORITY_ROUTE = "/lens/host/supervision/authority"
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
@@ -1119,6 +1120,12 @@ def lens_resident_runtime_authority_grant_readiness_audit(
     preflight = lens_preflight()
     supervision_gate = lens_host_supervision_gate(manifest=manifest)
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=manifest)
+    supervision_authority_denial = deny_lens_host_supervision_authority_grant(
+        actor=actor,
+        reason="audit Lens host supervision authority boundary",
+        route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        method="POST",
+    )
     summon_gate = lens_summon_enablement_gate(preflight=preflight)
     tray_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_gate = lens_overlay_enablement_gate(preflight=preflight)
@@ -1135,6 +1142,12 @@ def lens_resident_runtime_authority_grant_readiness_audit(
     runtime_execution_boundary_observed = not bool(runtime_denial.get("applied")) and not bool(
         runtime_denial.get("executed")
     )
+    supervision_authority_boundary_observed = (
+        bool(supervision_authority_denial.get("boundary_ready"))
+        and not bool(supervision_authority_denial.get("applied"))
+        and not bool(supervision_authority_denial.get("executed"))
+        and not bool(supervision_authority_denial.get("authority_granted"))
+    )
     blockers = _dedupe_strs(
         [
             *_str_list(runtime_preflight.get("blockers")),
@@ -1144,6 +1157,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(supervision_gate.get("blockers")),
             *_str_list(supervision_authority_preflight.get("blockers")),
+            *_str_list(supervision_authority_denial.get("blockers")),
             *_str_list(summon_gate.get("blockers")),
             *_str_list(tray_gate.get("blockers")),
             *_str_list(overlay_gate.get("blockers")),
@@ -1229,6 +1243,16 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             ready=bool(supervision_authority_preflight.get("ready")),
             status=supervision_authority_preflight.get("status"),
             blockers=supervision_authority_preflight.get("blockers"),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "resident_host_supervision_authority_denial_boundary",
+            label="Resident host supervision authority denial boundary",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            ready=supervision_authority_boundary_observed,
+            status=supervision_authority_denial.get("status"),
+            blockers=supervision_authority_denial.get("blockers"),
             authority_required="process_supervision_and_service_control",
             authority_granted=False,
         ),
@@ -1340,6 +1364,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             "execute_status": _safe_str(runtime_denial.get("status")).strip(),
             "supervision_status": _safe_str(supervision_gate.get("status")).strip(),
             "supervision_authority_preflight_status": _safe_str(supervision_authority_preflight.get("status")).strip(),
+            "supervision_authority_denial_status": _safe_str(supervision_authority_denial.get("status")).strip(),
             "summon_status": _safe_str(summon_gate.get("status")).strip(),
             "tray_status": _safe_str(tray_gate.get("status")).strip(),
             "overlay_status": _safe_str(overlay_gate.get("status")).strip(),
@@ -1928,6 +1953,123 @@ def deny_lens_resident_runtime_execution_authority_grant(
     elif record_receipt:
         governance["denial_receipt_write_blocker"] = "resident_runtime_authority_grant_not_ready"
     return response
+
+
+def _host_supervision_authority_boundary_status(blockers: list[str]) -> tuple[str, str]:
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_lens_host_supervision_authority_boundary"
+    return (
+        "denied_no_supervision_authority",
+        "review_host_supervision_authority_boundary_before_adding_resident_host_supervision",
+    )
+
+
+def deny_lens_host_supervision_authority_grant(
+    *,
+    actor: Any = "",
+    reason: Any = "attempt Lens host supervision authority grant",
+    route: str = LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_SUPERVISION_AUTHORITY_ROUTE
+    permission = _permission_readiness(actor, route=safe_route, method=method)
+    preflight = lens_host_supervision_authority_preflight()
+    blockers = _str_list(preflight.get("blockers"))
+    if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
+        blockers.append("system_write_scope_not_ready")
+    blockers.extend(
+        [
+            "host_supervision_authority_grant_not_implemented",
+            "process_supervision_authority_not_granted",
+            "process_restart_authority_not_granted",
+            "service_install_authority_not_granted",
+            "service_control_authority_not_granted",
+            "resident_host_supervision_authority_not_granted",
+            "resident_claim_authority_not_granted",
+        ]
+    )
+    deduped_blockers = sorted({blocker for blocker in blockers if blocker})
+    status, next_step = _host_supervision_authority_boundary_status(deduped_blockers)
+    denial = {
+        "reason": "host_supervision_authority_grant_not_implemented",
+        "message": (
+            "Lens resident host process supervision authority is denied until an explicit supervised "
+            "host implementation and receipt path exist."
+        ),
+        "would_grant_process_supervision_authority": False,
+        "would_grant_process_restart_authority": False,
+        "would_grant_service_install_authority": False,
+        "would_grant_service_control_authority": False,
+        "would_grant_local_process_launch_authority": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "would_claim_resident": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+    }
+    governance: dict[str, Any] = {
+        **_activation_governance(
+            route=safe_route,
+            approval_request_write=False,
+            read_only_contract=False,
+        ),
+        "gate": "lens_host_supervision_authority_denial_boundary",
+        "authority_grant_boundary": True,
+        "denial_boundary": True,
+        "resident_host_supervision_boundary": True,
+        "activation_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "tray_registration_authority": False,
+        "tray_icon_authority": False,
+        "notification_authority": False,
+        "hotkey_registration_authority": False,
+        "overlay_control_authority": False,
+        "window_management_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "memory_write": False,
+        "receipt_write_authority": False,
+        "denial_receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "runtime_mutation_authority_granted": False,
+        "mutation_authority_granted": False,
+        "authority_granted": False,
+        "next_step": next_step,
+    }
+    return {
+        "ok": True,
+        "kind": "lens.host.supervision_authority.denial",
+        "status": status,
+        "route": safe_route,
+        "method": method,
+        "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "supervision_route": "/lens/host/supervision",
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "applied": False,
+        "executed": False,
+        "authority_granted": False,
+        "boundary_ready": True,
+        "ready": False,
+        "supervision_ready": False,
+        "authority_ready": False,
+        "resident_claim_allowed": False,
+        "permission": permission,
+        "preflight": preflight,
+        "blockers": deduped_blockers,
+        "denial": denial,
+        "governance": governance,
+    }
 
 
 def lens_resident_runtime_activation_plan(
