@@ -47,7 +47,14 @@ function Write-JsonFile {
   if (-not [string]::IsNullOrWhiteSpace($Parent)) {
     New-Item -ItemType Directory -Force -Path $Parent | Out-Null
   }
-  $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding UTF8
+  $FileName = [System.IO.Path]::GetFileName($Path)
+  $TempPath = Join-Path $Parent ('.' + $FileName + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+  try {
+    $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-Item -LiteralPath $TempPath -Destination $Path -Force
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 $DataRoot = Get-DataRoot

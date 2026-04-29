@@ -38,7 +38,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
-    proc = _run_proof("-Mode", "Status", "-ForegroundRunSeconds", "2")
+    proc = _run_proof("-Mode", "Status")
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
@@ -61,7 +61,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     )
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["supervision_readiness_proof"]["status"] == "proof_passed"
+    assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
+    assert checks["supervision_proof_available"]["status"] == "available"
     assert checks["tray_presence_preflight"]["status"] == "blocked_disabled"
     assert checks["overlay_window_preflight"]["status"] == "blocked_disabled"
     assert checks["summon_binding_preflight"]["status"] == "blocked_disabled"
@@ -70,7 +71,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
-    assert proof["supervision_status"] == "proof_passed"
+    assert proof["host_lifecycle_status"] == "blocked"
+    assert proof["supervision_proof_available"] is True
     assert proof["tray_status"] == "blocked"
     assert proof["overlay_status"] == "blocked"
     assert proof["summon_status"] == "blocked"
@@ -94,8 +96,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
-        "bounded_foreground_session": True,
-        "temporary_runtime_state_write": True,
+        "bounded_foreground_session": False,
+        "temporary_runtime_state_write": False,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
