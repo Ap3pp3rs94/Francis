@@ -12282,6 +12282,42 @@ experience readback proof:
   Result: `passed` with the expected PowerShell line-ending warning for
   `scripts/lens-stage6-checkpoint.ps1`
 
+### 2026-04-29 - Stage 6/Lens bounded host launch diagnostic
+
+Stage 6/Lens now has an explicit bounded local host launch diagnostic.
+`scripts/lens-host.ps1 -Mode Launch -RunSeconds <n>` starts one child
+PowerShell process running the existing bounded `Foreground` host mode,
+observes the runtime state and PID through `data/runtime/lens-host/status.json`
+and `lens-host.pid`, returns `status: launch_started` when the foreground
+process is observed, and lets that foreground host self-stop after the requested
+run window. The launch response now distinguishes diagnostic launch authority
+from product launch authority: `diagnostic_launch_authority: true`,
+`launch_authority: false`, `product_execution_authority: false`, and
+`api_local_process_launch_authority: false`.
+
+This removes the previous `Launch` mode refusal for the local diagnostic runner
+only. It does not create a resident Lens host, install/start/stop/restart a
+service, supervise the process after the bounded window, register tray presence,
+bind a global hotkey, open or control an overlay, summon Francis anywhere, add
+API launch authority, grant execution authority, approve anything, write memory,
+or claim Stage 6 closure. The remaining truthful Stage 6 blocker is still
+resident host or overlay runtime that is supervised and operator-visible beyond
+this bounded diagnostic process.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens bounded host launch
+diagnostic:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_live_operator_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Launch -RunSeconds 3`
+  Result: `passed` against an isolated temporary `FRANCIS_DATA_DIR`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12290,9 +12326,10 @@ These remain true and should block any "finished" claim:
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
   binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
   readback only, has a `/lens/host` resident-host readiness contract, and has a
-  disabled `/lens/host/manifest` launch-manifest contract plus a bounded
-  foreground `scripts/lens-host.ps1` status session with live foreground process
-  readback proof plus API live process readback, a supervision readiness proof
+  disabled `/lens/host/manifest` API launch-manifest contract plus a bounded
+  foreground `scripts/lens-host.ps1` status session and bounded diagnostic
+  host-launch mode with live foreground process readback proof plus API live
+  process readback, a supervision readiness proof
   diagnostic, resident surface readiness proof diagnostic, disabled tracked service config
   baseline, resident supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
@@ -12308,7 +12345,7 @@ These remain true and should block any "finished" claim:
   summon, plus a resident-surface activation boundary readback that keeps the
   resident claim blocked, plus a live HTTP operator-experience readback proof
   that verifies the Lens status payload through a temporary local API process,
-  but no resident host process, installed/started service, resident overlay/HUD
+  but no supervised resident host process, installed/started service, resident overlay/HUD
   runtime, OS-level command palette, tray presence, hotkey binding, summon-anywhere
   behavior, or live Pilot takeover surface yet
 - the full plan -> gate -> execute -> trace -> memory loop is not yet clearly

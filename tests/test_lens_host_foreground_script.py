@@ -155,3 +155,61 @@ def test_lens_host_status_observes_live_foreground_session(tmp_path: Path) -> No
         if proc.poll() is None:
             proc.terminate()
             proc.wait(timeout=5)
+
+
+def test_lens_host_launch_starts_bounded_background_session(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    proc = _run_host("-Mode", "Launch", "-RunSeconds", "3", data_dir=data_dir)
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.host.status_runner"
+    assert payload["status"] == "launch_started"
+    assert payload["mode"] == "launch"
+    assert payload["launch_supported"] is True
+    assert payload["launch_authority"] is False
+    assert payload["diagnostic_launch_authority"] is True
+    assert payload["launch"]["status"] == "started_observed"
+    assert payload["launch"]["observed_pid"] > 0
+    assert payload["launch"]["run_seconds"] == 3
+    assert payload["launch"]["stop_mode"] == "bounded_self_stop"
+    assert payload["process_readback"]["status"] == "process_observed"
+    assert payload["process_readback"]["state_status"] == "foreground_running"
+    assert payload["process_readback"]["pid_present"] is True
+    assert payload["process_readback"]["pid"] == payload["launch"]["observed_pid"]
+    assert payload["process_readback"]["process_alive"] is True
+    assert payload["process_readback"]["blocked_reason"] == "resident_host_not_supervised"
+    assert payload["foreground_supported"] is True
+    assert payload["foreground_session"] is True
+    assert payload["resident"] is False
+    assert payload["process_supervision"] is False
+    assert payload["tray_presence"] is False
+    assert payload["overlay_window"] is False
+    assert payload["summon_anywhere"] is False
+    assert "resident_host_process_not_supervised" in payload["blockers"]
+    assert "lens_host_runtime_not_implemented" in payload["blockers"]
+
+    governance = payload["governance"]
+    assert governance["diagnostic_only"] is True
+    assert governance["bounded_process_launch"] is True
+    assert governance["temporary_runtime_state_write"] is True
+    assert governance["product_execution_authority"] is False
+    assert governance["execution_authority"] is False
+    assert governance["approval_decision_authority"] is False
+    assert governance["memory_write"] is False
+    assert governance["overlay_control_authority"] is False
+    assert governance["summon_authority"] is False
+    assert governance["local_process_launch_authority"] is True
+    assert governance["api_local_process_launch_authority"] is False
+    assert governance["service_install_authority"] is False
+    assert governance["service_control_authority"] is False
+    assert governance["mutation_authority_granted"] is False
+
+    stopped_state = _wait_for_state(data_dir, "foreground_stopped", timeout_seconds=8)
+    assert stopped_state["status"] == "foreground_stopped"
+    assert stopped_state["pid"] == payload["launch"]["observed_pid"]
+    assert stopped_state["process_alive"] is False
+    assert stopped_state["resident"] is False
+    assert stopped_state["service_managed"] is False
+    assert stopped_state["governance"]["memory_write"] is False
+    assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()

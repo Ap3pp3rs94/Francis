@@ -57,6 +57,92 @@ function Write-JsonFile {
   }
 }
 
+function Get-PowerShellPath {
+  try {
+    $Current = Get-Process -Id $PID -ErrorAction Stop
+    if (-not [string]::IsNullOrWhiteSpace([string]$Current.Path)) {
+      return [string]$Current.Path
+    }
+  } catch {
+  }
+
+  $Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -ne $Pwsh) {
+    return [string]$Pwsh.Source
+  }
+  $WindowsPowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -ne $WindowsPowerShell) {
+    return [string]$WindowsPowerShell.Source
+  }
+  return ''
+}
+
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Quote-PowerShellString {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return "''"
+  }
+  return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Read-JsonFile {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Get-PropertyValue {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Default = $null
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  return $Property.Value
+}
+
+function Wait-ForRuntimeState {
+  param(
+    [string]$StatePath,
+    [string]$Status,
+    [int]$TimeoutSeconds = 10
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $Deadline) {
+    $Payload = Read-JsonFile -Path $StatePath
+    if ($null -ne $Payload -and [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq $Status) {
+      return $Payload
+    }
+    Start-Sleep -Milliseconds 100
+  }
+  return (Read-JsonFile -Path $StatePath)
+}
+
 $DataRoot = Get-DataRoot
 $RuntimeDir = Join-Path $DataRoot 'runtime\lens-host'
 $ProcessStatePath = Join-Path $RuntimeDir 'status.json'
@@ -311,6 +397,120 @@ if ($Mode -eq 'Foreground') {
   $payload.message = 'Lens host foreground status session completed; resident service, tray, summon, and overlay remain unimplemented.'
   $payload | ConvertTo-Json -Depth 8
   exit 0
+}
+
+$LaunchRunSeconds = if ($RunSeconds -gt 0) { $RunSeconds } else { 10 }
+if ($Mode -eq 'Launch') {
+  $PowerShellPath = Get-PowerShellPath
+  $HostScriptPath = [string]$MyInvocation.MyCommand.Path
+  $LaunchStdoutPath = Join-Path $RuntimeDir 'launch-stdout.json'
+  $LaunchStderrPath = Join-Path $RuntimeDir 'launch-stderr.txt'
+  New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+  Remove-Item -LiteralPath $LaunchStdoutPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $LaunchStderrPath -Force -ErrorAction SilentlyContinue
+
+  $LaunchStarted = $false
+  $LaunchPid = 0
+  $RunningState = $null
+  if (-not [string]::IsNullOrWhiteSpace($PowerShellPath)) {
+    $ChildCommand = (
+      '$env:FRANCIS_DATA_DIR = ' +
+      (Quote-PowerShellString -Value $DataRoot) +
+      '; & ' +
+      (Quote-PowerShellString -Value $HostScriptPath) +
+      ' -Mode Foreground -RunSeconds ' +
+      [string]$LaunchRunSeconds +
+      ' > ' +
+      (Quote-PowerShellString -Value $LaunchStdoutPath) +
+      ' 2> ' +
+      (Quote-PowerShellString -Value $LaunchStderrPath)
+    )
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = $PowerShellPath
+    $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $ChildCommand)
+    $StartInfo.WorkingDirectory = $RepoRoot
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.CreateNoWindow = $true
+    $StartInfo.RedirectStandardOutput = $false
+    $StartInfo.RedirectStandardError = $false
+
+    $LaunchProcess = [System.Diagnostics.Process]::new()
+    $LaunchProcess.StartInfo = $StartInfo
+    $LaunchStarted = $LaunchProcess.Start()
+    if ($LaunchStarted) {
+      $LaunchPid = [int]$LaunchProcess.Id
+      $RunningState = Wait-ForRuntimeState -StatePath $ProcessStatePath -Status 'foreground_running' -TimeoutSeconds 10
+    }
+  }
+
+  $ObservedPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
+  $LaunchObserved = (
+    $LaunchStarted -and
+    [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '') -eq 'foreground_running' -and
+    [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false) -and
+    $ObservedPid -gt 0
+  )
+  $ObservedAt = (Get-Date).ToUniversalTime().ToString('o')
+
+  $payload.ok = $LaunchObserved
+  $payload.status = if ($LaunchObserved) { 'launch_started' } else { 'launch_unverified' }
+  $payload.mode = 'launch'
+  $payload.launch_supported = $true
+  $payload.launch_authority = $false
+  $payload.diagnostic_launch_authority = $LaunchObserved
+  $payload.foreground_supported = $true
+  $payload.foreground_session = $LaunchObserved
+  $payload.foreground_run_seconds = $LaunchRunSeconds
+  $payload.process_readback.status = if ($LaunchObserved) { 'process_observed' } else { 'missing' }
+  $payload.process_readback.state_exists = $null -ne $RunningState
+  $payload.process_readback.state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '')
+  $payload.process_readback.state_updated_at = [string](Get-PropertyValue -Payload $RunningState -Name 'updated_at' -Default $ObservedAt)
+  $payload.process_readback.pid_present = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $payload.process_readback.pid = $ObservedPid
+  $payload.process_readback.process_alive = $LaunchObserved
+  $payload.process_readback.blocked_reason = if ($LaunchObserved) { 'resident_host_not_supervised' } else { 'resident_host_process_missing' }
+  $payload.blockers = if ($LaunchObserved) {
+    @(
+      'lens_host_runtime_not_implemented',
+      'resident_host_process_not_supervised',
+      'tray_host_missing',
+      'global_hotkey_binding_missing',
+      'overlay_window_missing',
+      'summon_binding_missing'
+    )
+  } else {
+    $Blockers
+  }
+  $payload.launch = [ordered]@{
+    status = if ($LaunchObserved) { 'started_observed' } else { 'not_observed' }
+    launcher_pid = $LaunchPid
+    observed_pid = $ObservedPid
+    run_seconds = $LaunchRunSeconds
+    runtime_state_path = 'data/runtime/lens-host/status.json'
+    pid_path = 'data/runtime/lens-host/lens-host.pid'
+    stdout_path = 'data/runtime/lens-host/launch-stdout.json'
+    stderr_path = 'data/runtime/lens-host/launch-stderr.txt'
+    observed_at = $ObservedAt
+    stop_mode = 'bounded_self_stop'
+  }
+  $payload.governance.diagnostic_only = $true
+  $payload.governance.bounded_process_launch = $true
+  $payload.governance.temporary_runtime_state_write = $true
+  $payload.governance.product_execution_authority = $false
+  $payload.governance.local_process_launch_authority = $LaunchObserved
+  $payload.governance.api_local_process_launch_authority = $false
+  $payload.governance.foreground_session_authority = $true
+  $payload.governance.mutation_authority_granted = $false
+  $payload.message = if ($LaunchObserved) {
+    'Bounded Lens host foreground process was launched and observed; it self-stops after the requested run window and does not provide service, tray, summon, or overlay runtime.'
+  } else {
+    'Bounded Lens host launch could not be observed.'
+  }
+  $payload | ConvertTo-Json -Depth 8
+  if ($LaunchObserved) {
+    exit 0
+  }
+  exit 1
 }
 
 $payload.ok = $false
