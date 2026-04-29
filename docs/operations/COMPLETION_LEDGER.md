@@ -13172,6 +13172,53 @@ authority grant denial receipt readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident runtime authority grant readiness audit
+
+Stage 6/Lens now has a read-only readiness audit for the resident-runtime
+authority-grant path. `GET
+/lens/resident-runtime/authority-grant/readiness` composes the existing resident
+runtime preflight, execution policy contract, authority-grant denial boundary,
+authority-grant denial receipt readback, runtime activation plan, and Lens host
+enablement gates into one blocker-oriented audit record. The audit reports which
+requirements are ready, which are blocked, and which exact blockers prevent
+Francis from truthfully granting resident runtime execution authority.
+
+`/lens/status` now projects
+`resident_runtime_authority_grant_readiness`, Stage 6 readiness includes
+`resident_runtime_authority_grant_readiness_audit`, and the Stage 6 checkpoint
+reports
+`resident_runtime_execution_authority_grant_readiness_audit_observed: true`.
+Because the readiness audit is now observable, the checkpoint's next smallest
+truthful gap moves from
+`supervised_resident_host_runtime_authority_grant_readiness_audit` to
+`resolve_supervised_resident_host_runtime_authority_grant_blockers`.
+
+This is backend API/readback, diagnostic checkpoint, and test work only. It is
+read-only and audit-only. It does not grant resident runtime execution authority,
+approval decision authority, local process launch authority, process supervision
+or restart authority, service install/control authority, tray, hotkey, overlay,
+summon, capture, memory-write, receipt-write, denial-receipt-write, or
+resident-claim authority. It does not launch a Lens host, supervise or restart a
+process, install/start/control a service, register tray presence, register or
+bind a hotkey, open or control an overlay, capture screen content, write memory,
+write receipts, decide approvals, claim resident status, or add UI controls.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident runtime
+authority grant readiness audit:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed after formatting`
+- `python -m mypy src\francis\lens src\francis\api\routes\lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13235,7 +13282,10 @@ These remain true and should block any "finished" claim:
   writes, and resident claims denied, plus a read-only
   `/lens/resident-runtime/authority-grant/denials` receipt readback route that
   records bounded denial receipts for denied authority-grant attempts after the
-  existing approval/scope/posture gate is ready,
+  existing approval/scope/posture gate is ready, plus a direct read-only
+  `/lens/resident-runtime/authority-grant/readiness` audit that composes the
+  preflight, policy, denial boundary, denial receipt readback, runtime plan, and
+  host/summon/tray/overlay gates into exact authority-grant blockers,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, but no supervised
   resident host process, process-restart authority,

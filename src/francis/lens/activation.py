@@ -31,6 +31,7 @@ LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
+LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE = "/lens/resident-runtime/authority-grant/readiness"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE = "/lens/resident-runtime/authority-grant/denials"
 LENS_RESIDENT_RUNTIME_PLAN_ROUTE = "/lens/resident-runtime/plan"
 LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE = "/lens/resident-runtime/execute"
@@ -1051,6 +1052,309 @@ def lens_resident_runtime_authority_grant_denial_receipts(
             "denial_receipt_write_authority": False,
             "receipt_write_authority": False,
             "next_step": "review_authority_grant_denial_receipts_before_adding_resident_runtime_authority",
+        },
+    }
+
+
+def _readiness_requirement(
+    requirement_id: str,
+    *,
+    label: str,
+    route: str,
+    ready: bool,
+    status: Any = "",
+    blockers: Any = None,
+    authority_required: str = "",
+    authority_granted: bool = False,
+) -> dict[str, Any]:
+    return _filtered_record(
+        {
+            "id": requirement_id,
+            "label": label,
+            "route": route,
+            "status": _safe_str(status).strip() or ("ready" if ready else "blocked"),
+            "ready": ready,
+            "blockers": _str_list(blockers),
+            "authority_required": authority_required,
+            "authority_granted": authority_granted,
+        }
+    )
+
+
+def lens_resident_runtime_authority_grant_readiness_audit(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    limit: int = 5,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    runtime_preflight = lens_resident_runtime_activation_preflight(approval_id=safe_approval_id, actor=actor)
+    runtime_policy = lens_resident_runtime_execution_policy_contract(approval_id=safe_approval_id, actor=actor)
+    runtime_authority_grant = deny_lens_resident_runtime_execution_authority_grant(
+        approval_id=safe_approval_id,
+        actor=actor,
+        reason="audit Lens resident runtime authority grant readiness",
+        route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        method="POST",
+        record_receipt=False,
+    )
+    denial_receipts = lens_resident_runtime_authority_grant_denial_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+    )
+    runtime_plan = lens_resident_runtime_activation_plan(approval_id=safe_approval_id, actor=actor)
+    runtime_denial = deny_lens_resident_runtime_activation_execution(
+        approval_id=safe_approval_id,
+        actor=actor,
+        reason="audit Lens resident runtime execution boundary",
+        route=LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        method="POST",
+    )
+    manifest = lens_host_launch_manifest()
+    preflight = lens_preflight()
+    supervision_gate = lens_host_supervision_gate(manifest=manifest)
+    summon_gate = lens_summon_enablement_gate(preflight=preflight)
+    tray_gate = lens_tray_enablement_gate(preflight=preflight)
+    overlay_gate = lens_overlay_enablement_gate(preflight=preflight)
+    approval = _as_dict(runtime_preflight.get("approval"))
+    permission = _as_dict(runtime_preflight.get("permission"))
+    posture = _as_dict(runtime_preflight.get("operator_posture"))
+    grant_boundary_observed = (
+        bool(runtime_authority_grant.get("boundary_ready"))
+        and not bool(runtime_authority_grant.get("applied"))
+        and not bool(runtime_authority_grant.get("executed"))
+        and not bool(runtime_authority_grant.get("authority_granted"))
+    )
+    denial_receipt_readback_ready = _safe_str(denial_receipts.get("status")).strip() in {"empty", "readback_ready"}
+    runtime_execution_boundary_observed = not bool(runtime_denial.get("applied")) and not bool(
+        runtime_denial.get("executed")
+    )
+    blockers = _dedupe_strs(
+        [
+            *_str_list(runtime_preflight.get("blockers")),
+            *_str_list(runtime_policy.get("blockers")),
+            *_str_list(runtime_authority_grant.get("blockers")),
+            *_str_list(runtime_plan.get("blockers")),
+            *_str_list(runtime_denial.get("blockers")),
+            *_str_list(supervision_gate.get("blockers")),
+            *_str_list(summon_gate.get("blockers")),
+            *_str_list(tray_gate.get("blockers")),
+            *_str_list(overlay_gate.get("blockers")),
+        ]
+    )
+    requirements = [
+        _readiness_requirement(
+            "exact_activation_approval",
+            label="Exact approved Lens activation request",
+            route=LENS_HOST_ACTIVATION_READBACK_ROUTE,
+            ready=bool(approval.get("approved")),
+            status="ready" if bool(approval.get("approved")) else "blocked",
+            blockers=[
+                item
+                for item in blockers
+                if item
+                in {
+                    "approval_id_required",
+                    "activation_approval_not_found",
+                    "activation_approval_wrong_action",
+                    "activation_approval_not_approved",
+                }
+            ],
+            authority_required="operator_approval",
+            authority_granted=bool(approval.get("approved")),
+        ),
+        _readiness_requirement(
+            "actor_scope",
+            label="Actor has resident runtime write-review scope",
+            route=LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE,
+            ready=bool(permission.get("ready")),
+            status="ready" if bool(permission.get("ready")) else "blocked",
+            blockers=["system_write_scope_not_ready"] if "system_write_scope_not_ready" in blockers else [],
+            authority_required=LENS_HOST_ACTIVATION_SCOPE,
+            authority_granted=bool(permission.get("ready")),
+        ),
+        _readiness_requirement(
+            "operator_posture",
+            label="Operator posture allows write review",
+            route="operator_mode_snapshot",
+            ready=bool(posture.get("ready")),
+            status="ready" if bool(posture.get("ready")) else "blocked",
+            blockers=["operator_posture_not_ready"] if "operator_posture_not_ready" in blockers else [],
+        ),
+        _readiness_requirement(
+            "execution_policy_contract",
+            label="Resident runtime execution policy contract",
+            route=LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+            ready=bool(runtime_policy.get("policy_contract_ready")),
+            status=runtime_policy.get("status"),
+        ),
+        _readiness_requirement(
+            "authority_grant_denial_boundary",
+            label="Authority grant denial boundary is observed",
+            route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            ready=grant_boundary_observed,
+            status=runtime_authority_grant.get("status"),
+            blockers=runtime_authority_grant.get("blockers"),
+            authority_required="resident_runtime_execution_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "authority_grant_denial_receipts",
+            label="Authority grant denial receipt readback",
+            route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+            ready=denial_receipt_readback_ready,
+            status=denial_receipts.get("status"),
+        ),
+        _readiness_requirement(
+            "resident_supervision_gate",
+            label="Resident supervision and service gates",
+            route="/lens/host/supervision",
+            ready=bool(supervision_gate.get("ready")),
+            status=supervision_gate.get("status"),
+            blockers=supervision_gate.get("blockers"),
+            authority_required="process_supervision_and_service_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "summon_gate",
+            label="Summon and hotkey gate",
+            route="/lens/summon",
+            ready=bool(summon_gate.get("ready")),
+            status=summon_gate.get("status"),
+            blockers=summon_gate.get("blockers"),
+            authority_required="summon_and_hotkey_registration",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "tray_gate",
+            label="Tray presence gate",
+            route="/lens/tray",
+            ready=bool(tray_gate.get("ready")),
+            status=tray_gate.get("status"),
+            blockers=tray_gate.get("blockers"),
+            authority_required="tray_registration",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "overlay_gate",
+            label="Overlay window gate",
+            route="/lens/overlay",
+            ready=bool(overlay_gate.get("ready")),
+            status=overlay_gate.get("status"),
+            blockers=overlay_gate.get("blockers"),
+            authority_required="overlay_control",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "runtime_activation_plan",
+            label="Resident runtime activation plan",
+            route=LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+            ready=bool(runtime_plan.get("runtime_ready")),
+            status=runtime_plan.get("status"),
+            blockers=runtime_plan.get("blockers"),
+            authority_required="resident_runtime_execution_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "runtime_execution_denial_boundary",
+            label="Runtime execution denial boundary is observed",
+            route=LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+            ready=runtime_execution_boundary_observed,
+            status=runtime_denial.get("status"),
+            blockers=runtime_denial.get("blockers"),
+            authority_required="resident_runtime_execution_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "authority_grant_implementation",
+            label="Explicit supervised authority grant implementation",
+            route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            ready="resident_runtime_authority_grant_not_implemented" not in blockers,
+            status=(
+                "ready" if "resident_runtime_authority_grant_not_implemented" not in blockers else "not_implemented"
+            ),
+            blockers=(
+                ["resident_runtime_authority_grant_not_implemented"]
+                if "resident_runtime_authority_grant_not_implemented" in blockers
+                else []
+            ),
+            authority_required="resident_runtime_execution_authority",
+            authority_granted=False,
+        ),
+    ]
+    blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
+    ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    ready = not blocked_requirements and not blockers
+    return {
+        "ok": True,
+        "kind": "lens.resident_runtime.execution_authority_grant.readiness_audit",
+        "status": "ready" if ready else "blocked",
+        "audit_status": "complete",
+        "route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+        "preflight_route": LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE,
+        "policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+        "authority_grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+        "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        "approval_id": safe_approval_id,
+        "actor": _redact_free_text(actor),
+        "ready": ready,
+        "grant_ready": ready,
+        "authority_grant_ready": ready,
+        "runtime_ready": bool(runtime_plan.get("runtime_ready")) and ready,
+        "resident_claim_allowed": bool(runtime_plan.get("resident_claim_allowed")) and ready,
+        "boundary_observed": grant_boundary_observed,
+        "denial_receipt_readback_ready": denial_receipt_readback_ready,
+        "receipt_count": int(denial_receipts.get("total") or 0),
+        "latest_receipt_id": _safe_str(_as_dict(denial_receipts.get("latest")).get("receipt_id")).strip(),
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(ready_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "requirements": requirements,
+        "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "blockers": blockers,
+        "source_readbacks": {
+            "preflight_status": _safe_str(runtime_preflight.get("status")).strip(),
+            "policy_status": _safe_str(runtime_policy.get("status")).strip(),
+            "authority_grant_status": _safe_str(runtime_authority_grant.get("status")).strip(),
+            "denial_receipts_status": _safe_str(denial_receipts.get("status")).strip(),
+            "plan_status": _safe_str(runtime_plan.get("status")).strip(),
+            "execute_status": _safe_str(runtime_denial.get("status")).strip(),
+            "supervision_status": _safe_str(supervision_gate.get("status")).strip(),
+            "summon_status": _safe_str(summon_gate.get("status")).strip(),
+            "tray_status": _safe_str(tray_gate.get("status")).strip(),
+            "overlay_status": _safe_str(overlay_gate.get("status")).strip(),
+        },
+        "governance": {
+            **_activation_governance(
+                route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_resident_runtime_execution_authority_grant_readiness_audit",
+            "read_only_contract": True,
+            "audit_only": True,
+            "authority_grant_boundary": True,
+            "resident_runtime_boundary": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "runtime_mutation_authority_granted": False,
+            "authority_granted": False,
+            "next_step": "resolve_resident_runtime_authority_grant_readiness_blockers_before_implementation",
         },
     }
 

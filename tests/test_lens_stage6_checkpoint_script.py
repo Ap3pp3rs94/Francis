@@ -224,6 +224,36 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_authority_grant_denial_receipts"]["memory_write"] is False
     assert payload["resident_runtime_authority_grant_denial_receipts"]["receipt_write_authority"] is False
     assert payload["resident_runtime_authority_grant_denial_receipts"]["denial_receipt_write_authority"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["status"] == "blocked"
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["audit_status"] == "complete"
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["ok"] is True
+    assert (
+        "/lens/resident-runtime/authority-grant/readiness"
+        in (payload["resident_runtime_authority_grant_readiness_audit"]["evidence"])
+    )
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["ready"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["grant_ready"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["authority_grant_ready"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["runtime_ready"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["resident_claim_allowed"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["boundary_observed"] is True
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["denial_receipt_readback_ready"] is True
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["requirements_total"] >= 10
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["requirements_blocked_total"] >= 5
+    assert (
+        "authority_grant_implementation"
+        in (payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirements"])
+    )
+    assert (
+        "resident_runtime_authority_grant_not_implemented"
+        in (payload["resident_runtime_authority_grant_readiness_audit"]["blockers"])
+    )
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["execution_authority"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["approval_decision_authority"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["process_supervision_authority"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["service_control_authority"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["memory_write"] is False
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["receipt_write_authority"] is False
     assert payload["resident_runtime_activation_plan"]["status"] == "blocked"
     assert payload["resident_runtime_activation_plan"]["ok"] is True
     assert payload["resident_runtime_activation_plan"]["plan_available"] is True
@@ -338,7 +368,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
-    assert payload["next_smallest_truthful_gap"] == "supervised_resident_host_runtime_authority_grant_readiness_audit"
+    assert payload["next_smallest_truthful_gap"] == "resolve_supervised_resident_host_runtime_authority_grant_blockers"
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -353,6 +383,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_execution_policy_contract_observed": True,
         "resident_runtime_execution_authority_grant_boundary_observed": True,
         "resident_runtime_execution_authority_grant_denial_receipt_readback_observed": True,
+        "resident_runtime_execution_authority_grant_readiness_audit_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

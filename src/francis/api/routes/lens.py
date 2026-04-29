@@ -19,6 +19,7 @@ from francis.lens import (
     lens_overlay_enablement_gate,
     lens_preflight,
     lens_resident_runtime_authority_grant_denial_receipts,
+    lens_resident_runtime_authority_grant_readiness_audit,
     lens_resident_runtime_activation_preflight,
     lens_resident_runtime_activation_plan,
     lens_resident_runtime_execution_policy_contract,
@@ -146,6 +147,19 @@ def resident_runtime_authority_grant_denials(
         limit=limit,
         approval_id=approval_id,
         status=status,
+    )
+
+
+@router.get("/resident-runtime/authority-grant/readiness")
+def resident_runtime_authority_grant_readiness(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    actor: str = "",
+) -> dict[str, Any]:
+    return lens_resident_runtime_authority_grant_readiness_audit(
+        approval_id=approval_id,
+        actor=actor,
+        limit=limit,
     )
 
 
