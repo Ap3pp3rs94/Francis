@@ -12567,6 +12567,51 @@ activation boundary proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens checkpoint consumes overlay activation boundary
+
+Stage 6/Lens completion checkpoint now consumes the resident overlay activation
+boundary proof. `scripts/lens-stage6-checkpoint.ps1 -Mode Status` invokes
+`scripts/lens-resident-overlay-activation-boundary-proof.ps1`, exposes a
+dedicated `resident_overlay_activation_boundary_proof` block, and advances the
+`system_resident_presence` checkpoint status from
+`resident_overlay_boundary_observed` to
+`resident_overlay_activation_boundary_observed`.
+
+The checkpoint now reports the activation-boundary proof as `status:
+proof_passed`, `live_operator_experience_proof: true`,
+`resident_overlay_boundary_observed: true`, and
+`activation_boundary_observed: true`, while keeping
+`resident_overlay_activation_ready: false`, `activation_ready: false`,
+`execution_ready: false`, `executed: false`, and `applied: false`. It also
+projects the proof's non-authority fields: no process launch, service install,
+service start, hotkey registration, overlay open, memory write, or approval
+decision. The checkpoint remains `status: blocked`, `stage_state: active`, and
+`ready_to_close: false`; its next smallest truthful gap is now
+`process_supervision_authority_boundary_or_service_activation_plan`.
+
+This is checkpoint/readback composition only. It does not change Lens API
+routes, UI surfaces, service configuration, host runner behavior, approval
+decisions, memory writes, resident process supervision, service control, tray
+registration, hotkey registration, overlay control, or summon-anywhere behavior.
+The checkpoint still performs bounded diagnostic local process launch through
+the existing proof chain and reports that distinction explicitly.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens checkpoint overlay
+activation boundary consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -HostLaunchRunSeconds 3 -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -12597,10 +12642,10 @@ These remain true and should block any "finished" claim:
   readback of denial receipt totals/latest receipt handles, but no OS-wide
   summon, plus resident overlay runtime boundary proof/checkpoint consumption,
   plus a resident-surface activation boundary readback and composed activation
-  boundary proof that keep the resident claim blocked, plus a live HTTP
-  operator-experience readback proof that verifies the Lens status payload
-  through a temporary local API process, but no supervised resident host process,
-  process-restart authority,
+  boundary proof/checkpoint consumption that keep the resident claim blocked,
+  plus a live HTTP operator-experience readback proof that verifies the Lens
+  status payload through a temporary local API process, but no supervised
+  resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, summon-anywhere behavior, or live
   Pilot takeover surface yet

@@ -68,7 +68,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert criteria["mode_visibility"]["ready"] is True
     assert criteria["pilot_visibility_groundwork"]["status"] == "readback_ready"
     assert criteria["pilot_visibility_groundwork"]["ready"] is True
-    assert criteria["system_resident_presence"]["status"] == "resident_overlay_boundary_observed"
+    assert criteria["system_resident_presence"]["status"] == "resident_overlay_activation_boundary_observed"
     assert criteria["system_resident_presence"]["ready"] is False
     assert "resident_host_process_missing" not in criteria["system_resident_presence"]["blockers"]
     assert "resident_host_process_not_supervised" in criteria["system_resident_presence"]["blockers"]
@@ -82,6 +82,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-overlay-runtime-proof.ps1" in criteria["system_resident_presence"]["evidence"]
+    assert (
+        "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
+        in criteria["system_resident_presence"]["evidence"]
+    )
     assert "/lens/resident-surface/activation" in criteria["system_resident_presence"]["evidence"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
     assert payload["live_operator_experience_proof"]["status"] == "proof_passed"
@@ -123,8 +127,39 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_overlay_runtime_missing" in payload["resident_overlay_runtime_proof"]["blockers"]
     assert "operator_experience_proof_missing" not in payload["resident_overlay_runtime_proof"]["blockers"]
     assert "scripts/lens-resident-overlay-runtime-proof.ps1" in payload["resident_overlay_runtime_proof"]["evidence"]
+    assert payload["resident_overlay_activation_boundary_proof"]["status"] == "proof_passed"
+    assert payload["resident_overlay_activation_boundary_proof"]["ok"] is True
+    assert payload["resident_overlay_activation_boundary_proof"]["exit_code"] == 0
+    assert payload["resident_overlay_activation_boundary_proof"]["live_operator_experience_proof"] is True
+    assert payload["resident_overlay_activation_boundary_proof"]["resident_overlay_boundary_observed"] is True
+    assert payload["resident_overlay_activation_boundary_proof"]["activation_boundary_observed"] is True
+    assert payload["resident_overlay_activation_boundary_proof"]["resident_overlay_activation_ready"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["activation_ready"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["execution_ready"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["executed"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["applied"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_launch_process"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_install_service"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_start_service"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_register_hotkey"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_open_overlay"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_write_memory"] is False
+    assert payload["resident_overlay_activation_boundary_proof"]["would_decide_approval"] is False
+    assert (
+        "resident_overlay_activation_not_authorized"
+        in payload["resident_overlay_activation_boundary_proof"]["blockers"]
+    )
+    assert "operator_experience_proof_missing" not in payload["resident_overlay_activation_boundary_proof"]["blockers"]
+    assert (
+        "live_operator_experience_proof_missing"
+        not in payload["resident_overlay_activation_boundary_proof"]["blockers"]
+    )
+    assert (
+        "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
+        in payload["resident_overlay_activation_boundary_proof"]["evidence"]
+    )
     assert payload["next_smallest_truthful_gap"] == (
-        "resident_overlay_activation_or_process_supervision_authority_boundary"
+        "process_supervision_authority_boundary_or_service_activation_plan"
     )
     assert payload["governance"] == {
         "read_only_contract": True,
@@ -134,21 +169,26 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "bounded_host_launch": True,
         "bounded_supervisor_observation": True,
         "resident_overlay_boundary_observed": True,
+        "resident_overlay_activation_boundary_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,
         "memory_write": False,
+        "resident_overlay_activation_authority": False,
         "overlay_control_authority": False,
         "summon_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
         "local_process_launch_authority": True,
         "api_local_process_launch_authority": False,
+        "activation_local_process_launch_authority": False,
         "process_restart_authority": False,
         "process_supervision_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
+        "receipt_write_authority": False,
+        "denial_receipt_write_authority": False,
         "mutation_authority_granted": False,
     }

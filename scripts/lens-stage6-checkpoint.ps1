@@ -3,6 +3,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
+  [ValidateRange(5, 60)]
+  [int]$StartupTimeoutSeconds = 20,
+
   [ValidateRange(2, 30)]
   [int]$HostLaunchRunSeconds = 3,
 
@@ -213,6 +216,7 @@ $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
+$ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -311,7 +315,44 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
 
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers | Sort-Object -Unique)
+$ResidentOverlayActivationBoundaryProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorRunSeconds))
+$ResidentOverlayActivationBoundaryProof = if ($ResidentOverlayActivationBoundaryProofResult.Count -gt 0) { $ResidentOverlayActivationBoundaryProofResult[-1] } else { $null }
+$ResidentOverlayActivationBoundaryExitCode = -1
+$ResidentOverlayActivationBoundaryPayload = $null
+if ($ResidentOverlayActivationBoundaryProof -is [System.Collections.IDictionary]) {
+  if ($ResidentOverlayActivationBoundaryProof.Contains('exit_code') -and $null -ne $ResidentOverlayActivationBoundaryProof['exit_code']) {
+    $ResidentOverlayActivationBoundaryExitCode = [int]$ResidentOverlayActivationBoundaryProof['exit_code']
+  }
+  if ($ResidentOverlayActivationBoundaryProof.Contains('payload') -and $null -ne $ResidentOverlayActivationBoundaryProof['payload']) {
+    $ResidentOverlayActivationBoundaryPayload = $ResidentOverlayActivationBoundaryProof['payload']
+  }
+}
+$ResidentOverlayActivationBoundaryProofPassed = (
+  $ResidentOverlayActivationBoundaryExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_overlay_activation_boundary.proof' -and
+  [string](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'live_operator_experience_proof' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'activation_boundary_observed' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_overlay_activation_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'activation_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'execution_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'executed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'applied' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_launch_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_install_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_register_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_open_overlay' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $true)
+)
+$ResidentOverlayActivationBoundaryBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'blockers' -Default @())
+if ($LiveOperatorProofPassed) {
+  $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
+}
+
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -320,6 +361,8 @@ if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
 }
 $SystemResidentStatus = if ($HostStatus -eq 'ready') {
   'ready'
+} elseif ($ResidentOverlayActivationBoundaryProofPassed) {
+  'resident_overlay_activation_boundary_observed'
 } elseif ($ResidentOverlayRuntimeProofPassed) {
   'resident_overlay_boundary_observed'
 } elseif ($HostSupervisorProofPassed) {
@@ -368,9 +411,9 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
       -Blockers $SystemResidentBlockers `
-      -Basis $(if ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
+      -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_['ready'] })
@@ -445,7 +488,29 @@ $Payload = [ordered]@{
     ready_for_lens_resident_claim = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'ready_for_lens_resident_claim' -Default $false)
     blockers = $ResidentOverlayRuntimeBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
+  resident_overlay_activation_boundary_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'status' -Default 'missing')
+    ok = $ResidentOverlayActivationBoundaryProofPassed
+    exit_code = $ResidentOverlayActivationBoundaryExitCode
+    evidence = @('scripts/lens-live-operator-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1', '/lens/resident-surface/activation')
+    live_operator_experience_proof = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'live_operator_experience_proof' -Default $false)
+    resident_overlay_boundary_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false)
+    activation_boundary_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'activation_boundary_observed' -Default $false)
+    resident_overlay_activation_ready = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_overlay_activation_ready' -Default $false)
+    activation_ready = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'activation_ready' -Default $false)
+    execution_ready = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'execution_ready' -Default $false)
+    executed = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'executed' -Default $false)
+    applied = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'applied' -Default $false)
+    would_launch_process = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_launch_process' -Default $false)
+    would_install_service = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_install_service' -Default $false)
+    would_start_service = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_start_service' -Default $false)
+    would_register_hotkey = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_register_hotkey' -Default $false)
+    would_open_overlay = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_open_overlay' -Default $false)
+    would_write_memory = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_write_memory' -Default $false)
+    would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
+    blockers = $ResidentOverlayActivationBoundaryBlockers
+  }
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed) { 'process_supervision_authority_boundary_or_service_activation_plan' } elseif ($LiveOperatorProofPassed -and $ResidentOverlayRuntimeProofPassed) { 'resident_overlay_activation_or_process_supervision_authority_boundary' } elseif ($LiveOperatorProofPassed -and $HostSupervisorProofPassed) { 'resident_host_process_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed -and $HostLaunchProofPassed) { 'resident_host_supervision_or_resident_overlay_runtime' } elseif ($LiveOperatorProofPassed) { 'bounded_host_launch_proof' } else { 'live_operator_experience_proof' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -454,22 +519,27 @@ $Payload = [ordered]@{
     bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
     bounded_supervisor_observation = $HostSupervisorProofPassed
     resident_overlay_boundary_observed = $ResidentOverlayRuntimeProofPassed
+    resident_overlay_activation_boundary_observed = $ResidentOverlayActivationBoundaryProofPassed
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false
     memory_write = $false
+    resident_overlay_activation_authority = $false
     overlay_control_authority = $false
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
     local_process_launch_authority = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
     api_local_process_launch_authority = $false
+    activation_local_process_launch_authority = $false
     process_restart_authority = $false
     process_supervision_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     hotkey_registration_authority = $false
     tray_registration_authority = $false
+    receipt_write_authority = $false
+    denial_receipt_write_authority = $false
     mutation_authority_granted = $false
   }
 }
