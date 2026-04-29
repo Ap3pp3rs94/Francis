@@ -12445,6 +12445,50 @@ observation proof:
 - `python -m ruff format --check --no-cache tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident overlay runtime boundary proof
+
+Stage 6/Lens now has a composed resident overlay runtime boundary proof for the
+future resident Lens surface.
+`scripts/lens-resident-overlay-runtime-proof.ps1 -Mode Status` runs the existing
+resident-surface readiness proof and the bounded supervisor-observation proof,
+then verifies that the repo can observe both sides of the boundary at once: one
+bounded diagnostic Lens host lifecycle can be seen through running/stopped
+states, while overlay, tray, global hotkey, and summon-anywhere preflights remain
+readable, disabled, and blocked.
+
+The proof reports `kind: lens.resident_overlay_runtime.proof`,
+`status: proof_passed`, `bounded_supervisor_observed: true`, and
+`temporary_host_process_observed: true`, while keeping
+`resident_overlay_runtime_ready: false`, `resident_overlay_runtime: false`,
+`resident_host_process: false`, `supervised: false`, `overlay_window: false`,
+`tray_presence: false`, `global_hotkey_bound: false`, and
+`summon_anywhere: false`. The next smallest truthful gap reported by the proof is
+`resident_overlay_activation_or_process_supervision_authority_boundary`.
+
+This is diagnostic proof composition only. It does not change the Lens API,
+Stage 6 checkpoint, chat UI, service configuration, host runner, approval paths,
+or memory paths. It grants no product execution authority, no API launch
+authority, no process-restart authority, no process-supervision authority, no
+service install/control authority, no approval-decision authority, no
+memory-write authority, no tray registration, no hotkey registration, no overlay
+control, and no summon-anywhere claim. It does perform bounded diagnostic local
+process launch through the existing supervisor-observation proof and records that
+distinction explicitly.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident overlay
+runtime boundary proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-overlay-runtime-proof.ps1 -Mode Status -SupervisorRunSeconds 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
