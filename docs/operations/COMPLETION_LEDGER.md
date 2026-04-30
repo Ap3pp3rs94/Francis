@@ -14223,6 +14223,47 @@ proof blocker alignment:
 - `python -m ruff format --check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens host supervision authority request readback
+
+Stage 6/Lens now has a governed approval-request seam for future resident host
+supervision authority. `POST /lens/host/supervision/authority/request` creates a
+pending approval request for action `lens.host.supervision_authority` only when
+the caller has the existing `system.write` API scope. `GET
+/lens/host/supervision/authority/requests` reads those approval requests back by
+status. `/lens/status` now exposes the request and request-readback routes under
+the resident host surface, and the Lens command-palette readback now advertises a
+backend-truthful command for requesting host supervision review.
+
+This slice does not grant process supervision, process restart, service install,
+service control, local process launch, overlay, tray, hotkey, resident-claim,
+approval-decision, memory-write, or execution authority. It does not start,
+supervise, restart, install, or stop a Lens host process. It only makes the
+operator approval-request step explicit and readable before any future host
+supervision authority grant can be implemented.
+
+Stage 6 remains active and blocked. The next smallest truthful gap moves to the
+actual host supervision authority grant implementation and supervised resident
+host process path, with approval binding and receipts, not more request/readback
+scaffolding.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervision
+authority request readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_request_requires_system_write_without_grant tests\test_api_lens.py::test_lens_host_supervision_authority_request_creates_approval_only_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

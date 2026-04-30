@@ -17,6 +17,7 @@ from francis.lens import (
     lens_host_launch_manifest,
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
+    lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
@@ -34,6 +35,7 @@ from francis.lens import (
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
     request_lens_host_activation,
+    request_lens_host_supervision_authority,
 )
 
 router = APIRouter()
@@ -66,6 +68,11 @@ class LensResidentRuntimeAuthorityGrantIn(BaseModel):
 class LensHostSupervisionAuthorityGrantIn(BaseModel):
     actor: str | None = None
     reason: str = "attempt Lens host supervision authority grant"
+
+
+class LensHostSupervisionAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens host supervision authority review"
 
 
 @router.get("/status")
@@ -122,12 +129,30 @@ def host_supervision_authority_readiness(
     return lens_host_supervision_authority_readiness_audit(actor=actor, limit=limit)
 
 
+@router.get("/host/supervision/authority/requests")
+def host_supervision_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_host_supervision_authority_request_readback(limit=limit)
+
+
 @router.get("/host/supervision/authority/denials")
 def host_supervision_authority_denials(
     limit: int = Query(5, ge=1, le=50),
     status: str = "",
 ) -> dict[str, Any]:
     return lens_host_supervision_authority_denial_receipts(limit=limit, status=status)
+
+
+@router.post("/host/supervision/authority/request")
+def host_supervision_authority_request(
+    request: Request,
+    payload: LensHostSupervisionAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_host_supervision_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.post("/host/supervision/authority")

@@ -2768,6 +2768,173 @@ def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch,
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
+def test_lens_host_supervision_authority_request_requires_system_write_without_grant(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.lens.no_scope",
+            "reason": "try to request host supervision without scope",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["approval_requested"] is False
+    assert body["applied"] is False
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["required_scope"] == "system.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["process_supervision_authority"] is False
+    assert body["governance"]["process_restart_authority"] is False
+    assert body["governance"]["service_install_authority"] is False
+    assert body["governance"]["service_control_authority"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    assert client.get("/approvals/list?status=pending").json()["items"] == []
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervision_authority_request_creates_approval_only_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove governed host supervision authority request",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "approval_requested"
+    assert body["approval_requested"] is True
+    assert body["applied"] is False
+    assert body["authority_granted"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["action"] == "lens.host.supervision_authority"
+    assert body["governance"]["approval_request_write"] is True
+    assert body["governance"]["approval_action"] == "lens.host.supervision_authority"
+    assert body["governance"]["process_supervision_authority"] is False
+    assert body["governance"]["process_restart_authority"] is False
+    assert body["governance"]["service_install_authority"] is False
+    assert body["governance"]["service_control_authority"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    assert body["governance"]["authority_granted"] is False
+    approval_id = str(body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    pending_payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending_payload["action"] == "lens.host.supervision_authority"
+    assert pending_payload["reason"] == "prove governed host supervision authority request"
+    requested = pending_payload["payload"]
+    assert requested["request_kind"] == "lens.host.supervision_authority.request"
+    assert requested["route"] == "/lens/host/supervision/authority/request"
+    assert requested["supervision_route"] == "/lens/host/supervision"
+    assert requested["grant_route"] == "/lens/host/supervision/authority"
+    assert requested["readback_route"] == "/lens/host/supervision/authority/requests"
+    assert requested["supervision_gate"]["ready"] is False
+    assert requested["supervision_gate"]["resident_host_supervised"] is False
+    assert requested["preflight"]["preflight_ready"] is True
+    assert requested["preflight"]["authority_ready"] is False
+    assert "process_supervision_authority" in requested["preflight"]["blocked_requirements"]
+    assert "process_supervision_authority_not_granted" in requested["preflight"]["blockers"]
+    assert requested["governance"]["approval_request_write"] is True
+    assert requested["governance"]["process_supervision_authority"] is False
+    assert requested["governance"]["service_control_authority"] is False
+    assert requested["governance"]["resident_claim_authority"] is False
+
+    readback = client.get("/lens/host/supervision/authority/requests?limit=10")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["kind"] == "lens.host.supervision_authority.request_readback"
+    assert readback_body["status"] == "pending_review"
+    assert readback_body["route"] == "/lens/host/supervision/authority/requests"
+    assert readback_body["request_route"] == "/lens/host/supervision/authority/request"
+    assert readback_body["grant_route"] == "/lens/host/supervision/authority"
+    assert readback_body["pending_count"] == 1
+    assert readback_body["approved_count"] == 0
+    assert readback_body["total_count"] == 1
+    assert readback_body["latest"]["id"] == approval_id
+    assert readback_body["latest"]["action"] == "lens.host.supervision_authority"
+    assert readback_body["authority_granted"] is False
+    assert readback_body["resident_claim_allowed"] is False
+    assert readback_body["governance"]["read_only_contract"] is True
+    assert readback_body["governance"]["approval_request_write"] is False
+    assert readback_body["governance"]["process_supervision_authority"] is False
+    assert readback_body["governance"]["service_control_authority"] is False
+    assert readback_body["governance"]["authority_granted"] is False
+
+    lens_status = client.get("/lens/status")
+    assert lens_status.status_code == 200
+    status_body = lens_status.json()
+    assert status_body["approvals_view"]["pending_count"] == 1
+    assert status_body["resident_host"]["supervision_authority_request_route"] == (
+        "/lens/host/supervision/authority/request"
+    )
+    assert status_body["resident_host"]["supervision_authority_requests"]["pending_count"] == 1
+    command = next(
+        item
+        for item in status_body["command_palette"]["commands"]
+        if item["id"] == "lens.host.supervision_authority.request"
+    )
+    assert command["route"] == "/lens/host/supervision/authority/request"
+    assert command["method"] == "POST"
+    assert command["mutates"] is True
+    assert command["write_guard"] == "system.write approval request; no supervision authority"
+    assert command["execution_authority"] is False
+    assert command["approval_decision_authority"] is False
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_host_activation_readback_tracks_decision_without_execution(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

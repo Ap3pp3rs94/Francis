@@ -17,6 +17,8 @@ from francis.lens.activation import (
     lens_host_activation_readback,
     lens_host_activation_request_contract,
     lens_host_supervision_authority_denial_receipts,
+    lens_host_supervision_authority_request_contract,
+    lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_readiness_audit,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_authority_grant_denial_receipts,
@@ -256,6 +258,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     launch_manifest = lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
+    supervision_authority_request = lens_host_supervision_authority_request_contract()
+    supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
     supervision_authority_denial = deny_lens_host_supervision_authority_grant()
     supervision_authority_denial_receipts = lens_host_supervision_authority_denial_receipts(limit=limit)
     supervision_authority_readiness = lens_host_supervision_authority_readiness_audit(limit=limit)
@@ -403,6 +407,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "launch_manifest": launch_manifest,
         "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
         "supervision_gate": supervision_gate,
+        "supervision_authority_request_route": _safe_str(supervision_authority_request.get("route")).strip(),
+        "supervision_authority_request": supervision_authority_request,
+        "supervision_authority_requests_route": _safe_str(supervision_authority_requests.get("route")).strip(),
+        "supervision_authority_requests": supervision_authority_requests,
         "supervision_authority_preflight_route": _safe_str(supervision_authority_preflight.get("route")).strip(),
         "supervision_authority_preflight": supervision_authority_preflight,
         "supervision_authority_denial_route": _safe_str(supervision_authority_denial.get("route")).strip(),
@@ -724,6 +732,19 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
             mutates=True,
             write_guard="system.write approval request; no launch authority",
             receipt_kind="lens.host.activation.request",
+        ),
+        _palette_command(
+            "lens.host.supervision_authority.request",
+            "Request Lens Host Supervision",
+            "Create an approval request for resident host supervision authority without granting it.",
+            "Control",
+            route="/lens/host/supervision/authority/request",
+            method="POST",
+            action="request_lens_host_supervision_authority",
+            keywords="lens host supervision authority approval request resident",
+            mutates=True,
+            write_guard="system.write approval request; no supervision authority",
+            receipt_kind="lens.host.supervision_authority.request",
         ),
     ]
     group_counts: dict[str, int] = {}
@@ -1744,6 +1765,8 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "continuity_ledger_route": "/continuity/ledger",
             "reactor_operator_visibility_route": "/reactor/operator_visibility/summary",
             "lens_host_activation_denials_route": "/lens/host/activation/denials",
+            "lens_host_supervision_authority_request_route": "/lens/host/supervision/authority/request",
+            "lens_host_supervision_authority_requests_route": "/lens/host/supervision/authority/requests",
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
             "lens_host_supervision_authority_denial_route": "/lens/host/supervision/authority",
             "lens_host_supervision_authority_denials_route": "/lens/host/supervision/authority/denials",

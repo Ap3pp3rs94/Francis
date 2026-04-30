@@ -35,6 +35,9 @@ LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
 LENS_HOST_SUPERVISION_AUTHORITY_ROUTE = "/lens/host/supervision/authority"
 LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE = "/lens/host/supervision/authority/denials"
 LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE = "/lens/host/supervision/authority/readiness"
+LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION = "lens.host.supervision_authority"
+LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE = "/lens/host/supervision/authority/request"
+LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE = "/lens/host/supervision/authority/requests"
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
@@ -251,6 +254,46 @@ def _activation_governance(
     }
 
 
+def _supervision_authority_governance(
+    *,
+    route: str,
+    approval_request_write: bool = True,
+    read_only_contract: bool = False,
+) -> dict[str, Any]:
+    return {
+        "gate": "lens_host_supervision_authority_request",
+        "route": route,
+        "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+        "approval_action": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION,
+        "approval_request_write": approval_request_write,
+        "request_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE,
+        "readback_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+        "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "grant_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+        "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+        "read_only_contract": read_only_contract,
+        "activation_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "resident_claim_authority": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "runtime_mutation_authority_granted": False,
+        "mutation_authority_granted": False,
+        "authority_granted": False,
+        "next_step": "operator_decides_pending_lens_host_supervision_authority_request",
+    }
+
+
 def lens_host_activation_request_contract() -> dict[str, Any]:
     return {
         "status": "approval_request_ready",
@@ -270,6 +313,28 @@ def lens_host_activation_request_contract() -> dict[str, Any]:
         "registers_hotkey": False,
         "controls_overlay": False,
         "governance": _activation_governance(route=LENS_HOST_ACTIVATION_ROUTE),
+    }
+
+
+def lens_host_supervision_authority_request_contract() -> dict[str, Any]:
+    return {
+        "status": "approval_request_ready",
+        "route": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE,
+        "readback_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+        "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "grant_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+        "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+        "method": "POST",
+        "action": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION,
+        "creates_approval_request": True,
+        "grants_authority": False,
+        "supervises_process": False,
+        "restarts_process": False,
+        "installs_service": False,
+        "starts_service": False,
+        "claims_resident": False,
+        "governance": _supervision_authority_governance(route=LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE),
     }
 
 
@@ -316,6 +381,33 @@ def _permission_denied(decision: ApiPermissionDecision, *, route: str) -> dict[s
     }
 
 
+def _supervision_authority_permission_denied(decision: ApiPermissionDecision, *, route: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "applied": False,
+        "approval_requested": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "route": route,
+            "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_requesting_lens_host_supervision_authority",
+            "evidence": decision.evidence,
+            "activation_authority": False,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "resident_claim_authority": False,
+        },
+    }
+
+
 def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     redacted = redact_governed_display_value(item)
@@ -339,6 +431,37 @@ def _activation_approval_items(
             _approval_item(item)
             for item in records
             if isinstance(item, dict) and _safe_str(item.get("action")).strip() == LENS_HOST_ACTIVATION_ACTION
+        ]
+        items.sort(
+            key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+            reverse=True,
+        )
+        counts[status] = len(items)
+        by_status[status] = items[:limit]
+        all_items.extend(items)
+    all_items.sort(
+        key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+        reverse=True,
+    )
+    return by_status, all_items[:limit], counts
+
+
+def _supervision_authority_approval_items(
+    *, limit: int
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], dict[str, int]]:
+    by_status: dict[str, list[dict[str, Any]]] = {}
+    counts: dict[str, int] = {}
+    all_items: list[dict[str, Any]] = []
+    for status in _APPROVAL_STATUSES:
+        try:
+            records = list_requests(status=status, limit=5000)
+        except Exception:
+            records = []
+        items = [
+            _approval_item(item)
+            for item in records
+            if isinstance(item, dict)
+            and _safe_str(item.get("action")).strip() == LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION
         ]
         items.sort(
             key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
@@ -416,6 +539,57 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
                 read_only_contract=True,
             ),
             "gate": "lens_host_activation_readback",
+            "read_only_contract": True,
+            "next_step": next_step,
+        },
+    }
+
+
+def _supervision_authority_readback_status(counts: dict[str, int]) -> tuple[str, str]:
+    if counts.get("pending", 0) > 0:
+        return "pending_review", "operator_decide_pending_lens_host_supervision_authority_request"
+    if counts.get("emergency", 0) > 0:
+        return "emergency_reviewed_no_authority", "operator_review_emergency_supervision_authority_decision"
+    if counts.get("approved", 0) > 0:
+        return "approved_no_authority", "approved_request_requires_separate_supervision_authority_grant_slice"
+    if counts.get("rejected", 0) > 0:
+        return "rejected", "operator_may_request_lens_host_supervision_authority_again"
+    return "none", "request_lens_host_supervision_authority_before_grant"
+
+
+def lens_host_supervision_authority_request_readback(*, limit: int = 5) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    by_status, latest_items, counts = _supervision_authority_approval_items(limit=safe_limit)
+    total = sum(counts.values())
+    status, next_step = _supervision_authority_readback_status(counts)
+    latest = latest_items[0] if latest_items else None
+    return {
+        "ok": True,
+        "kind": "lens.host.supervision_authority.request_readback",
+        "status": status,
+        "route": LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+        "request_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE,
+        "grant_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+        "decision_route": "/approvals/decision",
+        "approval_action": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION,
+        "pending_count": counts.get("pending", 0),
+        "approved_count": counts.get("approved", 0),
+        "rejected_count": counts.get("rejected", 0),
+        "emergency_count": counts.get("emergency", 0),
+        "total_count": total,
+        "latest": latest,
+        "items": latest_items,
+        "by_status": by_status,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "governance": {
+            **_supervision_authority_governance(
+                route=LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_supervision_authority_request_readback",
             "read_only_contract": True,
             "next_step": next_step,
         },
@@ -3462,6 +3636,46 @@ def _activation_payload(*, actor: Any, mode: str, route: str) -> dict[str, Any]:
     }
 
 
+def _supervision_authority_request_payload(*, actor: Any, route: str) -> dict[str, Any]:
+    manifest = lens_host_launch_manifest()
+    supervision_gate = lens_host_supervision_gate(manifest=manifest)
+    preflight = lens_host_supervision_authority_preflight(manifest=manifest)
+    governance = _supervision_authority_governance(route=route)
+    return {
+        "request_kind": "lens.host.supervision_authority.request",
+        "actor": _redact_free_text(actor),
+        "route": route,
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "supervision_route": "/lens/host/supervision",
+        "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "grant_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "readback_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+        "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+        "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+        "supervision_gate": {
+            "status": _safe_str(supervision_gate.get("status")).strip(),
+            "ready": bool(supervision_gate.get("ready")),
+            "resident_host_process": bool(supervision_gate.get("resident_host_process")),
+            "resident_host_supervised": bool(supervision_gate.get("resident_host_supervised")),
+            "resident_claim_allowed": bool(supervision_gate.get("resident_claim_allowed")),
+            "blockers": _as_list(supervision_gate.get("blockers")),
+        },
+        "preflight": {
+            "status": _safe_str(preflight.get("status")).strip(),
+            "ready": bool(preflight.get("ready")),
+            "preflight_ready": bool(preflight.get("preflight_ready")),
+            "authority_ready": bool(preflight.get("authority_ready")),
+            "supervision_ready": bool(preflight.get("supervision_ready")),
+            "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")),
+            "blocked_requirements": _as_list(preflight.get("blocked_requirements")),
+            "blockers": _as_list(preflight.get("blockers")),
+        },
+        "blockers": _as_list(preflight.get("blockers")),
+        "governance": governance,
+    }
+
+
 def request_lens_host_activation(
     *,
     actor: Any,
@@ -3491,6 +3705,40 @@ def request_lens_host_activation(
         "activation": activation,
         "governance": {
             **_activation_governance(route=safe_route),
+            "permission": permission.evidence,
+        },
+    }
+
+
+def request_lens_host_supervision_authority(
+    *,
+    actor: Any,
+    reason: Any = "request Lens host supervision authority review",
+    route: str = LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE
+    permission = _permission(actor, route=safe_route, method=method)
+    if not permission.allowed:
+        return _supervision_authority_permission_denied(permission, route=safe_route)
+
+    request_reason = _redact_free_text(reason) or "request Lens host supervision authority review"
+    payload = _supervision_authority_request_payload(actor=actor, route=safe_route)
+    approval = create_approval_request(LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION, request_reason, payload)
+    approval_item = _approval_item(approval)
+    return {
+        "ok": True,
+        "applied": False,
+        "approval_requested": True,
+        "status": "approval_requested",
+        "action": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION,
+        "approval_id": _safe_str(approval_item.get("id")),
+        "approval": approval_item,
+        "supervision_authority": payload,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "governance": {
+            **_supervision_authority_governance(route=safe_route),
             "permission": permission.evidence,
         },
     }
