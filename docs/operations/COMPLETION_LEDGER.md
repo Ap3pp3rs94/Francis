@@ -13545,10 +13545,14 @@ supervisor_runner_observe`, `stopped_process_alive`, and a
 checkpoint, and process-supervision boundary proofs use a 10-second bounded
 supervisor observation window because the previous 4-second window was too
 tight when the reusable runner was consumed through nested proof chains. The
-supervisor runner now waits up to the bounded run window for the initial
-running-state receipt, and the Stage 6 checkpoint treats any passed
+host launch wrapper and supervisor runner now wait up to the bounded run window
+plus startup slack for the initial running-state receipt, and the Stage 6
+checkpoint treats any passed
 supervisor-consuming proof in the chain as evidence for bounded supervisor
-observation.
+observation. The supervisor runner also waits for the stopped host pid file to
+be removed after the stopped-state receipt and uses the refreshed stopped-state
+readback plus pid-file cleanup as the post-stop proof contract, avoiding
+redundant live process probing after the stopped readback is already false.
 
 This is diagnostic/readback proof wiring only. It does not create a resident
 host, supervise or restart a process, install/start/stop/control a service,

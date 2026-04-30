@@ -97,10 +97,20 @@ function Test-ProcessAlive {
   }
 }
 
+function Test-LeafPathPresent {
+  param([string]$Path)
+
+  try {
+    return [bool](Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)
+  } catch {
+    return $true
+  }
+}
+
 function Get-PidValue {
   param([string]$Path)
 
-  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+  if (-not (Test-LeafPathPresent -Path $Path)) {
     return 0
   }
   try {
@@ -126,7 +136,7 @@ function Get-HostState {
     state_exists = $null -ne $StatePayload
     state_status = [string](Get-PropertyValue -Payload $StatePayload -Name 'status' -Default '')
     state_updated_at = [string](Get-PropertyValue -Payload $StatePayload -Name 'updated_at' -Default '')
-    pid_present = Test-Path -LiteralPath $PidPath -PathType Leaf
+    pid_present = Test-LeafPathPresent -Path $PidPath
     pid = $PidValue
     process_alive = $ProcessAlive
   }
@@ -218,7 +228,7 @@ $Payload = [ordered]@{
     stopped_pid = 0
     stopped_process_alive = $false
     same_process_observed = $false
-    pid_file_present_after_stop = Test-Path -LiteralPath $HostPidPath -PathType Leaf
+    pid_file_present_after_stop = Test-LeafPathPresent -Path $HostPidPath
   }
   next_smallest_truthful_gap = 'resident_host_process_supervision_authority_boundary'
   governance = [ordered]@{
@@ -253,7 +263,7 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
-$RunningObservationTimeout = [Math]::Max(5, $RunSeconds)
+$RunningObservationTimeout = [Math]::Max(5, $RunSeconds + 10)
 $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
 $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
 $RunningObserved = (
@@ -277,12 +287,12 @@ if ($RunningObserved) {
 
 $StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds ($RunSeconds + 10)
 $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
-if (
-  [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and
-  $StoppedPid -gt 0
-) {
+if ([string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and $StoppedPid -gt 0) {
   $ExitDeadline = (Get-Date).AddSeconds(5)
-  while ((Get-Date) -lt $ExitDeadline -and (Test-ProcessAlive -ProcessId $StoppedPid)) {
+  while (
+    (Get-Date) -lt $ExitDeadline -and
+    ((Test-ProcessAlive -ProcessId $StoppedPid) -or (Test-LeafPathPresent -Path $HostPidPath))
+  ) {
     Start-Sleep -Milliseconds 100
     $StoppedState = Get-HostState -StatePath $HostStatePath -PidPath $HostPidPath
     $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default $StoppedPid)
@@ -293,8 +303,7 @@ $StoppedObserved = (
   [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and
   -not [bool](Get-PropertyValue -Payload $StoppedState -Name 'process_alive' -Default $true) -and
   $StoppedPid -eq $RunningPid -and
-  -not (Test-ProcessAlive -ProcessId $StoppedPid) -and
-  -not (Test-Path -LiteralPath $HostPidPath -PathType Leaf)
+  -not (Test-LeafPathPresent -Path $HostPidPath)
 )
 $ProofPassed = $RunningObserved -and $StoppedObserved
 $CompletedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -324,7 +333,7 @@ $Payload.proof.stopped_state_status = [string](Get-PropertyValue -Payload $Stopp
 $Payload.proof.stopped_pid = $StoppedPid
 $Payload.proof.stopped_process_alive = [bool](Get-PropertyValue -Payload $StoppedState -Name 'process_alive' -Default $true)
 $Payload.proof.same_process_observed = ($RunningPid -gt 0 -and $RunningPid -eq $StoppedPid)
-$Payload.proof.pid_file_present_after_stop = Test-Path -LiteralPath $HostPidPath -PathType Leaf
+$Payload.proof.pid_file_present_after_stop = Test-LeafPathPresent -Path $HostPidPath
 
 $Payload | ConvertTo-Json -Depth 8
 if ($ProofPassed) {
