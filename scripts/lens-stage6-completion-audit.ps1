@@ -22,6 +22,42 @@ function ConvertTo-StringArray {
   return @([string]$Value)
 }
 
+function Invoke-JsonScript {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PowerShellPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ScriptPath,
+
+    [string[]]$ScriptArgs = @()
+  )
+
+  if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+    }
+  }
+
+  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $Payload = $null
+  }
+
+  return [ordered]@{
+    exit_code = $ExitCode
+    payload = $Payload
+    output = $Text
+  }
+}
+
 function New-CriterionSummary {
   param(
     [Parameter(Mandatory = $true)]
@@ -41,6 +77,7 @@ function New-CriterionSummary {
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
+$ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -57,6 +94,22 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $Checkpoint = ($CheckpointJson | Out-String | ConvertFrom-Json)
+$ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
+  '-Mode', 'Status',
+  '-StartupTimeoutSeconds', '20',
+  '-ForegroundRunSeconds', '2',
+  '-HostLaunchRunSeconds', '3',
+  '-SupervisorRunSeconds', '20'
+)
+$ProcessSupervisionBoundary = $ProcessSupervisionBoundaryResult.payload
+$ProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value $ProcessSupervisionBoundary.blockers
+$ProcessSupervisionBoundaryObserved = (
+  [int]$ProcessSupervisionBoundaryResult.exit_code -eq 0 -and
+  [string]$ProcessSupervisionBoundary.kind -eq 'lens.process_supervision_authority_boundary.proof' -and
+  [bool]$ProcessSupervisionBoundary.ok -and
+  [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed -and
+  [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
+)
 $Criteria = @($Checkpoint.criteria)
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_.ready })
 $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
@@ -66,6 +119,8 @@ $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ProcessSupervisionBoundaryObserved -and $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised') {
+  'resident_host_process_not_supervised'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_not_supervised') {
   'resident_surface_runtime_not_supervised'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_missing') {
@@ -118,14 +173,52 @@ $Payload = [ordered]@{
     host_supervision = [string[]]@(
       $Blockers | Where-Object { $_ -match 'supervision|restart|service_' } | Sort-Object -Unique
     )
+    process_supervision = [string[]]@(
+      $ProcessSupervisionBoundaryBlockers | Where-Object {
+        $_ -match 'process_supervision|process_restart|resident_host_process|resident_supervision'
+      } | Sort-Object -Unique
+    )
+    service_activation = [string[]]@(
+      $ProcessSupervisionBoundaryBlockers | Where-Object { $_ -match 'service_' } | Sort-Object -Unique
+    )
     authority = [string[]]@(
       $Blockers | Where-Object { $_ -match 'authority|not_granted|not_authorized' } | Sort-Object -Unique
     )
+  }
+  process_supervision_authority_boundary_proof = [ordered]@{
+    status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
+    ok = $ProcessSupervisionBoundaryObserved
+    exit_code = [int]$ProcessSupervisionBoundaryResult.exit_code
+    evidence = @(
+      'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
+      'scripts/lens-host-supervision-proof.ps1 -Mode Status'
+    )
+    stage6_checkpoint_observed = [bool]$ProcessSupervisionBoundary.stage6_checkpoint_observed
+    host_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.host_supervision_boundary_observed
+    process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
+    service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
+    bounded_local_process_launch_observed = [bool]$ProcessSupervisionBoundary.bounded_local_process_launch_observed
+    supervision_ready = [bool]$ProcessSupervisionBoundary.supervision_ready
+    ready_for_resident_claim = [bool]$ProcessSupervisionBoundary.ready_for_resident_claim
+    resident_claim_allowed = [bool]$ProcessSupervisionBoundary.resident_claim_allowed
+    resident_host_supervised = [bool]$ProcessSupervisionBoundary.resident_host_supervised
+    service_installed = [bool]$ProcessSupervisionBoundary.service_installed
+    service_managed = [bool]$ProcessSupervisionBoundary.service_managed
+    process_supervision_ready = [bool]$ProcessSupervisionBoundary.process_supervision_ready
+    service_activation_ready = [bool]$ProcessSupervisionBoundary.service_activation_ready
+    would_supervise_process = [bool]$ProcessSupervisionBoundary.would_supervise_process
+    would_restart_process = [bool]$ProcessSupervisionBoundary.would_restart_process
+    would_install_service = [bool]$ProcessSupervisionBoundary.would_install_service
+    would_start_service = [bool]$ProcessSupervisionBoundary.would_start_service
+    would_write_memory = [bool]$ProcessSupervisionBoundary.would_write_memory
+    would_decide_approval = [bool]$ProcessSupervisionBoundary.would_decide_approval
+    blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
   }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
+    'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
     '/lens/status',
     '/lens/resident-surface',
     '/lens/resident-surface/activation',
@@ -135,6 +228,9 @@ $Payload = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     checkpoint_readback = $true
+    process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
+    process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
+    service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false
     approval_decision_authority = $false
     memory_write = $false

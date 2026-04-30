@@ -14125,6 +14125,57 @@ consumption of supervisor-owned host session:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens completion audit consumes process supervision boundary proof
+
+Stage 6/Lens completion audit now consumes the existing
+process-supervision/service-activation authority boundary proof instead of
+stopping at the checkpoint-only view. `scripts/lens-stage6-completion-audit.ps1
+-Mode Status` invokes
+`scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status`,
+embeds a `process_supervision_authority_boundary_proof` readback block, and
+groups the proof's process-supervision and service-activation blockers under
+dedicated `closure_blockers.process_supervision` and
+`closure_blockers.service_activation` sections.
+
+The audit now carries the proof that the Stage 6 checkpoint, host-supervision
+boundary, process-supervision denial, and service-activation plan are observed.
+It keeps `supervision_ready`, `ready_for_resident_claim`,
+`resident_claim_allowed`, `resident_host_supervised`, `service_installed`,
+`service_managed`, `process_supervision_ready`, and `service_activation_ready`
+false. It also keeps `would_supervise_process`, `would_restart_process`,
+`would_install_service`, `would_start_service`, `would_write_memory`, and
+`would_decide_approval` false.
+
+This is stage-audit/readback wiring only. It does not grant execution
+authority, approval authority, memory-write behavior, process-supervision
+authority, process-restart authority, service-install authority, service-control
+authority, tray/hotkey authority, overlay control, summon authority, telemetry
+authority, or a resident claim. Stage 6 remains active and blocked:
+`ready_to_close: false`, `transition_allowed: false`, and
+`closure_decision: do_not_close_stage6`.
+
+The audit's `next_smallest_truthful_gap` is now
+`resident_host_process_not_supervised`, moving the active blocker from generic
+resident-surface runtime readback to the specific unsupervised resident host
+process. The remaining Stage 6 closure blockers still include summon-anywhere,
+helpful-not-noisy, and system-resident presence.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens completion audit
+consumption of process supervision boundary proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed before test contract update`, then `passed`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

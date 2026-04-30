@@ -53,7 +53,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -83,14 +83,47 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "tray_host_missing" in payload["closure_blockers"]["tray"]
     assert "overlay_window_missing" in payload["closure_blockers"]["overlay"]
     assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["host_supervision"]
+    assert "resident_host_process_not_supervised" in payload["closure_blockers"]["process_supervision"]
+    assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["process_supervision"]
+    assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
+
+    process_boundary = payload["process_supervision_authority_boundary_proof"]
+    assert process_boundary["status"] == "proof_passed"
+    assert process_boundary["ok"] is True
+    assert process_boundary["stage6_checkpoint_observed"] is True
+    assert process_boundary["host_supervision_boundary_observed"] is True
+    assert process_boundary["process_supervision_boundary_observed"] is True
+    assert process_boundary["service_activation_plan_observed"] is True
+    assert process_boundary["bounded_local_process_launch_observed"] is True
+    assert process_boundary["supervision_ready"] is False
+    assert process_boundary["ready_for_resident_claim"] is False
+    assert process_boundary["resident_claim_allowed"] is False
+    assert process_boundary["resident_host_supervised"] is False
+    assert process_boundary["service_installed"] is False
+    assert process_boundary["service_managed"] is False
+    assert process_boundary["process_supervision_ready"] is False
+    assert process_boundary["service_activation_ready"] is False
+    assert process_boundary["would_supervise_process"] is False
+    assert process_boundary["would_restart_process"] is False
+    assert process_boundary["would_install_service"] is False
+    assert process_boundary["would_start_service"] is False
+    assert process_boundary["would_write_memory"] is False
+    assert process_boundary["would_decide_approval"] is False
+    assert "resident_host_process_not_supervised" in process_boundary["blockers"]
+    assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
+    assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in process_boundary["evidence"]
 
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/resident-surface" in payload["evidence"]
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is True
+    assert governance["process_supervision_authority_boundary_readback"] is True
+    assert governance["process_supervision_boundary_observed"] is True
+    assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False
     assert governance["approval_decision_authority"] is False
     assert governance["memory_write"] is False
