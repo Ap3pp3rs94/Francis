@@ -2554,6 +2554,104 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_execute_body["governance"]["resident_claim_authority"] is False
 
 
+def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/host/persistent-supervision")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "lens.host.persistent_supervision_plan"
+    assert body["status"] == "blocked"
+    assert body["route"] == "/lens/host/persistent-supervision"
+    assert body["host_route"] == "/lens/host"
+    assert body["manifest_route"] == "/lens/host/manifest"
+    assert body["supervision_route"] == "/lens/host/supervision"
+    assert body["authority_route"] == "/lens/host/supervision/authority"
+    assert body["service_name"] == "Francis-LensHost"
+    assert body["service_manager"] == "scripts/service-install.ps1"
+    assert body["service_manager_present"] is True
+    assert body["service_config_present"] is True
+    assert body["host_entrypoint_present"] is True
+    assert body["plan_available"] is True
+    assert body["ready"] is False
+    assert body["persistent_supervision_ready"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["requirements_total"] == 10
+    assert body["requirements_ready_total"] == 3
+    assert body["requirements_blocked_total"] == 7
+    assert body["blocked_requirements"] == [
+        "process_supervision_enabled",
+        "persistent_supervision_enabled",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "resident_claim_authority",
+    ]
+    assert "process_supervision_disabled" in body["blockers"]
+    assert "persistent_supervision_disabled" in body["blockers"]
+    assert "process_restart_authority_not_granted" in body["blockers"]
+    assert "service_install_authority_not_granted" in body["blockers"]
+    assert "service_control_authority_not_granted" in body["blockers"]
+    assert "receipt_write_authority_not_granted" in body["blockers"]
+    assert "resident_claim_authority_not_granted" in body["blockers"]
+    assert body["plan"] == {
+        "mode": "persistent_supervised_resident_host",
+        "service_name": "Francis-LensHost",
+        "would_install_service": False,
+        "would_update_service": False,
+        "would_start_service": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+    }
+    assert body["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert body["governance"] == {
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "mutation_authority_granted": False,
+    }
+
+    status = client.get("/lens/status")
+    assert status.status_code == 200
+    resident_host = status.json()["resident_host"]
+    assert resident_host["persistent_supervision_plan_route"] == "/lens/host/persistent-supervision"
+    assert resident_host["persistent_supervision_plan"]["next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert resident_host["persistent_supervision_plan"]["plan"]["would_supervise_process"] is False
+
+
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

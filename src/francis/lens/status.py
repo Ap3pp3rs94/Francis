@@ -30,6 +30,7 @@ from francis.lens.activation import (
 )
 from francis.lens.host_manifest import (
     lens_host_launch_manifest,
+    lens_host_persistent_supervision_plan,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
@@ -257,6 +258,7 @@ def _hud_runtime_surface() -> dict[str, Any]:
 def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any], limit: int = 5) -> dict[str, Any]:
     launch_manifest = lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
+    persistent_supervision_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     supervision_authority_request = lens_host_supervision_authority_request_contract()
     supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
@@ -407,6 +409,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "launch_manifest": launch_manifest,
         "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
         "supervision_gate": supervision_gate,
+        "persistent_supervision_plan_route": _safe_str(persistent_supervision_plan.get("route")).strip(),
+        "persistent_supervision_plan": persistent_supervision_plan,
         "supervision_authority_request_route": _safe_str(supervision_authority_request.get("route")).strip(),
         "supervision_authority_request": supervision_authority_request,
         "supervision_authority_requests_route": _safe_str(supervision_authority_requests.get("route")).strip(),

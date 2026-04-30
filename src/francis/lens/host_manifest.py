@@ -496,6 +496,178 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
     }
 
 
+def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    service_install = launch_manifest.get("service_install")
+    service_install = service_install if isinstance(service_install, dict) else {}
+    declared_entrypoint = launch_manifest.get("declared_entrypoint")
+    declared_entrypoint = declared_entrypoint if isinstance(declared_entrypoint, dict) else {}
+    supervision_readiness = launch_manifest.get("supervision_readiness")
+    supervision_readiness = supervision_readiness if isinstance(supervision_readiness, dict) else {}
+    service_plan = launch_manifest.get("service_plan")
+    service_plan = service_plan if isinstance(service_plan, dict) else {}
+    process_readback = launch_manifest.get("process_readback")
+    process_readback = process_readback if isinstance(process_readback, dict) else {}
+    service_readback = launch_manifest.get("service_readback")
+    service_readback = service_readback if isinstance(service_readback, dict) else {}
+
+    service_config_ready = bool(service_install.get("config_exists"))
+    host_entrypoint_ready = bool(declared_entrypoint.get("exists"))
+    service_manager_ready = bool(service_install.get("manager_exists"))
+    process_supervision_enabled = bool(supervision_readiness.get("process_supervision_enabled"))
+    persistent_supervision_enabled = bool(supervision_readiness.get("persistent_supervision_enabled"))
+    process_restart_authority = bool(supervision_readiness.get("process_restart_authority"))
+    service_install_authority = bool(supervision_readiness.get("service_install_authority"))
+    service_control_authority = bool(supervision_readiness.get("service_control_authority"))
+    receipt_write_authority = bool(supervision_readiness.get("receipt_write_authority"))
+    resident_claim_authority = bool(supervision_readiness.get("resident_claim_authority"))
+
+    requirements = [
+        _readiness_item(
+            "service_config",
+            label="Lens host service config",
+            ready=service_config_ready,
+            status="ready" if service_config_ready else "missing",
+            reason="" if service_config_ready else "service_config_missing",
+        ),
+        _readiness_item(
+            "host_entrypoint",
+            label="Lens host entrypoint",
+            ready=host_entrypoint_ready,
+            status="ready" if host_entrypoint_ready else "missing",
+            reason="" if host_entrypoint_ready else "host_entrypoint_missing",
+        ),
+        _readiness_item(
+            "service_manager",
+            label="Service manager script",
+            ready=service_manager_ready,
+            status="ready" if service_manager_ready else "missing",
+            reason="" if service_manager_ready else "service_manager_missing",
+        ),
+        _readiness_item(
+            "process_supervision_enabled",
+            label="Process supervision enabled",
+            ready=process_supervision_enabled,
+            status="ready" if process_supervision_enabled else "blocked",
+            reason="" if process_supervision_enabled else "process_supervision_disabled",
+        ),
+        _readiness_item(
+            "persistent_supervision_enabled",
+            label="Persistent supervision enabled",
+            ready=persistent_supervision_enabled,
+            status="ready" if persistent_supervision_enabled else "blocked",
+            reason="" if persistent_supervision_enabled else "persistent_supervision_disabled",
+        ),
+        _readiness_item(
+            "process_restart_authority",
+            label="Process restart authority",
+            ready=process_restart_authority,
+            status="ready" if process_restart_authority else "blocked",
+            reason="" if process_restart_authority else "process_restart_authority_not_granted",
+        ),
+        _readiness_item(
+            "service_install_authority",
+            label="Service install authority",
+            ready=service_install_authority,
+            status="ready" if service_install_authority else "blocked",
+            reason="" if service_install_authority else "service_install_authority_not_granted",
+        ),
+        _readiness_item(
+            "service_control_authority",
+            label="Service control authority",
+            ready=service_control_authority,
+            status="ready" if service_control_authority else "blocked",
+            reason="" if service_control_authority else "service_control_authority_not_granted",
+        ),
+        _readiness_item(
+            "receipt_write_authority",
+            label="Persistent supervision receipt authority",
+            ready=receipt_write_authority,
+            status="ready" if receipt_write_authority else "blocked",
+            reason="" if receipt_write_authority else "receipt_write_authority_not_granted",
+        ),
+        _readiness_item(
+            "resident_claim_authority",
+            label="Resident claim authority",
+            ready=resident_claim_authority,
+            status="ready" if resident_claim_authority else "blocked",
+            reason="" if resident_claim_authority else "resident_claim_authority_not_granted",
+        ),
+    ]
+    blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
+    blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
+    ready = not blocked_requirements
+    return {
+        "ok": True,
+        "kind": "lens.host.persistent_supervision_plan",
+        "status": "ready_for_operator_review" if ready else "blocked",
+        "route": "/lens/host/persistent-supervision",
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "supervision_route": "/lens/host/supervision",
+        "authority_route": "/lens/host/supervision/authority",
+        "service_name": str(service_install.get("service_name") or ""),
+        "service_manager": str(service_install.get("manager") or "scripts/service-install.ps1"),
+        "service_manager_present": service_manager_ready,
+        "service_config_present": service_config_ready,
+        "host_entrypoint_present": host_entrypoint_ready,
+        "plan_available": True,
+        "ready": ready,
+        "persistent_supervision_ready": ready,
+        "resident_claim_allowed": False,
+        "requirements": requirements,
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(requirements) - len(blocked_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "blocked_requirements": blocked_requirements,
+        "blockers": blockers,
+        "plan": {
+            "mode": "persistent_supervised_resident_host",
+            "service_name": str(service_install.get("service_name") or ""),
+            "would_install_service": False,
+            "would_update_service": False,
+            "would_start_service": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_write_receipt": False,
+            "would_write_memory": False,
+            "would_claim_resident": False,
+        },
+        "source_readbacks": {
+            "manifest": {
+                "route": "/lens/host/manifest",
+                "status": str(launch_manifest.get("status") or ""),
+            },
+            "service_plan": service_plan,
+            "process_readback": process_readback,
+            "service_readback": service_readback,
+            "supervision_readiness": supervision_readiness,
+        },
+        "next_smallest_truthful_gap": (
+            "persistent_supervision_execution_boundary" if ready else "persistent_supervision_authority_not_granted"
+        ),
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "message": (
+            "Persistent Lens host supervision is planned but blocked; this readback does not install, start, "
+            "supervise, restart, write receipts, write memory, or claim a resident host."
+        ),
+    }
+
+
 def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)

@@ -14539,6 +14539,50 @@ supervision plan proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision API readback
+
+Stage 6/Lens now exposes the persistent-supervision plan through a direct
+read-only backend route at `GET /lens/host/persistent-supervision`. The route
+projects the same current truth as the plan proof: the Lens host service config,
+host entrypoint, and service manager are present, while process supervision
+enablement, persistent supervision enablement, process-restart authority,
+service install/control authority, receipt-write authority, and resident-claim
+authority remain blocked.
+
+`/lens/status` now embeds the same plan as
+`resident_host.persistent_supervision_plan` with a stable
+`persistent_supervision_plan_route`, so downstream operator surfaces can read
+the blocker without shelling out to the proof script. The plan reports all
+future `would_*` actions as `false` in the current repo posture and keeps
+`next_smallest_truthful_gap: persistent_supervision_authority_not_granted`.
+
+This is backend readback/API work only. It does not grant execution, approval
+decision, memory-write, local-process-launch, process-supervision,
+process-restart, service-install, service-control, receipt-write,
+denial-receipt-write, resident-claim, telemetry, tray, hotkey, overlay, summon,
+capture, or UI authority. It does not install, update, start, stop, restart,
+supervise, write receipts, write memory, or claim a resident Lens host process.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+explicit persistent-supervision authority boundary behind process-supervision,
+restart, service-control, receipt-write, and resident-claim requirements.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision API readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `failed before fix; passed after importing the plan helper from the correct Lens module`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -14628,6 +14672,9 @@ These remain true and should block any "finished" claim:
   composes the supervision gate, authority preflight, denial boundary, and
   denial-receipt readback into exact remaining process-supervision and
   service-control authority blockers,
+  plus a direct read-only `/lens/host/persistent-supervision` API plan readback
+  that exposes the remaining persistent-supervision, restart, service-control,
+  receipt-write, and resident-claim blockers through `/lens/status`,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6`, groups closure blockers, and now moves the next
   concrete blocker past direct content readback and toward resident runtime

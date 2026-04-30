@@ -15,6 +15,7 @@ from francis.lens import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_launch_manifest,
+    lens_host_persistent_supervision_plan,
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_request_readback,
@@ -115,6 +116,11 @@ def host_manifest() -> dict[str, Any]:
 @router.get("/host/supervision")
 def host_supervision() -> dict[str, Any]:
     return lens_host_supervision_gate()
+
+
+@router.get("/host/persistent-supervision")
+def host_persistent_supervision() -> dict[str, Any]:
+    return lens_host_persistent_supervision_plan()
 
 
 @router.get("/host/supervision/authority")
