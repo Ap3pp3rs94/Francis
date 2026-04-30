@@ -85,9 +85,12 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" in criteria["summon_anywhere"]["blockers"]
     assert "global_hotkey_binding_missing" in criteria["summon_anywhere"]["blockers"]
     assert "summon_binding_missing" in criteria["summon_anywhere"]["blockers"]
-    assert criteria["helpful_not_noisy"]["status"] == "resident_surface_content_readback_ready"
+    assert criteria["helpful_not_noisy"]["status"] == "resident_surface_foreground_runtime_observed"
     assert criteria["helpful_not_noisy"]["ready"] is False
-    assert criteria["helpful_not_noisy"]["blockers"] == ["resident_surface_runtime_missing"]
+    assert criteria["helpful_not_noisy"]["blockers"] == [
+        "resident_surface_not_resident",
+        "resident_surface_runtime_not_supervised",
+    ]
     assert "/lens/resident-surface" in criteria["helpful_not_noisy"]["evidence"]
     assert "scripts/lens-live-operator-proof.ps1" in criteria["helpful_not_noisy"]["evidence"]
     assert criteria["mode_visibility"]["status"] == "readback_ready"
@@ -99,7 +102,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" not in criteria["system_resident_presence"]["blockers"]
     assert "resident_host_process_not_supervised" in criteria["system_resident_presence"]["blockers"]
     assert "resident_supervision_disabled" in criteria["system_resident_presence"]["blockers"]
-    assert "resident_surface_runtime_missing" in criteria["system_resident_presence"]["blockers"]
+    assert "resident_surface_runtime_missing" not in criteria["system_resident_presence"]["blockers"]
+    assert "resident_surface_not_resident" in criteria["system_resident_presence"]["blockers"]
+    assert "resident_surface_runtime_not_supervised" in criteria["system_resident_presence"]["blockers"]
     assert "resident_overlay_runtime_missing" in criteria["system_resident_presence"]["blockers"]
     assert "tray_host_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
@@ -121,7 +126,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     )
     assert "/lens/resident-surface/activation" in criteria["system_resident_presence"]["evidence"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
-    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_runtime_missing" not in payload["blockers"]
+    assert "resident_surface_not_resident" in payload["blockers"]
+    assert "resident_surface_runtime_not_supervised" in payload["blockers"]
     assert "resident_surface_missing" not in payload["blockers"]
     assert payload["resident_runtime_authority_grant_preflight"]["status"] == "blocked"
     assert payload["resident_runtime_authority_grant_preflight"]["ok"] is True
@@ -433,6 +440,30 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_surface_content_readback"]["resident_claim_authority"] is False
     assert "resident_surface_runtime_missing" in payload["resident_surface_content_readback"]["blockers"]
     assert "resident_surface_missing" not in payload["resident_surface_content_readback"]["blockers"]
+    assert payload["resident_surface_foreground_runtime_proof"]["status"] == "proof_passed"
+    assert payload["resident_surface_foreground_runtime_proof"]["ok"] is True
+    assert payload["resident_surface_foreground_runtime_proof"]["exit_code"] == 0
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_content_readback"] is True
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_readback"] is True
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_observed"] is True
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["resident_surface_runtime_status"]
+        == "foreground_runtime_observed"
+    )
+    assert payload["resident_surface_foreground_runtime_proof"]["foreground_host_process_observed"] is True
+    assert payload["resident_surface_foreground_runtime_proof"]["foreground_host_runtime_completed"] is True
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_ready"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_claim_allowed"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_host_process"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["execution_authority"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["approval_decision_authority"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["memory_write"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["process_supervision_authority"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["service_control_authority"] is False
+    assert payload["resident_surface_foreground_runtime_proof"]["resident_claim_authority"] is False
+    assert "resident_surface_not_resident" in payload["resident_surface_foreground_runtime_proof"]["blockers"]
+    assert "resident_surface_runtime_not_supervised" in payload["resident_surface_foreground_runtime_proof"]["blockers"]
+    assert "resident_surface_runtime_missing" not in payload["resident_surface_foreground_runtime_proof"]["blockers"]
     assert payload["live_operator_experience_proof"]["status"] == "proof_passed"
     assert payload["live_operator_experience_proof"]["ok"] is True
     assert payload["live_operator_experience_proof"]["exit_code"] == 0
@@ -514,6 +545,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "bounded_supervisor_observation": True,
         "resident_overlay_boundary_observed": True,
         "resident_overlay_activation_boundary_observed": True,
+        "resident_surface_foreground_runtime_proof_observed": True,
         "resident_runtime_authority_boundary_observed": True,
         "resident_runtime_authority_grant_preflight_observed": True,
         "resident_runtime_execution_policy_contract_observed": True,

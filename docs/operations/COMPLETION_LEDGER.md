@@ -13823,6 +13823,57 @@ foreground runtime proof:
   Result: `passed` with expected PowerShell LF-to-CRLF warning for
   `scripts/lens-resident-surface-proof.ps1`
 
+### 2026-04-30 - Stage 6/Lens checkpoint consumes foreground runtime proof
+
+Stage 6/Lens completion checkpoint now consumes the resident-surface foreground
+runtime proof. `scripts/lens-stage6-checkpoint.ps1` invokes
+`scripts/lens-resident-surface-proof.ps1`, verifies the bounded foreground
+runtime readback, exposes it as `resident_surface_foreground_runtime_proof`, and
+moves the `helpful_not_noisy` criterion from
+`resident_surface_content_readback_ready` with `resident_surface_runtime_missing`
+to `resident_surface_foreground_runtime_observed` with
+`resident_surface_runtime_not_supervised` and `resident_surface_not_resident`.
+
+The Stage 6 completion audit now prefers
+`resident_surface_runtime_not_supervised` as the next smallest truthful gap when
+the checkpoint has consumed the foreground runtime proof. This keeps the audit
+from reporting the older missing-runtime blocker after a bounded foreground
+runtime has already been observed.
+
+This is checkpoint/audit readback composition only. It does not make the
+foreground host resident, supervise or restart the process, install/start/stop
+or control a service, register tray presence, bind a hotkey, open/control an
+overlay, summon Francis anywhere, write memory, decide approvals, create UI
+controls, write receipts, or grant execution, approval-decision, memory-write,
+process-supervision, process-restart, service-control, overlay-control, summon,
+hotkey-registration, tray-registration, capture, telemetry, or resident-claim
+authority.
+
+Stage 6 remains blocked. The next smallest truthful gap is no longer proving
+that a foreground resident-surface runtime can be observed; it is making a real
+supervised resident runtime path truthful behind the existing approval,
+supervision, service-control, tray, hotkey, overlay, and resident-claim gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens checkpoint
+foreground runtime proof consumption:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed` before test contract update because the checkpoint/audit
+  moved from `resident_surface_runtime_missing` to
+  `resident_surface_runtime_not_supervised`; after updating the focused
+  assertions and removing the stale blocker leak from system-resident
+  aggregation, result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with expected PowerShell LF-to-CRLF warnings for
+  `scripts/lens-stage6-checkpoint.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13919,7 +13970,10 @@ These remain true and should block any "finished" claim:
   proof consumption of that live operator proof so operator experience is no
   longer reported as missing there, plus resident-surface proof consumption of a
   bounded foreground runtime readback so the proof now distinguishes
-  `resident_surface_runtime_not_supervised` from a missing runtime, but no
+  `resident_surface_runtime_not_supervised` from a missing runtime, plus Stage 6
+  checkpoint and completion-audit consumption of that foreground runtime proof
+  so the active checkpoint/audit blocker is now the unsupervised/non-resident
+  runtime rather than missing runtime, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

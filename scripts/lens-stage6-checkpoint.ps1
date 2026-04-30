@@ -9,6 +9,9 @@ param(
   [ValidateRange(2, 30)]
   [int]$HostLaunchRunSeconds = 3,
 
+  [ValidateRange(2, 30)]
+  [int]$ResidentSurfaceForegroundRunSeconds = 15,
+
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20
 )
@@ -420,6 +423,7 @@ $PilotStatus = [string](Get-PropertyValue -Payload $PilotIndicator -Name 'status
 
 $PowerShellPath = Get-PowerShellPath
 $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
+$ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
@@ -458,6 +462,59 @@ if ($ResidentSurfaceReadbackReady) {
 }
 if (-not $LiveOperatorProofPassed) {
   $LiveOperatorBlockers += 'operator_experience_proof_missing'
+}
+
+$ResidentSurfaceProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds))
+$ResidentSurfaceProof = if ($ResidentSurfaceProofResult.Count -gt 0) { $ResidentSurfaceProofResult[-1] } else { $null }
+$ResidentSurfaceProofExitCode = -1
+$ResidentSurfaceProofPayload = $null
+if ($ResidentSurfaceProof -is [System.Collections.IDictionary]) {
+  if ($ResidentSurfaceProof.Contains('exit_code') -and $null -ne $ResidentSurfaceProof['exit_code']) {
+    $ResidentSurfaceProofExitCode = [int]$ResidentSurfaceProof['exit_code']
+  }
+  if ($ResidentSurfaceProof.Contains('payload') -and $null -ne $ResidentSurfaceProof['payload']) {
+    $ResidentSurfaceProofPayload = $ResidentSurfaceProof['payload']
+  }
+}
+$ResidentSurfaceProofDetails = Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'proof'
+$ResidentSurfaceForegroundRuntimeBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentSurfaceProofDetails -Name 'resident_surface_foreground_runtime_blockers' -Default @()
+)
+$ResidentSurfaceForegroundRuntimeProofPassed = (
+  $ResidentSurfaceProofExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readiness_proof' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_content_readback' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_readback' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_runtime_status' -Default '') -eq 'foreground_runtime_observed' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'foreground_host_process_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'foreground_host_runtime_completed' -Default $false) -and
+  ($ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
+  ($ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_not_resident') -and
+  -not ($ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_runtime_missing') -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_host_process' -Default $true)
+)
+$ResidentSurfaceRuntimeProofBlockers = if ($ResidentSurfaceForegroundRuntimeProofPassed) {
+  @(
+    @($ResidentSurfaceForegroundRuntimeBlockers | Where-Object {
+        $_ -ne 'resident_surface_missing' -and $_ -ne 'resident_surface_runtime_missing'
+      }) +
+    @('resident_surface_runtime_not_supervised', 'resident_surface_not_resident')
+  ) | Sort-Object -Unique
+} elseif ($ResidentSurfaceReadbackReady) {
+  @('resident_surface_runtime_missing')
+} else {
+  @('resident_surface_readback_missing')
+}
+if ($ResidentSurfaceForegroundRuntimeProofPassed) {
+  $LiveOperatorStatus = 'resident_surface_foreground_runtime_observed'
+  $LiveOperatorBlockers = @(
+    @($LiveOperatorBlockers | Where-Object { $_ -ne 'resident_surface_runtime_missing' -and $_ -ne 'resident_surface_readback_missing' }) +
+    @($ResidentSurfaceRuntimeProofBlockers)
+  ) | Sort-Object -Unique
 }
 
 $HostLaunchProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds))
@@ -572,8 +629,12 @@ if ($LiveOperatorProofPassed) {
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($ResidentSurfaceReadbackReady) {
   $SystemResidentBlockers = @(
-    @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_surface_missing' }) +
-    @('resident_surface_runtime_missing')
+    @($SystemResidentBlockers | Where-Object {
+        $_ -ne 'resident_surface_missing' -and (
+          -not $ResidentSurfaceForegroundRuntimeProofPassed -or $_ -ne 'resident_surface_runtime_missing'
+        )
+      }) +
+    @($ResidentSurfaceRuntimeProofBlockers)
   ) | Sort-Object -Unique
 } else {
   $SystemResidentBlockers = @($SystemResidentBlockers + @('resident_surface_readback_missing')) | Sort-Object -Unique
@@ -994,6 +1055,31 @@ $Payload = [ordered]@{
       @('resident_surface_runtime_missing')
     ) | Sort-Object -Unique
   }
+  resident_surface_foreground_runtime_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'status' -Default 'missing')
+    ok = $ResidentSurfaceForegroundRuntimeProofPassed
+    exit_code = $ResidentSurfaceProofExitCode
+    evidence = @('/lens/resident-surface?limit=5', 'scripts/lens-resident-surface-proof.ps1')
+    resident_surface_content_readback = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_content_readback' -Default $false)
+    resident_surface_foreground_runtime_readback = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_readback' -Default $false)
+    resident_surface_foreground_runtime_observed = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_observed' -Default $false)
+    resident_surface_runtime_status = [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_runtime_status' -Default '')
+    foreground_host_process_observed = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'foreground_host_process_observed' -Default $false)
+    foreground_host_runtime_completed = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'foreground_host_runtime_completed' -Default $false)
+    resident_surface_ready = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_ready' -Default $false)
+    resident_claim_allowed = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_claim_allowed' -Default $false)
+    resident_host_process = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_host_process' -Default $false)
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    local_process_launch_authority = $true
+    process_supervision_authority = $false
+    service_control_authority = $false
+    resident_claim_authority = $false
+    blockers = @($ResidentSurfaceRuntimeProofBlockers)
+  }
   live_operator_experience_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default 'missing')
     ok = $LiveOperatorProofPassed
@@ -1109,6 +1195,7 @@ $Payload = [ordered]@{
     bounded_supervisor_observation = ($HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
     resident_overlay_boundary_observed = $ResidentOverlayRuntimeProofPassed
     resident_overlay_activation_boundary_observed = $ResidentOverlayActivationBoundaryProofPassed
+    resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofPassed
     resident_runtime_authority_boundary_observed = $RuntimeBoundaryObserved
     resident_runtime_authority_grant_preflight_observed = $RuntimeGrantObserved
     resident_runtime_execution_policy_contract_observed = $RuntimePolicyObserved
@@ -1128,7 +1215,7 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = ($HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
+    local_process_launch_authority = ($ResidentSurfaceForegroundRuntimeProofPassed -or $HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
     api_local_process_launch_authority = $false
     activation_local_process_launch_authority = $false
     process_restart_authority = $false
