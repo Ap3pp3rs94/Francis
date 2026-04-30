@@ -276,10 +276,14 @@ def _lens_host_supervision_readiness(
     process_readback: dict[str, Any],
 ) -> dict[str, Any]:
     supervision_enabled = bool(service_config_payload.get("process_supervision_enabled"))
+    persistent_supervision_enabled = bool(service_config_payload.get("persistent_supervision_enabled"))
+    process_restart_authority = bool(service_config_payload.get("process_restart_authority"))
     install_authority = bool(
         service_config_payload.get("install_authority") or service_config_payload.get("service_install_authority")
     )
     service_control_authority = bool(service_config_payload.get("service_control_authority"))
+    receipt_write_authority = bool(service_config_payload.get("receipt_write_authority"))
+    resident_claim_authority = bool(service_config_payload.get("resident_claim_authority"))
     foreground_readback_ready = bool(process_readback.get("readback_ready"))
     prerequisites = [
         _readiness_item(
@@ -318,6 +322,20 @@ def _lens_host_supervision_readiness(
             reason="" if supervision_enabled else "disabled_in_service_config",
         ),
         _readiness_item(
+            "persistent_supervision_enabled",
+            label="Persistent supervision enabled",
+            ready=persistent_supervision_enabled,
+            status="ready" if persistent_supervision_enabled else "blocked",
+            reason="" if persistent_supervision_enabled else "persistent_supervision_disabled",
+        ),
+        _readiness_item(
+            "process_restart_authority",
+            label="Process restart authority",
+            ready=process_restart_authority,
+            status="ready" if process_restart_authority else "blocked",
+            reason="" if process_restart_authority else "process_restart_authority_false",
+        ),
+        _readiness_item(
             "service_install_authority",
             label="Service install authority",
             ready=install_authority,
@@ -331,6 +349,20 @@ def _lens_host_supervision_readiness(
             status="ready" if service_control_authority else "blocked",
             reason="" if service_control_authority else "service_control_authority_false",
         ),
+        _readiness_item(
+            "receipt_write_authority",
+            label="Resident supervision receipt authority",
+            ready=receipt_write_authority,
+            status="ready" if receipt_write_authority else "blocked",
+            reason="" if receipt_write_authority else "receipt_write_authority_false",
+        ),
+        _readiness_item(
+            "resident_claim_authority",
+            label="Resident claim authority",
+            ready=resident_claim_authority,
+            status="ready" if resident_claim_authority else "blocked",
+            reason="" if resident_claim_authority else "resident_claim_authority_false",
+        ),
     ]
     blocked_by = [str(item["id"]) for item in prerequisites if not bool(item["ready"])]
     return {
@@ -340,8 +372,12 @@ def _lens_host_supervision_readiness(
         "service_manager": service_manager,
         "service_manager_exists": service_manager_exists,
         "process_supervision_enabled": supervision_enabled,
+        "persistent_supervision_enabled": persistent_supervision_enabled,
+        "process_restart_authority": process_restart_authority,
         "service_install_authority": install_authority,
         "service_control_authority": service_control_authority,
+        "receipt_write_authority": receipt_write_authority,
+        "resident_claim_authority": resident_claim_authority,
         "resident_claim_allowed": False,
         "next_allowed_transition": "foreground_status_session_only" if blocked_by else "operator_review_required",
         "blocked_by": blocked_by,
@@ -372,8 +408,18 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
     )
     service_plan_blockers = _as_str_list(service_plan.get("blocked_by"))
     supervision_blockers = _as_str_list(supervision_readiness.get("blocked_by"))
+    supervision_blocker_reasons = [
+        str(item.get("reason")) for item in prerequisite_items if str(item.get("reason") or "").strip()
+    ]
     manifest_blockers = _as_str_list(launch_manifest.get("blockers"))
-    blocked_by = sorted({*service_plan_blockers, *supervision_blockers, *manifest_blockers})
+    blocked_by = sorted(
+        {
+            *service_plan_blockers,
+            *supervision_blockers,
+            *supervision_blocker_reasons,
+            *manifest_blockers,
+        }
+    )
     supervision_ready = bool(supervision_readiness.get("ready"))
     process_alive = bool(process_readback.get("process_alive"))
     host_process_blocker = "resident_host_process_not_supervised" if process_alive else "resident_host_process_missing"
@@ -406,6 +452,8 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "service_installed": bool(service_readback.get("installed")),
         "service_managed": service_managed,
         "process_supervision_enabled": bool(supervision_readiness.get("process_supervision_enabled")),
+        "persistent_supervision_enabled": bool(supervision_readiness.get("persistent_supervision_enabled")),
+        "process_restart_authority": bool(supervision_readiness.get("process_restart_authority")),
         "process_restart_supported": bool(process_readback.get("restart_supported")),
         "service_plan_ready": bool(service_plan.get("ready")),
         "would_install_service": bool(service_plan.get("would_install")),
@@ -432,6 +480,8 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
             "process_restart_authority": False,
             "service_install_authority": False,
             "service_control_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
             "resident_claim_authority": False,
             "overlay_control_authority": False,
             "summon_authority": False,
@@ -441,7 +491,7 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         },
         "message": (
             "Resident Lens supervision enablement is read-only and blocked until process supervision, "
-            "restart, service install, service control, and resident claim authority are explicitly granted."
+            "restart, service install, service control, receipt write, and resident claim authority are explicitly granted."
         ),
     }
 
@@ -496,6 +546,13 @@ def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None
             ready=False,
             status="blocked",
             reason="resident_claim_authority_not_granted",
+        ),
+        _readiness_item(
+            "receipt_write_authority",
+            label="Resident supervision receipt authority",
+            ready=False,
+            status="blocked",
+            reason="receipt_write_authority_not_granted",
         ),
     ]
     requirements = [

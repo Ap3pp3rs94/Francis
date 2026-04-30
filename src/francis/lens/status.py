@@ -1212,6 +1212,8 @@ def _stage6_readiness(
                 "process_restart_authority": False,
                 "service_install_authority": False,
                 "service_control_authority": False,
+                "receipt_write_authority": False,
+                "resident_claim_authority": False,
                 "blockers": _as_list(_as_dict(resident_host.get("supervision_gate")).get("blockers")),
             },
             {

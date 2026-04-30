@@ -227,6 +227,8 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "start_after_install": false,
   "installable": false,
   "process_supervision_enabled": false,
+  "persistent_supervision_enabled": false,
+  "process_restart_authority": false,
   "supervision_readiness_gate": true,
   "supervision_mode": "windows_service",
   "supervision_ready": false,
@@ -234,6 +236,8 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "process_supervision_readback": true,
   "service_status_readback": true,
   "service_control_authority": false,
+  "receipt_write_authority": false,
+  "resident_claim_authority": false,
   "install_authority": false,
   "service_install_authority": false,
   "blocked_reason": "lens_host_runtime_not_implemented"
@@ -840,14 +844,22 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "service_manager": "scripts/service-install.ps1",
         "service_manager_exists": True,
         "process_supervision_enabled": False,
+        "persistent_supervision_enabled": False,
+        "process_restart_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
+        "receipt_write_authority": False,
+        "resident_claim_authority": False,
         "resident_claim_allowed": False,
         "next_allowed_transition": "foreground_status_session_only",
         "blocked_by": [
             "process_supervision_enabled",
+            "persistent_supervision_enabled",
+            "process_restart_authority",
             "service_install_authority",
             "service_control_authority",
+            "receipt_write_authority",
+            "resident_claim_authority",
         ],
         "blocked_reason": "resident_supervision_disabled",
         "prerequisites": [
@@ -887,6 +899,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
                 "reason": "disabled_in_service_config",
             },
             {
+                "id": "persistent_supervision_enabled",
+                "label": "Persistent supervision enabled",
+                "ready": False,
+                "status": "blocked",
+                "reason": "persistent_supervision_disabled",
+            },
+            {
+                "id": "process_restart_authority",
+                "label": "Process restart authority",
+                "ready": False,
+                "status": "blocked",
+                "reason": "process_restart_authority_false",
+            },
+            {
                 "id": "service_install_authority",
                 "label": "Service install authority",
                 "ready": False,
@@ -899,6 +925,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
                 "ready": False,
                 "status": "blocked",
                 "reason": "service_control_authority_false",
+            },
+            {
+                "id": "receipt_write_authority",
+                "label": "Resident supervision receipt authority",
+                "ready": False,
+                "status": "blocked",
+                "reason": "receipt_write_authority_false",
+            },
+            {
+                "id": "resident_claim_authority",
+                "label": "Resident claim authority",
+                "ready": False,
+                "status": "blocked",
+                "reason": "resident_claim_authority_false",
             },
         ],
     }
@@ -921,6 +961,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["service_installed"] is False
     assert supervision_gate["service_managed"] is False
     assert supervision_gate["process_supervision_enabled"] is False
+    assert supervision_gate["persistent_supervision_enabled"] is False
+    assert supervision_gate["process_restart_authority"] is False
     assert supervision_gate["process_restart_supported"] is False
     assert supervision_gate["service_plan_ready"] is False
     assert supervision_gate["would_install_service"] is False
@@ -930,10 +972,17 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["next_allowed_transition"] == "foreground_status_session_only"
     assert "resident_host_process_missing" in supervision_gate["blockers"]
     assert "process_supervision_enabled" in supervision_gate["blockers"]
+    assert "persistent_supervision_enabled" in supervision_gate["blockers"]
+    assert "process_restart_authority" in supervision_gate["blockers"]
     assert "service_install_authority" in supervision_gate["blockers"]
     assert "service_control_authority" in supervision_gate["blockers"]
+    assert "receipt_write_authority" in supervision_gate["blockers"]
+    assert "resident_claim_authority" in supervision_gate["blockers"]
+    assert "process_restart_authority_false" in supervision_gate["blockers"]
     assert "service_install_authority_false" in supervision_gate["blockers"]
     assert "service_control_authority_false" in supervision_gate["blockers"]
+    assert "receipt_write_authority_false" in supervision_gate["blockers"]
+    assert "resident_claim_authority_false" in supervision_gate["blockers"]
     assert "lens_host_runtime_not_implemented" in supervision_gate["blockers"]
     assert supervision_gate["prerequisites"] == expected_supervision_readiness["prerequisites"]
     assert supervision_gate["process_readback"] == resident_host["process_readback"]
@@ -950,6 +999,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "process_restart_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
+        "receipt_write_authority": False,
+        "denial_receipt_write_authority": False,
         "resident_claim_authority": False,
         "overlay_control_authority": False,
         "summon_authority": False,
@@ -981,8 +1032,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "service_install_authority" in supervision_authority["blocked_requirements"]
     assert "service_control_authority" in supervision_authority["blocked_requirements"]
     assert "resident_claim_authority" in supervision_authority["blocked_requirements"]
+    assert "receipt_write_authority" in supervision_authority["blocked_requirements"]
     assert "resident_host_supervision_authority_not_granted" in supervision_authority["blockers"]
     assert "process_supervision_authority_not_granted" in supervision_authority["blockers"]
+    assert "receipt_write_authority_not_granted" in supervision_authority["blockers"]
     assert supervision_authority["governance"] == {
         "read_only_contract": True,
         "preflight_only": True,
@@ -1964,7 +2017,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate_criterion["process_restart_authority"] is False
     assert supervision_gate_criterion["service_install_authority"] is False
     assert supervision_gate_criterion["service_control_authority"] is False
+    assert supervision_gate_criterion["receipt_write_authority"] is False
+    assert supervision_gate_criterion["resident_claim_authority"] is False
     assert "process_supervision_enabled" in supervision_gate_criterion["blockers"]
+    assert "persistent_supervision_enabled" in supervision_gate_criterion["blockers"]
+    assert "receipt_write_authority_false" in supervision_gate_criterion["blockers"]
+    assert "resident_claim_authority_false" in supervision_gate_criterion["blockers"]
     assert "service_install_authority_false" in supervision_gate_criterion["blockers"]
     assert _criterion(body, "summon_anywhere")["status"] == "not_implemented"
     assert _criterion(body, "summon_anywhere")["evidence"] == [
@@ -2585,8 +2643,12 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert resident_host["supervision_readiness"]["resident_claim_allowed"] is False
     assert resident_host["supervision_readiness"]["blocked_by"] == [
         "process_supervision_enabled",
+        "persistent_supervision_enabled",
+        "process_restart_authority",
         "service_install_authority",
         "service_control_authority",
+        "receipt_write_authority",
+        "resident_claim_authority",
     ]
     assert resident_host["supervision_readiness"]["prerequisites"][3]["id"] == "foreground_process_readback"
     assert resident_host["supervision_readiness"]["prerequisites"][3]["status"] == "process_observed"

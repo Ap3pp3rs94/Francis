@@ -14418,6 +14418,43 @@ stopped-state stabilization:
 - `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `failed once during concurrent proof-state contention with a simultaneously running raw audit, then passed when rerun serially`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision prerequisite readback
+
+Stage 6/Lens resident supervision readback now names the remaining persistent
+supervision prerequisites directly instead of leaving them implicit behind the
+broader supervision blocker. The disabled Lens host service config declares
+`persistent_supervision_enabled: false`, `process_restart_authority: false`,
+`receipt_write_authority: false`, and `resident_claim_authority: false`.
+`/lens/host`, `/lens/host/supervision`, `/lens/host/supervision/authority`,
+and `/lens/status` now surface those values as blocked readiness requirements
+and false governance authorities.
+
+This is readback-only prerequisite disclosure. It does not grant execution,
+approval decision, memory-write, local-process-launch, process-supervision,
+process-restart, service-install, service-control, receipt-write, telemetry,
+tray, hotkey, overlay, summon, or resident-claim authority. It does not start,
+supervise, restart, install, or stop a Lens host process.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+actual persistent resident supervision path behind explicit process-supervision,
+restart, service-control, receipt-write, and resident-claim authority.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision prerequisite readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
