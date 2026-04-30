@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(5, 60)]
-  [int]$StartupTimeoutSeconds = 20,
+  [int]$StartupTimeoutSeconds = 30,
 
   [ValidateRange(2, 30)]
   [int]$HostLaunchRunSeconds = 3,
@@ -119,6 +119,44 @@ function Invoke-JsonScript {
     payload = $Payload
     output = $Text
   }
+}
+
+function Invoke-JsonScriptWithProofRetry {
+  param(
+    [string]$PowerShellPath,
+    [string]$ScriptPath,
+    [string[]]$ScriptArgs = @(),
+    [string]$ExpectedKind,
+    [int]$Attempts = 2
+  )
+
+  $LastProof = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $Result = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ScriptArgs $ScriptArgs)
+    $Proof = if ($Result.Count -gt 0) { $Result[-1] } else { $null }
+    $LastProof = $Proof
+    $ExitCode = -1
+    $Payload = $null
+    if ($Proof -is [System.Collections.IDictionary]) {
+      if ($Proof.Contains('exit_code') -and $null -ne $Proof['exit_code']) {
+        $ExitCode = [int]$Proof['exit_code']
+      }
+      if ($Proof.Contains('payload') -and $null -ne $Proof['payload']) {
+        $Payload = $Proof['payload']
+      }
+    }
+    if (
+      $ExitCode -eq 0 -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+    ) {
+      return $Proof
+    }
+    if ($Attempt -lt $Attempts) {
+      Start-Sleep -Milliseconds 500
+    }
+  }
+  return $LastProof
 }
 
 function Get-LensStatus {
@@ -593,8 +631,7 @@ $HostSupervisorOwnedSessionPassed = (
 )
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'blockers' -Default @())
 
-$ResidentOverlayRuntimeProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds))
-$ResidentOverlayRuntimeProof = if ($ResidentOverlayRuntimeProofResult.Count -gt 0) { $ResidentOverlayRuntimeProofResult[-1] } else { $null }
+$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds) -ExpectedKind 'lens.resident_overlay_runtime.proof'
 $ResidentOverlayRuntimeExitCode = -1
 $ResidentOverlayRuntimePayload = $null
 if ($ResidentOverlayRuntimeProof -is [System.Collections.IDictionary]) {
@@ -620,8 +657,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
 
-$ResidentOverlayActivationBoundaryProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorRunSeconds))
-$ResidentOverlayActivationBoundaryProof = if ($ResidentOverlayActivationBoundaryProofResult.Count -gt 0) { $ResidentOverlayActivationBoundaryProofResult[-1] } else { $null }
+$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorRunSeconds) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $ResidentOverlayActivationBoundaryExitCode = -1
 $ResidentOverlayActivationBoundaryPayload = $null
 if ($ResidentOverlayActivationBoundaryProof -is [System.Collections.IDictionary]) {

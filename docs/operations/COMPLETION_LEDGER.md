@@ -14305,6 +14305,45 @@ authority grant approval binding:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens checkpoint proof timing stabilization
+
+Stage 6/Lens checkpoint diagnostics now tolerate the timing sensitivity exposed
+by the `42a1d4a` CI run without weakening the proof contract. The checkpoint
+now gives live API startup a 30-second default window, retries the composed
+resident overlay runtime and activation-boundary proof scripts once when the
+first diagnostic run does not return `proof_passed`, and still requires a real
+`proof_passed` payload before reporting those checkpoint proof blocks as passed.
+The resident overlay activation-boundary proof also creates an isolated temp
+data root when callers do not provide `-DataDir`, keeping its live API,
+overlay-runtime, and activation-boundary reads on one proof-local state root.
+The process-supervision authority boundary and completion audit now use the same
+30-second startup window when they consume the Stage 6 checkpoint.
+
+This is diagnostic stability only. It does not grant execution, approval
+decision, memory-write, process-supervision, process-restart, service-install,
+service-control, overlay-control, tray-registration, hotkey-registration,
+summon, capture, telemetry, receipt-write, denial-receipt-write, resident-claim,
+or UI authority. It does not start a resident host, supervise or restart a real
+resident process, install or control a service, bind a global hotkey, create tray
+presence, open an overlay, write memory, decide approvals, or claim Stage 6
+closure.
+
+Stage 6 remains active and blocked. This removes a CI/local timing flake from
+the Stage 6 checkpoint and completion-audit proof chain so the next truthful
+gap remains implementing a real supervised resident host process only behind the
+existing approval, authority, service-control, tray, hotkey, overlay, and
+resident-claim gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens checkpoint proof
+timing stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `failed before retry stabilization on resident overlay runtime proof timing, then passed after the checkpoint retry fix`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

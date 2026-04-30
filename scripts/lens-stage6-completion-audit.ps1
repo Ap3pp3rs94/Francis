@@ -96,7 +96,7 @@ if ($LASTEXITCODE -ne 0) {
 $Checkpoint = ($CheckpointJson | Out-String | ConvertFrom-Json)
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-StartupTimeoutSeconds', '20',
+  '-StartupTimeoutSeconds', '30',
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', '3',
   '-SupervisorRunSeconds', '20'

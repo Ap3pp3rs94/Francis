@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(5, 60)]
-  [int]$StartupTimeoutSeconds = 20,
+  [int]$StartupTimeoutSeconds = 30,
 
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20,
@@ -232,9 +232,10 @@ function New-Check {
 $PowerShellPath = Get-PowerShellPath
 $PythonPath = Get-PythonPath
 $ProofDataRoot = ''
-if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-  $ProofDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+if ([string]::IsNullOrWhiteSpace($DataDir)) {
+  $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-overlay-activation-proof\" + [guid]::NewGuid().ToString('N') + "\data")
 }
+$ProofDataRoot = [System.IO.Path]::GetFullPath($DataDir)
 
 $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'

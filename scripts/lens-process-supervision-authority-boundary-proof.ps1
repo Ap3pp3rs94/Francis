@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(5, 60)]
-  [int]$StartupTimeoutSeconds = 20,
+  [int]$StartupTimeoutSeconds = 30,
 
   [ValidateRange(2, 30)]
   [int]$ForegroundRunSeconds = 2,
