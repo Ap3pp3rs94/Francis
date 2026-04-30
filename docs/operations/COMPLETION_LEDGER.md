@@ -14344,6 +14344,41 @@ timing stabilization:
 - `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
   Result: `failed before retry stabilization on resident overlay runtime proof timing, then passed after the checkpoint retry fix`
 
+### 2026-04-30 - Stage 6/Lens completion-audit blocker ordering
+
+Stage 6/Lens completion audit now consumes the checkpoint's bounded
+supervisor-owned host session before selecting the next smallest truthful gap.
+When that bounded `SuperviseOnce` proof is observed, the audit now reports
+`resident_supervision_not_persistent` instead of asking for another bounded
+`resident_host_process_not_supervised` proof. This makes the closure audit point
+at the next real resident-host blocker: persistent supervised resident runtime,
+not another diagnostic foreground/supervisor loop.
+
+This is diagnostic/audit readback only. It does not grant execution, approval
+decision, memory-write, local-process-launch, process-supervision,
+process-restart, service-install, service-control, tray-registration,
+hotkey-registration, overlay-control, summon, capture, receipt-write,
+denial-receipt-write, resident-claim, telemetry, or UI authority. It does not
+start, supervise, restart, install, or stop a resident Lens host process.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is now the
+persistent resident supervision path behind explicit process supervision,
+restart, service-control, resident-claim, and receipt authority.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens completion-audit
+blocker-ordering slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object -ExpandProperty host_supervisor_owned_session | ConvertTo-Json -Depth 8`
+  Result: `passed; reported supervised_session_completed with bounded_supervised_session=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 | ConvertFrom-Json | Select-Object next_smallest_truthful_gap,next_smallest_truthful_gap_basis | ConvertTo-Json -Depth 4`
+  Result: `passed; reported resident_supervision_not_persistent`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed once during concurrent proof-state contention, then passed when rerun serially`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

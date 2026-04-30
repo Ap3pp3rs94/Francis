@@ -116,9 +116,24 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
 $Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
+$HostSupervisorOwnedSession = $Checkpoint.host_supervisor_owned_session
+$HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value $HostSupervisorOwnedSession.blockers
+$HostSupervisorOwnedSessionObserved = (
+  [string]$HostSupervisorOwnedSession.status -eq 'supervised_session_completed' -and
+  [bool]$HostSupervisorOwnedSession.ok -and
+  [bool]$HostSupervisorOwnedSession.bounded_supervised_session -and
+  [bool]$HostSupervisorOwnedSession.bounded_supervisor_observed -and
+  -not [bool]$HostSupervisorOwnedSession.resident_supervised_runtime -and
+  -not [bool]$HostSupervisorOwnedSession.resident_claim_allowed
+)
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif (
+  $HostSupervisorOwnedSessionObserved -and
+  $HostSupervisorOwnedSessionBlockers -contains 'resident_supervision_not_persistent'
+) {
+  'resident_supervision_not_persistent'
 } elseif ($ProcessSupervisionBoundaryObserved -and $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised') {
   'resident_host_process_not_supervised'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_not_supervised') {
@@ -151,6 +166,13 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_supervision_not_persistent') {
+    'The checkpoint observed one bounded supervisor-owned host session, so the next blocker is persistent resident supervision rather than another bounded supervision proof.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_not_supervised') {
+    'Process-supervision authority boundary proof still reports the host process as not supervised.'
+  } else {
+    'Derived from the current Stage 6 checkpoint blocker ordering.'
+  }
   checkpoint_next_smallest_truthful_gap = [string]$Checkpoint.next_smallest_truthful_gap
   summary = [ordered]@{
     criteria_total = [int]$Checkpoint.summary.criteria_total
