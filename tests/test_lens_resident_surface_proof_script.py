@@ -47,12 +47,17 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["ok"] is True
     assert payload["resident_surface_ready"] is False
     assert payload["resident_surface_content_readback"] is True
+    assert payload["resident_surface_foreground_runtime_readback"] is True
+    assert payload["resident_surface_foreground_runtime_observed"] is True
     assert payload["resident_surface_content_contract_ready"] is True
     assert payload["resident_surface_contract_status"] == "readback_ready"
+    assert payload["resident_surface_runtime_status"] == "foreground_runtime_observed"
     assert payload["resident_surface_route"] == "/lens/resident-surface"
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
     assert payload["resident_host_process"] is False
+    assert payload["foreground_host_process_observed"] is True
+    assert payload["foreground_host_runtime_completed"] is True
     assert payload["tray_presence"] is False
     assert payload["tray_icon"] is False
     assert payload["overlay_window"] is False
@@ -62,10 +67,11 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["operator_experience_proof"] is True
     assert payload["live_operator_experience_proof"] is True
     assert payload["live_operator_experience_ready"] is False
-    assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
+    assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_surface_content_readback"]["status"] == "readback_ready"
+    assert checks["resident_surface_foreground_runtime_readback"]["status"] == "foreground_runtime_observed"
     assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
     assert checks["supervision_proof_available"]["status"] == "available"
     assert checks["live_operator_experience_proof"]["status"] == "proof_passed"
@@ -84,6 +90,13 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["resident_surface_content_contract_ready"] is True
     assert "resident_surface_runtime_missing" in proof["resident_surface_readback_blockers"]
     assert "resident_surface_missing" not in proof["resident_surface_readback_blockers"]
+    assert proof["resident_surface_foreground_runtime_status"] == "foreground_runtime_observed"
+    assert proof["resident_surface_foreground_runtime_observed"] is True
+    assert "resident_surface_runtime_not_supervised" in proof["resident_surface_foreground_runtime_blockers"]
+    assert "resident_surface_not_resident" in proof["resident_surface_foreground_runtime_blockers"]
+    assert "resident_surface_runtime_missing" not in proof["resident_surface_foreground_runtime_blockers"]
+    assert proof["foreground_runtime_running_state"] == "foreground_running"
+    assert proof["foreground_runtime_final_state"] == "foreground_stopped"
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_status"] == "proof_passed"
@@ -105,7 +118,9 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert "overlay_window_disabled" in proof["overlay_blockers"]
     assert "global_hotkey_binding_disabled" in proof["summon_blockers"]
 
-    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_runtime_missing" not in payload["blockers"]
+    assert "resident_surface_runtime_not_supervised" in payload["blockers"]
+    assert "resident_surface_not_resident" in payload["blockers"]
     assert "resident_surface_missing" not in payload["blockers"]
     assert "tray_presence_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
@@ -118,7 +133,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
         "api_route_readback": True,
         "live_http_readback": True,
         "temporary_api_process": True,
-        "bounded_foreground_session": False,
+        "bounded_foreground_session": True,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,

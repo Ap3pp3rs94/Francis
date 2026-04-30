@@ -13775,6 +13775,54 @@ foreground runtime readback:
 - `python -m ruff format --check --no-cache src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident surface proof consumes foreground runtime readback
+
+Stage 6/Lens resident-surface readiness proof now consumes the foreground
+runtime readback that `/lens/resident-surface` exposes. The proof starts a
+bounded foreground Lens host session against a temporary data root, reads
+`/lens/resident-surface` while the host runtime state is live, verifies
+`resident_surface_runtime.status: foreground_runtime_observed`, and carries the
+normalized blockers `resident_surface_runtime_not_supervised` and
+`resident_surface_not_resident` instead of treating the runtime as missing in
+the proof's top-level blocker set.
+
+The API host-manifest reader now accepts UTF-8 with BOM for runtime JSON files.
+That matches the runtime state written by Windows PowerShell status scripts and
+prevents the API from observing a live PID while losing the `foreground_running`
+state field.
+
+This is proof/readback and parser hardening only. It does not make the
+foreground host resident, supervise or restart the process, install/start/stop
+or control a service, register tray presence, bind a hotkey, open/control an
+overlay, summon Francis anywhere, write memory, decide approvals, create UI
+controls, or grant execution, approval-decision, memory-write,
+process-supervision, process-restart, service-control, overlay-control, summon,
+hotkey-registration, tray-registration, capture, telemetry, or resident-claim
+authority.
+
+Stage 6 remains blocked. The next smallest truthful gap is to consume this
+resident-surface foreground runtime proof in the Stage 6 checkpoint and
+completion-audit path, then continue toward a supervised resident runtime only
+behind the existing authority gates.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+foreground runtime proof:
+
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `failed` before fix because the API host-manifest reader treated the
+  PowerShell-written UTF-8 BOM runtime state as invalid JSON and therefore lost
+  `foreground_running`; after accepting UTF-8 with BOM and widening the bounded
+  diagnostic foreground window, result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with expected PowerShell LF-to-CRLF warning for
+  `scripts/lens-resident-surface-proof.ps1`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13864,12 +13912,15 @@ These remain true and should block any "finished" claim:
   service-control authority blockers,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6`, groups closure blockers, and now moves the next
-  concrete blocker to `resident_surface_runtime_missing` once direct content
-  readback is proven,
+  concrete blocker past direct content readback and toward resident runtime
+  supervision,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, plus resident-surface
   proof consumption of that live operator proof so operator experience is no
-  longer reported as missing there, but no supervised
+  longer reported as missing there, plus resident-surface proof consumption of a
+  bounded foreground runtime readback so the proof now distinguishes
+  `resident_surface_runtime_not_supervised` from a missing runtime, but no
+  supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command
   palette, tray presence, hotkey binding, summon-anywhere behavior, or live

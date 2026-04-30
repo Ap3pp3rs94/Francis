@@ -19,7 +19,7 @@ def _json_dict_from_path(path: Path) -> dict[str, Any]:
     try:
         if not path.is_file():
             return {}
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}

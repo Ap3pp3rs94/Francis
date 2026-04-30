@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [ValidateRange(2, 30)]
+  [int]$ForegroundRunSeconds = 15
 )
 
 Set-StrictMode -Version 2
@@ -80,6 +83,55 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Read-JsonFile {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Quote-PowerShellString {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return "''"
+  }
+  return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Wait-ForRuntimeState {
+  param(
+    [string]$StatePath,
+    [string]$Status,
+    [int]$TimeoutSeconds = 10
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $Deadline) {
+    $Payload = Read-JsonFile -Path $StatePath
+    if ($null -ne $Payload -and [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq $Status) {
+      return $Payload
+    }
+    Start-Sleep -Milliseconds 100
+  }
+  return (Read-JsonFile -Path $StatePath)
+}
+
 function Invoke-JsonScript {
   param(
     [string]$PowerShellPath,
@@ -113,6 +165,8 @@ function Invoke-JsonScript {
 }
 
 function Invoke-ResidentSurfaceReadback {
+  param([string]$DataDir = '')
+
   $Python = Get-Command python -ErrorAction SilentlyContinue
   if ($null -eq $Python) {
     return [ordered]@{
@@ -138,6 +192,8 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
 
   $SrcPath = Join-Path $RepoRoot 'src'
   $PreviousPythonPath = [string]$env:PYTHONPATH
+  $HadPreviousDataDir = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
   $TempScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-{0}.py" -f $PID)
   $Output = @()
   $ExitCode = 1
@@ -147,6 +203,9 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
     } else {
       $env:PYTHONPATH = "$SrcPath$([System.IO.Path]::PathSeparator)$PreviousPythonPath"
     }
+    if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+      $env:FRANCIS_DATA_DIR = $DataDir
+    }
     Set-Content -LiteralPath $TempScriptPath -Value $Source -Encoding UTF8
     $Output = & $Python.Source $TempScriptPath 2>&1
     $ExitCode = $LASTEXITCODE
@@ -155,6 +214,11 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
       Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
     } else {
       $env:PYTHONPATH = $PreviousPythonPath
+    }
+    if ($HadPreviousDataDir) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataDir
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
     }
     Remove-Item -LiteralPath $TempScriptPath -Force -ErrorAction SilentlyContinue
   }
@@ -185,6 +249,152 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
   }
 }
 
+function Invoke-ForegroundResidentSurfaceReadback {
+  param(
+    [string]$PowerShellPath,
+    [int]$RunSeconds
+  )
+
+  $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
+  $HostScriptExists = Test-Path -LiteralPath $HostScriptPath -PathType Leaf
+  if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not $HostScriptExists) {
+    return [ordered]@{
+      ok = $false
+      error = 'host_foreground_runner_unavailable'
+      payload = $null
+      runtime = $null
+      runtime_blockers = @('resident_surface_runtime_missing')
+    }
+  }
+
+  $ProofDataRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-runtime\" + [guid]::NewGuid().ToString('N') + "\data"))
+  )
+  $RuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-host'
+  $StatePath = Join-Path $RuntimeDir 'status.json'
+  $ForegroundOutputPath = Join-Path $RuntimeDir 'foreground-output.json'
+  $ForegroundErrorPath = Join-Path $RuntimeDir 'foreground-error.txt'
+
+  $ProofStarted = $false
+  $RunningState = $null
+  $SurfaceReadback = $null
+  $FinalPayload = $null
+  $FinalState = $null
+  $ForegroundExitCode = -1
+  $ForegroundStdout = ''
+  $ForegroundStderr = ''
+  $ForegroundProcess = $null
+
+  New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+  Remove-Item -LiteralPath $ForegroundOutputPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $ForegroundErrorPath -Force -ErrorAction SilentlyContinue
+
+  try {
+    $ChildCommand = (
+      '$env:FRANCIS_DATA_DIR = ' +
+      (Quote-PowerShellString -Value $ProofDataRoot) +
+      '; & ' +
+      (Quote-PowerShellString -Value $HostScriptPath) +
+      ' -Mode Foreground -RunSeconds ' +
+      [string]$RunSeconds +
+      ' > ' +
+      (Quote-PowerShellString -Value $ForegroundOutputPath) +
+      ' 2> ' +
+      (Quote-PowerShellString -Value $ForegroundErrorPath)
+    )
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = $PowerShellPath
+    $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $ChildCommand)
+    $StartInfo.WorkingDirectory = $RepoRoot
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.CreateNoWindow = $true
+    $StartInfo.RedirectStandardOutput = $false
+    $StartInfo.RedirectStandardError = $false
+
+    $ForegroundProcess = [System.Diagnostics.Process]::new()
+    $ForegroundProcess.StartInfo = $StartInfo
+    $ProofStarted = $ForegroundProcess.Start()
+
+    $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 10
+    $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
+
+    $WaitTimeoutMs = [int](($RunSeconds + 10) * 1000)
+    $Completed = $ForegroundProcess.WaitForExit($WaitTimeoutMs)
+    if (-not $Completed) {
+      try {
+        $ForegroundProcess.Kill()
+      } catch {
+      }
+      $ForegroundProcess.WaitForExit(5000) | Out-Null
+    }
+    $ForegroundExitCode = $ForegroundProcess.ExitCode
+  } finally {
+    if ($null -ne $ForegroundProcess -and -not $ForegroundProcess.HasExited) {
+      try {
+        $ForegroundProcess.Kill()
+      } catch {
+      }
+      $ForegroundProcess.WaitForExit(5000) | Out-Null
+    }
+  }
+
+  if (Test-Path -LiteralPath $ForegroundOutputPath -PathType Leaf) {
+    $ForegroundStdout = Get-Content -LiteralPath $ForegroundOutputPath -Raw -ErrorAction SilentlyContinue
+  }
+  if (Test-Path -LiteralPath $ForegroundErrorPath -PathType Leaf) {
+    $ForegroundStderr = Get-Content -LiteralPath $ForegroundErrorPath -Raw -ErrorAction SilentlyContinue
+  }
+  try {
+    $FinalPayload = $ForegroundStdout | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $FinalPayload = $null
+  }
+  $FinalState = Read-JsonFile -Path $StatePath
+
+  $SurfacePayload = Get-PropertyValue -Payload $SurfaceReadback -Name 'payload'
+  $Runtime = Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_runtime'
+  $RuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Runtime -Name 'blockers' -Default @())
+  $ForegroundObserved = (
+    $ProofStarted -and
+    [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '') -eq 'foreground_running' -and
+    [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false)
+  )
+  $ReadbackObserved = (
+    [bool](Get-PropertyValue -Payload $SurfaceReadback -Name 'ok' -Default $false) -and
+    [int](Get-PropertyValue -Payload $SurfaceReadback -Name 'status_code' -Default 0) -eq 200 -and
+    [string](Get-PropertyValue -Payload $SurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
+    [string](Get-PropertyValue -Payload $Runtime -Name 'status' -Default '') -eq 'foreground_runtime_observed' -and
+    [bool](Get-PropertyValue -Payload $Runtime -Name 'foreground_runtime_observed' -Default $false) -and
+    ($RuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
+    ($RuntimeBlockers -contains 'resident_surface_not_resident') -and
+    -not ($RuntimeBlockers -contains 'resident_surface_runtime_missing') -and
+    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_ready' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_claim_allowed' -Default $true)
+  )
+  $ForegroundCompleted = (
+    $ForegroundExitCode -eq 0 -and
+    [string](Get-PropertyValue -Payload $FinalPayload -Name 'status' -Default '') -eq 'foreground_completed' -and
+    [string](Get-PropertyValue -Payload $FinalState -Name 'status' -Default '') -eq 'foreground_stopped'
+  )
+
+  return [ordered]@{
+    ok = ($ForegroundObserved -and $ReadbackObserved -and $ForegroundCompleted)
+    data_root = $ProofDataRoot
+    runtime_state_path = 'runtime/lens-host/status.json'
+    foreground_process_observed = $ForegroundObserved
+    foreground_runtime_readback_observed = $ReadbackObserved
+    foreground_completed = $ForegroundCompleted
+    foreground_exit_code = $ForegroundExitCode
+    payload = $SurfacePayload
+    runtime = $Runtime
+    runtime_blockers = $RuntimeBlockers
+    running_state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '')
+    final_state_status = [string](Get-PropertyValue -Payload $FinalState -Name 'status' -Default '')
+    foreground_stdout_length = if ($null -eq $ForegroundStdout) { 0 } else { $ForegroundStdout.Length }
+    foreground_stderr_length = if ($null -eq $ForegroundStderr) { 0 } else { $ForegroundStderr.Length }
+  }
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -212,6 +422,7 @@ $OverlayPreflightPath = Join-Path $PSScriptRoot 'lens-overlay-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
 
 $ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback
+$ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
 $LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status')
 $TrayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status')
@@ -224,6 +435,8 @@ $TrayPayload = Get-PropertyValue -Payload $TrayPreflight -Name 'payload'
 $OverlayPayload = Get-PropertyValue -Payload $OverlayPreflight -Name 'payload'
 $SummonPayload = Get-PropertyValue -Payload $SummonPreflight -Name 'payload'
 $ResidentSurfacePayload = Get-PropertyValue -Payload $ResidentSurfaceReadback -Name 'payload'
+$ForegroundSurfacePayload = Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'payload'
+$ForegroundSurfaceRuntime = Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'runtime'
 
 $Tray = Get-PropertyValue -Payload $TrayPayload -Name 'tray'
 $Overlay = Get-PropertyValue -Payload $OverlayPayload -Name 'overlay'
@@ -231,6 +444,9 @@ $Binding = Get-PropertyValue -Payload $SummonPayload -Name 'binding'
 $ResidentSurfaceGovernance = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'governance'
 $ResidentSurfaceReadbackBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'blockers' -Default @()
+)
+$ForegroundSurfaceRuntimeBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'runtime_blockers' -Default @()
 )
 $HostGovernance = Get-PropertyValue -Payload $HostPayload -Name 'governance'
 $TrayGovernance = Get-PropertyValue -Payload $TrayPayload -Name 'governance'
@@ -294,6 +510,20 @@ $ResidentSurfaceContentReadback = (
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'summon_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'resident_claim_authority' -Default $true)
 )
+$ResidentSurfaceForegroundRuntimeReadback = (
+  [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'ok' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_process_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_runtime_readback_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_completed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
+  [string](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'status' -Default '') -eq 'foreground_runtime_observed' -and
+  [bool](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'foreground_runtime_observed' -Default $false) -and
+  ($ForegroundSurfaceRuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
+  ($ForegroundSurfaceRuntimeBlockers -contains 'resident_surface_not_resident') -and
+  -not ($ForegroundSurfaceRuntimeBlockers -contains 'resident_surface_runtime_missing') -and
+  -not [bool](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'resident_claim_allowed' -Default $true)
+)
 $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_control_authority' -Default $true) -and
@@ -315,6 +545,7 @@ $ResidentClaimBlocked = $HostLifecycleBlocked -and $TrayBlocked -and $OverlayBlo
 
 $Checks = @(
   (New-Check -Id 'resident_surface_content_readback' -Status $(if ($ResidentSurfaceContentReadback) { 'readback_ready' } else { 'failed' }) -Passed $ResidentSurfaceContentReadback -Evidence '/lens/resident-surface?limit=5' -Reason 'Resident surface content must be directly readable through the backend API route before runtime work can claim a surface.')
+  (New-Check -Id 'resident_surface_foreground_runtime_readback' -Status $(if ($ResidentSurfaceForegroundRuntimeReadback) { 'foreground_runtime_observed' } else { 'missing_or_failed' }) -Passed $ResidentSurfaceForegroundRuntimeReadback -Evidence '/lens/resident-surface?limit=5 with bounded foreground lens-host state' -Reason 'Resident surface proof must consume the foreground runtime readback before replacing runtime-missing with the normalized unsupervised/resident blockers.')
   (New-Check -Id 'host_lifecycle_boundary' -Status $(if ($HostLifecycleBlocked) { 'blocked_readback_ready' } else { 'failed' }) -Passed $HostLifecycleBlocked -Evidence 'scripts/lens-host-preflight.ps1 -Mode Status' -Reason 'Host lifecycle must be readable and blocked before resident surface work.')
   (New-Check -Id 'supervision_proof_available' -Status $(if ($SupervisionProofAvailable) { 'available' } else { 'missing' }) -Passed $SupervisionProofAvailable -Evidence 'scripts/lens-host-supervision-proof.ps1' -Reason 'The separate foreground/supervision proof remains the bounded process-readiness evidence.')
   (New-Check -Id 'live_operator_experience_proof' -Status $(if ($LiveOperatorProofPassed) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $LiveOperatorProofPassed -Evidence 'scripts/lens-live-operator-proof.ps1 -Mode Status' -Reason 'Resident surface readiness must consume the live HTTP operator readback proof before it reports operator experience as available.')
@@ -326,10 +557,19 @@ $Checks = @(
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
-$ResidentSurfaceRuntimeBlockers = @(
-  @($ResidentSurfaceReadbackBlockers | Where-Object { $_ -ne 'resident_surface_missing' }) +
-  @('resident_surface_runtime_missing')
-) | Sort-Object -Unique
+if ($ResidentSurfaceForegroundRuntimeReadback) {
+  $ResidentSurfaceRuntimeBlockers = @(
+    @($ForegroundSurfaceRuntimeBlockers | Where-Object {
+        $_ -ne 'resident_surface_missing' -and $_ -ne 'resident_surface_runtime_missing'
+      }) +
+    @('resident_surface_runtime_not_supervised', 'resident_surface_not_resident')
+  ) | Sort-Object -Unique
+} else {
+  $ResidentSurfaceRuntimeBlockers = @(
+    @($ResidentSurfaceReadbackBlockers | Where-Object { $_ -ne 'resident_surface_missing' }) +
+    @('resident_surface_runtime_missing')
+  ) | Sort-Object -Unique
+}
 $BaseBlockers = @(
   $ResidentSurfaceRuntimeBlockers +
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostPayload -Name 'blockers' -Default @())) +
@@ -358,12 +598,17 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   resident_surface_ready = $false
   resident_surface_content_readback = $ResidentSurfaceContentReadback
+  resident_surface_foreground_runtime_readback = $ResidentSurfaceForegroundRuntimeReadback
+  resident_surface_foreground_runtime_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_runtime_readback_observed' -Default $false)
   resident_surface_content_contract_ready = [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'content_contract_ready' -Default $false)
   resident_surface_contract_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'contract_status' -Default '')
+  resident_surface_runtime_status = [string](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'status' -Default '')
   resident_surface_route = '/lens/resident-surface'
   ready_for_lens_resident_claim = $false
   resident_claim_allowed = $false
   resident_host_process = $false
+  foreground_host_process_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_process_observed' -Default $false)
+  foreground_host_runtime_completed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_completed' -Default $false)
   tray_presence = $false
   tray_icon = $false
   overlay_window = $false
@@ -382,6 +627,12 @@ $Payload = [ordered]@{
     resident_surface_activation_route = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'activation_route' -Default '')
     resident_surface_content_contract_ready = [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'content_contract_ready' -Default $false)
     resident_surface_readback_blockers = $ResidentSurfaceReadbackBlockers
+    resident_surface_foreground_runtime_status = [string](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'status' -Default '')
+    resident_surface_foreground_runtime_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'foreground_runtime_observed' -Default $false)
+    resident_surface_foreground_runtime_blockers = $ForegroundSurfaceRuntimeBlockers
+    foreground_runtime_state_path = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'runtime_state_path' -Default '')
+    foreground_runtime_running_state = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'running_state_status' -Default '')
+    foreground_runtime_final_state = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'final_state_status' -Default '')
     host_lifecycle_status = [string](Get-PropertyValue -Payload $HostPayload -Name 'status' -Default '')
     supervision_proof_available = $SupervisionProofAvailable
     live_operator_status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '')
@@ -402,15 +653,15 @@ $Payload = [ordered]@{
     overlay_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @())
     summon_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blockers' -Default @())
   }
-  next_smallest_truthful_gap = 'resident_host_or_resident_overlay_runtime'
+  next_smallest_truthful_gap = if ($ResidentSurfaceForegroundRuntimeReadback) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     api_route_readback = $ResidentSurfaceContentReadback
     live_http_readback = $LiveOperatorProofPassed
     temporary_api_process = $LiveOperatorProofPassed
-    bounded_foreground_session = $false
-    temporary_runtime_state_write = $LiveOperatorProofPassed
+    bounded_foreground_session = $ResidentSurfaceForegroundRuntimeReadback
+    temporary_runtime_state_write = ($LiveOperatorProofPassed -or $ResidentSurfaceForegroundRuntimeReadback)
     product_execution_authority = $false
     execution_authority = $false
     approval_decision_authority = $false
@@ -430,7 +681,7 @@ $Payload = [ordered]@{
     notification_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Lens resident surface readiness now consumes the direct resident-surface API readback and the live HTTP operator proof, then remains blocked; this proof does not register tray presence, bind a hotkey, open an overlay, spawn a foreground host, or claim summon-anywhere behavior.'
+  message = 'Lens resident surface readiness now consumes the direct resident-surface API readback, the live HTTP operator proof, and a bounded foreground runtime readback, then remains blocked; this proof does not register tray presence, bind a hotkey, open an overlay, supervise a host, install a service, or claim summon-anywhere behavior.'
 }
 
 $Payload | ConvertTo-Json -Depth 10
