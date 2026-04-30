@@ -14030,6 +14030,8 @@ denial receipt readback:
   Result: `passed`
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `passed`
+- `python -m mypy src`
+  Result: `passed`
 - `python -m ruff check --no-cache src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py tests\test_api_lens.py`
   Result: `passed`
 - `python -m ruff format --check --no-cache src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py tests\test_api_lens.py`

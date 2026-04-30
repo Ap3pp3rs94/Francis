@@ -2989,7 +2989,7 @@ def deny_lens_resident_runtime_activation_execution(
     )
     deduped_blockers = sorted({blocker for blocker in blockers if blocker})
     status, next_step = _resident_runtime_denial_status(deduped_blockers)
-    response = {
+    response: dict[str, Any] = {
         "ok": True,
         "applied": False,
         "executed": False,
