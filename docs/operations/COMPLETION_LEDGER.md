@@ -14379,6 +14379,45 @@ blocker-ordering slice:
 - `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens host supervisor stopped-state stabilization
+
+Stage 6/Lens bounded host supervisor diagnostics now wait for the supervisor-owned
+foreground host process to complete before finalizing stopped-state proof, then
+poll for the matching stopped runtime state and PID cleanup through a shared
+cleanup-aware stopped-state observer. The same observer is used by the
+read-only `Observe` path. This stabilizes the Windows proof window exposed by
+CI run `964`, where the bounded `SuperviseOnce` proof could miss the final
+stopped/cleanup state under full-suite timing even though the focused local test
+passed.
+
+This is diagnostic/proof-stability work only. It does not grant execution,
+approval decision, memory-write, resident process supervision, process restart,
+service install, service control, tray registration, hotkey registration,
+overlay control, summon, capture, receipt-write, telemetry, UI, or resident
+claim authority. It still launches only one bounded diagnostic foreground host
+inside `SuperviseOnce` and does not create a persistent resident host.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains
+persistent resident supervision behind explicit authority; this slice only makes
+the existing bounded proof less timing-sensitive so audit/readback can be
+trusted.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervisor
+stopped-state stabilization:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py::test_lens_host_supervisor_supervises_one_bounded_host_without_resident_claim -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; reported next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed once during concurrent proof-state contention with a simultaneously running raw audit, then passed when rerun serially`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

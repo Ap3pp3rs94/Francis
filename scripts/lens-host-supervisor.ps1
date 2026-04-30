@@ -168,6 +168,31 @@ function Wait-ForHostStatus {
   return $Latest
 }
 
+function Wait-ForHostStoppedState {
+  param(
+    [string]$StatePath,
+    [string]$PidPath,
+    [int]$ExpectedPid,
+    [int]$TimeoutSeconds
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $Latest = Get-HostState -StatePath $StatePath -PidPath $PidPath
+  while ((Get-Date) -lt $Deadline) {
+    $Latest = Get-HostState -StatePath $StatePath -PidPath $PidPath
+    $StateStatus = [string](Get-PropertyValue -Payload $Latest -Name 'state_status' -Default '')
+    $StoppedPid = [int](Get-PropertyValue -Payload $Latest -Name 'pid' -Default 0)
+    $PidPresent = [bool](Get-PropertyValue -Payload $Latest -Name 'pid_present' -Default $true)
+    $ProcessAlive = [bool](Get-PropertyValue -Payload $Latest -Name 'process_alive' -Default $true)
+    $SameProcess = $ExpectedPid -le 0 -or $StoppedPid -eq $ExpectedPid
+    if ($StateStatus -eq 'foreground_stopped' -and $SameProcess -and -not $ProcessAlive -and -not $PidPresent) {
+      return $Latest
+    }
+    Start-Sleep -Milliseconds 100
+  }
+  return $Latest
+}
+
 function Get-PowerShellPath {
   try {
     $Current = Get-Process -Id $PID -ErrorAction Stop
@@ -438,7 +463,7 @@ if ($Mode -eq 'SuperviseOnce') {
   $HostStarted = [bool](Get-PropertyValue -Payload $StartedProcess -Name 'started' -Default $false)
   $Payload.supervisor_started_process = $HostStarted
 
-  $RunningObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
+  $RunningObservationTimeout = [Math]::Max(25, $RunSeconds + 25)
   $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
   $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
   $RunningObserved = (
@@ -463,22 +488,10 @@ if ($Mode -eq 'SuperviseOnce') {
       })
   }
 
-  $StoppedObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
-  $StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds $StoppedObservationTimeout
+  $Completion = Complete-BoundedHostProcess -StartedProcess $StartedProcess -TimeoutSeconds ([Math]::Max(45, $RunSeconds + 45))
+  $StoppedObservationTimeout = [Math]::Max(20, $RunSeconds + 20)
+  $StoppedState = Wait-ForHostStoppedState -StatePath $HostStatePath -PidPath $HostPidPath -ExpectedPid $RunningPid -TimeoutSeconds $StoppedObservationTimeout
   $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
-  if ([string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and $StoppedPid -gt 0) {
-    $ExitDeadline = (Get-Date).AddSeconds([Math]::Max(20, $RunSeconds + 20))
-    while (
-      (Get-Date) -lt $ExitDeadline -and
-      ((Test-ProcessAlive -ProcessId $StoppedPid) -or (Test-LeafPathPresent -Path $HostPidPath))
-    ) {
-      Start-Sleep -Milliseconds 100
-      $StoppedState = Get-HostState -StatePath $HostStatePath -PidPath $HostPidPath
-      $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default $StoppedPid)
-    }
-  }
-
-  $Completion = Complete-BoundedHostProcess -StartedProcess $StartedProcess -TimeoutSeconds ([Math]::Max(30, $RunSeconds + 30))
   $StoppedObserved = (
     $RunningObserved -and
     [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and
@@ -539,7 +552,7 @@ if ($Mode -eq 'SuperviseOnce') {
   exit 1
 }
 
-$RunningObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
+$RunningObservationTimeout = [Math]::Max(25, $RunSeconds + 25)
 $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
 $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
 $RunningObserved = (
@@ -561,21 +574,9 @@ if ($RunningObserved) {
     })
 }
 
-$StoppedObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
-$StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds $StoppedObservationTimeout
+$StoppedObservationTimeout = [Math]::Max(20, $RunSeconds + 20)
+$StoppedState = Wait-ForHostStoppedState -StatePath $HostStatePath -PidPath $HostPidPath -ExpectedPid $RunningPid -TimeoutSeconds $StoppedObservationTimeout
 $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
-if ([string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and $StoppedPid -gt 0) {
-  # The foreground host writes its stopped state before the PowerShell process fully exits.
-  $ExitDeadline = (Get-Date).AddSeconds([Math]::Max(20, $RunSeconds + 20))
-  while (
-    (Get-Date) -lt $ExitDeadline -and
-    ((Test-ProcessAlive -ProcessId $StoppedPid) -or (Test-LeafPathPresent -Path $HostPidPath))
-  ) {
-    Start-Sleep -Milliseconds 100
-    $StoppedState = Get-HostState -StatePath $HostStatePath -PidPath $HostPidPath
-    $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default $StoppedPid)
-  }
-}
 $StoppedObserved = (
   $RunningObserved -and
   [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and
