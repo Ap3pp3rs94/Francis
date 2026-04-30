@@ -377,6 +377,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface["host_route"] == "/lens/host"
     assert resident_surface["hud_route"] == "/lens/hud"
     assert resident_surface["content_contract_ready"] is True
+    assert resident_surface["foreground_runtime_observed"] is False
     assert resident_surface["resident_surface_ready"] is False
     assert resident_surface["resident_claim_allowed"] is False
     assert resident_surface["resident_overlay_runtime"] is False
@@ -397,6 +398,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "execute_route": "/lens/resident-runtime/execute",
         "ready": False,
     }
+    resident_surface_runtime = resident_surface["resident_surface_runtime"]
+    assert resident_surface_runtime["kind"] == "lens.resident_surface.runtime_readback"
+    assert resident_surface_runtime["status"] == "missing"
+    assert resident_surface_runtime["foreground_runtime_observed"] is False
+    assert resident_surface_runtime["runtime_ready"] is False
+    assert resident_surface_runtime["resident_surface_ready"] is False
+    assert resident_surface_runtime["resident_claim_allowed"] is False
+    assert resident_surface_runtime["blockers"] == ["resident_surface_runtime_missing"]
+    assert resident_surface_runtime["governance"]["execution_authority"] is False
+    assert resident_surface_runtime["governance"]["process_supervision_authority"] is False
     surface_sections = {item["id"]: item for item in resident_surface["surface_sections"]}
     assert surface_sections["mode_and_scope"]["route"] == "/system/operator_mode"
     assert surface_sections["hud_summary"]["route"] == "/lens/hud"
@@ -2444,6 +2455,29 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert process_readback["process_alive"] is True
     assert process_readback["process_alive_check"] in {"posix_signal_zero", "windows_exit_code"}
     assert process_readback["blocked_reason"] == "resident_host_not_supervised"
+    resident_surface = body["resident_surface"]
+    resident_surface_runtime = resident_surface["resident_surface_runtime"]
+    assert resident_surface["foreground_runtime_observed"] is True
+    assert resident_surface["resident_surface_ready"] is False
+    assert resident_surface["resident_claim_allowed"] is False
+    assert resident_surface_runtime["status"] == "foreground_runtime_observed"
+    assert resident_surface_runtime["runtime_state_status"] == "foreground_running"
+    assert resident_surface_runtime["pid"] == os.getpid()
+    assert resident_surface_runtime["process_alive"] is True
+    assert resident_surface_runtime["foreground_runtime_observed"] is True
+    assert resident_surface_runtime["foreground_session_only"] is True
+    assert resident_surface_runtime["runtime_ready"] is False
+    assert resident_surface_runtime["resident_claim_allowed"] is False
+    assert "resident_surface_runtime_missing" not in resident_surface["blockers"]
+    assert "resident_surface_runtime_not_supervised" in resident_surface["blockers"]
+    assert "resident_surface_not_resident" in resident_surface["blockers"]
+    assert resident_surface_runtime["blockers"] == [
+        "resident_surface_runtime_not_supervised",
+        "resident_surface_not_resident",
+    ]
+    assert resident_surface_runtime["governance"]["execution_authority"] is False
+    assert resident_surface_runtime["governance"]["process_supervision_authority"] is False
+    assert resident_surface_runtime["governance"]["resident_claim_authority"] is False
     assert resident_host["resident"] is False
     assert resident_host["process_supervision"] is False
     assert resident_host["service_plan_ready"] is False

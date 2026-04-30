@@ -13734,6 +13734,47 @@ blocker normalization:
 - `git diff --check`
   Result: `passed` with expected PowerShell LF-to-CRLF warnings
 
+### 2026-04-30 - Stage 6/Lens resident surface foreground runtime readback
+
+Stage 6/Lens resident-surface readback now projects a dedicated
+`resident_surface_runtime` readback from the existing Lens host process state.
+When no bounded foreground Lens host process is observed, `/lens/resident-surface`
+continues to report `resident_surface_runtime_missing`. When the existing
+bounded foreground host state is present and the process is alive, the same
+route reports `foreground_runtime_observed: true`,
+`resident_surface_runtime.status: foreground_runtime_observed`, and replaces the
+generic runtime-missing blocker with `resident_surface_runtime_not_supervised`
+and `resident_surface_not_resident`.
+
+This is a readback-only runtime observation. It does not make the foreground
+host resident, supervise or restart the process, install/start/stop/control a
+service, register tray presence, bind a hotkey, open/control an overlay, summon
+Francis anywhere, write memory, decide approvals, create UI controls, or grant
+execution, approval-decision, memory-write, process-supervision,
+process-restart, service-control, overlay-control, summon, hotkey-registration,
+tray-registration, capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The next smallest truthful gap is to consume this
+foreground runtime readback in a focused resident-surface runtime proof/checkpoint
+path, then continue toward a real supervised resident runtime only behind the
+existing authority gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens resident surface
+foreground runtime readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `failed` before fix because the new PID readback reused a bounded
+  display helper that clamps values at `5000`; after scoping the PID readback to
+  a larger maximum, result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

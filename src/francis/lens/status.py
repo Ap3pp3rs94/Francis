@@ -1400,9 +1400,11 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
     overlay_enablement_gate = _as_dict(status.get("overlay_enablement_gate"))
     resident_surface_activation = _as_dict(status.get("resident_surface_activation"))
     hud_runtime = _as_dict(hud.get("runtime"))
+    resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
 
     blockers: list[str] = []
     for source in (
+        resident_surface_runtime.get("blockers"),
         hud_runtime.get("blockers"),
         resident_host.get("blockers"),
         resident_surface_activation.get("blockers"),
@@ -1414,7 +1416,9 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             blocker_id = _safe_str(blocker).strip()
             if blocker_id and blocker_id not in blockers:
                 blockers.append(blocker_id)
-    if "resident_surface_runtime_missing" not in blockers:
+    if bool(resident_surface_runtime.get("foreground_runtime_observed")):
+        blockers = [blocker for blocker in blockers if blocker != "resident_surface_runtime_missing"]
+    elif "resident_surface_runtime_missing" not in blockers:
         blockers.insert(0, "resident_surface_runtime_missing")
 
     surface_sections = [
@@ -1483,6 +1487,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "host_route": "/lens/host",
         "hud_route": "/lens/hud",
         "content_contract_ready": True,
+        "foreground_runtime_observed": bool(resident_surface_runtime.get("foreground_runtime_observed")),
         "resident_surface_ready": False,
         "resident_claim_allowed": False,
         "resident_overlay_runtime": bool(hud_runtime.get("resident_overlay")),
@@ -1526,6 +1531,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             "execute_route": "/lens/resident-runtime/execute",
             "ready": False,
         },
+        "resident_surface_runtime": resident_surface_runtime,
         "enablement_gates": {
             "preflight": preflight,
             "summon": summon_enablement_gate,
@@ -1539,6 +1545,67 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "message": "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active.",
         "governance": {
             "gate": "lens_resident_surface_readback",
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
+def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[str, Any]:
+    process_readback = _as_dict(resident_host.get("process_readback"))
+    foreground_session = _as_dict(resident_host.get("foreground_session"))
+    process_alive = bool(process_readback.get("process_alive"))
+    state_status = _safe_str(process_readback.get("state_status")).strip()
+    foreground_observed = process_alive and state_status == "foreground_running"
+    blockers = (
+        ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
+        if foreground_observed
+        else ["resident_surface_runtime_missing"]
+    )
+    return {
+        "ok": True,
+        "kind": "lens.resident_surface.runtime_readback",
+        "status": "foreground_runtime_observed" if foreground_observed else "missing",
+        "readback_ready": True,
+        "source": "lens_host_process_readback",
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "runtime_state_path": _safe_str(process_readback.get("runtime_state_path")).strip(),
+        "runtime_state_exists": bool(process_readback.get("state_exists")),
+        "runtime_state_status": state_status,
+        "runtime_state_updated_at": _safe_str(process_readback.get("state_updated_at")).strip(),
+        "pid_path": _safe_str(process_readback.get("pid_path")).strip(),
+        "pid_present": bool(process_readback.get("pid_present")),
+        "pid": _safe_int(process_readback.get("pid"), maximum=999999),
+        "process_alive": process_alive,
+        "process_alive_check": _safe_str(process_readback.get("process_alive_check")).strip(),
+        "foreground_runtime_observed": foreground_observed,
+        "foreground_session_supported": bool(foreground_session.get("supported")),
+        "foreground_session_only": foreground_observed,
+        "runtime_ready": False,
+        "resident_surface_ready": False,
+        "resident_claim_allowed": False,
+        "resident_overlay_runtime": False,
+        "blockers": blockers,
+        "message": (
+            "A bounded foreground Lens host process is observable but not resident or supervised."
+            if foreground_observed
+            else "No Lens foreground or resident surface runtime is currently observed."
+        ),
+        "governance": {
+            "gate": "lens_resident_surface_runtime_readback",
             "read_only_contract": True,
             "execution_authority": False,
             "approval_decision_authority": False,
