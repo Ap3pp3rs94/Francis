@@ -696,6 +696,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_receipts["governance"]["process_supervision_authority"] is False
     assert supervision_authority_denial_receipts["governance"]["service_control_authority"] is False
     assert supervision_authority_denial_receipts["governance"]["memory_write"] is False
+    assert resident_host["supervision_authority_grant_receipts_route"] == "/lens/host/supervision/authority/grants"
+    supervision_authority_grant_receipts = resident_host["supervision_authority_grant_receipts"]
+    assert supervision_authority_grant_receipts["kind"] == "lens.host.supervision_authority.grant_receipts"
+    assert supervision_authority_grant_receipts["status"] == "empty"
+    assert supervision_authority_grant_receipts["route"] == "/lens/host/supervision/authority/grants"
+    assert supervision_authority_grant_receipts["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_grant_receipts["total"] == 0
+    assert supervision_authority_grant_receipts["latest"] is None
+    assert supervision_authority_grant_receipts["active_latest"] is None
+    assert supervision_authority_grant_receipts["authority_granted"] is False
+    assert supervision_authority_grant_receipts["items"] == []
+    assert supervision_authority_grant_receipts["governance"]["gate"] == (
+        "lens_host_supervision_authority_grant_receipts_readback"
+    )
+    assert supervision_authority_grant_receipts["governance"]["read_only_contract"] is True
+    assert supervision_authority_grant_receipts["governance"]["execution_authority"] is False
+    assert supervision_authority_grant_receipts["governance"]["approval_decision_authority"] is False
+    assert supervision_authority_grant_receipts["governance"]["process_supervision_authority"] is False
+    assert supervision_authority_grant_receipts["governance"]["service_control_authority"] is False
+    assert supervision_authority_grant_receipts["governance"]["memory_write"] is False
     assert resident_host["supervision_authority_readiness_route"] == "/lens/host/supervision/authority/readiness"
     supervision_authority_readiness = resident_host["supervision_authority_readiness"]
     assert supervision_authority_readiness["kind"] == "lens.host.supervision_authority.readiness_audit"
@@ -704,6 +724,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness["route"] == "/lens/host/supervision/authority/readiness"
     assert supervision_authority_readiness["authority_route"] == "/lens/host/supervision/authority"
     assert supervision_authority_readiness["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_readiness["grants_route"] == "/lens/host/supervision/authority/grants"
     assert supervision_authority_readiness["ready"] is False
     assert supervision_authority_readiness["preflight_ready"] is True
     assert supervision_authority_readiness["authority_ready"] is False
@@ -711,9 +732,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness["resident_claim_allowed"] is False
     assert supervision_authority_readiness["boundary_observed"] is True
     assert supervision_authority_readiness["denial_receipt_readback_ready"] is True
+    assert supervision_authority_readiness["grant_receipt_readback_ready"] is True
     assert supervision_authority_readiness["receipt_count"] == 0
     assert supervision_authority_readiness["latest_receipt_id"] == ""
-    assert supervision_authority_readiness["requirements_total"] >= 10
+    assert supervision_authority_readiness["grant_receipt_count"] == 0
+    assert supervision_authority_readiness["latest_grant_receipt_id"] == ""
+    assert supervision_authority_readiness["active_grant_receipt_id"] == ""
+    assert supervision_authority_readiness["requirements_total"] >= 11
     assert supervision_authority_readiness["requirements_blocked_total"] >= 6
     supervision_authority_readiness_requirements = {
         item["id"]: item for item in supervision_authority_readiness["requirements"]
@@ -721,14 +746,15 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
     assert supervision_authority_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
     assert supervision_authority_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
-    assert supervision_authority_readiness_requirements["authority_grant_implementation"]["ready"] is False
+    assert supervision_authority_readiness_requirements["host_supervision_authority_grant_receipts"]["ready"] is True
+    assert supervision_authority_readiness_requirements["authority_grant_implementation"]["ready"] is True
     assert "actor_scope" in supervision_authority_readiness["blocked_requirements"]
     assert "process_supervision_authority" in supervision_authority_readiness["blocked_requirements"]
     assert "service_control_authority" in supervision_authority_readiness["blocked_requirements"]
     assert "resident_claim_authority" in supervision_authority_readiness["blocked_requirements"]
-    assert "authority_grant_implementation" in supervision_authority_readiness["blocked_requirements"]
+    assert "authority_grant_implementation" not in supervision_authority_readiness["blocked_requirements"]
     assert "system_write_scope_not_ready" in supervision_authority_readiness["blockers"]
-    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_readiness["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" not in supervision_authority_readiness["blockers"]
     assert "process_supervision_authority_not_granted" in supervision_authority_readiness["blockers"]
     assert supervision_authority_readiness["governance"]["gate"] == "lens_host_supervision_authority_readiness_audit"
     assert supervision_authority_readiness["governance"]["read_only_contract"] is True
@@ -845,11 +871,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "service_manager_exists": True,
         "process_supervision_enabled": False,
         "persistent_supervision_enabled": False,
+        "process_supervision_authority": False,
         "process_restart_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
         "receipt_write_authority": False,
         "resident_claim_authority": False,
+        "authority_grant_active": False,
+        "authority_grant_route": "/lens/host/supervision/authority",
+        "authority_grants_route": "/lens/host/supervision/authority/grants",
+        "authority_grant": {},
         "resident_claim_allowed": False,
         "next_allowed_transition": "foreground_status_session_only",
         "blocked_by": [
@@ -1072,13 +1103,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial["resident_claim_allowed"] is False
     assert supervision_authority_denial["permission"]["ready"] is False
     assert "system_write_scope_not_ready" in supervision_authority_denial["blockers"]
-    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_denial["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" not in supervision_authority_denial["blockers"]
     assert "process_supervision_authority_not_granted" in supervision_authority_denial["blockers"]
     assert supervision_authority_denial["denial"] == {
-        "reason": "host_supervision_authority_grant_not_implemented",
+        "reason": "host_supervision_authority_not_ready",
         "message": (
-            "Lens resident host process supervision authority is denied until an explicit supervised "
-            "host implementation and receipt path exist."
+            "Lens resident host process supervision authority is denied until an exact approved "
+            "host supervision authority request and system.write actor scope are present."
         ),
         "would_grant_process_supervision_authority": False,
         "would_grant_process_restart_authority": False,
@@ -1736,7 +1767,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_denial_criterion["ready"] is False
     assert host_supervision_denial_criterion["authority_ready"] is False
     assert host_supervision_denial_criterion["resident_claim_allowed"] is False
-    assert "host_supervision_authority_grant_not_implemented" in host_supervision_denial_criterion["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" not in host_supervision_denial_criterion["blockers"]
     assert "process_supervision_authority_not_granted" in host_supervision_denial_criterion["blockers"]
     assert host_supervision_denial_criterion["execution_authority"] is False
     assert host_supervision_denial_criterion["approval_decision_authority"] is False
@@ -1769,11 +1800,33 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_denial_receipts_criterion["memory_write"] is False
     assert host_supervision_denial_receipts_criterion["denial_receipt_write_authority"] is False
     assert host_supervision_denial_receipts_criterion["receipt_write_authority"] is False
+    host_supervision_grant_receipts_criterion = _criterion(
+        body, "resident_host_supervision_authority_grant_receipt_readback"
+    )
+    assert host_supervision_grant_receipts_criterion["status"] == "empty"
+    assert host_supervision_grant_receipts_criterion["evidence"] == [
+        "/lens/host/supervision/authority/grants",
+        "/lens/host/supervision/authority",
+        "/lens/status",
+    ]
+    assert host_supervision_grant_receipts_criterion["receipt_count"] == 0
+    assert host_supervision_grant_receipts_criterion["latest_receipt_id"] == ""
+    assert host_supervision_grant_receipts_criterion["active_receipt_id"] == ""
+    assert host_supervision_grant_receipts_criterion["authority_granted"] is False
+    assert host_supervision_grant_receipts_criterion["execution_authority"] is False
+    assert host_supervision_grant_receipts_criterion["approval_decision_authority"] is False
+    assert host_supervision_grant_receipts_criterion["local_process_launch_authority"] is False
+    assert host_supervision_grant_receipts_criterion["process_supervision_authority"] is False
+    assert host_supervision_grant_receipts_criterion["service_control_authority"] is False
+    assert host_supervision_grant_receipts_criterion["memory_write"] is False
+    assert host_supervision_grant_receipts_criterion["denial_receipt_write_authority"] is False
+    assert host_supervision_grant_receipts_criterion["receipt_write_authority"] is False
     host_supervision_readiness_criterion = _criterion(body, "resident_host_supervision_authority_readiness_audit")
     assert host_supervision_readiness_criterion["status"] == "blocked"
     assert host_supervision_readiness_criterion["audit_status"] == "complete"
     assert host_supervision_readiness_criterion["evidence"] == [
         "/lens/host/supervision/authority/readiness",
+        "/lens/host/supervision/authority/grants",
         "/lens/host/supervision/authority/denials",
         "/lens/host/supervision/authority",
         "/lens/host/supervision",
@@ -1787,14 +1840,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_readiness_criterion["resident_claim_allowed"] is False
     assert host_supervision_readiness_criterion["boundary_observed"] is True
     assert host_supervision_readiness_criterion["denial_receipt_readback_ready"] is True
+    assert host_supervision_readiness_criterion["grant_receipt_readback_ready"] is True
     assert host_supervision_readiness_criterion["receipt_count"] == 0
     assert host_supervision_readiness_criterion["latest_receipt_id"] == ""
-    assert host_supervision_readiness_criterion["requirements_total"] >= 10
+    assert host_supervision_readiness_criterion["grant_receipt_count"] == 0
+    assert host_supervision_readiness_criterion["latest_grant_receipt_id"] == ""
+    assert host_supervision_readiness_criterion["active_grant_receipt_id"] == ""
+    assert host_supervision_readiness_criterion["requirements_total"] >= 11
     assert host_supervision_readiness_criterion["requirements_blocked_total"] >= 6
-    assert "authority_grant_implementation" in host_supervision_readiness_criterion["blocked_requirements"]
+    assert "authority_grant_implementation" not in host_supervision_readiness_criterion["blocked_requirements"]
     assert "process_supervision_authority" in host_supervision_readiness_criterion["blocked_requirements"]
     assert "service_control_authority" in host_supervision_readiness_criterion["blocked_requirements"]
-    assert "host_supervision_authority_grant_not_implemented" in host_supervision_readiness_criterion["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" not in host_supervision_readiness_criterion["blockers"]
     assert host_supervision_readiness_criterion["execution_authority"] is False
     assert host_supervision_readiness_criterion["approval_decision_authority"] is False
     assert host_supervision_readiness_criterion["local_process_launch_authority"] is False
@@ -2151,8 +2208,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     )
     assert supervision_authority_denial_response.status_code == 200
     supervision_authority_denial_body = supervision_authority_denial_response.json()
-    assert supervision_authority_denial_body["kind"] == "lens.host.supervision_authority.denial"
-    assert supervision_authority_denial_body["status"] == "denied_no_supervision_authority"
+    assert supervision_authority_denial_body["kind"] == "lens.host.supervision_authority.grant"
+    assert supervision_authority_denial_body["status"] == "authority_granted"
     assert supervision_authority_denial_body["route"] == "/lens/host/supervision/authority"
     assert supervision_authority_denial_body["method"] == "POST"
     assert supervision_authority_denial_body["approval_id"] == supervision_authority_approval_id
@@ -2162,87 +2219,90 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_body["actor"] == "test.system.write"
     assert supervision_authority_denial_body["permission"]["ready"] is True
     assert supervision_authority_denial_body["boundary_ready"] is True
-    assert supervision_authority_denial_body["applied"] is False
+    assert supervision_authority_denial_body["applied"] is True
     assert supervision_authority_denial_body["executed"] is False
-    assert supervision_authority_denial_body["authority_granted"] is False
-    assert supervision_authority_denial_body["ready"] is False
-    assert supervision_authority_denial_body["authority_ready"] is False
+    assert supervision_authority_denial_body["authority_granted"] is True
+    assert supervision_authority_denial_body["ready"] is True
+    assert supervision_authority_denial_body["authority_ready"] is True
     assert supervision_authority_denial_body["resident_claim_allowed"] is False
     assert "system_write_scope_not_ready" not in supervision_authority_denial_body["blockers"]
-    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_denial_body["blockers"]
-    assert "process_supervision_authority_not_granted" in supervision_authority_denial_body["blockers"]
-    assert supervision_authority_denial_body["denial"]["would_grant_process_supervision_authority"] is False
-    assert supervision_authority_denial_body["denial"]["would_grant_process_restart_authority"] is False
-    assert supervision_authority_denial_body["denial"]["would_grant_service_install_authority"] is False
-    assert supervision_authority_denial_body["denial"]["would_grant_service_control_authority"] is False
-    assert supervision_authority_denial_body["denial"]["would_supervise_process"] is False
-    assert supervision_authority_denial_body["denial"]["would_restart_process"] is False
-    assert supervision_authority_denial_body["denial"]["would_install_service"] is False
-    assert supervision_authority_denial_body["denial"]["would_start_service"] is False
-    assert supervision_authority_denial_body["denial"]["would_write_receipt"] is False
-    assert supervision_authority_denial_body["denial"]["would_write_memory"] is False
-    assert supervision_authority_denial_body["denial"]["denial_receipt_written"] is True
+    assert "host_supervision_authority_grant_not_implemented" not in supervision_authority_denial_body["blockers"]
+    assert "process_supervision_authority_not_granted" not in supervision_authority_denial_body["blockers"]
+    assert supervision_authority_denial_body["grant"]["would_grant_process_supervision_authority"] is True
+    assert supervision_authority_denial_body["grant"]["would_grant_process_restart_authority"] is True
+    assert supervision_authority_denial_body["grant"]["would_grant_service_install_authority"] is True
+    assert supervision_authority_denial_body["grant"]["would_grant_service_control_authority"] is True
+    assert supervision_authority_denial_body["grant"]["would_supervise_process"] is False
+    assert supervision_authority_denial_body["grant"]["would_restart_process"] is False
+    assert supervision_authority_denial_body["grant"]["would_install_service"] is False
+    assert supervision_authority_denial_body["grant"]["would_start_service"] is False
+    assert supervision_authority_denial_body["grant"]["would_write_receipt"] is False
+    assert supervision_authority_denial_body["grant"]["would_write_memory"] is False
+    assert supervision_authority_denial_body["grant"]["grant_receipt_written"] is True
     assert supervision_authority_denial_body["receipt_written"] is True
-    assert supervision_authority_denial_body["receipt_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_denial_body["receipt_route"] == "/lens/host/supervision/authority/grants"
     supervision_authority_denial_receipt = supervision_authority_denial_body["receipt"]
-    assert supervision_authority_denial_receipt["kind"] == "lens.host.supervision_authority.denial.receipt"
-    assert supervision_authority_denial_receipt["status"] == "denied_no_supervision_authority"
+    assert supervision_authority_denial_receipt["kind"] == "lens.host.supervision_authority.grant.receipt"
+    assert supervision_authority_denial_receipt["status"] == "authority_granted"
     assert supervision_authority_denial_receipt["route"] == "/lens/host/supervision/authority"
-    assert supervision_authority_denial_receipt["source_kind"] == "lens.host.supervision_authority.denial"
+    assert supervision_authority_denial_receipt["source_kind"] == "lens.host.supervision_authority.grant"
     assert supervision_authority_denial_receipt["approval_id"] == supervision_authority_approval_id
     assert supervision_authority_denial_receipt["approval"]["approved"] is True
     assert supervision_authority_denial_receipt["actor"] == "test.system.write"
     assert supervision_authority_denial_receipt["permission"]["ready"] is True
     assert supervision_authority_denial_receipt["preflight"]["preflight_ready"] is True
-    assert supervision_authority_denial_receipt["authority_boundary"]["applied"] is False
+    assert supervision_authority_denial_receipt["lease"]["active"] is True
+    assert supervision_authority_denial_receipt["authority_boundary"]["applied"] is True
     assert supervision_authority_denial_receipt["authority_boundary"]["executed"] is False
-    assert supervision_authority_denial_receipt["authority_boundary"]["authority_granted"] is False
-    assert supervision_authority_denial_receipt["denial"]["would_grant_process_supervision_authority"] is False
+    assert supervision_authority_denial_receipt["authority_boundary"]["authority_granted"] is True
+    assert supervision_authority_denial_receipt["authorities"]["process_supervision_authority"] is True
+    assert supervision_authority_denial_receipt["authorities"]["service_control_authority"] is True
+    assert supervision_authority_denial_receipt["grant"]["would_grant_process_supervision_authority"] is True
     assert supervision_authority_denial_receipt["governance"]["gate"] == (
-        "lens_host_supervision_authority_denial_receipt"
+        "lens_host_supervision_authority_grant_receipt"
     )
-    assert supervision_authority_denial_receipt["governance"]["denial_receipt_write_authority"] is True
+    assert supervision_authority_denial_receipt["governance"]["denial_receipt_write_authority"] is False
     assert supervision_authority_denial_receipt["governance"]["execution_authority"] is False
     assert supervision_authority_denial_receipt["governance"]["approval_decision_authority"] is False
-    assert supervision_authority_denial_receipt["governance"]["process_supervision_authority"] is False
-    assert supervision_authority_denial_receipt["governance"]["service_control_authority"] is False
+    assert supervision_authority_denial_receipt["governance"]["process_supervision_authority"] is True
+    assert supervision_authority_denial_receipt["governance"]["service_control_authority"] is True
     assert supervision_authority_denial_receipt["governance"]["memory_write"] is False
     supervision_authority_denial_receipt_path = (
         data_root
         / "lens"
-        / "host_supervision_authority_denials"
+        / "host_supervision_authority_grants"
         / f"{supervision_authority_denial_receipt['receipt_id']}.json"
     )
     assert supervision_authority_denial_receipt_path.exists()
     assert supervision_authority_denial_body["governance"]["authority_grant_boundary"] is True
-    assert supervision_authority_denial_body["governance"]["denial_boundary"] is True
-    assert supervision_authority_denial_body["governance"]["process_supervision_authority"] is False
-    assert supervision_authority_denial_body["governance"]["process_restart_authority"] is False
-    assert supervision_authority_denial_body["governance"]["service_install_authority"] is False
-    assert supervision_authority_denial_body["governance"]["service_control_authority"] is False
-    assert supervision_authority_denial_body["governance"]["receipt_write_authority"] is False
-    assert supervision_authority_denial_body["governance"]["denial_receipt_write_authority"] is True
+    assert supervision_authority_denial_body["governance"]["denial_boundary"] is False
+    assert supervision_authority_denial_body["governance"]["process_supervision_authority"] is True
+    assert supervision_authority_denial_body["governance"]["process_restart_authority"] is True
+    assert supervision_authority_denial_body["governance"]["service_install_authority"] is True
+    assert supervision_authority_denial_body["governance"]["service_control_authority"] is True
+    assert supervision_authority_denial_body["governance"]["receipt_write_authority"] is True
+    assert supervision_authority_denial_body["governance"]["denial_receipt_write_authority"] is False
     supervision_authority_denials_response = client.get(
-        "/lens/host/supervision/authority/denials"
-        f"?limit=10&approval_id={supervision_authority_approval_id}&status=denied_no_supervision_authority"
+        "/lens/host/supervision/authority/grants"
+        f"?limit=10&approval_id={supervision_authority_approval_id}&status=authority_granted"
     )
     assert supervision_authority_denials_response.status_code == 200
     supervision_authority_denials_body = supervision_authority_denials_response.json()
-    assert supervision_authority_denials_body["kind"] == "lens.host.supervision_authority.denial_receipts"
+    assert supervision_authority_denials_body["kind"] == "lens.host.supervision_authority.grant_receipts"
     assert supervision_authority_denials_body["status"] == "readback_ready"
-    assert supervision_authority_denials_body["route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_denials_body["route"] == "/lens/host/supervision/authority/grants"
     assert supervision_authority_denials_body["authority_route"] == "/lens/host/supervision/authority"
     assert supervision_authority_denials_body["approval_id"] == supervision_authority_approval_id
-    assert supervision_authority_denials_body["filter_status"] == "denied_no_supervision_authority"
+    assert supervision_authority_denials_body["filter_status"] == "authority_granted"
     assert supervision_authority_denials_body["total"] == 1
     assert (
         supervision_authority_denials_body["latest"]["receipt_id"]
         == (supervision_authority_denial_receipt["receipt_id"])
     )
-    assert supervision_authority_denials_body["items"][0]["authority_boundary"]["authority_granted"] is False
+    assert supervision_authority_denials_body["items"][0]["authority_boundary"]["authority_granted"] is True
     assert supervision_authority_denials_body["items"][0]["governance"]["execution_authority"] is False
     assert supervision_authority_denials_body["governance"]["gate"] == (
-        "lens_host_supervision_authority_denial_receipts_readback"
+        "lens_host_supervision_authority_grant_receipts_readback"
     )
     assert supervision_authority_denials_body["governance"]["read_only_contract"] is True
     assert supervision_authority_denials_body["governance"]["denial_receipt_write_authority"] is False
@@ -2263,17 +2323,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness_body["route"] == "/lens/host/supervision/authority/readiness"
     assert supervision_authority_readiness_body["authority_route"] == "/lens/host/supervision/authority"
     assert supervision_authority_readiness_body["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_readiness_body["grants_route"] == "/lens/host/supervision/authority/grants"
     assert supervision_authority_readiness_body["approval_id"] == supervision_authority_approval_id
     assert supervision_authority_readiness_body["ready"] is False
     assert supervision_authority_readiness_body["preflight_ready"] is True
-    assert supervision_authority_readiness_body["authority_ready"] is False
+    assert supervision_authority_readiness_body["authority_ready"] is True
     assert supervision_authority_readiness_body["supervision_ready"] is False
     assert supervision_authority_readiness_body["resident_claim_allowed"] is False
     assert supervision_authority_readiness_body["boundary_observed"] is True
     assert supervision_authority_readiness_body["denial_receipt_readback_ready"] is True
-    assert supervision_authority_readiness_body["receipt_count"] == 1
+    assert supervision_authority_readiness_body["grant_receipt_readback_ready"] is True
+    assert supervision_authority_readiness_body["receipt_count"] == 0
+    assert supervision_authority_readiness_body["latest_receipt_id"] == ""
+    assert supervision_authority_readiness_body["grant_receipt_count"] == 1
     assert (
-        supervision_authority_readiness_body["latest_receipt_id"] == supervision_authority_denial_receipt["receipt_id"]
+        supervision_authority_readiness_body["latest_grant_receipt_id"]
+        == supervision_authority_denial_receipt["receipt_id"]
+    )
+    assert (
+        supervision_authority_readiness_body["active_grant_receipt_id"]
+        == supervision_authority_denial_receipt["receipt_id"]
     )
     direct_readiness_requirements = {item["id"]: item for item in supervision_authority_readiness_body["requirements"]}
     assert direct_readiness_requirements["exact_supervision_authority_approval"]["ready"] is True
@@ -2281,20 +2350,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert direct_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
-    assert direct_readiness_requirements["authority_grant_implementation"]["ready"] is False
+    assert direct_readiness_requirements["host_supervision_authority_grant_receipts"]["ready"] is True
+    assert direct_readiness_requirements["authority_grant_implementation"]["ready"] is True
+    assert direct_readiness_requirements["process_supervision_authority"]["ready"] is True
+    assert direct_readiness_requirements["process_restart_authority"]["ready"] is True
+    assert direct_readiness_requirements["service_install_authority"]["ready"] is True
+    assert direct_readiness_requirements["service_control_authority"]["ready"] is True
+    assert direct_readiness_requirements["resident_claim_authority"]["ready"] is True
     assert "actor_scope" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "exact_supervision_authority_approval" not in supervision_authority_readiness_body["blocked_requirements"]
-    assert "process_supervision_authority" in supervision_authority_readiness_body["blocked_requirements"]
-    assert "service_control_authority" in supervision_authority_readiness_body["blocked_requirements"]
-    assert "resident_claim_authority" in supervision_authority_readiness_body["blocked_requirements"]
-    assert "authority_grant_implementation" in supervision_authority_readiness_body["blocked_requirements"]
+    assert "process_supervision_authority" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert "service_control_authority" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert "resident_claim_authority" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert "authority_grant_implementation" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "system_write_scope_not_ready" not in supervision_authority_readiness_body["blockers"]
-    assert "host_supervision_authority_grant_not_implemented" in supervision_authority_readiness_body["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" not in supervision_authority_readiness_body["blockers"]
     assert supervision_authority_readiness_body["governance"]["audit_only"] is True
     assert supervision_authority_readiness_body["governance"]["execution_authority"] is False
     assert supervision_authority_readiness_body["governance"]["approval_decision_authority"] is False
-    assert supervision_authority_readiness_body["governance"]["process_supervision_authority"] is False
-    assert supervision_authority_readiness_body["governance"]["service_control_authority"] is False
+    assert supervision_authority_readiness_body["governance"]["process_supervision_authority"] is True
+    assert supervision_authority_readiness_body["governance"]["service_control_authority"] is True
     assert supervision_authority_readiness_body["governance"]["memory_write"] is False
     preflight_response = client.get("/lens/preflight")
     assert preflight_response.status_code == 200
@@ -3129,7 +3204,7 @@ def test_lens_host_supervision_authority_request_creates_approval_only_receipt(
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
-def test_lens_host_supervision_authority_grant_requires_approved_request_before_denial_receipt(
+def test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -3215,36 +3290,67 @@ def test_lens_host_supervision_authority_grant_requires_approved_request_before_
         json={
             "approval_id": approval_id,
             "actor": "test.system.write",
-            "reason": "prove approved host supervision authority still denies execution",
+            "reason": "prove approved host supervision authority grants bounded lease without execution",
         },
     )
     assert approved_attempt.status_code == 200
     approved_body = approved_attempt.json()
-    assert approved_body["status"] == "denied_no_supervision_authority"
+    assert approved_body["kind"] == "lens.host.supervision_authority.grant"
+    assert approved_body["status"] == "authority_granted"
     assert approved_body["approval_id"] == approval_id
     assert approved_body["approval"]["found"] is True
     assert approved_body["approval"]["status"] == "approved"
     assert approved_body["approval"]["approved"] is True
     assert "approval_id_required" not in approved_body["blockers"]
     assert "supervision_authority_approval_not_approved" not in approved_body["blockers"]
-    assert "host_supervision_authority_grant_not_implemented" in approved_body["blockers"]
-    assert "process_supervision_authority_not_granted" in approved_body["blockers"]
-    assert approved_body["authority_granted"] is False
-    assert approved_body["applied"] is False
+    assert "host_supervision_authority_grant_not_implemented" not in approved_body["blockers"]
+    assert "process_supervision_authority_not_granted" not in approved_body["blockers"]
+    assert approved_body["authority_granted"] is True
+    assert approved_body["grant_ready"] is True
+    assert approved_body["ready"] is True
+    assert approved_body["authority_ready"] is True
+    assert approved_body["supervision_ready"] is False
+    assert approved_body["resident_claim_allowed"] is False
+    assert approved_body["applied"] is True
     assert approved_body["executed"] is False
+    assert approved_body["receipt_route"] == "/lens/host/supervision/authority/grants"
     assert approved_body["receipt_written"] is True
     receipt = approved_body["receipt"]
+    assert receipt["kind"] == "lens.host.supervision_authority.grant.receipt"
+    assert receipt["status"] == "authority_granted"
     assert receipt["approval_id"] == approval_id
     assert receipt["approval"]["approved"] is True
-    assert receipt["authority_boundary"]["authority_granted"] is False
+    assert receipt["lease"]["active"] is True
+    assert receipt["lease"]["lease_seconds"] == 3600
+    assert receipt["authority_boundary"]["applied"] is True
+    assert receipt["authority_boundary"]["executed"] is False
+    assert receipt["authority_boundary"]["authority_granted"] is True
+    assert receipt["authorities"]["process_supervision_authority"] is True
+    assert receipt["authorities"]["process_restart_authority"] is True
+    assert receipt["authorities"]["service_install_authority"] is True
+    assert receipt["authorities"]["service_control_authority"] is True
+    assert receipt["authorities"]["receipt_write_authority"] is True
+    assert receipt["authorities"]["resident_claim_authority"] is True
+    assert receipt["governance"]["execution_authority"] is False
+    assert receipt["governance"]["approval_decision_authority"] is False
+    assert receipt["governance"]["memory_write"] is False
 
     denials = client.get(f"/lens/host/supervision/authority/denials?limit=10&approval_id={approval_id}")
     assert denials.status_code == 200
     denials_body = denials.json()
     assert denials_body["approval_id"] == approval_id
-    assert denials_body["total"] == 1
-    assert denials_body["items"][0]["approval_id"] == approval_id
-    assert denials_body["items"][0]["approval"]["approved"] is True
+    assert denials_body["total"] == 0
+    assert denials_body["items"] == []
+
+    grants = client.get(f"/lens/host/supervision/authority/grants?limit=10&approval_id={approval_id}")
+    assert grants.status_code == 200
+    grants_body = grants.json()
+    assert grants_body["approval_id"] == approval_id
+    assert grants_body["total"] == 1
+    assert grants_body["items"][0]["approval_id"] == approval_id
+    assert grants_body["items"][0]["approval"]["approved"] is True
+    assert grants_body["active_latest"]["receipt_id"] == receipt["receipt_id"]
+    assert grants_body["authority_granted"] is True
 
     readiness = client.get(
         f"/lens/host/supervision/authority/readiness?limit=10&approval_id={approval_id}&actor=test.system.write"
@@ -3255,8 +3361,32 @@ def test_lens_host_supervision_authority_grant_requires_approved_request_before_
     requirements = {item["id"]: item for item in readiness_body["requirements"]}
     assert requirements["exact_supervision_authority_approval"]["ready"] is True
     assert "exact_supervision_authority_approval" not in readiness_body["blocked_requirements"]
-    assert "host_supervision_authority_grant_not_implemented" in readiness_body["blockers"]
-    assert readiness_body["receipt_count"] == 1
+    assert requirements["host_supervision_authority_grant_receipts"]["ready"] is True
+    assert requirements["authority_grant_implementation"]["ready"] is True
+    assert requirements["process_supervision_authority"]["ready"] is True
+    assert requirements["process_restart_authority"]["ready"] is True
+    assert requirements["service_install_authority"]["ready"] is True
+    assert requirements["service_control_authority"]["ready"] is True
+    assert requirements["resident_claim_authority"]["ready"] is True
+    assert "host_supervision_authority_grant_not_implemented" not in readiness_body["blockers"]
+    assert "process_supervision_authority_not_granted" not in readiness_body["blockers"]
+    assert readiness_body["receipt_count"] == 0
+    assert readiness_body["grant_receipt_count"] == 1
+    assert readiness_body["active_grant_receipt_id"] == receipt["receipt_id"]
+
+    persistent_plan = client.get("/lens/host/persistent-supervision")
+    assert persistent_plan.status_code == 200
+    persistent_body = persistent_plan.json()
+    persistent_requirements = {item["id"]: item for item in persistent_body["requirements"]}
+    assert persistent_body["status"] == "blocked"
+    assert persistent_body["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert persistent_requirements["process_supervision_enabled"]["ready"] is False
+    assert persistent_requirements["persistent_supervision_enabled"]["ready"] is False
+    assert persistent_requirements["process_restart_authority"]["ready"] is True
+    assert persistent_requirements["service_install_authority"]["ready"] is True
+    assert persistent_requirements["service_control_authority"]["ready"] is True
+    assert persistent_requirements["receipt_write_authority"]["ready"] is True
+    assert persistent_requirements["resident_claim_authority"]["ready"] is True
     assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

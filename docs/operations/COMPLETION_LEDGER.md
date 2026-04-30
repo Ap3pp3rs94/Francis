@@ -14612,6 +14612,50 @@ blocker priority stabilization:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_smallest_truthful_gap_basis | ConvertTo-Json -Depth 4`
   Result: `passed; reported persistent_supervision_authority_not_granted`
 
+### 2026-04-30 - Stage 6/Lens host supervision authority grant lease
+
+Stage 6/Lens now has an approval-gated, receipt-backed host supervision
+authority lease for the future persistent Lens host. `POST
+/lens/host/supervision/authority` no longer treats the grant boundary as
+not implemented when an exact approved `lens.host.supervision_authority`
+approval and `system.write` actor scope are present. It writes a bounded local
+grant receipt under `/lens/host/supervision/authority/grants`, and the direct
+readiness audit, `/lens/status`, Stage 6 checkpoint, process-supervision
+boundary proof, and completion audit now read that grant-receipt surface.
+
+The lease only records bounded authority for later process-supervision,
+process-restart, service-install, service-control, receipt-write, and
+resident-claim review. It does not start, install, stop, supervise, restart, or
+claim a Lens host; it does not write memory; it does not decide approvals; it
+does not grant local process launch, tray, hotkey, overlay, summon, capture,
+telemetry, or UI authority. In the normal empty runtime state, Stage 6 remains
+blocked on `persistent_supervision_authority_not_granted` until an operator
+approval produces an active grant receipt. In the approved-grant contract test,
+the persistent-supervision plan advances to
+`persistent_supervision_enablement_disabled`, because enablement and execution
+remain separate follow-up boundaries.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is turning an
+active, receipt-backed host supervision authority lease into an explicit
+persistent-supervision enablement/execution boundary without broadening
+resident authority or claiming a resident Lens host early.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervision
+authority grant lease:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed before checkpoint proof update on stale not-implemented blocker expectation; passed after checkpoint consumed grant-receipt readback`
+- `python -m ruff check src\francis\lens\activation.py src\francis\api\routes\lens.py src\francis\lens\__init__.py src\francis\lens\status.py src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\api\routes\lens.py src\francis\lens\__init__.py src\francis\lens\status.py src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed after formatting`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

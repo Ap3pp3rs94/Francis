@@ -244,6 +244,7 @@ $HostCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 're
 $HostSupervisionAuthorityCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_preflight'
 $HostSupervisionAuthorityDenialCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_denial_boundary'
 $HostSupervisionAuthorityDenialReceiptsCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_denial_receipt_readback'
+$HostSupervisionAuthorityGrantReceiptsCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_grant_receipt_readback'
 $HostSupervisionAuthorityReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_readiness_audit'
 $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_activation_plan'
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
@@ -319,7 +320,8 @@ $HostSupervisionAuthorityDenialObserved = (
   -not $HostSupervisionAuthorityDenialReady -and
   -not $HostSupervisionAuthorityDenialAuthorityReady -and
   $HostSupervisionAuthorityDenialEvidence -contains '/lens/host/supervision/authority' -and
-  $HostSupervisionAuthorityDenialBlockers -contains 'host_supervision_authority_grant_not_implemented'
+  $HostSupervisionAuthorityDenialBlockers -contains 'approval_id_required' -and
+  $HostSupervisionAuthorityDenialBlockers -contains 'process_supervision_authority_not_granted'
 )
 $HostSupervisionAuthorityDenialReceiptsStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityDenialReceiptsCriterion -Name 'status' -Default 'missing')
 $HostSupervisionAuthorityDenialReceiptsCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityDenialReceiptsCriterion -Name 'receipt_count' -Default 0)
@@ -328,6 +330,16 @@ $HostSupervisionAuthorityDenialReceiptsEvidence = ConvertTo-StringArray -Value (
 $HostSupervisionAuthorityDenialReceiptsObserved = (
   ($HostSupervisionAuthorityDenialReceiptsStatus -eq 'empty' -or $HostSupervisionAuthorityDenialReceiptsStatus -eq 'readback_ready') -and
   $HostSupervisionAuthorityDenialReceiptsEvidence -contains '/lens/host/supervision/authority/denials'
+)
+$HostSupervisionAuthorityGrantReceiptsStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'status' -Default 'missing')
+$HostSupervisionAuthorityGrantReceiptsCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'receipt_count' -Default 0)
+$HostSupervisionAuthorityGrantReceiptsLatestId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'latest_receipt_id' -Default '')
+$HostSupervisionAuthorityGrantReceiptsActiveId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'active_receipt_id' -Default '')
+$HostSupervisionAuthorityGrantReceiptsAuthorityGranted = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'authority_granted' -Default $false)
+$HostSupervisionAuthorityGrantReceiptsEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityGrantReceiptsCriterion -Name 'evidence' -Default @())
+$HostSupervisionAuthorityGrantReceiptsObserved = (
+  ($HostSupervisionAuthorityGrantReceiptsStatus -eq 'empty' -or $HostSupervisionAuthorityGrantReceiptsStatus -eq 'readback_ready') -and
+  $HostSupervisionAuthorityGrantReceiptsEvidence -contains '/lens/host/supervision/authority/grants'
 )
 $HostSupervisionAuthorityReadinessStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'status' -Default 'missing')
 $HostSupervisionAuthorityReadinessAuditStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'audit_status' -Default 'missing')
@@ -338,8 +350,12 @@ $HostSupervisionAuthorityReadinessSupervisionReady = [bool](Get-PropertyValue -P
 $HostSupervisionAuthorityReadinessResidentClaimAllowed = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'resident_claim_allowed' -Default $true)
 $HostSupervisionAuthorityReadinessBoundaryObserved = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'boundary_observed' -Default $false)
 $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'denial_receipt_readback_ready' -Default $false)
+$HostSupervisionAuthorityReadinessGrantReceiptReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'grant_receipt_readback_ready' -Default $false)
 $HostSupervisionAuthorityReadinessReceiptCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'receipt_count' -Default 0)
 $HostSupervisionAuthorityReadinessLatestReceiptId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'latest_receipt_id' -Default '')
+$HostSupervisionAuthorityReadinessGrantReceiptCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'grant_receipt_count' -Default 0)
+$HostSupervisionAuthorityReadinessLatestGrantReceiptId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'latest_grant_receipt_id' -Default '')
+$HostSupervisionAuthorityReadinessActiveGrantReceiptId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'active_grant_receipt_id' -Default '')
 $HostSupervisionAuthorityReadinessRequirementsTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_total' -Default 0)
 $HostSupervisionAuthorityReadinessRequirementsReadyTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_ready_total' -Default 0)
 $HostSupervisionAuthorityReadinessRequirementsBlockedTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_blocked_total' -Default 0)
@@ -356,9 +372,13 @@ $HostSupervisionAuthorityReadinessObserved = (
   -not $HostSupervisionAuthorityReadinessResidentClaimAllowed -and
   $HostSupervisionAuthorityReadinessBoundaryObserved -and
   $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady -and
+  $HostSupervisionAuthorityReadinessGrantReceiptReadbackReady -and
   $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/readiness' -and
-  $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'authority_grant_implementation' -and
-  $HostSupervisionAuthorityReadinessBlockers -contains 'host_supervision_authority_grant_not_implemented'
+  $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/grants' -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -notcontains 'authority_grant_implementation' -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'process_supervision_authority' -and
+  $HostSupervisionAuthorityReadinessBlockers -notcontains 'host_supervision_authority_grant_not_implemented' -and
+  $HostSupervisionAuthorityReadinessBlockers -contains 'process_supervision_authority_not_granted'
 )
 $RuntimePlanStatus = [string](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'status' -Default 'missing')
 $RuntimePlanAvailable = [bool](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'plan_available' -Default $false)
@@ -897,6 +917,29 @@ $Payload = [ordered]@{
     denial_receipt_write_authority = $false
     resident_claim_authority = $false
   }
+  resident_host_supervision_authority_grant_receipts = [ordered]@{
+    status = $HostSupervisionAuthorityGrantReceiptsStatus
+    ok = $HostSupervisionAuthorityGrantReceiptsObserved
+    evidence = $HostSupervisionAuthorityGrantReceiptsEvidence
+    receipt_count = $HostSupervisionAuthorityGrantReceiptsCount
+    latest_receipt_id = $HostSupervisionAuthorityGrantReceiptsLatestId
+    active_receipt_id = $HostSupervisionAuthorityGrantReceiptsActiveId
+    authority_granted = $HostSupervisionAuthorityGrantReceiptsAuthorityGranted
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    denial_receipt_write_authority = $false
+    resident_claim_authority = $false
+  }
   resident_host_supervision_authority_readiness_audit = [ordered]@{
     status = $HostSupervisionAuthorityReadinessStatus
     audit_status = $HostSupervisionAuthorityReadinessAuditStatus
@@ -909,8 +952,12 @@ $Payload = [ordered]@{
     resident_claim_allowed = $HostSupervisionAuthorityReadinessResidentClaimAllowed
     boundary_observed = $HostSupervisionAuthorityReadinessBoundaryObserved
     denial_receipt_readback_ready = $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady
+    grant_receipt_readback_ready = $HostSupervisionAuthorityReadinessGrantReceiptReadbackReady
     receipt_count = $HostSupervisionAuthorityReadinessReceiptCount
     latest_receipt_id = $HostSupervisionAuthorityReadinessLatestReceiptId
+    grant_receipt_count = $HostSupervisionAuthorityReadinessGrantReceiptCount
+    latest_grant_receipt_id = $HostSupervisionAuthorityReadinessLatestGrantReceiptId
+    active_grant_receipt_id = $HostSupervisionAuthorityReadinessActiveGrantReceiptId
     requirements_total = $HostSupervisionAuthorityReadinessRequirementsTotal
     requirements_ready_total = $HostSupervisionAuthorityReadinessRequirementsReadyTotal
     requirements_blocked_total = $HostSupervisionAuthorityReadinessRequirementsBlockedTotal
@@ -1246,10 +1293,12 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved) {
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved) {
     'stage6_lens_completion_audit'
-  } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved) {
+  } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved) {
     'resident_host_supervision_authority_readiness_audit'
+  } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved) {
+    'resident_host_supervision_authority_grant_receipt_readback'
   } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved) {
     'resident_host_supervision_authority_denial_receipt_readback'
   } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved) {
@@ -1301,6 +1350,7 @@ $Payload = [ordered]@{
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved
+    resident_host_supervision_authority_grant_receipt_readback_observed = $HostSupervisionAuthorityGrantReceiptsObserved
     resident_host_supervision_authority_readiness_audit_observed = $HostSupervisionAuthorityReadinessObserved
     temporary_runtime_state_write = $true
     execution_authority = $false

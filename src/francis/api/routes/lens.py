@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 from francis.lens import (
     deny_lens_host_activation_execution,
-    deny_lens_host_supervision_authority_grant,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
+    grant_lens_host_supervision_authority,
     lens_host_activation_denial_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
@@ -18,6 +18,7 @@ from francis.lens import (
     lens_host_persistent_supervision_plan,
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
+    lens_host_supervision_authority_grant_receipts,
     lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
@@ -70,6 +71,7 @@ class LensHostSupervisionAuthorityGrantIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens host supervision authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
 class LensHostSupervisionAuthorityRequestIn(BaseModel):
@@ -151,6 +153,21 @@ def host_supervision_authority_denials(
     return lens_host_supervision_authority_denial_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
+@router.get("/host/supervision/authority/grants")
+def host_supervision_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_host_supervision_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
 @router.post("/host/supervision/authority/request")
 def host_supervision_authority_request(
     request: Request,
@@ -169,13 +186,14 @@ def host_supervision_authority_grant(
     request: Request,
     payload: LensHostSupervisionAuthorityGrantIn,
 ) -> dict[str, Any]:
-    return deny_lens_host_supervision_authority_grant(
+    return grant_lens_host_supervision_authority(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
         record_receipt=True,
+        lease_seconds=payload.lease_seconds,
     )
 
 

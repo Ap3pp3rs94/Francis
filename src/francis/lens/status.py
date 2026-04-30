@@ -17,6 +17,7 @@ from francis.lens.activation import (
     lens_host_activation_readback,
     lens_host_activation_request_contract,
     lens_host_supervision_authority_denial_receipts,
+    lens_host_supervision_authority_grant_receipts,
     lens_host_supervision_authority_request_contract,
     lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_readiness_audit,
@@ -264,6 +265,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
     supervision_authority_denial = deny_lens_host_supervision_authority_grant()
     supervision_authority_denial_receipts = lens_host_supervision_authority_denial_receipts(limit=limit)
+    supervision_authority_grant_receipts = lens_host_supervision_authority_grant_receipts(limit=limit)
     supervision_authority_readiness = lens_host_supervision_authority_readiness_audit(limit=limit)
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
@@ -423,6 +425,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             supervision_authority_denial_receipts.get("route")
         ).strip(),
         "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
+        "supervision_authority_grant_receipts_route": _safe_str(
+            supervision_authority_grant_receipts.get("route")
+        ).strip(),
+        "supervision_authority_grant_receipts": supervision_authority_grant_receipts,
         "supervision_authority_readiness_route": _safe_str(supervision_authority_readiness.get("route")).strip(),
         "supervision_authority_readiness": supervision_authority_readiness,
         "status_route": "/lens/status",
@@ -811,6 +817,7 @@ def _stage6_readiness(
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
     supervision_authority_denial = _as_dict(resident_host.get("supervision_authority_denial"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
+    supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     return {
@@ -1315,11 +1322,43 @@ def _stage6_readiness(
                 "receipt_write_authority": False,
             },
             {
+                "id": "resident_host_supervision_authority_grant_receipt_readback",
+                "status": _safe_str(supervision_authority_grant_receipts.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/host/supervision/authority/grants",
+                    "/lens/host/supervision/authority",
+                    "/lens/status",
+                ],
+                "receipt_count": _safe_int(supervision_authority_grant_receipts.get("total")),
+                "latest_receipt_id": _safe_str(
+                    _as_dict(supervision_authority_grant_receipts.get("latest")).get("receipt_id")
+                ).strip(),
+                "active_receipt_id": _safe_str(
+                    _as_dict(supervision_authority_grant_receipts.get("active_latest")).get("receipt_id")
+                ).strip(),
+                "authority_granted": bool(supervision_authority_grant_receipts.get("authority_granted")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": False,
+                "receipt_write_authority": False,
+            },
+            {
                 "id": "resident_host_supervision_authority_readiness_audit",
                 "status": _safe_str(supervision_authority_readiness.get("status")).strip() or "missing",
                 "audit_status": _safe_str(supervision_authority_readiness.get("audit_status")).strip(),
                 "evidence": [
                     "/lens/host/supervision/authority/readiness",
+                    "/lens/host/supervision/authority/grants",
                     "/lens/host/supervision/authority/denials",
                     "/lens/host/supervision/authority",
                     "/lens/host/supervision",
@@ -1335,8 +1374,18 @@ def _stage6_readiness(
                 "denial_receipt_readback_ready": bool(
                     supervision_authority_readiness.get("denial_receipt_readback_ready")
                 ),
+                "grant_receipt_readback_ready": bool(
+                    supervision_authority_readiness.get("grant_receipt_readback_ready")
+                ),
                 "receipt_count": _safe_int(supervision_authority_readiness.get("receipt_count")),
                 "latest_receipt_id": _safe_str(supervision_authority_readiness.get("latest_receipt_id")).strip(),
+                "grant_receipt_count": _safe_int(supervision_authority_readiness.get("grant_receipt_count")),
+                "latest_grant_receipt_id": _safe_str(
+                    supervision_authority_readiness.get("latest_grant_receipt_id")
+                ).strip(),
+                "active_grant_receipt_id": _safe_str(
+                    supervision_authority_readiness.get("active_grant_receipt_id")
+                ).strip(),
                 "requirements_total": _safe_int(supervision_authority_readiness.get("requirements_total")),
                 "requirements_ready_total": _safe_int(supervision_authority_readiness.get("requirements_ready_total")),
                 "requirements_blocked_total": _safe_int(
@@ -1347,18 +1396,30 @@ def _stage6_readiness(
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
-                "process_supervision_authority": False,
-                "process_restart_authority": False,
-                "service_install_authority": False,
-                "service_control_authority": False,
+                "process_supervision_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("process_supervision_authority")
+                ),
+                "process_restart_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("process_restart_authority")
+                ),
+                "service_install_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("service_install_authority")
+                ),
+                "service_control_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("service_control_authority")
+                ),
                 "tray_registration_authority": False,
                 "hotkey_registration_authority": False,
                 "overlay_control_authority": False,
                 "summon_authority": False,
                 "memory_write": False,
-                "resident_claim_authority": False,
+                "resident_claim_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("resident_claim_authority")
+                ),
                 "denial_receipt_write_authority": False,
-                "receipt_write_authority": False,
+                "receipt_write_authority": bool(
+                    _as_dict(supervision_authority_readiness.get("governance")).get("receipt_write_authority")
+                ),
             },
             {
                 "id": "summon_anywhere",
@@ -1723,6 +1784,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     )
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
+    supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     resident_runtime_plan = _as_dict(resident_host.get("resident_runtime_plan"))
 
@@ -1750,6 +1812,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
         "resident_runtime_denial_receipts": resident_runtime_denial_receipts,
         "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
+        "supervision_authority_grant_receipts": supervision_authority_grant_receipts,
         "supervision_authority_readiness": supervision_authority_readiness,
         "resident_runtime_plan": resident_runtime_plan,
         "resident_runtime_denial": _as_dict(resident_host.get("resident_runtime_denial")),
@@ -1776,6 +1839,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
             "lens_host_supervision_authority_denial_route": "/lens/host/supervision/authority",
             "lens_host_supervision_authority_denials_route": "/lens/host/supervision/authority/denials",
+            "lens_host_supervision_authority_grants_route": "/lens/host/supervision/authority/grants",
             "lens_host_supervision_authority_readiness_route": "/lens/host/supervision/authority/readiness",
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (

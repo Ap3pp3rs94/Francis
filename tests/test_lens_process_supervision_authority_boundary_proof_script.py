@@ -134,6 +134,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         "resident_overlay_activation_boundary_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,
+        "resident_host_supervision_authority_grant_receipt_readback_observed": True,
         "resident_host_supervision_authority_readiness_audit_observed": True,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,

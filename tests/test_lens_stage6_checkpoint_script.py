@@ -310,8 +310,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_denial_boundary"]["authority_ready"] is False
     assert (
         "host_supervision_authority_grant_not_implemented"
-        in payload["resident_host_supervision_authority_denial_boundary"]["blockers"]
+        not in payload["resident_host_supervision_authority_denial_boundary"]["blockers"]
     )
+    assert "approval_id_required" in payload["resident_host_supervision_authority_denial_boundary"]["blockers"]
     assert (
         "process_supervision_authority_not_granted"
         in payload["resident_host_supervision_authority_denial_boundary"]["blockers"]
@@ -340,6 +341,23 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_denial_receipts"]["memory_write"] is False
     assert payload["resident_host_supervision_authority_denial_receipts"]["receipt_write_authority"] is False
     assert payload["resident_host_supervision_authority_denial_receipts"]["denial_receipt_write_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["status"] == "empty"
+    assert payload["resident_host_supervision_authority_grant_receipts"]["ok"] is True
+    assert (
+        "/lens/host/supervision/authority/grants"
+        in payload["resident_host_supervision_authority_grant_receipts"]["evidence"]
+    )
+    assert payload["resident_host_supervision_authority_grant_receipts"]["receipt_count"] == 0
+    assert payload["resident_host_supervision_authority_grant_receipts"]["latest_receipt_id"] == ""
+    assert payload["resident_host_supervision_authority_grant_receipts"]["active_receipt_id"] == ""
+    assert payload["resident_host_supervision_authority_grant_receipts"]["authority_granted"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["execution_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["approval_decision_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["process_supervision_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["service_control_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["memory_write"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["receipt_write_authority"] is False
+    assert payload["resident_host_supervision_authority_grant_receipts"]["denial_receipt_write_authority"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["status"] == "blocked"
     assert payload["resident_host_supervision_authority_readiness_audit"]["audit_status"] == "complete"
     assert payload["resident_host_supervision_authority_readiness_audit"]["ok"] is True
@@ -354,13 +372,17 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_readiness_audit"]["resident_claim_allowed"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["boundary_observed"] is True
     assert payload["resident_host_supervision_authority_readiness_audit"]["denial_receipt_readback_ready"] is True
+    assert payload["resident_host_supervision_authority_readiness_audit"]["grant_receipt_readback_ready"] is True
     assert payload["resident_host_supervision_authority_readiness_audit"]["receipt_count"] == 0
     assert payload["resident_host_supervision_authority_readiness_audit"]["latest_receipt_id"] == ""
-    assert payload["resident_host_supervision_authority_readiness_audit"]["requirements_total"] >= 10
+    assert payload["resident_host_supervision_authority_readiness_audit"]["grant_receipt_count"] == 0
+    assert payload["resident_host_supervision_authority_readiness_audit"]["latest_grant_receipt_id"] == ""
+    assert payload["resident_host_supervision_authority_readiness_audit"]["active_grant_receipt_id"] == ""
+    assert payload["resident_host_supervision_authority_readiness_audit"]["requirements_total"] >= 11
     assert payload["resident_host_supervision_authority_readiness_audit"]["requirements_blocked_total"] >= 6
     assert (
         "authority_grant_implementation"
-        in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
+        not in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
     )
     assert (
         "process_supervision_authority"
@@ -368,6 +390,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     )
     assert (
         "host_supervision_authority_grant_not_implemented"
+        not in payload["resident_host_supervision_authority_readiness_audit"]["blockers"]
+    )
+    assert (
+        "process_supervision_authority_not_granted"
         in payload["resident_host_supervision_authority_readiness_audit"]["blockers"]
     )
     assert payload["resident_host_supervision_authority_readiness_audit"]["execution_authority"] is False
@@ -585,6 +611,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,
+        "resident_host_supervision_authority_grant_receipt_readback_observed": True,
         "resident_host_supervision_authority_readiness_audit_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -170,6 +171,47 @@ def _as_str_list(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _record_ts(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _latest_active_host_supervision_authority_grant() -> dict[str, Any]:
+    root = data_dir() / "lens" / "host_supervision_authority_grants"
+    try:
+        paths = list(root.glob("*.json")) if root.exists() else []
+    except OSError:
+        return {}
+
+    now = time.time()
+    items: list[dict[str, Any]] = []
+    for path in paths:
+        item = _json_dict_from_path(path)
+        if not item:
+            continue
+        lease = _as_dict(item.get("lease"))
+        authority_boundary = _as_dict(item.get("authority_boundary"))
+        if (
+            str(item.get("kind") or "").strip() != "lens.host.supervision_authority.grant.receipt"
+            or str(item.get("status") or "").strip() != "authority_granted"
+            or not bool(lease.get("active"))
+            or not bool(authority_boundary.get("authority_granted"))
+            or _record_ts(lease.get("expires_ts") or item.get("expires_ts")) <= now
+        ):
+            continue
+        items.append(item)
+    items.sort(key=lambda item: (_record_ts(item.get("created_ts")), str(item.get("receipt_id") or "")), reverse=True)
+    return items[0] if items else {}
+
+
 def _quote_command_arg(value: str) -> str:
     if any(character.isspace() for character in value) or '"' in value:
         return '"' + value.replace('"', '\\"') + '"'
@@ -275,15 +317,29 @@ def _lens_host_supervision_readiness(
     service_config_payload: dict[str, Any],
     process_readback: dict[str, Any],
 ) -> dict[str, Any]:
+    active_authority_grant = _latest_active_host_supervision_authority_grant()
+    grant_authorities = _as_dict(active_authority_grant.get("authorities"))
+    authority_grant_active = bool(active_authority_grant)
     supervision_enabled = bool(service_config_payload.get("process_supervision_enabled"))
     persistent_supervision_enabled = bool(service_config_payload.get("persistent_supervision_enabled"))
-    process_restart_authority = bool(service_config_payload.get("process_restart_authority"))
-    install_authority = bool(
-        service_config_payload.get("install_authority") or service_config_payload.get("service_install_authority")
+    process_restart_authority = bool(
+        service_config_payload.get("process_restart_authority") or grant_authorities.get("process_restart_authority")
     )
-    service_control_authority = bool(service_config_payload.get("service_control_authority"))
-    receipt_write_authority = bool(service_config_payload.get("receipt_write_authority"))
-    resident_claim_authority = bool(service_config_payload.get("resident_claim_authority"))
+    process_supervision_authority = bool(grant_authorities.get("process_supervision_authority"))
+    install_authority = bool(
+        service_config_payload.get("install_authority")
+        or service_config_payload.get("service_install_authority")
+        or grant_authorities.get("service_install_authority")
+    )
+    service_control_authority = bool(
+        service_config_payload.get("service_control_authority") or grant_authorities.get("service_control_authority")
+    )
+    receipt_write_authority = bool(
+        service_config_payload.get("receipt_write_authority") or grant_authorities.get("receipt_write_authority")
+    )
+    resident_claim_authority = bool(
+        service_config_payload.get("resident_claim_authority") or grant_authorities.get("resident_claim_authority")
+    )
     foreground_readback_ready = bool(process_readback.get("readback_ready"))
     prerequisites = [
         _readiness_item(
@@ -373,11 +429,16 @@ def _lens_host_supervision_readiness(
         "service_manager_exists": service_manager_exists,
         "process_supervision_enabled": supervision_enabled,
         "persistent_supervision_enabled": persistent_supervision_enabled,
+        "process_supervision_authority": process_supervision_authority,
         "process_restart_authority": process_restart_authority,
         "service_install_authority": install_authority,
         "service_control_authority": service_control_authority,
         "receipt_write_authority": receipt_write_authority,
         "resident_claim_authority": resident_claim_authority,
+        "authority_grant_active": authority_grant_active,
+        "authority_grant_route": "/lens/host/supervision/authority",
+        "authority_grants_route": "/lens/host/supervision/authority/grants",
+        "authority_grant": active_authority_grant,
         "resident_claim_allowed": False,
         "next_allowed_transition": "foreground_status_session_only" if blocked_by else "operator_review_required",
         "blocked_by": blocked_by,
@@ -597,6 +658,17 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
     blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
     blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
     ready = not blocked_requirements
+    authority_requirement_ids = {
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "resident_claim_authority",
+    }
+    authority_blocked = any(item in authority_requirement_ids for item in blocked_requirements)
+    next_gap = "persistent_supervision_execution_boundary" if ready else "persistent_supervision_authority_not_granted"
+    if not ready and not authority_blocked:
+        next_gap = "persistent_supervision_enablement_disabled"
     return {
         "ok": True,
         "kind": "lens.host.persistent_supervision_plan",
@@ -643,9 +715,7 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
             "service_readback": service_readback,
             "supervision_readiness": supervision_readiness,
         },
-        "next_smallest_truthful_gap": (
-            "persistent_supervision_execution_boundary" if ready else "persistent_supervision_authority_not_granted"
-        ),
+        "next_smallest_truthful_gap": next_gap,
         "governance": {
             "read_only_contract": True,
             "diagnostic_only": True,
@@ -687,44 +757,56 @@ def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None
         _readiness_item(
             "process_supervision_authority",
             label="Process supervision authority",
-            ready=False,
-            status="blocked",
-            reason="process_supervision_authority_not_granted",
+            ready=bool(supervision_readiness.get("process_supervision_authority")),
+            status="ready" if bool(supervision_readiness.get("process_supervision_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("process_supervision_authority"))
+            else "process_supervision_authority_not_granted",
         ),
         _readiness_item(
             "process_restart_authority",
             label="Process restart authority",
-            ready=False,
-            status="blocked",
-            reason="process_restart_authority_not_granted",
+            ready=bool(supervision_readiness.get("process_restart_authority")),
+            status="ready" if bool(supervision_readiness.get("process_restart_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("process_restart_authority"))
+            else "process_restart_authority_not_granted",
         ),
         _readiness_item(
             "service_install_authority",
             label="Service install authority",
-            ready=False,
-            status="blocked",
-            reason="service_install_authority_not_granted",
+            ready=bool(supervision_readiness.get("service_install_authority")),
+            status="ready" if bool(supervision_readiness.get("service_install_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("service_install_authority"))
+            else "service_install_authority_not_granted",
         ),
         _readiness_item(
             "service_control_authority",
             label="Service control authority",
-            ready=False,
-            status="blocked",
-            reason="service_control_authority_not_granted",
+            ready=bool(supervision_readiness.get("service_control_authority")),
+            status="ready" if bool(supervision_readiness.get("service_control_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("service_control_authority"))
+            else "service_control_authority_not_granted",
         ),
         _readiness_item(
             "resident_claim_authority",
             label="Resident claim authority",
-            ready=False,
-            status="blocked",
-            reason="resident_claim_authority_not_granted",
+            ready=bool(supervision_readiness.get("resident_claim_authority")),
+            status="ready" if bool(supervision_readiness.get("resident_claim_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("resident_claim_authority"))
+            else "resident_claim_authority_not_granted",
         ),
         _readiness_item(
             "receipt_write_authority",
             label="Resident supervision receipt authority",
-            ready=False,
-            status="blocked",
-            reason="receipt_write_authority_not_granted",
+            ready=bool(supervision_readiness.get("receipt_write_authority")),
+            status="ready" if bool(supervision_readiness.get("receipt_write_authority")) else "blocked",
+            reason=""
+            if bool(supervision_readiness.get("receipt_write_authority"))
+            else "receipt_write_authority_not_granted",
         ),
     ]
     requirements = [
