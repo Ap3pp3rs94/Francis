@@ -57,13 +57,74 @@ function ConvertTo-StringArray {
   return @([string]$Value)
 }
 
+function ConvertTo-Number {
+  param([AllowNull()][object]$Value)
+
+  if ($null -eq $Value -or $Value -is [bool]) {
+    return 0
+  }
+  try {
+    return [double]$Value
+  } catch {
+    return 0
+  }
+}
+
+function Get-DataRoot {
+  $Override = [string]$env:FRANCIS_DATA_DIR
+  if (-not [string]::IsNullOrWhiteSpace($Override)) {
+    return $Override
+  }
+  return (Join-Path $RepoRoot 'data')
+}
+
+function Get-LatestActiveHostSupervisionAuthorityGrant {
+  param([string]$DataRoot)
+
+  $GrantRoot = Join-Path $DataRoot 'lens/host_supervision_authority_grants'
+  if (-not (Test-Path -LiteralPath $GrantRoot -PathType Container)) {
+    return $null
+  }
+
+  $Now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  $Candidates = @()
+  foreach ($Path in @(Get-ChildItem -LiteralPath $GrantRoot -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
+    $Item = Read-JsonFile -Path $Path.FullName
+    if ($null -eq $Item) {
+      continue
+    }
+    $Lease = Get-PropertyValue -Payload $Item -Name 'lease' -Default $null
+    $Boundary = Get-PropertyValue -Payload $Item -Name 'authority_boundary' -Default $null
+    $ExpiresTs = ConvertTo-Number -Value (Get-PropertyValue -Payload $Lease -Name 'expires_ts' -Default (Get-PropertyValue -Payload $Item -Name 'expires_ts' -Default 0))
+    if (
+      [string](Get-PropertyValue -Payload $Item -Name 'kind' -Default '') -ne 'lens.host.supervision_authority.grant.receipt' -or
+      [string](Get-PropertyValue -Payload $Item -Name 'status' -Default '') -ne 'authority_granted' -or
+      -not [bool](Get-PropertyValue -Payload $Lease -Name 'active' -Default $false) -or
+      -not [bool](Get-PropertyValue -Payload $Boundary -Name 'authority_granted' -Default $false) -or
+      $ExpiresTs -le $Now
+    ) {
+      continue
+    }
+    $Candidates += $Item
+  }
+
+  if ($Candidates.Count -eq 0) {
+    return $null
+  }
+  return @($Candidates | Sort-Object `
+    @{Expression = { ConvertTo-Number -Value (Get-PropertyValue -Payload $_ -Name 'created_ts' -Default 0) }; Descending = $true}, `
+    @{Expression = { [string](Get-PropertyValue -Payload $_ -Name 'receipt_id' -Default '') }; Descending = $true} `
+  )[0]
+}
+
 function New-Requirement {
   param(
     [string]$Id,
     [string]$Label,
     [bool]$Ready,
     [string]$Reason,
-    [string]$AuthorityRequired = ''
+    [string]$AuthorityRequired = '',
+    [bool]$AuthorityGranted = $false
   )
 
   return [ordered]@{
@@ -73,7 +134,7 @@ function New-Requirement {
     status = if ($Ready) { 'ready' } else { 'blocked' }
     reason = $Reason
     authority_required = $AuthorityRequired
-    authority_granted = $false
+    authority_granted = $AuthorityGranted
   }
 }
 
@@ -96,6 +157,10 @@ $HostPath = Join-Path $RepoRoot $HostRelativePath
 $ManagerRelativePath = 'scripts/service-install.ps1'
 $ManagerPath = Join-Path $RepoRoot $ManagerRelativePath
 $Config = Read-JsonFile -Path $ConfigPath
+$DataRoot = Get-DataRoot
+$ActiveAuthorityGrant = Get-LatestActiveHostSupervisionAuthorityGrant -DataRoot $DataRoot
+$GrantAuthorities = Get-PropertyValue -Payload $ActiveAuthorityGrant -Name 'authorities' -Default $null
+$AuthorityGrantActive = $null -ne $ActiveAuthorityGrant
 
 $ConfigPresent = $null -ne $Config
 $HostPresent = Test-Path -LiteralPath $HostPath -PathType Leaf
@@ -112,14 +177,27 @@ $PlannedCommandParts += @($Arguments | ForEach-Object { Quote-CommandPart -Value
 
 $ProcessSupervisionEnabled = [bool](Get-PropertyValue -Payload $Config -Name 'process_supervision_enabled' -Default $false)
 $PersistentSupervisionEnabled = [bool](Get-PropertyValue -Payload $Config -Name 'persistent_supervision_enabled' -Default $false)
-$ProcessRestartAuthority = [bool](Get-PropertyValue -Payload $Config -Name 'process_restart_authority' -Default $false)
+$ProcessRestartAuthority = [bool](
+  (Get-PropertyValue -Payload $Config -Name 'process_restart_authority' -Default $false) -or
+  (Get-PropertyValue -Payload $GrantAuthorities -Name 'process_restart_authority' -Default $false)
+)
 $InstallAuthority = [bool](
   (Get-PropertyValue -Payload $Config -Name 'install_authority' -Default $false) -or
-  (Get-PropertyValue -Payload $Config -Name 'service_install_authority' -Default $false)
+  (Get-PropertyValue -Payload $Config -Name 'service_install_authority' -Default $false) -or
+  (Get-PropertyValue -Payload $GrantAuthorities -Name 'service_install_authority' -Default $false)
 )
-$ServiceControlAuthority = [bool](Get-PropertyValue -Payload $Config -Name 'service_control_authority' -Default $false)
-$ReceiptWriteAuthority = [bool](Get-PropertyValue -Payload $Config -Name 'receipt_write_authority' -Default $false)
-$ResidentClaimAuthority = [bool](Get-PropertyValue -Payload $Config -Name 'resident_claim_authority' -Default $false)
+$ServiceControlAuthority = [bool](
+  (Get-PropertyValue -Payload $Config -Name 'service_control_authority' -Default $false) -or
+  (Get-PropertyValue -Payload $GrantAuthorities -Name 'service_control_authority' -Default $false)
+)
+$ReceiptWriteAuthority = [bool](
+  (Get-PropertyValue -Payload $Config -Name 'receipt_write_authority' -Default $false) -or
+  (Get-PropertyValue -Payload $GrantAuthorities -Name 'receipt_write_authority' -Default $false)
+)
+$ResidentClaimAuthority = [bool](
+  (Get-PropertyValue -Payload $Config -Name 'resident_claim_authority' -Default $false) -or
+  (Get-PropertyValue -Payload $GrantAuthorities -Name 'resident_claim_authority' -Default $false)
+)
 
 $Requirements = @(
   (New-Requirement -Id 'service_config' -Label 'Lens host service config' -Ready $ConfigPresent -Reason $(if ($ConfigPresent) { '' } else { 'service_config_missing' })),
@@ -127,11 +205,11 @@ $Requirements = @(
   (New-Requirement -Id 'service_manager' -Label 'Service manager script' -Ready $ManagerPresent -Reason $(if ($ManagerPresent) { '' } else { 'service_manager_missing' })),
   (New-Requirement -Id 'process_supervision_enabled' -Label 'Process supervision enabled' -Ready $ProcessSupervisionEnabled -Reason $(if ($ProcessSupervisionEnabled) { '' } else { 'process_supervision_disabled' }) -AuthorityRequired 'process_supervision'),
   (New-Requirement -Id 'persistent_supervision_enabled' -Label 'Persistent supervision enabled' -Ready $PersistentSupervisionEnabled -Reason $(if ($PersistentSupervisionEnabled) { '' } else { 'persistent_supervision_disabled' }) -AuthorityRequired 'persistent_supervision'),
-  (New-Requirement -Id 'process_restart_authority' -Label 'Process restart authority' -Ready $ProcessRestartAuthority -Reason $(if ($ProcessRestartAuthority) { '' } else { 'process_restart_authority_not_granted' }) -AuthorityRequired 'process_restart'),
-  (New-Requirement -Id 'service_install_authority' -Label 'Service install authority' -Ready $InstallAuthority -Reason $(if ($InstallAuthority) { '' } else { 'service_install_authority_not_granted' }) -AuthorityRequired 'service_install'),
-  (New-Requirement -Id 'service_control_authority' -Label 'Service control authority' -Ready $ServiceControlAuthority -Reason $(if ($ServiceControlAuthority) { '' } else { 'service_control_authority_not_granted' }) -AuthorityRequired 'service_control'),
-  (New-Requirement -Id 'receipt_write_authority' -Label 'Persistent supervision receipt authority' -Ready $ReceiptWriteAuthority -Reason $(if ($ReceiptWriteAuthority) { '' } else { 'receipt_write_authority_not_granted' }) -AuthorityRequired 'receipt_write'),
-  (New-Requirement -Id 'resident_claim_authority' -Label 'Resident claim authority' -Ready $ResidentClaimAuthority -Reason $(if ($ResidentClaimAuthority) { '' } else { 'resident_claim_authority_not_granted' }) -AuthorityRequired 'resident_claim')
+  (New-Requirement -Id 'process_restart_authority' -Label 'Process restart authority' -Ready $ProcessRestartAuthority -Reason $(if ($ProcessRestartAuthority) { '' } else { 'process_restart_authority_not_granted' }) -AuthorityRequired 'process_restart' -AuthorityGranted $ProcessRestartAuthority),
+  (New-Requirement -Id 'service_install_authority' -Label 'Service install authority' -Ready $InstallAuthority -Reason $(if ($InstallAuthority) { '' } else { 'service_install_authority_not_granted' }) -AuthorityRequired 'service_install' -AuthorityGranted $InstallAuthority),
+  (New-Requirement -Id 'service_control_authority' -Label 'Service control authority' -Ready $ServiceControlAuthority -Reason $(if ($ServiceControlAuthority) { '' } else { 'service_control_authority_not_granted' }) -AuthorityRequired 'service_control' -AuthorityGranted $ServiceControlAuthority),
+  (New-Requirement -Id 'receipt_write_authority' -Label 'Persistent supervision receipt authority' -Ready $ReceiptWriteAuthority -Reason $(if ($ReceiptWriteAuthority) { '' } else { 'receipt_write_authority_not_granted' }) -AuthorityRequired 'receipt_write' -AuthorityGranted $ReceiptWriteAuthority),
+  (New-Requirement -Id 'resident_claim_authority' -Label 'Resident claim authority' -Ready $ResidentClaimAuthority -Reason $(if ($ResidentClaimAuthority) { '' } else { 'resident_claim_authority_not_granted' }) -AuthorityRequired 'resident_claim' -AuthorityGranted $ResidentClaimAuthority)
 )
 
 $BlockedRequirements = @($Requirements | Where-Object { -not [bool]$_.ready })
@@ -146,6 +224,21 @@ $Blockers = @(
 ) | Sort-Object -Unique
 
 $Ready = $BlockedRequirements.Count -eq 0
+$AuthorityRequirementIds = @(
+  'process_restart_authority',
+  'service_install_authority',
+  'service_control_authority',
+  'receipt_write_authority',
+  'resident_claim_authority'
+)
+$AuthorityBlocked = @($BlockedRequirementIds | Where-Object { $AuthorityRequirementIds -contains $_ }).Count -gt 0
+$NextSmallestTruthfulGap = if ($Ready) {
+  'persistent_supervision_execution_boundary'
+} elseif (-not $AuthorityBlocked) {
+  'persistent_supervision_enablement_disabled'
+} else {
+  'persistent_supervision_authority_not_granted'
+}
 $Payload = [ordered]@{
   ok = $true
   kind = 'lens.host.persistent_supervision_plan'
@@ -162,6 +255,11 @@ $Payload = [ordered]@{
   service_manager_present = $ManagerPresent
   service_name = $ServiceName
   planned_command = ($PlannedCommandParts -join ' ')
+  data_root = $DataRoot
+  authority_grant_active = $AuthorityGrantActive
+  authority_grant_route = '/lens/host/supervision/authority'
+  authority_grants_route = '/lens/host/supervision/authority/grants'
+  authority_grant_receipt_id = [string](Get-PropertyValue -Payload $ActiveAuthorityGrant -Name 'receipt_id' -Default '')
   requirements_total = $Requirements.Count
   requirements_ready_total = ($Requirements.Count - $BlockedRequirements.Count)
   requirements_blocked_total = $BlockedRequirements.Count
@@ -181,7 +279,7 @@ $Payload = [ordered]@{
     would_write_memory = $false
     would_claim_resident = $false
   }
-  next_smallest_truthful_gap = if ($Ready) { 'persistent_supervision_execution_boundary' } else { 'persistent_supervision_authority_not_granted' }
+  next_smallest_truthful_gap = $NextSmallestTruthfulGap
   governance = [ordered]@{
     diagnostic_only = $true
     read_only_contract = $true

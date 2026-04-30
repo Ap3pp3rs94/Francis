@@ -14656,6 +14656,45 @@ authority grant lease:
 - `python -m ruff format --check src\francis\lens\activation.py src\francis\api\routes\lens.py src\francis\lens\__init__.py src\francis\lens\status.py src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
   Result: `passed after formatting`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision proof consumes authority grants
+
+Stage 6/Lens persistent-supervision proof script now reads the same active host
+supervision authority grant receipt surface that the backend readback uses.
+`scripts/lens-persistent-supervision-plan.ps1 -Mode Status` checks
+`FRANCIS_DATA_DIR` when provided, otherwise the repo `data` directory, and only
+accepts unexpired `lens.host.supervision_authority.grant.receipt` records with an
+active lease and an authority-granted boundary.
+
+This is readback-only proof alignment. An active grant receipt can now make the
+script's authority requirements ready and move the proof's next gap from
+`persistent_supervision_authority_not_granted` to
+`persistent_supervision_enablement_disabled`, while the plan still refuses to
+install, start, supervise, restart, write memory, write receipts, or claim a
+resident host. Without an active grant receipt, the script preserves the prior
+blocked posture.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains an
+explicit persistent-supervision enablement/execution boundary that consumes an
+active grant receipt without granting resident execution, service mutation,
+tray/hotkey/overlay control, memory writes, or resident-claim authority beyond
+the existing bounded lease contract.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision proof grant-readback alignment:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; Git warned the PowerShell script will be normalized to CRLF when Git touches it`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
