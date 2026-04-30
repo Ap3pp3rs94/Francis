@@ -14695,6 +14695,47 @@ supervision proof grant-readback alignment:
 - `git diff --check`
   Result: `passed; Git warned the PowerShell script will be normalized to CRLF when Git touches it`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision enablement preflight
+
+Stage 6/Lens now exposes a read-only persistent-supervision enablement preflight
+at `GET /lens/host/persistent-supervision/enablement`. The route composes the
+existing persistent-supervision plan, the resident-host supervision readiness
+readback, and active host supervision authority grant receipts into an explicit
+enablement boundary.
+
+Without an active authority grant, the route remains blocked on
+`persistent_supervision_authority_not_granted`. With an active grant receipt, it
+proves the next blocker is now `persistent_supervision_enablement_disabled`:
+process supervision and persistent supervision are still disabled in the service
+configuration. The route is also surfaced through `/lens/status` resident-host
+readback for operator/API clients.
+
+This is backend readback-only and preflight-only. It does not update service
+configuration, install or start a service, supervise or restart a process, write
+receipts, write memory, decide approvals, grant UI authority, or claim a
+resident Lens host.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is a
+governed non-mutating enablement attempt/denial boundary, or checkpoint/audit
+consumption of this preflight if the closure proof needs to name it directly
+before any execution boundary is added.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision enablement preflight:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

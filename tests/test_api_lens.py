@@ -2717,6 +2717,62 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "mutation_authority_granted": False,
     }
 
+    enablement = client.get("/lens/host/persistent-supervision/enablement")
+    assert enablement.status_code == 200
+    enablement_body = enablement.json()
+    assert enablement_body["kind"] == "lens.host.persistent_supervision_enablement.preflight"
+    assert enablement_body["status"] == "blocked"
+    assert enablement_body["route"] == "/lens/host/persistent-supervision/enablement"
+    assert enablement_body["plan_route"] == "/lens/host/persistent-supervision"
+    assert enablement_body["authority_route"] == "/lens/host/supervision/authority"
+    assert enablement_body["preflight_ready"] is True
+    assert enablement_body["ready"] is False
+    assert enablement_body["enablement_ready"] is False
+    assert enablement_body["persistent_supervision_ready"] is False
+    assert enablement_body["resident_claim_allowed"] is False
+    assert enablement_body["authority_grant_active"] is False
+    assert enablement_body["active_grant_receipt_id"] == ""
+    assert enablement_body["blocked_requirements"] == [
+        "active_host_supervision_authority_grant",
+        "process_supervision_enabled",
+        "persistent_supervision_enabled",
+    ]
+    assert "host_supervision_authority_grant_not_active" in enablement_body["blockers"]
+    assert "process_supervision_disabled" in enablement_body["blockers"]
+    assert "persistent_supervision_disabled" in enablement_body["blockers"]
+    assert enablement_body["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert enablement_body["plan"] == {
+        "mode": "persistent_supervision_enablement_preflight",
+        "service_name": "Francis-LensHost",
+        "would_update_service_config": False,
+        "would_enable_process_supervision": False,
+        "would_enable_persistent_supervision": False,
+        "would_install_service": False,
+        "would_update_service": False,
+        "would_start_service": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+    }
+    assert enablement_body["governance"] == {
+        "read_only_contract": True,
+        "preflight_only": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "service_config_write_authority": False,
+        "mutation_authority_granted": False,
+    }
+
     status = client.get("/lens/status")
     assert status.status_code == 200
     resident_host = status.json()["resident_host"]
@@ -2725,6 +2781,11 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "persistent_supervision_authority_not_granted"
     )
     assert resident_host["persistent_supervision_plan"]["plan"]["would_supervise_process"] is False
+    assert resident_host["persistent_supervision_enablement_route"] == ("/lens/host/persistent-supervision/enablement")
+    assert resident_host["persistent_supervision_enablement"]["next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert resident_host["persistent_supervision_enablement"]["plan"]["would_update_service_config"] is False
 
 
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
@@ -3387,6 +3448,53 @@ def test_lens_host_supervision_authority_grant_requires_approved_request_before_
     assert persistent_requirements["service_control_authority"]["ready"] is True
     assert persistent_requirements["receipt_write_authority"]["ready"] is True
     assert persistent_requirements["resident_claim_authority"]["ready"] is True
+
+    enablement = client.get("/lens/host/persistent-supervision/enablement")
+    assert enablement.status_code == 200
+    enablement_body = enablement.json()
+    assert enablement_body["kind"] == "lens.host.persistent_supervision_enablement.preflight"
+    assert enablement_body["status"] == "blocked"
+    assert enablement_body["ready"] is False
+    assert enablement_body["enablement_ready"] is False
+    assert enablement_body["persistent_supervision_ready"] is False
+    assert enablement_body["resident_claim_allowed"] is False
+    assert enablement_body["authority_grant_active"] is True
+    assert enablement_body["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert enablement_body["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert enablement_body["blocked_requirements"] == [
+        "process_supervision_enabled",
+        "persistent_supervision_enabled",
+    ]
+    enablement_requirements = {item["id"]: item for item in enablement_body["requirements"]}
+    assert enablement_requirements["active_host_supervision_authority_grant"]["ready"] is True
+    assert enablement_requirements["process_supervision_enabled"]["ready"] is False
+    assert enablement_requirements["persistent_supervision_enabled"]["ready"] is False
+    assert "host_supervision_authority_grant_not_active" not in enablement_body["blockers"]
+    assert "process_supervision_disabled" in enablement_body["blockers"]
+    assert "persistent_supervision_disabled" in enablement_body["blockers"]
+    assert enablement_body["plan"]["would_update_service_config"] is False
+    assert enablement_body["plan"]["would_enable_process_supervision"] is False
+    assert enablement_body["plan"]["would_enable_persistent_supervision"] is False
+    assert enablement_body["plan"]["would_install_service"] is False
+    assert enablement_body["plan"]["would_start_service"] is False
+    assert enablement_body["plan"]["would_supervise_process"] is False
+    assert enablement_body["plan"]["would_restart_process"] is False
+    assert enablement_body["plan"]["would_write_memory"] is False
+    assert enablement_body["plan"]["would_claim_resident"] is False
+    assert enablement_body["governance"]["execution_authority"] is False
+    assert enablement_body["governance"]["approval_decision_authority"] is False
+    assert enablement_body["governance"]["service_config_write_authority"] is False
+    assert enablement_body["governance"]["memory_write"] is False
+    assert enablement_body["governance"]["mutation_authority_granted"] is False
+
+    status = client.get("/lens/status?limit=10")
+    assert status.status_code == 200
+    resident_host = status.json()["resident_host"]
+    assert resident_host["persistent_supervision_enablement_route"] == ("/lens/host/persistent-supervision/enablement")
+    assert resident_host["persistent_supervision_enablement"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert resident_host["persistent_supervision_enablement"]["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_disabled"
+    )
     assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

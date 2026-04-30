@@ -738,6 +738,129 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
     }
 
 
+def lens_host_persistent_supervision_enablement_preflight(
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    persistent_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
+    source_readbacks = _as_dict(persistent_plan.get("source_readbacks"))
+    supervision_readiness = _as_dict(source_readbacks.get("supervision_readiness"))
+    active_grant = _as_dict(supervision_readiness.get("authority_grant"))
+    service_plan = _as_dict(source_readbacks.get("service_plan"))
+    process_supervision_enabled = bool(supervision_readiness.get("process_supervision_enabled"))
+    persistent_supervision_enabled = bool(supervision_readiness.get("persistent_supervision_enabled"))
+    authority_grant_active = bool(supervision_readiness.get("authority_grant_active"))
+    receipt_id = str(active_grant.get("receipt_id") or "")
+    requirements = [
+        _readiness_item(
+            "persistent_supervision_plan",
+            label="Persistent supervision plan",
+            ready=bool(persistent_plan.get("plan_available")),
+            status="ready" if bool(persistent_plan.get("plan_available")) else "missing",
+            reason="" if bool(persistent_plan.get("plan_available")) else "persistent_supervision_plan_missing",
+        ),
+        _readiness_item(
+            "active_host_supervision_authority_grant",
+            label="Active host supervision authority grant",
+            ready=authority_grant_active,
+            status="ready" if authority_grant_active else "blocked",
+            reason="" if authority_grant_active else "host_supervision_authority_grant_not_active",
+        ),
+        _readiness_item(
+            "process_supervision_enabled",
+            label="Process supervision enabled",
+            ready=process_supervision_enabled,
+            status="ready" if process_supervision_enabled else "blocked",
+            reason="" if process_supervision_enabled else "process_supervision_disabled",
+        ),
+        _readiness_item(
+            "persistent_supervision_enabled",
+            label="Persistent supervision enabled",
+            ready=persistent_supervision_enabled,
+            status="ready" if persistent_supervision_enabled else "blocked",
+            reason="" if persistent_supervision_enabled else "persistent_supervision_disabled",
+        ),
+    ]
+    blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
+    blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
+    enablement_ready = not blocked_requirements
+    if enablement_ready:
+        next_gap = "persistent_supervision_execution_boundary"
+    elif authority_grant_active:
+        next_gap = "persistent_supervision_enablement_disabled"
+    else:
+        next_gap = "persistent_supervision_authority_not_granted"
+    return {
+        "ok": True,
+        "kind": "lens.host.persistent_supervision_enablement.preflight",
+        "status": "ready_for_operator_review" if enablement_ready else "blocked",
+        "route": "/lens/host/persistent-supervision/enablement",
+        "plan_route": "/lens/host/persistent-supervision",
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "authority_route": "/lens/host/supervision/authority",
+        "authority_grants_route": "/lens/host/supervision/authority/grants",
+        "service_name": str(persistent_plan.get("service_name") or ""),
+        "preflight_ready": True,
+        "ready": enablement_ready,
+        "enablement_ready": enablement_ready,
+        "persistent_supervision_ready": bool(persistent_plan.get("persistent_supervision_ready")),
+        "resident_claim_allowed": False,
+        "authority_grant_active": authority_grant_active,
+        "active_grant_receipt_id": receipt_id,
+        "process_supervision_enabled": process_supervision_enabled,
+        "persistent_supervision_enabled": persistent_supervision_enabled,
+        "requirements": requirements,
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(requirements) - len(blocked_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "blocked_requirements": blocked_requirements,
+        "blockers": blockers,
+        "plan": {
+            "mode": "persistent_supervision_enablement_preflight",
+            "service_name": str(persistent_plan.get("service_name") or ""),
+            "would_update_service_config": False,
+            "would_enable_process_supervision": False,
+            "would_enable_persistent_supervision": False,
+            "would_install_service": False,
+            "would_update_service": False,
+            "would_start_service": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_write_receipt": False,
+            "would_write_memory": False,
+            "would_claim_resident": False,
+        },
+        "source_readbacks": {
+            "persistent_supervision_plan": persistent_plan,
+            "service_plan": service_plan,
+            "supervision_readiness": supervision_readiness,
+        },
+        "next_smallest_truthful_gap": next_gap,
+        "governance": {
+            "read_only_contract": True,
+            "preflight_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "service_config_write_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "message": (
+            "Persistent Lens host supervision enablement is a read-only preflight; this route does not "
+            "update config, install, start, supervise, restart, write receipts, write memory, or claim a resident host."
+        ),
+    }
+
+
 def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
