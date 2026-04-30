@@ -21,6 +21,7 @@ from francis.lens import (
     lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
     lens_overlay_enablement_gate,
+    lens_resident_runtime_activation_denial_receipts,
     lens_preflight,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
@@ -182,6 +183,19 @@ def resident_runtime_plan(approval_id: str = "", actor: str = "") -> dict[str, A
     return lens_resident_runtime_activation_plan(approval_id=approval_id, actor=actor)
 
 
+@router.get("/resident-runtime/denials")
+def resident_runtime_denials(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_resident_runtime_activation_denial_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+    )
+
+
 @router.get("/resident-runtime/authority-grant/denials")
 def resident_runtime_authority_grant_denials(
     limit: int = Query(5, ge=1, le=50),
@@ -231,6 +245,7 @@ def resident_runtime_execute(request: Request, payload: LensResidentRuntimeExecu
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+        record_receipt=True,
     )
 
 

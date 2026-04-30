@@ -599,6 +599,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_runtime_denial["executed"] is False
     assert resident_runtime_denial["route"] == "/lens/resident-runtime/execute"
     assert resident_runtime_denial["plan_route"] == "/lens/resident-runtime/plan"
+    assert resident_runtime_denial["receipt_route"] == "/lens/resident-runtime/denials"
     assert resident_runtime_denial["surface_route"] == "/lens/resident-surface/activation"
     assert resident_runtime_denial["denial"]["reason"] == "resident_runtime_execution_authority_not_granted"
     assert resident_runtime_denial["denial"]["would_launch_process"] is False
@@ -636,6 +637,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_runtime_denial["governance"]["memory_write"] is False
     assert resident_runtime_denial["governance"]["receipt_write_authority"] is False
     assert resident_runtime_denial["governance"]["resident_claim_authority"] is False
+    assert resident_host["resident_runtime_denial_receipts_route"] == "/lens/resident-runtime/denials"
+    resident_runtime_denial_receipts = resident_host["resident_runtime_denial_receipts"]
+    assert resident_runtime_denial_receipts["kind"] == "lens.resident_runtime.activation.denial_receipts"
+    assert resident_runtime_denial_receipts["status"] == "empty"
+    assert resident_runtime_denial_receipts["route"] == "/lens/resident-runtime/denials"
+    assert resident_runtime_denial_receipts["execute_route"] == "/lens/resident-runtime/execute"
+    assert resident_runtime_denial_receipts["plan_route"] == "/lens/resident-runtime/plan"
+    assert resident_runtime_denial_receipts["total"] == 0
+    assert resident_runtime_denial_receipts["latest"] is None
+    assert resident_runtime_denial_receipts["items"] == []
+    assert resident_runtime_denial_receipts["governance"]["gate"] == (
+        "lens_resident_runtime_activation_denial_receipts_readback"
+    )
+    assert resident_runtime_denial_receipts["governance"]["read_only_contract"] is True
+    assert resident_runtime_denial_receipts["governance"]["denial_receipt_write_authority"] is False
+    assert resident_runtime_denial_receipts["governance"]["execution_authority"] is False
+    assert resident_runtime_denial_receipts["governance"]["approval_decision_authority"] is False
+    assert resident_runtime_denial_receipts["governance"]["process_supervision_authority"] is False
+    assert resident_runtime_denial_receipts["governance"]["service_control_authority"] is False
+    assert resident_runtime_denial_receipts["governance"]["memory_write"] is False
     assert resident_host["activation_denial_receipts_route"] == "/lens/host/activation/denials"
     activation_denial_receipts = resident_host["activation_denial_receipts"]
     assert activation_denial_receipts["kind"] == "lens.host.activation.denial_receipts"
@@ -1786,6 +1807,22 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_boundary_criterion["memory_write"] is False
     assert runtime_boundary_criterion["receipt_write_authority"] is False
     assert runtime_boundary_criterion["resident_claim_authority"] is False
+    runtime_denial_receipts_criterion = _criterion(body, "resident_runtime_activation_denial_receipt_readback")
+    assert runtime_denial_receipts_criterion["status"] == "empty"
+    assert runtime_denial_receipts_criterion["evidence"] == [
+        "/lens/resident-runtime/denials",
+        "/lens/resident-runtime/execute",
+        "/lens/status",
+    ]
+    assert runtime_denial_receipts_criterion["receipt_count"] == 0
+    assert runtime_denial_receipts_criterion["latest_receipt_id"] == ""
+    assert runtime_denial_receipts_criterion["execution_authority"] is False
+    assert runtime_denial_receipts_criterion["approval_decision_authority"] is False
+    assert runtime_denial_receipts_criterion["process_supervision_authority"] is False
+    assert runtime_denial_receipts_criterion["service_control_authority"] is False
+    assert runtime_denial_receipts_criterion["memory_write"] is False
+    assert runtime_denial_receipts_criterion["denial_receipt_write_authority"] is False
+    assert runtime_denial_receipts_criterion["receipt_write_authority"] is False
     execution_denial_criterion = _criterion(body, "host_activation_execution_denial_boundary")
     assert execution_denial_criterion["status"] == "blocked"
     assert execution_denial_criterion["applied"] is False
@@ -3268,8 +3305,39 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert denied_runtime_execution_body["denial"]["would_write_memory"] is False
     assert denied_runtime_execution_body["denial"]["would_write_receipt"] is False
     assert denied_runtime_execution_body["denial"]["would_claim_resident"] is False
-    assert denied_runtime_execution_body["receipt_written"] is False
-    assert denied_runtime_execution_body["receipt"] == {}
+    assert denied_runtime_execution_body["denial"]["denial_receipt_written"] is True
+    assert denied_runtime_execution_body["receipt_written"] is True
+    assert denied_runtime_execution_body["receipt_route"] == "/lens/resident-runtime/denials"
+    runtime_denial_receipt = denied_runtime_execution_body["receipt"]
+    assert runtime_denial_receipt["kind"] == "lens.resident_runtime.activation.denial.receipt"
+    assert runtime_denial_receipt["status"] == "denied_no_resident_runtime_authority"
+    assert runtime_denial_receipt["route"] == "/lens/resident-runtime/execute"
+    assert runtime_denial_receipt["source_kind"] == "lens.resident_runtime.activation.execution_denial"
+    assert runtime_denial_receipt["approval_id"] == approval_id
+    assert runtime_denial_receipt["actor"] == "test.system.write"
+    assert runtime_denial_receipt["approval"]["approved"] is True
+    assert runtime_denial_receipt["permission"]["ready"] is True
+    assert runtime_denial_receipt["runtime"]["runtime_ready"] is False
+    assert runtime_denial_receipt["runtime"]["resident_claim_allowed"] is False
+    assert runtime_denial_receipt["execution"]["applied"] is False
+    assert runtime_denial_receipt["execution"]["executed"] is False
+    assert runtime_denial_receipt["execution"]["would_launch_process"] is False
+    assert runtime_denial_receipt["execution"]["would_supervise_process"] is False
+    assert runtime_denial_receipt["execution"]["would_register_tray"] is False
+    assert runtime_denial_receipt["execution"]["would_open_overlay"] is False
+    assert runtime_denial_receipt["execution"]["would_write_memory"] is False
+    assert runtime_denial_receipt["execution"]["would_write_receipt"] is False
+    assert runtime_denial_receipt["governance"]["gate"] == "lens_resident_runtime_activation_denial_receipt"
+    assert runtime_denial_receipt["governance"]["denial_receipt_write_authority"] is True
+    assert runtime_denial_receipt["governance"]["execution_authority"] is False
+    assert runtime_denial_receipt["governance"]["approval_decision_authority"] is False
+    assert runtime_denial_receipt["governance"]["process_supervision_authority"] is False
+    assert runtime_denial_receipt["governance"]["service_control_authority"] is False
+    assert runtime_denial_receipt["governance"]["memory_write"] is False
+    runtime_denial_receipt_path = (
+        data_root / "lens" / "resident_runtime_activation_denials" / f"{runtime_denial_receipt['receipt_id']}.json"
+    )
+    assert runtime_denial_receipt_path.exists()
     assert "activation_approval_not_approved" not in denied_runtime_execution_body["blockers"]
     assert "system_write_scope_not_ready" not in denied_runtime_execution_body["blockers"]
     assert "resident_runtime_execution_authority_not_granted" in denied_runtime_execution_body["blockers"]
@@ -3291,7 +3359,32 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert denied_runtime_execution_body["governance"]["overlay_control_authority"] is False
     assert denied_runtime_execution_body["governance"]["memory_write"] is False
     assert denied_runtime_execution_body["governance"]["receipt_write_authority"] is False
+    assert denied_runtime_execution_body["governance"]["denial_receipt_write_authority"] is True
     assert denied_runtime_execution_body["governance"]["resident_claim_authority"] is False
+    runtime_denial_receipts = client.get(f"/lens/resident-runtime/denials?limit=10&approval_id={approval_id}")
+    assert runtime_denial_receipts.status_code == 200
+    runtime_denial_receipts_body = runtime_denial_receipts.json()
+    assert runtime_denial_receipts_body["kind"] == "lens.resident_runtime.activation.denial_receipts"
+    assert runtime_denial_receipts_body["status"] == "readback_ready"
+    assert runtime_denial_receipts_body["route"] == "/lens/resident-runtime/denials"
+    assert runtime_denial_receipts_body["execute_route"] == "/lens/resident-runtime/execute"
+    assert runtime_denial_receipts_body["plan_route"] == "/lens/resident-runtime/plan"
+    assert runtime_denial_receipts_body["approval_id"] == approval_id
+    assert runtime_denial_receipts_body["total"] == 1
+    assert runtime_denial_receipts_body["latest"]["receipt_id"] == runtime_denial_receipt["receipt_id"]
+    assert runtime_denial_receipts_body["items"][0]["approval_id"] == approval_id
+    assert runtime_denial_receipts_body["items"][0]["execution"]["would_supervise_process"] is False
+    assert runtime_denial_receipts_body["items"][0]["governance"]["execution_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["gate"] == (
+        "lens_resident_runtime_activation_denial_receipts_readback"
+    )
+    assert runtime_denial_receipts_body["governance"]["read_only_contract"] is True
+    assert runtime_denial_receipts_body["governance"]["denial_receipt_write_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["execution_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["approval_decision_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["process_supervision_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["service_control_authority"] is False
+    assert runtime_denial_receipts_body["governance"]["memory_write"] is False
 
     denied_execution = client.post(
         "/lens/host/activation/execute",
@@ -3442,6 +3535,23 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert status_authority_grant_readiness_criterion["process_supervision_authority"] is False
     assert status_authority_grant_readiness_criterion["service_control_authority"] is False
     assert status_authority_grant_readiness_criterion["memory_write"] is False
+    status_runtime_denials = status_body["resident_host"]["resident_runtime_denial_receipts"]
+    assert status_runtime_denials["status"] == "readback_ready"
+    assert status_runtime_denials["total"] == 1
+    assert status_runtime_denials["latest"]["receipt_id"] == runtime_denial_receipt["receipt_id"]
+    assert (
+        status_body["resident_runtime_denial_receipts"]["latest"]["receipt_id"] == runtime_denial_receipt["receipt_id"]
+    )
+    status_runtime_denials_criterion = _criterion(status_body, "resident_runtime_activation_denial_receipt_readback")
+    assert status_runtime_denials_criterion["status"] == "readback_ready"
+    assert status_runtime_denials_criterion["receipt_count"] == 1
+    assert status_runtime_denials_criterion["latest_receipt_id"] == runtime_denial_receipt["receipt_id"]
+    assert status_runtime_denials_criterion["execution_authority"] is False
+    assert status_runtime_denials_criterion["approval_decision_authority"] is False
+    assert status_runtime_denials_criterion["process_supervision_authority"] is False
+    assert status_runtime_denials_criterion["service_control_authority"] is False
+    assert status_runtime_denials_criterion["memory_write"] is False
+    assert status_runtime_denials_criterion["denial_receipt_write_authority"] is False
     runtime_authority_criterion = _criterion(status_body, "resident_runtime_authority_boundary")
     assert runtime_authority_criterion["status"] == "blocked"
     assert runtime_authority_criterion["applied"] is False

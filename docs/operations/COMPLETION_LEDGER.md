@@ -13990,6 +13990,56 @@ process-state blockers:
   Result: `passed`; status remains `blocked`, `ready_to_close: false`,
   `next_smallest_truthful_gap: resident_surface_runtime_not_supervised`.
 
+### 2026-04-30 - Stage 6/Lens resident runtime denial receipt readback
+
+Stage 6/Lens resident runtime activation attempts now have a durable denial
+receipt/readback boundary. `POST /lens/resident-runtime/execute` still denies
+resident runtime activation, but when the existing `system.write` API permission
+gate is ready and the denial is specifically
+`denied_no_resident_runtime_authority`, Francis writes a
+`lens.resident_runtime.activation.denial.receipt` under
+`data/lens/resident_runtime_activation_denials/`. The new read-only
+`GET /lens/resident-runtime/denials` route lists those receipts with approval
+and status filters, and `/lens/status` embeds the same receipt readback plus a
+Stage 6 readiness criterion named
+`resident_runtime_activation_denial_receipt_readback`.
+
+This is backend route/API receipt persistence and readback truth only. It does
+not launch a resident runtime, supervise or restart a process, install/start or
+control a service, register tray presence, bind a hotkey, open/control an
+overlay, summon Francis anywhere, write memory, decide approvals, create UI
+controls, or grant execution, approval-decision, memory-write,
+process-supervision, process-restart, service-control, overlay-control, summon,
+hotkey-registration, tray-registration, capture, telemetry, or resident-claim
+authority. Read-only status and boundary readbacks still do not write denial
+receipts; receipt persistence is confined to the explicit POST execution-denial
+attempt after the existing API permission gate is ready.
+
+Stage 6 remains active and blocked. The completion audit still reports
+`ready_to_close: false`, `transition_allowed: false`, and
+`next_smallest_truthful_gap: resident_surface_runtime_not_supervised`.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens resident runtime
+denial receipt readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_readback_tracks_decision_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; status remains `blocked`, `ready_to_close: false`,
+  `next_smallest_truthful_gap: resident_surface_runtime_not_supervised`.
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
