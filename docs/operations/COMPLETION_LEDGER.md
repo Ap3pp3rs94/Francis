@@ -13874,6 +13874,46 @@ foreground runtime proof consumption:
   `scripts/lens-stage6-checkpoint.ps1` and
   `scripts/lens-stage6-completion-audit.ps1`
 
+### 2026-04-30 - Stage 6/Lens resident runtime activation blocker normalization
+
+Stage 6/Lens resident runtime activation contracts now use the same foreground
+runtime truth as `/lens/resident-surface`. When a bounded foreground Lens host
+runtime is observed through the existing host process readback, the resident
+runtime preflight, policy, authority-grant denial, activation plan, activation
+denial, and resident-surface activation boundary no longer report
+`resident_surface_runtime_missing`. They report the sharper blockers
+`resident_surface_runtime_not_supervised` and `resident_surface_not_resident`.
+
+This keeps the direct route contracts aligned with the current Stage 6 proof
+chain: foreground runtime can be observed, but it is not supervised, not
+resident, and not eligible for a resident Lens claim.
+
+This is backend readback normalization only. It does not launch a Lens host,
+supervise or restart a process, install/start/stop/control a service, register
+tray presence, bind a hotkey, open/control an overlay, summon Francis anywhere,
+write memory, decide approvals, create UI controls, write receipts, or grant
+execution, approval-decision, memory-write, process-supervision,
+process-restart, service-control, overlay-control, summon, hotkey-registration,
+tray-registration, capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The next smallest truthful gap remains making the
+supervised resident runtime path real behind the existing approval, supervision,
+service-control, tray, hotkey, overlay, and resident-claim gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens resident runtime
+activation blocker normalization:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13973,7 +14013,10 @@ These remain true and should block any "finished" claim:
   `resident_surface_runtime_not_supervised` from a missing runtime, plus Stage 6
   checkpoint and completion-audit consumption of that foreground runtime proof
   so the active checkpoint/audit blocker is now the unsupervised/non-resident
-  runtime rather than missing runtime, but no
+  runtime rather than missing runtime, plus resident runtime activation route
+  blocker normalization so direct preflight/policy/authority-grant/plan/denial
+  and resident-surface activation readbacks also distinguish foreground runtime
+  observation from supervised resident runtime, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

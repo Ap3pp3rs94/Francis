@@ -1690,6 +1690,15 @@ def _resident_runtime_preflight_status(blockers: list[str]) -> tuple[str, str]:
     return "blocked", "implement_resident_runtime_execution_authority_grant_boundary"
 
 
+def _resident_surface_runtime_blockers_from_manifest(manifest: dict[str, Any]) -> list[str]:
+    process_readback = _as_dict(manifest.get("process_readback"))
+    process_alive = bool(process_readback.get("process_alive"))
+    state_status = _safe_str(process_readback.get("state_status")).strip()
+    if process_alive and state_status == "foreground_running":
+        return ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
+    return ["resident_surface_runtime_missing"]
+
+
 def lens_resident_runtime_activation_preflight(
     *,
     approval_id: Any = "",
@@ -1721,7 +1730,7 @@ def lens_resident_runtime_activation_preflight(
             "overlay_control_authority_not_granted",
             "resident_activation_receipt_write_authority_not_granted",
             "resident_claim_authority_not_granted",
-            "resident_surface_runtime_missing",
+            *_resident_surface_runtime_blockers_from_manifest(manifest),
         ]
     )
     status, next_step = _resident_runtime_preflight_status(blockers)
@@ -2540,7 +2549,7 @@ def lens_resident_runtime_activation_plan(
             "tray_registration_authority_not_granted",
             "hotkey_registration_authority_not_granted",
             "overlay_control_authority_not_granted",
-            "resident_surface_runtime_missing",
+            *_resident_surface_runtime_blockers_from_manifest(manifest),
         ]
     )
     steps = [
@@ -2897,7 +2906,7 @@ def lens_resident_surface_activation_boundary(
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(execution_denial.get("blockers")),
-            "resident_surface_runtime_missing",
+            *_resident_surface_runtime_blockers_from_manifest(lens_host_launch_manifest()),
         ]
     )
     components = [

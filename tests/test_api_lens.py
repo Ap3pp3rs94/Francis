@@ -2475,6 +2475,17 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
         "resident_surface_runtime_not_supervised",
         "resident_surface_not_resident",
     ]
+    for runtime_contract in (
+        body["resident_runtime_preflight"],
+        body["resident_runtime_policy"],
+        body["resident_runtime_authority_grant"],
+        body["resident_runtime_plan"],
+        body["resident_runtime_denial"],
+        body["resident_surface_activation"],
+    ):
+        assert "resident_surface_runtime_missing" not in runtime_contract["blockers"]
+        assert "resident_surface_runtime_not_supervised" in runtime_contract["blockers"]
+        assert "resident_surface_not_resident" in runtime_contract["blockers"]
     assert resident_surface_runtime["governance"]["execution_authority"] is False
     assert resident_surface_runtime["governance"]["process_supervision_authority"] is False
     assert resident_surface_runtime["governance"]["resident_claim_authority"] is False
@@ -2508,6 +2519,13 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert "lens_host_runtime_not_implemented" in resident_host["blockers"]
     assert resident_host["governance"]["service_control_authority"] is False
     assert resident_host["governance"]["local_process_launch_authority"] is False
+    activation_response = client.get("/lens/resident-surface/activation?limit=1")
+    assert activation_response.status_code == 200
+    activation_body = activation_response.json()
+    assert "resident_surface_runtime_missing" not in activation_body["blockers"]
+    assert "resident_surface_runtime_not_supervised" in activation_body["blockers"]
+    assert "resident_surface_not_resident" in activation_body["blockers"]
+    assert activation_body["governance"]["execution_authority"] is False
 
     manifest = client.get("/lens/host/manifest")
     assert manifest.status_code == 200
