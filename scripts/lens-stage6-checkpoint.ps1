@@ -426,6 +426,7 @@ $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
+$HostSupervisorOwnedSessionPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
 $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
@@ -562,6 +563,36 @@ $HostSupervisorProofPassed = (
 )
 $HostSupervisorProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorPayload -Name 'blockers' -Default @())
 
+$HostSupervisorOwnedSessionRunSeconds = [Math]::Max(3, [Math]::Min($HostLaunchRunSeconds, $SupervisorRunSeconds))
+$HostSupervisorOwnedSessionResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorOwnedSessionPath -ScriptArgs @('-Mode', 'SuperviseOnce', '-RunSeconds', [string]$HostSupervisorOwnedSessionRunSeconds))
+$HostSupervisorOwnedSessionProof = if ($HostSupervisorOwnedSessionResult.Count -gt 0) { $HostSupervisorOwnedSessionResult[-1] } else { $null }
+$HostSupervisorOwnedSessionExitCode = -1
+$HostSupervisorOwnedSessionPayload = $null
+if ($HostSupervisorOwnedSessionProof -is [System.Collections.IDictionary]) {
+  if ($HostSupervisorOwnedSessionProof.Contains('exit_code') -and $null -ne $HostSupervisorOwnedSessionProof['exit_code']) {
+    $HostSupervisorOwnedSessionExitCode = [int]$HostSupervisorOwnedSessionProof['exit_code']
+  }
+  if ($HostSupervisorOwnedSessionProof.Contains('payload') -and $null -ne $HostSupervisorOwnedSessionProof['payload']) {
+    $HostSupervisorOwnedSessionPayload = $HostSupervisorOwnedSessionProof['payload']
+  }
+}
+$HostSupervisorOwnedSessionPassed = (
+  $HostSupervisorOwnedSessionExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_runner' -and
+  [string](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'status' -Default '') -eq 'supervised_session_completed' -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_started_process' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'bounded_supervised_session' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'bounded_supervisor_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'temporary_host_process_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_observed_running_state' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_observed_stopped_state' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'ready_for_resident_claim' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'resident_host_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'resident_supervised_runtime' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervised' -Default $true)
+)
+$HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'blockers' -Default @())
+
 $ResidentOverlayRuntimeProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds))
 $ResidentOverlayRuntimeProof = if ($ResidentOverlayRuntimeProofResult.Count -gt 0) { $ResidentOverlayRuntimeProofResult[-1] } else { $null }
 $ResidentOverlayRuntimeExitCode = -1
@@ -626,7 +657,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
 }
 
-$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
+$SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $HostSupervisorOwnedSessionBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($ResidentSurfaceReadbackReady) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object {
@@ -639,7 +670,7 @@ if ($ResidentSurfaceReadbackReady) {
 } else {
   $SystemResidentBlockers = @($SystemResidentBlockers + @('resident_surface_readback_missing')) | Sort-Object -Unique
 }
-if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
+if ($HostLaunchProofPassed -or $HostSupervisorProofPassed -or $HostSupervisorOwnedSessionPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
     @('resident_host_process_not_supervised')
@@ -651,6 +682,8 @@ $SystemResidentStatus = if ($HostStatus -eq 'ready') {
   'resident_overlay_activation_boundary_observed'
 } elseif ($ResidentOverlayRuntimeProofPassed) {
   'resident_overlay_boundary_observed'
+} elseif ($HostSupervisorOwnedSessionPassed) {
+  'bounded_supervisor_owned_session_observed'
 } elseif ($HostSupervisorProofPassed) {
   'bounded_supervisor_observed'
 } elseif ($HostLaunchProofPassed) {
@@ -697,9 +730,9 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/authority-grant', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/authority-grant', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
       -Blockers $SystemResidentBlockers `
-      -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
+      -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorOwnedSessionPassed) { 'Bounded supervisor-owned session starts and observes one diagnostic host process through running and stopped states; persistent resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
 
 $EnablementGateIds = @(
@@ -1114,6 +1147,32 @@ $Payload = [ordered]@{
     ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $false)
     blockers = $HostSupervisorProofBlockers
   }
+  host_supervisor_owned_session = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'status' -Default 'missing')
+    ok = $HostSupervisorOwnedSessionPassed
+    exit_code = $HostSupervisorOwnedSessionExitCode
+    evidence = @('scripts/lens-host-supervisor.ps1 -Mode SuperviseOnce', 'scripts/lens-host.ps1 -Mode Foreground')
+    supervisor_started_process = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_started_process' -Default $false)
+    bounded_supervised_session = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'bounded_supervised_session' -Default $false)
+    bounded_supervisor_observed = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'bounded_supervisor_observed' -Default $false)
+    temporary_host_process_observed = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'temporary_host_process_observed' -Default $false)
+    supervisor_observed_running_state = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_observed_running_state' -Default $false)
+    supervisor_observed_stopped_state = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervisor_observed_stopped_state' -Default $false)
+    ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'ready_for_resident_claim' -Default $false)
+    resident_host_process = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'resident_host_process' -Default $false)
+    resident_supervised_runtime = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'resident_supervised_runtime' -Default $false)
+    supervised = [bool](Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'supervised' -Default $false)
+    local_process_launch_authority = $HostSupervisorOwnedSessionPassed
+    api_local_process_launch_authority = $false
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_control_authority = $false
+    resident_claim_authority = $false
+    blockers = $HostSupervisorOwnedSessionBlockers
+  }
   resident_overlay_runtime_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'status' -Default 'missing')
     ok = $ResidentOverlayRuntimeProofPassed
@@ -1192,7 +1251,8 @@ $Payload = [ordered]@{
     live_http_readback = $true
     temporary_api_process = $true
     bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
-    bounded_supervisor_observation = ($HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
+    bounded_supervisor_observation = ($HostSupervisorProofPassed -or $HostSupervisorOwnedSessionPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
+    bounded_supervisor_owned_session = $HostSupervisorOwnedSessionPassed
     resident_overlay_boundary_observed = $ResidentOverlayRuntimeProofPassed
     resident_overlay_activation_boundary_observed = $ResidentOverlayActivationBoundaryProofPassed
     resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofPassed
@@ -1215,7 +1275,7 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = ($ResidentSurfaceForegroundRuntimeProofPassed -or $HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
+    local_process_launch_authority = ($ResidentSurfaceForegroundRuntimeProofPassed -or $HostLaunchProofPassed -or $HostSupervisorProofPassed -or $HostSupervisorOwnedSessionPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
     api_local_process_launch_authority = $false
     activation_local_process_launch_authority = $false
     process_restart_authority = $false

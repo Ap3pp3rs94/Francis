@@ -490,6 +490,35 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["host_supervisor_observation_proof"]["supervisor_observed_stopped_state"] is True
     assert payload["host_supervisor_observation_proof"]["ready_for_resident_claim"] is False
     assert "resident_host_process_not_supervised" in payload["host_supervisor_observation_proof"]["blockers"]
+    assert payload["host_supervisor_owned_session"]["status"] == "supervised_session_completed"
+    assert payload["host_supervisor_owned_session"]["ok"] is True
+    assert payload["host_supervisor_owned_session"]["exit_code"] == 0
+    assert payload["host_supervisor_owned_session"]["supervisor_started_process"] is True
+    assert payload["host_supervisor_owned_session"]["bounded_supervised_session"] is True
+    assert payload["host_supervisor_owned_session"]["bounded_supervisor_observed"] is True
+    assert payload["host_supervisor_owned_session"]["temporary_host_process_observed"] is True
+    assert payload["host_supervisor_owned_session"]["supervisor_observed_running_state"] is True
+    assert payload["host_supervisor_owned_session"]["supervisor_observed_stopped_state"] is True
+    assert payload["host_supervisor_owned_session"]["ready_for_resident_claim"] is False
+    assert payload["host_supervisor_owned_session"]["resident_host_process"] is False
+    assert payload["host_supervisor_owned_session"]["resident_supervised_runtime"] is False
+    assert payload["host_supervisor_owned_session"]["supervised"] is False
+    assert payload["host_supervisor_owned_session"]["local_process_launch_authority"] is True
+    assert payload["host_supervisor_owned_session"]["api_local_process_launch_authority"] is False
+    assert payload["host_supervisor_owned_session"]["execution_authority"] is False
+    assert payload["host_supervisor_owned_session"]["approval_decision_authority"] is False
+    assert payload["host_supervisor_owned_session"]["memory_write"] is False
+    assert payload["host_supervisor_owned_session"]["process_supervision_authority"] is False
+    assert payload["host_supervisor_owned_session"]["process_restart_authority"] is False
+    assert payload["host_supervisor_owned_session"]["service_control_authority"] is False
+    assert payload["host_supervisor_owned_session"]["resident_claim_authority"] is False
+    assert "resident_host_process_missing" not in payload["host_supervisor_owned_session"]["blockers"]
+    assert "resident_host_process_not_resident" in payload["host_supervisor_owned_session"]["blockers"]
+    assert "resident_supervision_not_persistent" in payload["host_supervisor_owned_session"]["blockers"]
+    assert "process_supervision_authority_not_granted" in payload["host_supervisor_owned_session"]["blockers"]
+    assert (
+        "scripts/lens-host-supervisor.ps1 -Mode SuperviseOnce" in payload["host_supervisor_owned_session"]["evidence"]
+    )
     assert payload["resident_overlay_runtime_proof"]["status"] == "proof_passed"
     assert payload["resident_overlay_runtime_proof"]["ok"] is True
     assert payload["resident_overlay_runtime_proof"]["exit_code"] == 0
@@ -543,6 +572,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "temporary_api_process": True,
         "bounded_host_launch": True,
         "bounded_supervisor_observation": True,
+        "bounded_supervisor_owned_session": True,
         "resident_overlay_boundary_observed": True,
         "resident_overlay_activation_boundary_observed": True,
         "resident_surface_foreground_runtime_proof_observed": True,

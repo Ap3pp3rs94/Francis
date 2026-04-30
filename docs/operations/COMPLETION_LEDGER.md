@@ -14079,6 +14079,52 @@ supervisor-owned host session:
 - `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens checkpoint consumes supervisor-owned host session
+
+Stage 6/Lens checkpoint readback now consumes the bounded supervisor-owned host
+session instead of leaving `SuperviseOnce` isolated in the standalone runner.
+`scripts/lens-stage6-checkpoint.ps1 -Mode Status` invokes
+`scripts/lens-host-supervisor.ps1 -Mode SuperviseOnce`, verifies the supervisor
+started one temporary foreground host, observed running and stopped states, and
+adds a `host_supervisor_owned_session` readback block. That block keeps
+`ready_for_resident_claim`, `resident_host_process`,
+`resident_supervised_runtime`, and `supervised` false while carrying the
+remaining resident, process-supervision, restart, service-control, tray, hotkey,
+overlay, and summon blockers.
+
+This is checkpoint/readback consumption of an existing diagnostic proof only. It
+does not grant API process-launch authority, activation process-launch
+authority, process-supervision authority, process-restart authority,
+service-control authority, tray or hotkey authority, overlay control, memory
+writes, approval decisions, resident runtime authority, or a resident claim. The
+checkpoint governance payload now records `bounded_supervisor_owned_session:
+true` and keeps product execution and mutation authority false.
+
+Stage 6 remains active and blocked. The completion audit still reports
+`ready_to_close: false`, `transition_allowed: false`, and
+`next_smallest_truthful_gap: resident_surface_runtime_not_supervised`. The next
+smallest truthful gap is to move from diagnostic bounded supervision proof to
+the resident-runtime authority boundary that still blocks real resident process
+supervision, service/tray/hotkey/overlay behavior, and summon-anywhere.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens checkpoint
+consumption of supervisor-owned host session:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -14097,9 +14143,9 @@ These remain true and should block any "finished" claim:
   process-supervision, or service-control authority, plus a reusable bounded
   `scripts/lens-host-supervisor.ps1` diagnostic runner that can observe an
   already-started bounded foreground host process and can now own one bounded
-  diagnostic foreground host lifecycle through `SuperviseOnce` without
-  persistent resident supervision, restart, service-control, API launch, or
-  resident-claim authority, a direct
+  diagnostic foreground host lifecycle through `SuperviseOnce` with Stage 6
+  checkpoint readback consumption, without persistent resident supervision,
+  restart, service-control, API launch, or resident-claim authority, a direct
   `/lens/resident-surface` backend content readback contract, resident surface
   readiness proof diagnostic that consumes direct route readback, disabled
   tracked service config baseline,
