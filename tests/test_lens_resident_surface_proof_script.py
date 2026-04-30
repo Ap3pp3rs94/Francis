@@ -46,6 +46,10 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["resident_surface_ready"] is False
+    assert payload["resident_surface_content_readback"] is True
+    assert payload["resident_surface_content_contract_ready"] is True
+    assert payload["resident_surface_contract_status"] == "readback_ready"
+    assert payload["resident_surface_route"] == "/lens/resident-surface"
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
     assert payload["resident_host_process"] is False
@@ -61,6 +65,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
 
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_surface_content_readback"]["status"] == "readback_ready"
     assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
     assert checks["supervision_proof_available"]["status"] == "available"
     assert checks["live_operator_experience_proof"]["status"] == "proof_passed"
@@ -72,6 +77,12 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
+    assert proof["resident_surface_readback_status"] == "blocked"
+    assert proof["resident_surface_contract_status"] == "readback_ready"
+    assert proof["resident_surface_route"] == "/lens/resident-surface"
+    assert proof["resident_surface_activation_route"] == "/lens/resident-surface/activation"
+    assert proof["resident_surface_content_contract_ready"] is True
+    assert "resident_surface_missing" in proof["resident_surface_readback_blockers"]
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_status"] == "proof_passed"
@@ -92,7 +103,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert "overlay_window_disabled" in proof["overlay_blockers"]
     assert "global_hotkey_binding_disabled" in proof["summon_blockers"]
 
-    assert "resident_surface_missing" in payload["blockers"]
+    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_missing" not in payload["blockers"]
     assert "tray_presence_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
     assert "summon_anywhere_missing" in payload["blockers"]
@@ -101,6 +113,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["governance"] == {
         "read_only_contract": True,
         "diagnostic_only": True,
+        "api_route_readback": True,
         "live_http_readback": True,
         "temporary_api_process": True,
         "bounded_foreground_session": False,

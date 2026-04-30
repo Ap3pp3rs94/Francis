@@ -13634,6 +13634,63 @@ readback contract:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens resident surface proof consumes direct readback
+
+Stage 6/Lens resident-surface readiness proof now consumes the direct
+`/lens/resident-surface?limit=5` backend readback contract before reporting the
+surface content contract as ready. The proof verifies the route kind, blocked
+status, `contract_status: readback_ready`, route links, content-contract flag,
+remaining blocked resident-surface/runtime flags, and no execution, approval,
+memory-write, overlay-control, summon, process-supervision, service-control, or
+resident-claim authority.
+
+The Stage 6 checkpoint now embeds this as
+`resident_surface_content_readback`, adds `/lens/resident-surface` evidence to
+the helpful-not-noisy and system-resident criteria, and reports
+`helpful_not_noisy` as `resident_surface_content_readback_ready` while keeping
+the criterion blocked on `resident_surface_runtime_missing`. The completion
+audit now prefers `resident_surface_runtime_missing` over the older generic
+`resident_surface_missing` gap when the content contract is directly readable.
+
+This slice also stabilizes the bounded supervisor-observation proof chain that
+feeds the resident overlay runtime proof. The supervisor runner now treats a
+`foreground_stopped` runtime state with no pid file as no longer owning a live
+host process, avoiding stale-PID/PID-reuse false positives during rapid nested
+Windows PowerShell validation. The bounded supervisor proof defaults now use a
+20-second observation window, and the existing final host-status readback remains
+the separate check that the bounded host is not running.
+
+This is readback/proof/checkpoint/audit truth only. It does not create a
+resident host, launch or supervise a process, install/start/stop/control a
+service, register tray presence, bind a hotkey, open/control an overlay, summon
+Francis anywhere, write memory, decide approvals, create UI controls, or grant
+execution, approval-decision, memory-write, process-supervision, process-restart,
+service-control, overlay-control, summon, hotkey-registration, tray-registration,
+capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The next smallest truthful gap is now sharper:
+resident-surface content readback exists, but the actual resident surface runtime
+is still missing.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+proof direct-readback consumption:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: first run exposed a transient nested proof mismatch; rerun passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-overlay-runtime-proof.ps1 -Mode Status`
+  Result: `passed`; status `proof_passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-overlay-activation-boundary-proof.ps1 -Mode Status`
+  Result: `passed`; status `proof_passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed` twice back-to-back
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: first run exposed a transient checkpoint nested runtime proof mismatch;
+  rerun passed.
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13654,7 +13711,8 @@ These remain true and should block any "finished" claim:
   already-started bounded foreground host process without launch, restart,
   resident supervision, service-control, or resident-claim authority, a direct
   `/lens/resident-surface` backend content readback contract, resident surface
-  readiness proof diagnostic, disabled tracked service config baseline,
+  readiness proof diagnostic that consumes direct route readback, disabled
+  tracked service config baseline,
   resident
   supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
@@ -13721,8 +13779,9 @@ These remain true and should block any "finished" claim:
   denial-receipt readback into exact remaining process-supervision and
   service-control authority blockers,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
-  reports `do_not_close_stage6`, groups closure blockers, and moves the next
-  concrete blocker to `resident_surface_missing`,
+  reports `do_not_close_stage6`, groups closure blockers, and now moves the next
+  concrete blocker to `resident_surface_runtime_missing` once direct content
+  readback is proven,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, plus resident-surface
   proof consumption of that live operator proof so operator experience is no

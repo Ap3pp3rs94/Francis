@@ -10,7 +10,7 @@ param(
   [int]$HostLaunchRunSeconds = 3,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 10
+  [int]$SupervisorRunSeconds = 20
 )
 
 Set-StrictMode -Version 2
@@ -212,6 +212,27 @@ $RuntimeAuthorityGrantDenialReceiptsCriterion = Get-ReadinessCriterion -LensStat
 $RuntimeAuthorityGrantReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_readiness_audit'
 $RuntimeBoundaryCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_boundary'
 $PilotIndicator = Get-PropertyValue -Payload $LensStatus -Name 'pilot_indicator'
+$ResidentSurface = Get-PropertyValue -Payload $LensStatus -Name 'resident_surface'
+$ResidentSurfaceGovernance = Get-PropertyValue -Payload $ResidentSurface -Name 'governance'
+$ResidentSurfaceBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentSurface -Name 'blockers' -Default @()
+)
+$ResidentSurfaceReadbackReady = (
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'contract_status' -Default '') -eq 'readback_ready' -and
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'route' -Default '') -eq '/lens/resident-surface' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'content_contract_ready' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_overlay_runtime' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'overlay_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'summon_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'resident_claim_authority' -Default $true)
+)
 
 $SummonStatus = [string](Get-PropertyValue -Payload $SummonCriterion -Name 'status' -Default 'missing')
 $SummonBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonCriterion -Name 'blockers' -Default @())
@@ -422,11 +443,21 @@ $LiveOperatorProofPassed = (
   [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'operator_experience_proof' -Default $false) -and
   [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
 )
-$LiveOperatorStatus = if ($LiveOperatorProofPassed) { 'operator_readback_proof_ready' } else { 'needs_live_operator_proof' }
-$LiveOperatorBlockers = if ($LiveOperatorProofPassed) {
-  @('resident_surface_missing')
+$LiveOperatorStatus = if ($LiveOperatorProofPassed -and $ResidentSurfaceReadbackReady) {
+  'resident_surface_content_readback_ready'
+} elseif ($LiveOperatorProofPassed) {
+  'operator_readback_proof_ready'
 } else {
-  @('resident_surface_missing', 'operator_experience_proof_missing')
+  'needs_live_operator_proof'
+}
+$LiveOperatorBlockers = @()
+if ($ResidentSurfaceReadbackReady) {
+  $LiveOperatorBlockers += 'resident_surface_runtime_missing'
+} else {
+  $LiveOperatorBlockers += 'resident_surface_readback_missing'
+}
+if (-not $LiveOperatorProofPassed) {
+  $LiveOperatorBlockers += 'operator_experience_proof_missing'
 }
 
 $HostLaunchProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds))
@@ -539,6 +570,14 @@ if ($LiveOperatorProofPassed) {
 }
 
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
+if ($ResidentSurfaceReadbackReady) {
+  $SystemResidentBlockers = @(
+    @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_surface_missing' }) +
+    @('resident_surface_runtime_missing')
+  ) | Sort-Object -Unique
+} else {
+  $SystemResidentBlockers = @($SystemResidentBlockers + @('resident_surface_readback_missing')) | Sort-Object -Unique
+}
 if ($HostLaunchProofPassed -or $HostSupervisorProofPassed) {
   $SystemResidentBlockers = @(
     @($SystemResidentBlockers | Where-Object { $_ -ne 'resident_host_process_missing' }) +
@@ -573,9 +612,9 @@ $Criteria = @(
       -Label 'Lens is helpful, not noisy' `
       -Status $LiveOperatorStatus `
       -Ready $false `
-      -Evidence @('/lens/status', 'chat_ui.system_orb', 'scripts/lens-live-operator-proof.ps1') `
+      -Evidence @('/lens/status', '/lens/resident-surface', 'chat_ui.system_orb', 'scripts/lens-live-operator-proof.ps1') `
       -Blockers $LiveOperatorBlockers `
-      -Basis 'Live HTTP Lens readback proof exists; resident surface still blocks a finished Lens claim.')
+      -Basis 'Live HTTP Lens readback and direct resident-surface content readback exist; resident runtime still blocks a finished Lens claim.')
   (New-Criterion `
       -Id 'mode_visibility' `
       -Label 'Mode visibility becomes real' `
@@ -597,7 +636,7 @@ $Criteria = @(
       -Label 'Francis begins to feel system-resident, not tab-trapped' `
       -Status $SystemResidentStatus `
       -Ready ($HostStatus -eq 'ready') `
-      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/authority-grant', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
+      -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/authority-grant', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
       -Blockers $SystemResidentBlockers `
       -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
 )
@@ -932,6 +971,28 @@ $Payload = [ordered]@{
     receipt_write_authority = $false
     resident_claim_authority = $false
     blockers = $RuntimeBoundaryBlockers
+  }
+  resident_surface_content_readback = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default 'missing')
+    ok = $ResidentSurfaceReadbackReady
+    evidence = @('/lens/resident-surface', '/lens/status')
+    route = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'route' -Default '')
+    activation_route = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'activation_route' -Default '')
+    contract_status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'contract_status' -Default '')
+    content_contract_ready = [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'content_contract_ready' -Default $false)
+    resident_surface_ready = [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_surface_ready' -Default $false)
+    resident_overlay_runtime = [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_overlay_runtime' -Default $false)
+    resident_claim_allowed = [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_claim_allowed' -Default $false)
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    resident_claim_authority = $false
+    blockers = @(
+      @($ResidentSurfaceBlockers | Where-Object { $_ -ne 'resident_surface_missing' }) +
+      @('resident_surface_runtime_missing')
+    ) | Sort-Object -Unique
   }
   live_operator_experience_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default 'missing')

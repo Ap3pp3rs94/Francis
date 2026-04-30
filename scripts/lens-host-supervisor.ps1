@@ -128,15 +128,21 @@ function Get-HostState {
 
   $StatePayload = Read-JsonFile -Path $StatePath
   $PidValue = Get-PidValue -Path $PidPath
+  $PidPresent = Test-LeafPathPresent -Path $PidPath
+  $StateStatus = [string](Get-PropertyValue -Payload $StatePayload -Name 'status' -Default '')
   if ($PidValue -le 0 -and $null -ne $StatePayload) {
     $PidValue = [int](Get-PropertyValue -Payload $StatePayload -Name 'pid' -Default 0)
   }
-  $ProcessAlive = Test-ProcessAlive -ProcessId $PidValue
+  $ProcessAlive = if ($StateStatus -eq 'foreground_stopped' -and -not $PidPresent) {
+    $false
+  } else {
+    Test-ProcessAlive -ProcessId $PidValue
+  }
   return [ordered]@{
     state_exists = $null -ne $StatePayload
-    state_status = [string](Get-PropertyValue -Payload $StatePayload -Name 'status' -Default '')
+    state_status = $StateStatus
     state_updated_at = [string](Get-PropertyValue -Payload $StatePayload -Name 'updated_at' -Default '')
-    pid_present = Test-LeafPathPresent -Path $PidPath
+    pid_present = $PidPresent
     pid = $PidValue
     process_alive = $ProcessAlive
   }
@@ -288,7 +294,8 @@ if ($RunningObserved) {
 $StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds ($RunSeconds + 10)
 $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
 if ([string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and $StoppedPid -gt 0) {
-  $ExitDeadline = (Get-Date).AddSeconds(5)
+  # The foreground host writes its stopped state before the PowerShell process fully exits.
+  $ExitDeadline = (Get-Date).AddSeconds([Math]::Max(15, $RunSeconds + 10))
   while (
     (Get-Date) -lt $ExitDeadline -and
     ((Test-ProcessAlive -ProcessId $StoppedPid) -or (Test-LeafPathPresent -Path $HostPidPath))

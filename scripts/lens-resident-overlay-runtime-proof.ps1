@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 10,
+  [int]$SupervisorRunSeconds = 20,
 
   [string]$DataDir = ''
 )

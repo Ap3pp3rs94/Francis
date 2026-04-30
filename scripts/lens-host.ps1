@@ -176,11 +176,15 @@ if ($PidPresent) {
 }
 $ProcessAlive = $false
 if ($PidValue -gt 0) {
-  try {
-    Get-Process -Id $PidValue -ErrorAction Stop | Out-Null
-    $ProcessAlive = $true
-  } catch {
+  if ($ProcessStateStatus -eq 'foreground_stopped' -and -not $PidPresent) {
     $ProcessAlive = $false
+  } else {
+    try {
+      Get-Process -Id $PidValue -ErrorAction Stop | Out-Null
+      $ProcessAlive = $true
+    } catch {
+      $ProcessAlive = $false
+    }
   }
 }
 $ProcessReadbackStatus = if ($ProcessAlive) { 'process_observed' } elseif ($PidPresent -or $ProcessStateExists) { 'state_present_process_not_running' } else { 'missing' }

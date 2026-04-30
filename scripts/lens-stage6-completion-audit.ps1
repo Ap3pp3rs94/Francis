@@ -66,6 +66,8 @@ $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_missing') {
+  'resident_surface_runtime_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
   'resident_surface_missing'
 } elseif ($BlockedCriterionIds -contains 'summon_anywhere') {
@@ -123,6 +125,7 @@ $Payload = [ordered]@{
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
     '/lens/status',
+    '/lens/resident-surface',
     '/lens/resident-surface/activation',
     '/lens/host/supervision/authority/readiness'
   )

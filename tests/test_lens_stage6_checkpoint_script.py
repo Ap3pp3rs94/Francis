@@ -85,9 +85,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" in criteria["summon_anywhere"]["blockers"]
     assert "global_hotkey_binding_missing" in criteria["summon_anywhere"]["blockers"]
     assert "summon_binding_missing" in criteria["summon_anywhere"]["blockers"]
-    assert criteria["helpful_not_noisy"]["status"] == "operator_readback_proof_ready"
+    assert criteria["helpful_not_noisy"]["status"] == "resident_surface_content_readback_ready"
     assert criteria["helpful_not_noisy"]["ready"] is False
-    assert criteria["helpful_not_noisy"]["blockers"] == ["resident_surface_missing"]
+    assert criteria["helpful_not_noisy"]["blockers"] == ["resident_surface_runtime_missing"]
+    assert "/lens/resident-surface" in criteria["helpful_not_noisy"]["evidence"]
     assert "scripts/lens-live-operator-proof.ps1" in criteria["helpful_not_noisy"]["evidence"]
     assert criteria["mode_visibility"]["status"] == "readback_ready"
     assert criteria["mode_visibility"]["ready"] is True
@@ -98,6 +99,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" not in criteria["system_resident_presence"]["blockers"]
     assert "resident_host_process_not_supervised" in criteria["system_resident_presence"]["blockers"]
     assert "resident_supervision_disabled" in criteria["system_resident_presence"]["blockers"]
+    assert "resident_surface_runtime_missing" in criteria["system_resident_presence"]["blockers"]
     assert "resident_overlay_runtime_missing" in criteria["system_resident_presence"]["blockers"]
     assert "tray_host_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]
@@ -106,6 +108,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "scripts/lens-host-supervisor-observation-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-host-supervision-proof.ps1" in criteria["system_resident_presence"]["evidence"]
     assert "scripts/lens-resident-surface-proof.ps1" in criteria["system_resident_presence"]["evidence"]
+    assert "/lens/resident-surface" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/preflight" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/policy" in criteria["system_resident_presence"]["evidence"]
     assert "/lens/resident-runtime/authority-grant" in criteria["system_resident_presence"]["evidence"]
@@ -118,6 +121,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     )
     assert "/lens/resident-surface/activation" in criteria["system_resident_presence"]["evidence"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
+    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_missing" not in payload["blockers"]
     assert payload["resident_runtime_authority_grant_preflight"]["status"] == "blocked"
     assert payload["resident_runtime_authority_grant_preflight"]["ok"] is True
     assert payload["resident_runtime_authority_grant_preflight"]["ready"] is False
@@ -411,6 +416,23 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_authority_boundary"]["memory_write"] is False
     assert payload["resident_runtime_authority_boundary"]["receipt_write_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["resident_claim_authority"] is False
+    assert payload["resident_surface_content_readback"]["status"] == "blocked"
+    assert payload["resident_surface_content_readback"]["ok"] is True
+    assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
+    assert payload["resident_surface_content_readback"]["activation_route"] == "/lens/resident-surface/activation"
+    assert payload["resident_surface_content_readback"]["contract_status"] == "readback_ready"
+    assert payload["resident_surface_content_readback"]["content_contract_ready"] is True
+    assert payload["resident_surface_content_readback"]["resident_surface_ready"] is False
+    assert payload["resident_surface_content_readback"]["resident_overlay_runtime"] is False
+    assert payload["resident_surface_content_readback"]["resident_claim_allowed"] is False
+    assert payload["resident_surface_content_readback"]["execution_authority"] is False
+    assert payload["resident_surface_content_readback"]["approval_decision_authority"] is False
+    assert payload["resident_surface_content_readback"]["memory_write"] is False
+    assert payload["resident_surface_content_readback"]["overlay_control_authority"] is False
+    assert payload["resident_surface_content_readback"]["summon_authority"] is False
+    assert payload["resident_surface_content_readback"]["resident_claim_authority"] is False
+    assert "resident_surface_runtime_missing" in payload["resident_surface_content_readback"]["blockers"]
+    assert "resident_surface_missing" not in payload["resident_surface_content_readback"]["blockers"]
     assert payload["live_operator_experience_proof"]["status"] == "proof_passed"
     assert payload["live_operator_experience_proof"]["ok"] is True
     assert payload["live_operator_experience_proof"]["exit_code"] == 0

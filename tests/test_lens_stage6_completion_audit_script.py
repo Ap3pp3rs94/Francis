@@ -53,7 +53,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "resident_surface_missing"
+    assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_missing"
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -69,10 +69,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     ]
 
     blocked = {item["id"]: item for item in payload["blocked_criteria"]}
-    assert blocked["helpful_not_noisy"]["blockers"] == ["resident_surface_missing"]
+    assert blocked["helpful_not_noisy"]["blockers"] == ["resident_surface_runtime_missing"]
     assert "global_hotkey_binding_missing" in blocked["summon_anywhere"]["blockers"]
     assert "resident_overlay_runtime_missing" in blocked["system_resident_presence"]["blockers"]
-    assert "resident_surface_missing" in payload["closure_blockers"]["resident_surface"]
+    assert "resident_surface_runtime_missing" in payload["closure_blockers"]["resident_surface"]
+    assert "resident_surface_missing" not in payload["closure_blockers"]["resident_surface"]
     assert "summon_binding_missing" in payload["closure_blockers"]["summon"]
     assert "tray_host_missing" in payload["closure_blockers"]["tray"]
     assert "overlay_window_missing" in payload["closure_blockers"]["overlay"]
@@ -80,6 +81,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
 
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
+    assert "/lens/resident-surface" in payload["evidence"]
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True
