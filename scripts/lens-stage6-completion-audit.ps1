@@ -142,7 +142,6 @@ $HostSupervisorOwnedSessionObserved = (
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
 } elseif (
-  $HostSupervisorOwnedSessionObserved -and
   $PersistentSupervisionPlanObserved -and
   $PersistentSupervisionPlanBlockers -contains 'persistent_supervision_disabled'
 ) {

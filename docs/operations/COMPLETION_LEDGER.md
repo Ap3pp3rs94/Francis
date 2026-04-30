@@ -14583,6 +14583,35 @@ supervision API readback:
 - `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens completion-audit blocker priority stabilization
+
+Stage 6/Lens completion audit blocker selection now prefers
+`persistent_supervision_authority_not_granted` whenever the
+persistent-supervision plan proof is present and blocked. The previous
+selection still depended on observing a bounded supervisor-owned session in the
+same audit pass, which allowed Windows CI timing to report the older
+`resident_host_process_not_supervised` blocker even though the persistent
+supervision plan proof was already available.
+
+This is diagnostic/readback ordering only. It does not grant execution,
+approval decision, memory-write, local-process-launch, process-supervision,
+process-restart, service-install, service-control, receipt-write,
+denial-receipt-write, resident-claim, telemetry, tray, hotkey, overlay, summon,
+capture, or UI authority. It does not install, update, start, stop, restart,
+supervise, write receipts, write memory, or claim a resident Lens host process.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+explicit persistent-supervision authority boundary behind process-supervision,
+restart, service-control, receipt-write, and resident-claim requirements.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens completion-audit
+blocker priority stabilization:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_smallest_truthful_gap_basis | ConvertTo-Json -Depth 4`
+  Result: `passed; reported persistent_supervision_authority_not_granted`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
