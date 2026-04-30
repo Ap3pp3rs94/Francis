@@ -78,6 +78,7 @@ function New-CriterionSummary {
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
 $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
+$PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -110,6 +111,17 @@ $ProcessSupervisionBoundaryObserved = (
   [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed -and
   [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
 )
+$PersistentSupervisionPlanResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $PersistentSupervisionPlanScript -ScriptArgs @('-Mode', 'Status')
+$PersistentSupervisionPlan = $PersistentSupervisionPlanResult.payload
+$PersistentSupervisionPlanBlockers = ConvertTo-StringArray -Value $PersistentSupervisionPlan.blockers
+$PersistentSupervisionPlanObserved = (
+  [int]$PersistentSupervisionPlanResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionPlan.kind -eq 'lens.host.persistent_supervision_plan' -and
+  [bool]$PersistentSupervisionPlan.ok -and
+  [bool]$PersistentSupervisionPlan.plan_available -and
+  -not [bool]$PersistentSupervisionPlan.persistent_supervision_ready -and
+  -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
+)
 $Criteria = @($Checkpoint.criteria)
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_.ready })
 $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
@@ -129,6 +141,12 @@ $HostSupervisorOwnedSessionObserved = (
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif (
+  $HostSupervisorOwnedSessionObserved -and
+  $PersistentSupervisionPlanObserved -and
+  $PersistentSupervisionPlanBlockers -contains 'persistent_supervision_disabled'
+) {
+  'persistent_supervision_authority_not_granted'
 } elseif (
   $HostSupervisorOwnedSessionObserved -and
   $HostSupervisorOwnedSessionBlockers -contains 'resident_supervision_not_persistent'
@@ -166,7 +184,9 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_supervision_not_persistent') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted') {
+    'The audit now has a persistent-supervision plan proof; it shows the blocker is explicit process-supervision, restart, service-control, receipt-write, and resident-claim authority, not another bounded supervisor proof.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_supervision_not_persistent') {
     'The checkpoint observed one bounded supervisor-owned host session, so the next blocker is persistent resident supervision rather than another bounded supervision proof.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_not_supervised') {
     'Process-supervision authority boundary proof still reports the host process as not supervised.'
@@ -203,6 +223,9 @@ $Payload = [ordered]@{
     service_activation = [string[]]@(
       $ProcessSupervisionBoundaryBlockers | Where-Object { $_ -match 'service_' } | Sort-Object -Unique
     )
+    persistent_supervision = [string[]]@(
+      $PersistentSupervisionPlanBlockers | Where-Object { $_ -match 'persistent_supervision|process_supervision|process_restart|service_|receipt_write|resident_claim' } | Sort-Object -Unique
+    )
     authority = [string[]]@(
       $Blockers | Where-Object { $_ -match 'authority|not_granted|not_authorized' } | Sort-Object -Unique
     )
@@ -236,11 +259,33 @@ $Payload = [ordered]@{
     would_decide_approval = [bool]$ProcessSupervisionBoundary.would_decide_approval
     blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
   }
+  persistent_supervision_plan = [ordered]@{
+    status = if ($PersistentSupervisionPlanObserved) { [string]$PersistentSupervisionPlan.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionPlanObserved
+    exit_code = [int]$PersistentSupervisionPlanResult.exit_code
+    evidence = @('scripts/lens-persistent-supervision-plan.ps1 -Mode Status')
+    plan_available = [bool]$PersistentSupervisionPlan.plan_available
+    persistent_supervision_ready = [bool]$PersistentSupervisionPlan.persistent_supervision_ready
+    resident_claim_allowed = [bool]$PersistentSupervisionPlan.resident_claim_allowed
+    requirements_total = [int]$PersistentSupervisionPlan.requirements_total
+    requirements_ready_total = [int]$PersistentSupervisionPlan.requirements_ready_total
+    requirements_blocked_total = [int]$PersistentSupervisionPlan.requirements_blocked_total
+    blocked_requirements = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionPlan.blocked_requirements)
+    blockers = [string[]]@($PersistentSupervisionPlanBlockers)
+    would_install_service = [bool]$PersistentSupervisionPlan.plan.would_install_service
+    would_start_service = [bool]$PersistentSupervisionPlan.plan.would_start_service
+    would_restart_process = [bool]$PersistentSupervisionPlan.plan.would_restart_process
+    would_supervise_process = [bool]$PersistentSupervisionPlan.plan.would_supervise_process
+    would_write_receipt = [bool]$PersistentSupervisionPlan.plan.would_write_receipt
+    would_write_memory = [bool]$PersistentSupervisionPlan.plan.would_write_memory
+    would_claim_resident = [bool]$PersistentSupervisionPlan.plan.would_claim_resident
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
     'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
     '/lens/status',
     '/lens/resident-surface',
     '/lens/resident-surface/activation',
@@ -251,6 +296,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     checkpoint_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
+    persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

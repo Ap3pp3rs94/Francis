@@ -53,8 +53,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
-    assert "bounded supervisor-owned host session" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert "persistent-supervision plan proof" in payload["next_smallest_truthful_gap_basis"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -87,6 +87,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "resident_host_process_not_supervised" in payload["closure_blockers"]["process_supervision"]
     assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["process_supervision"]
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
+    assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
+    assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
+    assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
 
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
@@ -114,15 +117,39 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in process_boundary["evidence"]
 
+    persistent_plan = payload["persistent_supervision_plan"]
+    assert persistent_plan["status"] == "blocked"
+    assert persistent_plan["ok"] is True
+    assert persistent_plan["plan_available"] is True
+    assert persistent_plan["persistent_supervision_ready"] is False
+    assert persistent_plan["resident_claim_allowed"] is False
+    assert persistent_plan["requirements_total"] >= 10
+    assert persistent_plan["requirements_blocked_total"] >= 7
+    assert "persistent_supervision_enabled" in persistent_plan["blocked_requirements"]
+    assert "receipt_write_authority" in persistent_plan["blocked_requirements"]
+    assert "resident_claim_authority" in persistent_plan["blocked_requirements"]
+    assert "persistent_supervision_disabled" in persistent_plan["blockers"]
+    assert "receipt_write_authority_not_granted" in persistent_plan["blockers"]
+    assert persistent_plan["would_install_service"] is False
+    assert persistent_plan["would_start_service"] is False
+    assert persistent_plan["would_restart_process"] is False
+    assert persistent_plan["would_supervise_process"] is False
+    assert persistent_plan["would_write_receipt"] is False
+    assert persistent_plan["would_write_memory"] is False
+    assert persistent_plan["would_claim_resident"] is False
+    assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in persistent_plan["evidence"]
+
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/resident-surface" in payload["evidence"]
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is True
     assert governance["process_supervision_authority_boundary_readback"] is True
+    assert governance["persistent_supervision_plan_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

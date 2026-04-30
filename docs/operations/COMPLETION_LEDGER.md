@@ -14492,6 +14492,53 @@ authority enforcement:
 - `python -m ruff format --check --no-cache tests\test_service_install_plan_script.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision plan proof
+
+Stage 6/Lens now has a non-mutating persistent-supervision plan proof for the
+remaining resident host blocker. `scripts/lens-persistent-supervision-plan.ps1`
+emits `kind: lens.host.persistent_supervision_plan`, reads the disabled Lens host
+service config, and reports the exact requirements that must become true before
+Francis can claim persistent resident supervision. In the current repo posture,
+the host entrypoint, service manager, and service config are present, while
+process supervision enablement, persistent supervision enablement, process
+restart authority, service install/control authority, receipt-write authority,
+and resident-claim authority remain blocked.
+
+The Stage 6 completion audit now consumes that proof and reports
+`next_smallest_truthful_gap: persistent_supervision_authority_not_granted`
+instead of the broader `resident_supervision_not_persistent`. This moves the
+audit from another bounded foreground/supervisor proof toward the explicit
+authority boundary required for a real persistent resident supervisor.
+
+This is diagnostic/readback and plan-proof work only. It does not grant
+execution, approval decision, memory-write, local-process-launch,
+process-supervision, process-restart, service-install, service-control,
+receipt-write, denial-receipt-write, resident-claim, telemetry, tray, hotkey,
+overlay, summon, capture, or UI authority. It does not install, update, start,
+stop, restart, supervise, or claim a resident Lens host process.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is the
+explicit persistent-supervision authority boundary behind process-supervision,
+restart, service-control, receipt-write, and resident-claim requirements.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision plan proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,requirements_blocked_total | ConvertTo-Json -Depth 4`
+  Result: `passed; reported persistent_supervision_authority_not_granted`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 | ConvertFrom-Json | Select-Object next_smallest_truthful_gap,next_smallest_truthful_gap_basis,persistent_supervision_plan | ConvertTo-Json -Depth 6`
+  Result: `passed; reported persistent_supervision_authority_not_granted`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
