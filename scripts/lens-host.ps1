@@ -443,7 +443,7 @@ if ($Mode -eq 'Launch') {
     $LaunchStarted = $LaunchProcess.Start()
     if ($LaunchStarted) {
       $LaunchPid = [int]$LaunchProcess.Id
-      $LaunchObservationTimeout = [Math]::Max(10, $LaunchRunSeconds + 10)
+      $LaunchObservationTimeout = [Math]::Max(15, $LaunchRunSeconds + 15)
       $RunningState = Wait-ForRuntimeState -StatePath $ProcessStatePath -Status 'foreground_running' -TimeoutSeconds $LaunchObservationTimeout
     }
   }

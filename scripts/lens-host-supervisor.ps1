@@ -269,7 +269,7 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
-$RunningObservationTimeout = [Math]::Max(5, $RunSeconds + 10)
+$RunningObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
 $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
 $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
 $RunningObserved = (
@@ -291,11 +291,12 @@ if ($RunningObserved) {
     })
 }
 
-$StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds ($RunSeconds + 10)
+$StoppedObservationTimeout = [Math]::Max(15, $RunSeconds + 15)
+$StoppedState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_stopped' -TimeoutSeconds $StoppedObservationTimeout
 $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
 if ([string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'foreground_stopped' -and $StoppedPid -gt 0) {
   # The foreground host writes its stopped state before the PowerShell process fully exits.
-  $ExitDeadline = (Get-Date).AddSeconds([Math]::Max(15, $RunSeconds + 10))
+  $ExitDeadline = (Get-Date).AddSeconds([Math]::Max(20, $RunSeconds + 20))
   while (
     (Get-Date) -lt $ExitDeadline -and
     ((Test-ProcessAlive -ProcessId $StoppedPid) -or (Test-LeafPathPresent -Path $HostPidPath))

@@ -13914,6 +13914,36 @@ activation blocker normalization:
 - `python -m ruff format --check --no-cache src\francis\lens\activation.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens proof observation window stabilization
+
+Stage 6/Lens bounded host observation proofs now use wider observation and
+process-exit grace windows for the future Lens host runtime. The host launch
+runner, host-supervisor runner, and composed host-supervisor observation proof
+still observe exactly one bounded foreground diagnostic host lifecycle, but the
+readback now gives slower local/CI PowerShell process startup and teardown more
+time before declaring the running or stopped state missing.
+
+This is diagnostic stability only. It does not change the Lens runtime claim,
+launch a resident host, supervise or restart a process, install/start/stop/control
+a service, register tray presence, bind a hotkey, open/control an overlay, summon
+Francis anywhere, write memory, decide approvals, create UI controls, or grant
+execution, approval-decision, memory-write, process-supervision, process-restart,
+service-control, overlay-control, summon, hotkey-registration, tray-registration,
+capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The next truthful gap remains converting the bounded
+diagnostic observation chain into a real supervised resident runtime only behind
+the existing approval, authority, supervision, service-control, tray, hotkey,
+overlay, and resident-claim gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens proof observation
+window stabilization:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
