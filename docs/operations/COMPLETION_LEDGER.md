@@ -14176,6 +14176,53 @@ consumption of process supervision boundary proof:
 - `python -m ruff format --check --no-cache tests\test_lens_stage6_completion_audit_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens host supervision proof names unsupervised resident host blocker
+
+Stage 6/Lens host supervision readiness proof now uses the same foreground
+runtime blocker vocabulary as the completion audit and direct Lens readbacks.
+`scripts/lens-host-supervision-proof.ps1 -Mode Status` still composes host
+lifecycle preflight, bounded foreground readiness proof, bounded host-launch
+proof, service plan readback, service status readback, process-supervision
+readiness, and service-control denial. It now reports
+`foreground_process_observed: true`, `resident_host_process_state:
+foreground_observed_not_supervised`, and `resident_host_process_blocker:
+resident_host_process_not_supervised` when the bounded foreground host launch
+proof is observed.
+
+The proof's `next_smallest_truthful_gap` is now
+`resident_host_process_not_supervised`, and its blockers use
+`resident_surface_runtime_not_supervised` instead of the older generic
+`resident_surface_runtime_missing` once bounded foreground process readback has
+been observed. This keeps the standalone proof aligned with the Stage 6
+completion audit's latest next gap.
+
+This is diagnostic/readback alignment only. It does not grant execution
+authority, approval authority, memory-write behavior, process-supervision
+authority, process-restart authority, service-install authority, service-control
+authority, tray/hotkey authority, overlay control, summon authority, API local
+process-launch authority, or a resident claim. The proof still keeps
+`supervision_ready`, `ready_for_resident_claim`, `resident_claim_allowed`,
+`resident_host_process`, `service_installed`, `supervised`, and
+`service_managed` false.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+actual supervised resident host process path behind explicit authority gates,
+not another readback rename.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervision
+proof blocker alignment:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervision_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervision_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervision_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

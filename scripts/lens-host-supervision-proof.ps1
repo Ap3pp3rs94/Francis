@@ -222,10 +222,20 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 $PreflightBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PreflightPayload -Name 'blockers' -Default @())
 $ForegroundBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ForegroundPayload -Name 'blockers' -Default @())
 $HostLaunchBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
-$AllBlockers = @($PreflightBlockers + $ForegroundBlockers + $HostLaunchBlockers + @(
-  'resident_host_process_not_supervised',
-  'resident_supervision_disabled',
+$ObservedHostProcessBlocker = if ($HostLaunchProofOk) {
+  'resident_host_process_not_supervised'
+} else {
+  'resident_host_process_missing'
+}
+$ObservedSurfaceRuntimeBlocker = if ($HostLaunchProofOk) {
+  'resident_surface_runtime_not_supervised'
+} else {
   'resident_surface_runtime_missing'
+}
+$AllBlockers = @($PreflightBlockers + $ForegroundBlockers + $HostLaunchBlockers + @(
+  $ObservedHostProcessBlocker,
+  'resident_supervision_disabled',
+  $ObservedSurfaceRuntimeBlocker
   ) | Sort-Object -Unique)
 
 $Payload = [ordered]@{
@@ -241,7 +251,10 @@ $Payload = [ordered]@{
   ready_for_resident_claim = $false
   resident_claim_allowed = $false
   bounded_host_launch_observed = $HostLaunchProofOk
+  foreground_process_observed = $HostLaunchProofOk
   resident_host_process = $false
+  resident_host_process_state = if ($HostLaunchProofOk) { 'foreground_observed_not_supervised' } else { 'missing' }
+  resident_host_process_blocker = $ObservedHostProcessBlocker
   service_installed = $false
   supervised = $false
   service_managed = $false
@@ -271,7 +284,7 @@ $Payload = [ordered]@{
     process_supervision_status = [string](Get-PropertyValue -Payload $ProcessSupervisionCheck -Name 'status' -Default '')
     service_control_status = [string](Get-PropertyValue -Payload $ServiceControlCheck -Name 'status' -Default '')
   }
-  next_smallest_truthful_gap = 'resident_host_supervision_or_resident_overlay_runtime'
+  next_smallest_truthful_gap = 'resident_host_process_not_supervised'
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -295,7 +308,7 @@ $Payload = [ordered]@{
     tray_registration_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Lens host supervision readiness is observable and still blocked; this proof does not install, start, supervise, or expose a resident host.'
+  message = 'Lens host supervision readiness is observable and still blocked; this proof can observe a bounded foreground host process but does not install, start, supervise, or expose a resident host.'
 }
 
 $Payload | ConvertTo-Json -Depth 10

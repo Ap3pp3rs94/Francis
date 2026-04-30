@@ -59,7 +59,10 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert payload["ready_for_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
     assert payload["bounded_host_launch_observed"] is True
+    assert payload["foreground_process_observed"] is True
     assert payload["resident_host_process"] is False
+    assert payload["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert payload["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert payload["service_installed"] is False
     assert payload["supervised"] is False
     assert payload["service_managed"] is False
@@ -67,7 +70,7 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert payload["global_hotkey"] is False
     assert payload["overlay_window"] is False
     assert payload["summon_anywhere"] is False
-    assert payload["next_smallest_truthful_gap"] == ("resident_host_supervision_or_resident_overlay_runtime")
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["host_lifecycle_preflight"]["status"] == "blocked_readback_ready"
@@ -103,7 +106,8 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert proof["service_control_status"] == "blocked"
     assert "resident_host_process_not_supervised" in payload["blockers"]
     assert "resident_supervision_disabled" in payload["blockers"]
-    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_runtime_not_supervised" in payload["blockers"]
+    assert "resident_surface_runtime_missing" not in payload["blockers"]
     assert "resident_surface_missing" not in payload["blockers"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
     assert "tray_host_missing" in payload["blockers"]
