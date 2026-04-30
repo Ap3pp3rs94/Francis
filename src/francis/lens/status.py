@@ -1384,6 +1384,179 @@ def _stage6_readiness(
     }
 
 
+def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, Any]:
+    mode = _as_dict(status.get("mode"))
+    scope = _as_dict(status.get("scope"))
+    hud = _as_dict(status.get("hud"))
+    resident_host = _as_dict(status.get("resident_host"))
+    approvals = _as_dict(status.get("approvals_view"))
+    incidents = _as_dict(status.get("incident_view"))
+    missions = _as_dict(status.get("mission_feed"))
+    command_palette = _as_dict(status.get("command_palette"))
+    reactor = _as_dict(status.get("reactor"))
+    preflight = _as_dict(status.get("preflight"))
+    summon_enablement_gate = _as_dict(status.get("summon_enablement_gate"))
+    tray_enablement_gate = _as_dict(status.get("tray_enablement_gate"))
+    overlay_enablement_gate = _as_dict(status.get("overlay_enablement_gate"))
+    resident_surface_activation = _as_dict(status.get("resident_surface_activation"))
+    hud_runtime = _as_dict(hud.get("runtime"))
+
+    blockers: list[str] = []
+    for source in (
+        hud_runtime.get("blockers"),
+        resident_host.get("blockers"),
+        resident_surface_activation.get("blockers"),
+        summon_enablement_gate.get("blockers"),
+        tray_enablement_gate.get("blockers"),
+        overlay_enablement_gate.get("blockers"),
+    ):
+        for blocker in _as_list(source):
+            blocker_id = _safe_str(blocker).strip()
+            if blocker_id and blocker_id not in blockers:
+                blockers.append(blocker_id)
+    if "resident_surface_missing" not in blockers:
+        blockers.insert(0, "resident_surface_missing")
+
+    surface_sections = [
+        {
+            "id": "mode_and_scope",
+            "label": "Mode and scope",
+            "status": "readback_ready" if mode else "missing",
+            "route": "/system/operator_mode",
+        },
+        {
+            "id": "hud_summary",
+            "label": "HUD summary",
+            "status": _safe_str(hud.get("runtime_status")).strip() or "missing",
+            "route": "/lens/hud",
+        },
+        {
+            "id": "approval_queue",
+            "label": "Approval queue",
+            "status": _safe_str(approvals.get("status")).strip() or "missing",
+            "route": _safe_str(approvals.get("route")).strip() or "/approvals/list?status=pending",
+            "count": _safe_int(approvals.get("pending_count")),
+        },
+        {
+            "id": "mission_feed",
+            "label": "Mission feed",
+            "status": "readback_ready",
+            "route": _safe_str(missions.get("route")).strip() or "/continuity/briefing",
+            "counts": _as_dict(missions.get("counts")),
+        },
+        {
+            "id": "incident_feed",
+            "label": "Incident feed",
+            "status": _safe_str(incidents.get("status")).strip() or "missing",
+            "route": _safe_str(incidents.get("route")).strip() or "/system/observer",
+        },
+        {
+            "id": "command_palette",
+            "label": "Command palette",
+            "status": _safe_str(command_palette.get("status")).strip() or "missing",
+            "route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
+            "command_total": _safe_int(command_palette.get("command_total")),
+        },
+        {
+            "id": "resident_host",
+            "label": "Resident host",
+            "status": _safe_str(resident_host.get("status")).strip() or "missing",
+            "route": _safe_str(resident_host.get("route")).strip() or "/lens/host",
+        },
+        {
+            "id": "activation_boundary",
+            "label": "Resident surface activation boundary",
+            "status": _safe_str(resident_surface_activation.get("status")).strip() or "missing",
+            "route": _safe_str(resident_surface_activation.get("route")).strip() or "/lens/resident-surface/activation",
+        },
+    ]
+
+    return {
+        "ok": True,
+        "kind": "lens.resident_surface.readback",
+        "status": "blocked",
+        "contract_status": "readback_ready",
+        "availability": "backend_readback_only",
+        "route": "/lens/resident-surface",
+        "status_route": "/lens/status",
+        "activation_route": "/lens/resident-surface/activation",
+        "host_route": "/lens/host",
+        "hud_route": "/lens/hud",
+        "content_contract_ready": True,
+        "resident_surface_ready": False,
+        "resident_claim_allowed": False,
+        "resident_overlay_runtime": bool(hud_runtime.get("resident_overlay")),
+        "resident_host": bool(resident_host.get("resident")),
+        "always_on_top_overlay": bool(hud_runtime.get("always_on_top")),
+        "summon_anywhere": bool(command_palette.get("summon_anywhere")),
+        "tray_presence": bool(hud_runtime.get("tray_presence")),
+        "mode": mode,
+        "scope": scope,
+        "headline": _safe_str(hud.get("headline")).strip(),
+        "badges": [dict(item) for item in _as_list(hud.get("badges")) if isinstance(item, dict)],
+        "surface_sections": surface_sections,
+        "approval_queue": {
+            "status": _safe_str(approvals.get("status")).strip() or "missing",
+            "pending_count": _safe_int(approvals.get("pending_count")),
+            "route": _safe_str(approvals.get("route")).strip() or "/approvals/list?status=pending",
+        },
+        "mission_feed": {
+            "headline": _safe_str(missions.get("headline")).strip(),
+            "counts": _as_dict(missions.get("counts")),
+            "route": _safe_str(missions.get("route")).strip() or "/continuity/briefing",
+        },
+        "incident_feed": {
+            "status": _safe_str(incidents.get("status")).strip() or "missing",
+            "route": _safe_str(incidents.get("route")).strip() or "/system/observer",
+            "reactor_route": _safe_str(incidents.get("reactor_route")).strip()
+            or "/reactor/operator_visibility/summary",
+        },
+        "command_palette": {
+            "status": _safe_str(command_palette.get("status")).strip() or "missing",
+            "availability": _safe_str(command_palette.get("availability")).strip() or "chat_ui_only",
+            "route": _safe_str(command_palette.get("route")).strip() or "/lens/status",
+            "command_total": _safe_int(command_palette.get("command_total")),
+            "summon_anywhere": bool(command_palette.get("summon_anywhere")),
+        },
+        "resident_runtime": {
+            "preflight_route": "/lens/resident-runtime/preflight",
+            "policy_route": "/lens/resident-runtime/policy",
+            "authority_grant_route": "/lens/resident-runtime/authority-grant",
+            "plan_route": "/lens/resident-runtime/plan",
+            "execute_route": "/lens/resident-runtime/execute",
+            "ready": False,
+        },
+        "enablement_gates": {
+            "preflight": preflight,
+            "summon": summon_enablement_gate,
+            "tray": tray_enablement_gate,
+            "overlay": overlay_enablement_gate,
+        },
+        "activation_boundary": resident_surface_activation,
+        "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
+        "blockers": blockers,
+        "next_smallest_truthful_gap": "resident_host_or_resident_overlay_runtime",
+        "message": "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active.",
+        "governance": {
+            "gate": "lens_resident_surface_readback",
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def lens_status(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
     operator = _operator_surface()
@@ -1426,7 +1599,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     resident_runtime_plan = _as_dict(resident_host.get("resident_runtime_plan"))
 
-    return {
+    payload = {
         "ok": True,
         "kind": "lens.status",
         "subsystem": "lens",
@@ -1478,6 +1651,8 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_resident_runtime_authority_grant_readiness_route": (
                 "/lens/resident-runtime/authority-grant/readiness"
             ),
+            "lens_resident_surface_route": "/lens/resident-surface",
+            "lens_resident_surface_activation_route": "/lens/resident-surface/activation",
             "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
         },
         "reactor": reactor,
@@ -1506,6 +1681,13 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "new_sensing_authority": False,
         },
     }
+    payload["resident_surface"] = _resident_surface_readback_from_status(payload)
+    return payload
+
+
+def lens_resident_surface_readback(*, limit: int = 5) -> dict[str, Any]:
+    status = lens_status(limit=limit)
+    return dict(_as_dict(status.get("resident_surface")))
 
 
 def lens_host_status(*, limit: int = 5) -> dict[str, Any]:

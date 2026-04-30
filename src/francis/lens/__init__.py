@@ -31,7 +31,7 @@ from francis.lens.preflight import (
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
 )
-from francis.lens.status import lens_host_status, lens_status
+from francis.lens.status import lens_host_status, lens_resident_surface_readback, lens_status
 
 __all__ = [
     "deny_lens_host_activation_execution",
@@ -56,6 +56,7 @@ __all__ = [
     "lens_resident_runtime_execution_policy_contract",
     "lens_resident_runtime_activation_preflight",
     "lens_resident_runtime_activation_plan",
+    "lens_resident_surface_readback",
     "lens_resident_surface_activation_boundary",
     "lens_status",
     "lens_summon_enablement_gate",

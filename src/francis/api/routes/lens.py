@@ -28,6 +28,7 @@ from francis.lens import (
     lens_resident_runtime_activation_plan,
     lens_resident_runtime_execution_policy_contract,
     lens_resident_surface_activation_boundary,
+    lens_resident_surface_readback,
     lens_status,
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
@@ -231,6 +232,11 @@ def resident_runtime_execute(request: Request, payload: LensResidentRuntimeExecu
         route=request.url.path,
         method=request.method,
     )
+
+
+@router.get("/resident-surface")
+def resident_surface(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_resident_surface_readback(limit=limit)
 
 
 @router.get("/resident-surface/activation")

@@ -366,6 +366,71 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "mutation_authority_granted": False,
         },
     }
+    resident_surface = body["resident_surface"]
+    assert resident_surface["kind"] == "lens.resident_surface.readback"
+    assert resident_surface["status"] == "blocked"
+    assert resident_surface["contract_status"] == "readback_ready"
+    assert resident_surface["availability"] == "backend_readback_only"
+    assert resident_surface["route"] == "/lens/resident-surface"
+    assert resident_surface["status_route"] == "/lens/status"
+    assert resident_surface["activation_route"] == "/lens/resident-surface/activation"
+    assert resident_surface["host_route"] == "/lens/host"
+    assert resident_surface["hud_route"] == "/lens/hud"
+    assert resident_surface["content_contract_ready"] is True
+    assert resident_surface["resident_surface_ready"] is False
+    assert resident_surface["resident_claim_allowed"] is False
+    assert resident_surface["resident_overlay_runtime"] is False
+    assert resident_surface["resident_host"] is False
+    assert resident_surface["always_on_top_overlay"] is False
+    assert resident_surface["summon_anywhere"] is False
+    assert resident_surface["tray_presence"] is False
+    assert resident_surface["approval_queue"]["route"] == "/approvals/list?status=pending"
+    assert resident_surface["mission_feed"]["route"] == "/continuity/briefing"
+    assert resident_surface["incident_feed"]["reactor_route"] == "/reactor/operator_visibility/summary"
+    assert resident_surface["command_palette"]["route"] == "/lens/status"
+    assert resident_surface["command_palette"]["summon_anywhere"] is False
+    assert resident_surface["resident_runtime"] == {
+        "preflight_route": "/lens/resident-runtime/preflight",
+        "policy_route": "/lens/resident-runtime/policy",
+        "authority_grant_route": "/lens/resident-runtime/authority-grant",
+        "plan_route": "/lens/resident-runtime/plan",
+        "execute_route": "/lens/resident-runtime/execute",
+        "ready": False,
+    }
+    surface_sections = {item["id"]: item for item in resident_surface["surface_sections"]}
+    assert surface_sections["mode_and_scope"]["route"] == "/system/operator_mode"
+    assert surface_sections["hud_summary"]["route"] == "/lens/hud"
+    assert surface_sections["approval_queue"]["route"] == "/approvals/list?status=pending"
+    assert surface_sections["mission_feed"]["route"] == "/continuity/briefing"
+    assert surface_sections["incident_feed"]["route"] == "/system/observer"
+    assert surface_sections["command_palette"]["route"] == "/lens/status"
+    assert surface_sections["resident_host"]["route"] == "/lens/host"
+    assert surface_sections["activation_boundary"]["route"] == "/lens/resident-surface/activation"
+    assert resident_surface["activation_boundary"]["kind"] == "lens.resident_surface.activation_boundary"
+    assert resident_surface["enablement_gates"]["summon"]["kind"] == "lens.summon.enablement_gate"
+    assert resident_surface["enablement_gates"]["tray"]["kind"] == "lens.tray.enablement_gate"
+    assert resident_surface["enablement_gates"]["overlay"]["kind"] == "lens.overlay.enablement_gate"
+    assert "resident_surface_missing" in resident_surface["blockers"]
+    assert "resident_overlay_runtime_missing" in resident_surface["blockers"]
+    assert "resident_host_process_missing" in resident_surface["blockers"]
+    assert resident_surface["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
+    assert resident_surface["governance"] == {
+        "gate": "lens_resident_surface_readback",
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "service_control_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "resident_claim_authority": False,
+        "mutation_authority_granted": False,
+    }
     resident_host = body["resident_host"]
     assert resident_host["kind"] == "lens.resident_host"
     assert resident_host["status"] == "not_implemented"
@@ -1346,6 +1411,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert pilot_mode["write_guard"] == "system.write plus operator posture"
     assert body["mode_selector"]["status"] == "readback_ready"
     assert body["pilot_indicator"]["status"] == "standby"
+    assert body["receipts"]["lens_resident_surface_route"] == "/lens/resident-surface"
+    assert body["receipts"]["lens_resident_surface_activation_route"] == "/lens/resident-surface/activation"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
     assert _criterion(body, "resident_host_runtime")["status"] == "not_implemented"
     assert _criterion(body, "resident_host_runtime")["resident"] is False
@@ -2100,6 +2167,25 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"
     assert surface_activation_response.json()["resident_surface_ready"] is False
+    surface_response = client.get("/lens/resident-surface?limit=3")
+    assert surface_response.status_code == 200
+    surface_body = surface_response.json()
+    assert surface_body["kind"] == "lens.resident_surface.readback"
+    assert surface_body["status"] == "blocked"
+    assert surface_body["contract_status"] == "readback_ready"
+    assert surface_body["route"] == "/lens/resident-surface"
+    assert surface_body["activation_route"] == "/lens/resident-surface/activation"
+    assert surface_body["content_contract_ready"] is True
+    assert surface_body["resident_surface_ready"] is False
+    assert surface_body["resident_overlay_runtime"] is False
+    assert surface_body["summon_anywhere"] is False
+    assert surface_body["tray_presence"] is False
+    assert "resident_surface_missing" in surface_body["blockers"]
+    assert surface_body["governance"]["read_only_contract"] is True
+    assert surface_body["governance"]["execution_authority"] is False
+    assert surface_body["governance"]["approval_decision_authority"] is False
+    assert surface_body["governance"]["memory_write"] is False
+    assert surface_body["governance"]["overlay_control_authority"] is False
     runtime_preflight_response = client.get("/lens/resident-runtime/preflight?actor=test.system.write")
     assert runtime_preflight_response.status_code == 200
     runtime_preflight_body = runtime_preflight_response.json()

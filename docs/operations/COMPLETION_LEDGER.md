@@ -13586,6 +13586,54 @@ runner consumption:
 - `git diff --check`
   Result: `passed` with expected PowerShell LF-to-CRLF warnings only
 
+### 2026-04-29 - Stage 6/Lens resident surface readback contract
+
+Stage 6/Lens now has a direct read-only `/lens/resident-surface` backend
+readback route for the future resident Lens surface. The route composes the
+existing Lens status truth into an operator-facing content contract: mode and
+scope, HUD summary, approval queue, mission feed, incident feed, command
+palette, resident host, resident-runtime route links, enablement gates, and the
+existing resident-surface activation boundary. The same readback is embedded in
+`/lens/status` as `resident_surface`, and the receipts block now advertises
+`lens_resident_surface_route` and
+`lens_resident_surface_activation_route`.
+
+This is backend readback/API truth only. It explicitly reports
+`availability: backend_readback_only`, `status: blocked`,
+`content_contract_ready: true`, `resident_surface_ready: false`,
+`resident_overlay_runtime: false`, and the remaining
+`resident_surface_missing`, `resident_overlay_runtime_missing`, and
+`resident_host_process_missing` blockers. It does not create a resident host,
+launch or supervise a process, install/start/stop/control a service, register
+tray presence, bind a hotkey, open/control an overlay, summon Francis anywhere,
+write memory, decide approvals, create UI controls, or grant execution,
+approval-decision, memory-write, process-supervision, process-restart,
+service-control, overlay-control, summon, hotkey-registration,
+tray-registration, capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The direct resident-surface readback route makes the
+future surface content contract inspectable before UI/runtime work, but the
+completion audit still reports `do_not_close_stage6` with the next smallest
+truthful gap at `resident_surface_missing`.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens resident surface
+readback contract:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; audit reported `closure_decision:
+  do_not_close_stage6`, `transition_allowed: false`, and
+  `next_smallest_truthful_gap: resident_surface_missing`
+- `python -m ruff check src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed` with non-fatal `.ruff_cache` access warnings
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -13604,8 +13652,9 @@ These remain true and should block any "finished" claim:
   process-supervision, or service-control authority, plus a reusable bounded
   `scripts/lens-host-supervisor.ps1` diagnostic runner that can observe an
   already-started bounded foreground host process without launch, restart,
-  resident supervision, service-control, or resident-claim authority, resident
-  surface readiness proof diagnostic, disabled tracked service config baseline,
+  resident supervision, service-control, or resident-claim authority, a direct
+  `/lens/resident-surface` backend content readback contract, resident surface
+  readiness proof diagnostic, disabled tracked service config baseline,
   resident
   supervision readiness gate, read-only service-manager
   dry-run plan proof, service plan preflight/API readback, and non-starting process
