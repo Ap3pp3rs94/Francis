@@ -12,6 +12,9 @@ from francis.lens.activation import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
+    lens_host_persistent_supervision_enablement_authority_readiness_audit,
+    lens_host_persistent_supervision_enablement_authority_request_contract,
+    lens_host_persistent_supervision_enablement_authority_request_readback,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_grant_receipts,
     lens_host_supervision_authority_request_contract,
@@ -25,6 +28,7 @@ from francis.lens.activation import (
     lens_resident_runtime_activation_plan,
     lens_resident_surface_activation_boundary,
     request_lens_host_activation,
+    request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
 )
 from francis.lens.host_manifest import (
@@ -54,6 +58,9 @@ __all__ = [
     "lens_host_activation_execution_plan",
     "lens_host_activation_request_contract",
     "lens_host_activation_readback",
+    "lens_host_persistent_supervision_enablement_authority_readiness_audit",
+    "lens_host_persistent_supervision_enablement_authority_request_contract",
+    "lens_host_persistent_supervision_enablement_authority_request_readback",
     "lens_host_supervision_authority_denial_receipts",
     "lens_host_supervision_authority_grant_receipts",
     "lens_host_supervision_authority_request_contract",
@@ -79,5 +86,6 @@ __all__ = [
     "lens_summon_enablement_gate",
     "lens_tray_enablement_gate",
     "request_lens_host_activation",
+    "request_lens_host_persistent_supervision_enablement_authority",
     "request_lens_host_supervision_authority",
 ]

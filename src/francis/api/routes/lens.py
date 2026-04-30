@@ -16,6 +16,8 @@ from francis.lens import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_launch_manifest,
+    lens_host_persistent_supervision_enablement_authority_readiness_audit,
+    lens_host_persistent_supervision_enablement_authority_request_readback,
     lens_host_persistent_supervision_enablement_preflight,
     lens_host_persistent_supervision_plan,
     lens_host_status,
@@ -39,6 +41,7 @@ from francis.lens import (
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
     request_lens_host_activation,
+    request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
 )
 
@@ -84,6 +87,11 @@ class LensHostSupervisionAuthorityRequestIn(BaseModel):
 class LensHostPersistentSupervisionEnablementIn(BaseModel):
     actor: str | None = None
     reason: str = "attempt Lens persistent supervision enablement"
+
+
+class LensHostPersistentSupervisionEnablementAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens persistent supervision enablement authority review"
 
 
 @router.get("/status")
@@ -143,6 +151,39 @@ def host_persistent_supervision_enablement_denial(
     payload: LensHostPersistentSupervisionEnablementIn,
 ) -> dict[str, Any]:
     return deny_lens_host_persistent_supervision_enablement(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.get("/host/persistent-supervision/enablement/authority/requests")
+def host_persistent_supervision_enablement_authority_requests(
+    limit: int = Query(5, ge=1, le=50),
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_enablement_authority_request_readback(limit=limit)
+
+
+@router.get("/host/persistent-supervision/enablement/authority/readiness")
+def host_persistent_supervision_enablement_authority_readiness(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    actor: str = "",
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_enablement_authority_readiness_audit(
+        approval_id=approval_id,
+        actor=actor,
+        limit=limit,
+    )
+
+
+@router.post("/host/persistent-supervision/enablement/authority/request")
+def host_persistent_supervision_enablement_authority_request(
+    request: Request,
+    payload: LensHostPersistentSupervisionEnablementAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_host_persistent_supervision_enablement_authority(
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,

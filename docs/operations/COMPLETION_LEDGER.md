@@ -14807,6 +14807,49 @@ of persistent-supervision enablement denial:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision enablement authority request readback
+
+Stage 6/Lens now has a governed approval-request seam for future persistent
+supervision enablement authority. `POST
+/lens/host/persistent-supervision/enablement/authority/request` creates a
+pending approval request under the existing `system.write` API permission gate,
+and `GET /lens/host/persistent-supervision/enablement/authority/requests`
+projects pending/approved/rejected/emergency request readback filtered to the
+new `lens.host.persistent_supervision_enablement_authority` action. `GET
+/lens/host/persistent-supervision/enablement/authority/readiness` composes the
+approval state, existing persistent-supervision enablement preflight, existing
+enablement denial boundary, and request readback into exact blockers for the
+future grant boundary.
+
+This is a request/readback/readiness slice only. It does not grant service
+configuration write authority, persistent-supervision execution authority,
+process supervision, service control, receipt-write authority, memory writes,
+approval-decision authority, or resident-claim authority. `/lens/status` now
+surfaces the request contract, request readback, readiness audit, and a
+read-only command-palette entry for creating the approval request without
+claiming persistent supervision enablement.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is an exact
+approved-request-bound persistent-supervision enablement authority grant
+boundary that still does not enable persistent supervision or mutate service
+configuration until a separate execution boundary is proven.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision enablement authority request readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_request_requires_system_write_without_grant tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_request_creates_approval_only_readback -q`
+  Result: `failed before fix; passed after readiness used approved approval-record status`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -14904,7 +14947,13 @@ These remain true and should block any "finished" claim:
   service-config write, persistent-supervision execution, receipt-write, memory,
   and resident-claim authority denied while naming
   `persistent_supervision_enablement_authority_not_granted` as the current
-  audit blocker,
+  audit blocker, plus governed approval-request/readback/readiness routes at
+  `/lens/host/persistent-supervision/enablement/authority/request`,
+  `/lens/host/persistent-supervision/enablement/authority/requests`, and
+  `/lens/host/persistent-supervision/enablement/authority/readiness` that create
+  and read back approval requests without granting service-config write,
+  persistent-supervision execution, receipt-write, memory-write, approval-decision,
+  or resident-claim authority,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6` and groups closure blockers without allowing
   Stage 6 transition,
