@@ -53,8 +53,9 @@ def test_lens_live_operator_proof_reads_status_over_http_without_authority() -> 
     assert payload["live_operator_experience_ready"] is False
     assert payload["ready_for_stage6_closure"] is False
     assert payload["resident_surface_ready"] is False
+    assert payload["resident_surface_content_readback"] is True
     assert payload["resident_claim_allowed"] is False
-    assert payload["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
+    assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_missing"
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["api_process_started"]["status"] == "started"
@@ -68,7 +69,8 @@ def test_lens_live_operator_proof_reads_status_over_http_without_authority() -> 
     assert checks["helpful_not_noisy_boundary"]["status"] == "readback_ready"
     assert all(item["passed"] for item in payload["checks"])
 
-    assert "resident_surface_missing" in payload["blockers"]
+    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_missing" not in payload["blockers"]
     assert "resident_host_process_missing" in payload["blockers"]
     assert "resident_overlay_runtime_missing" in payload["blockers"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
@@ -83,6 +85,10 @@ def test_lens_live_operator_proof_reads_status_over_http_without_authority() -> 
     assert proof["mode"]
     assert proof["pilot_status"]
     assert proof["receipt_status"] == "readback_ready"
+    assert proof["resident_surface_status"] == "blocked"
+    assert proof["resident_surface_contract_status"] == "readback_ready"
+    assert proof["resident_surface_route"] == "/lens/resident-surface"
+    assert proof["resident_surface_content_contract_ready"] is True
     assert proof["resident_surface_activation_status"] == "blocked"
 
     assert payload["governance"] == {

@@ -1721,7 +1721,7 @@ def lens_resident_runtime_activation_preflight(
             "overlay_control_authority_not_granted",
             "resident_activation_receipt_write_authority_not_granted",
             "resident_claim_authority_not_granted",
-            "resident_surface_missing",
+            "resident_surface_runtime_missing",
         ]
     )
     status, next_step = _resident_runtime_preflight_status(blockers)
@@ -2540,7 +2540,7 @@ def lens_resident_runtime_activation_plan(
             "tray_registration_authority_not_granted",
             "hotkey_registration_authority_not_granted",
             "overlay_control_authority_not_granted",
-            "resident_surface_missing",
+            "resident_surface_runtime_missing",
         ]
     )
     steps = [
@@ -2897,7 +2897,7 @@ def lens_resident_surface_activation_boundary(
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(execution_denial.get("blockers")),
-            "resident_surface_missing",
+            "resident_surface_runtime_missing",
         ]
     )
     components = [

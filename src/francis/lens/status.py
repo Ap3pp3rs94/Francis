@@ -1414,8 +1414,8 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             blocker_id = _safe_str(blocker).strip()
             if blocker_id and blocker_id not in blockers:
                 blockers.append(blocker_id)
-    if "resident_surface_missing" not in blockers:
-        blockers.insert(0, "resident_surface_missing")
+    if "resident_surface_runtime_missing" not in blockers:
+        blockers.insert(0, "resident_surface_runtime_missing")
 
     surface_sections = [
         {
@@ -1535,7 +1535,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "activation_boundary": resident_surface_activation,
         "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
         "blockers": blockers,
-        "next_smallest_truthful_gap": "resident_host_or_resident_overlay_runtime",
+        "next_smallest_truthful_gap": "resident_surface_runtime_missing",
         "message": "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active.",
         "governance": {
             "gate": "lens_resident_surface_readback",

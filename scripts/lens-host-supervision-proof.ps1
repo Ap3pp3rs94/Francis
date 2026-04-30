@@ -225,7 +225,7 @@ $HostLaunchBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $
 $AllBlockers = @($PreflightBlockers + $ForegroundBlockers + $HostLaunchBlockers + @(
   'resident_host_process_not_supervised',
   'resident_supervision_disabled',
-  'resident_surface_missing'
+  'resident_surface_runtime_missing'
   ) | Sort-Object -Unique)
 
 $Payload = [ordered]@{

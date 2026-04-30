@@ -441,7 +441,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["live_operator_experience_proof"]["operator_experience_proof"] is True
     assert payload["live_operator_experience_proof"]["live_operator_experience_ready"] is False
     assert payload["live_operator_experience_proof"]["ready_for_stage6_closure"] is False
-    assert "resident_surface_missing" in payload["live_operator_experience_proof"]["blockers"]
+    assert "resident_surface_runtime_missing" in payload["live_operator_experience_proof"]["blockers"]
+    assert "resident_surface_missing" not in payload["live_operator_experience_proof"]["blockers"]
     assert payload["host_launch_proof"]["status"] == "proof_passed"
     assert payload["host_launch_proof"]["ok"] is True
     assert payload["host_launch_proof"]["exit_code"] == 0

@@ -410,10 +410,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface["enablement_gates"]["summon"]["kind"] == "lens.summon.enablement_gate"
     assert resident_surface["enablement_gates"]["tray"]["kind"] == "lens.tray.enablement_gate"
     assert resident_surface["enablement_gates"]["overlay"]["kind"] == "lens.overlay.enablement_gate"
-    assert "resident_surface_missing" in resident_surface["blockers"]
+    assert "resident_surface_runtime_missing" in resident_surface["blockers"]
+    assert "resident_surface_missing" not in resident_surface["blockers"]
     assert "resident_overlay_runtime_missing" in resident_surface["blockers"]
     assert "resident_host_process_missing" in resident_surface["blockers"]
-    assert resident_surface["next_smallest_truthful_gap"] == "resident_host_or_resident_overlay_runtime"
+    assert resident_surface["next_smallest_truthful_gap"] == "resident_surface_runtime_missing"
     assert resident_surface["governance"] == {
         "gate": "lens_resident_surface_readback",
         "read_only_contract": True,
@@ -1834,7 +1835,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["surface"]["summon_status"] == "blocked"
     assert resident_surface_activation["surface"]["tray_status"] == "blocked"
     assert resident_surface_activation["surface"]["overlay_status"] == "blocked"
-    assert "resident_surface_missing" in resident_surface_activation["blockers"]
+    assert "resident_surface_runtime_missing" in resident_surface_activation["blockers"]
+    assert "resident_surface_missing" not in resident_surface_activation["blockers"]
     assert "local_process_launch_authority_not_granted" in resident_surface_activation["blockers"]
     assert "resident_runtime_execution_authority_not_granted" in resident_surface_activation["blockers"]
     assert resident_surface_activation["resident_runtime_plan"]["kind"] == "lens.resident_runtime.activation_plan"
@@ -2180,7 +2182,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert surface_body["resident_overlay_runtime"] is False
     assert surface_body["summon_anywhere"] is False
     assert surface_body["tray_presence"] is False
-    assert "resident_surface_missing" in surface_body["blockers"]
+    assert "resident_surface_runtime_missing" in surface_body["blockers"]
+    assert "resident_surface_missing" not in surface_body["blockers"]
     assert surface_body["governance"]["read_only_contract"] is True
     assert surface_body["governance"]["execution_authority"] is False
     assert surface_body["governance"]["approval_decision_authority"] is False
@@ -3156,7 +3159,8 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert "local_process_launch_authority_not_granted" in resident_surface_activation_body["blockers"]
     assert "resident_runtime_execution_authority_not_granted" in resident_surface_activation_body["blockers"]
     assert "process_supervision_authority_not_granted" in resident_surface_activation_body["blockers"]
-    assert "resident_surface_missing" in resident_surface_activation_body["blockers"]
+    assert "resident_surface_runtime_missing" in resident_surface_activation_body["blockers"]
+    assert "resident_surface_missing" not in resident_surface_activation_body["blockers"]
     assert resident_surface_activation_body["governance"]["boundary_only"] is True
     assert resident_surface_activation_body["governance"]["activation_authority"] is False
     assert resident_surface_activation_body["governance"]["execution_authority"] is False

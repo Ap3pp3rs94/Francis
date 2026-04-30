@@ -82,13 +82,15 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["resident_surface_route"] == "/lens/resident-surface"
     assert proof["resident_surface_activation_route"] == "/lens/resident-surface/activation"
     assert proof["resident_surface_content_contract_ready"] is True
-    assert "resident_surface_missing" in proof["resident_surface_readback_blockers"]
+    assert "resident_surface_runtime_missing" in proof["resident_surface_readback_blockers"]
+    assert "resident_surface_missing" not in proof["resident_surface_readback_blockers"]
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_operator_helpful_not_noisy_readback"] is True
     assert proof["live_operator_status_route"] == "/lens/status?limit=5"
-    assert "resident_surface_missing" in proof["live_operator_blockers"]
+    assert "resident_surface_runtime_missing" in proof["live_operator_blockers"]
+    assert "resident_surface_missing" not in proof["live_operator_blockers"]
     assert proof["tray_status"] == "blocked"
     assert proof["overlay_status"] == "blocked"
     assert proof["summon_status"] == "blocked"

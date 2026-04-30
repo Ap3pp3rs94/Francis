@@ -276,7 +276,9 @@ $MissionFeed = Get-PropertyValue -Payload $StatusPayload -Name 'mission_feed'
 $Receipts = Get-PropertyValue -Payload $StatusPayload -Name 'receipts'
 $PilotIndicator = Get-PropertyValue -Payload $StatusPayload -Name 'pilot_indicator'
 $ResidentHost = Get-PropertyValue -Payload $StatusPayload -Name 'resident_host'
+$ResidentSurface = Get-PropertyValue -Payload $StatusPayload -Name 'resident_surface'
 $ResidentSurfaceActivation = Get-PropertyValue -Payload $StatusPayload -Name 'resident_surface_activation'
+$ResidentSurfaceGovernance = Get-PropertyValue -Payload $ResidentSurface -Name 'governance'
 $Governance = Get-PropertyValue -Payload $StatusPayload -Name 'governance'
 
 $HttpStatusReadback = (
@@ -311,6 +313,16 @@ $OperatorViewsReadback = (
   [string](Get-PropertyValue -Payload $Receipts -Name 'status' -Default '') -eq 'readback_ready'
 )
 $ResidentClaimBlocked = (
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $ResidentSurface -Name 'contract_status' -Default '') -eq 'readback_ready' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'content_contract_ready' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'resident_overlay_runtime' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'overlay_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'resident_claim_authority' -Default $true) -and
   [bool](Get-PropertyValue -Payload $ResidentSurfaceActivation -Name 'boundary_ready' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceActivation -Name 'activation_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceActivation -Name 'resident_surface_ready' -Default $true) -and
@@ -361,7 +373,7 @@ $Checks = @(
 )
 
 $Blockers = @(
-  'resident_surface_missing',
+  'resident_surface_runtime_missing',
   'resident_host_process_missing',
   'resident_overlay_runtime_missing',
   'tray_presence_missing',
@@ -388,6 +400,7 @@ $Payload = [ordered]@{
   live_operator_experience_ready = $false
   ready_for_stage6_closure = $false
   resident_surface_ready = $false
+  resident_surface_content_readback = $ResidentClaimBlocked
   resident_claim_allowed = $false
   checks = @($Checks)
   blockers = @($Blockers)
@@ -408,7 +421,11 @@ $Payload = [ordered]@{
     approvals_status = [string](Get-PropertyValue -Payload $ApprovalsView -Name 'status' -Default '')
     incident_status = [string](Get-PropertyValue -Payload $IncidentView -Name 'status' -Default '')
     receipt_status = [string](Get-PropertyValue -Payload $Receipts -Name 'status' -Default '')
+    resident_surface_status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default '')
+    resident_surface_contract_status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'contract_status' -Default '')
     resident_surface_activation_status = [string](Get-PropertyValue -Payload $ResidentSurfaceActivation -Name 'status' -Default '')
+    resident_surface_route = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'route' -Default '')
+    resident_surface_content_contract_ready = [bool](Get-PropertyValue -Payload $ResidentSurface -Name 'content_contract_ready' -Default $false)
     resident_surface_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentSurfaceActivation -Name 'blockers' -Default @())
   }
   governance = [ordered]@{
@@ -434,7 +451,7 @@ $Payload = [ordered]@{
     tray_registration_authority = $false
     mutation_authority_granted = $false
   }
-  next_smallest_truthful_gap = 'resident_host_or_resident_overlay_runtime'
+  next_smallest_truthful_gap = 'resident_surface_runtime_missing'
   message = 'Lens operator readback is proven through a live local HTTP API process; this does not create a resident host, tray presence, hotkey, overlay, summon-anywhere behavior, telemetry, memory writes, or execution authority.'
 }
 

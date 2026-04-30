@@ -103,7 +103,8 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert proof["service_control_status"] == "blocked"
     assert "resident_host_process_not_supervised" in payload["blockers"]
     assert "resident_supervision_disabled" in payload["blockers"]
-    assert "resident_surface_missing" in payload["blockers"]
+    assert "resident_surface_runtime_missing" in payload["blockers"]
+    assert "resident_surface_missing" not in payload["blockers"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
     assert "tray_host_missing" in payload["blockers"]
 

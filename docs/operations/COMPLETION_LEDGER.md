@@ -13691,6 +13691,49 @@ proof direct-readback consumption:
 - `python -m pytest tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens resident surface blocker normalization
+
+Stage 6/Lens resident surface readback, live operator proof, host supervision
+proof, and resident surface activation boundary now consistently report the
+remaining surface blocker as `resident_surface_runtime_missing` once the direct
+`/lens/resident-surface` backend content contract is readable. This removes the
+old generic `resident_surface_missing` claim from the direct readback and proof
+payloads that already know the surface content contract exists.
+
+The live operator proof now verifies the resident-surface readback from the live
+`/lens/status?limit=5` API payload, exposes `resident_surface_content_readback:
+true`, preserves `/lens/resident-surface` route/contract evidence in its proof
+payload, and keeps `live_operator_experience_ready: false` and
+`ready_for_stage6_closure: false`. The resident surface activation boundary and
+runtime preflight/plan blockers now carry the same runtime-missing blocker
+language.
+
+This is readback/proof/blocker truth only. It does not create a resident host,
+launch or supervise a product process, install/start/stop/control a service,
+register tray presence, bind a hotkey, open/control an overlay, summon Francis
+anywhere, write memory, decide approvals, create UI controls, or grant
+execution, approval-decision, memory-write, process-supervision,
+process-restart, service-control, overlay-control, summon, hotkey-registration,
+tray-registration, capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The next smallest truthful gap remains the actual
+resident surface/runtime path behind `resident_surface_runtime_missing`.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens resident surface
+blocker normalization:
+
+- `python -m pytest tests\test_api_lens.py tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status`
+  Result: `passed`; status `proof_passed`, blockers normalized to
+  `resident_surface_runtime_missing`
+- `python -m ruff check --no-cache src\francis\lens\status.py src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\status.py src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with expected PowerShell LF-to-CRLF warnings
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
