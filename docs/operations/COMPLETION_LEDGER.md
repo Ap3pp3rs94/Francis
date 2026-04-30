@@ -14042,6 +14042,43 @@ denial receipt readback:
   Result: `passed`; status remains `blocked`, `ready_to_close: false`,
   `next_smallest_truthful_gap: resident_surface_runtime_not_supervised`.
 
+### 2026-04-30 - Stage 6/Lens bounded supervisor-owned host session
+
+Stage 6/Lens now has a bounded supervisor-owned host session in
+`scripts/lens-host-supervisor.ps1 -Mode SuperviseOnce`. The supervisor can
+launch one temporary `scripts/lens-host.ps1 -Mode Foreground` process, observe
+the same process through `foreground_running` and `foreground_stopped` runtime
+states, write a supervisor state receipt under the selected runtime data root,
+and report `supervised_session_completed` after the host self-stops and leaves
+no pid file. This is the first Lens host supervisor mode that owns the temporary
+host lifecycle instead of only observing an already-started foreground host.
+
+This is a diagnostic local PowerShell process-launch and runtime-state proof
+only. It does not install, start, stop, restart, or manage a Windows service;
+does not register tray presence, bind a global hotkey, open/control an overlay,
+summon Francis anywhere, write memory, decide approvals, expose an API launch
+path, grant resident runtime execution authority, grant process-supervision or
+process-restart authority, or claim a resident supervised runtime. The new mode
+keeps `ready_for_resident_claim: false`, `resident_host_process: false`,
+`resident_supervised_runtime: false`, `supervised: false`, and
+`mutation_authority_granted: false`.
+
+Stage 6 remains active and blocked. The new session removes a prerequisite gap
+inside the supervisor runner itself, but it has not yet been consumed by the
+Stage 6 checkpoint, the resident overlay runtime proof, or the API/operator
+readback surfaces. The next smallest truthful gap is to consume this
+supervisor-owned session in the checkpoint/readback chain without granting
+resident, service, tray, hotkey, overlay, summon, memory-write, approval, or
+API process-launch authority.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens bounded
+supervisor-owned host session:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `failed before fix`, then `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -14059,8 +14096,10 @@ These remain true and should block any "finished" claim:
   diagnostic host process through running and stopped states without restart,
   process-supervision, or service-control authority, plus a reusable bounded
   `scripts/lens-host-supervisor.ps1` diagnostic runner that can observe an
-  already-started bounded foreground host process without launch, restart,
-  resident supervision, service-control, or resident-claim authority, a direct
+  already-started bounded foreground host process and can now own one bounded
+  diagnostic foreground host lifecycle through `SuperviseOnce` without
+  persistent resident supervision, restart, service-control, API launch, or
+  resident-claim authority, a direct
   `/lens/resident-surface` backend content readback contract, resident surface
   readiness proof diagnostic that consumes direct route readback, disabled
   tracked service config baseline,

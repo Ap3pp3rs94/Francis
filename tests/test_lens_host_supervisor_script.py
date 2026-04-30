@@ -191,3 +191,87 @@ def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp
     }
     assert (data_dir / "runtime" / "lens-host-supervisor" / "status.json").is_file()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervisor_supervises_one_bounded_host_without_resident_claim(tmp_path: Path) -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Lens host lifecycle process-exit proof is Windows-hosted.")
+
+    data_dir = tmp_path / "data"
+    proc = _run_script(
+        "lens-host-supervisor.ps1",
+        "-Mode",
+        "SuperviseOnce",
+        "-RunSeconds",
+        "5",
+        "-DataDir",
+        str(data_dir),
+        timeout=90,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.host.supervisor_runner"
+    assert payload["status"] == "supervised_session_completed"
+    assert payload["mode"] == "superviseonce"
+    assert payload["ok"] is True
+    assert payload["supervisor_started_process"] is True
+    assert payload["bounded_supervised_session"] is True
+    assert payload["bounded_supervisor_observed"] is True
+    assert payload["supervisor_observed_running_state"] is True
+    assert payload["supervisor_observed_stopped_state"] is True
+    assert payload["temporary_host_process_observed"] is True
+    assert payload["supervisor_restarted_process"] is False
+    assert payload["supervisor_managed_service"] is False
+    assert payload["ready_for_resident_claim"] is False
+    assert payload["resident_claim_allowed"] is False
+    assert payload["resident_host_process"] is False
+    assert payload["resident_supervised_runtime"] is False
+    assert payload["supervised"] is False
+    assert payload["next_smallest_truthful_gap"] == "resident_supervised_session_checkpoint_readback"
+    assert "resident_host_process_missing" not in payload["blockers"]
+    assert "resident_host_process_not_resident" in payload["blockers"]
+    assert "resident_supervision_not_persistent" in payload["blockers"]
+    assert "process_supervision_authority_not_granted" in payload["blockers"]
+    assert "process_restart_authority_not_granted" in payload["blockers"]
+    assert "service_control_authority_not_granted" in payload["blockers"]
+
+    proof = payload["proof"]
+    assert proof["running_state_status"] == "foreground_running"
+    assert proof["running_pid"] > 0
+    assert proof["running_process_alive"] is True
+    assert proof["stopped_state_status"] == "foreground_stopped"
+    assert proof["stopped_pid"] == proof["running_pid"]
+    assert proof["stopped_process_alive"] is False
+    assert proof["same_process_observed"] is True
+    assert proof["pid_file_present_after_stop"] is False
+    assert proof["supervisor_owned_launch"] is True
+    assert proof["host_exit_code"] == 0
+
+    assert payload["governance"] == {
+        "diagnostic_only": True,
+        "read_only_contract": False,
+        "bounded_supervisor_observation": True,
+        "temporary_runtime_state_write": True,
+        "product_execution_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": True,
+        "api_local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "overlay_control_authority": False,
+        "window_management_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "mutation_authority_granted": False,
+    }
+    assert (data_dir / "runtime" / "lens-host-supervisor" / "status.json").is_file()
+    assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
+    assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
