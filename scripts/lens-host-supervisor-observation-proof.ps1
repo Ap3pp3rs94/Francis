@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(3, 30)]
-  [int]$RunSeconds = 4,
+  [int]$RunSeconds = 10,
 
   [string]$DataDir = ''
 )
@@ -192,9 +192,150 @@ function Invoke-HostScript {
   }
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Quote-PowerShellString {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return "''"
+  }
+  return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Start-JsonScript {
+  param(
+    [string]$PowerShellPath,
+    [string]$ScriptPath,
+    [string]$ProofDataRoot,
+    [string[]]$ScriptArgs
+  )
+
+  if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+    return [ordered]@{
+      started = $false
+      process = $null
+      error = 'script_unavailable'
+    }
+  }
+
+  $AsyncDir = Join-Path $ProofDataRoot 'runtime\lens-host-supervisor-proof'
+  New-Item -ItemType Directory -Force -Path $AsyncDir | Out-Null
+  $StdoutPath = Join-Path $AsyncDir 'launch-stdout.json'
+  $StderrPath = Join-Path $AsyncDir 'launch-stderr.txt'
+  Remove-Item -LiteralPath $StdoutPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StderrPath -Force -ErrorAction SilentlyContinue
+
+  $ScriptArgumentText = @()
+  foreach ($Arg in $ScriptArgs) {
+    if ($Arg.StartsWith('-')) {
+      $ScriptArgumentText += $Arg
+    } else {
+      $ScriptArgumentText += (Quote-PowerShellString -Value $Arg)
+    }
+  }
+  $Command = (
+    '$env:FRANCIS_DATA_DIR = ' +
+    (Quote-PowerShellString -Value $ProofDataRoot) +
+    '; & ' +
+    (Quote-PowerShellString -Value $ScriptPath) +
+    ' ' +
+    ($ScriptArgumentText -join ' ') +
+    ' > ' +
+    (Quote-PowerShellString -Value $StdoutPath) +
+    ' 2> ' +
+    (Quote-PowerShellString -Value $StderrPath)
+  )
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $Command)
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $false
+  $StartInfo.RedirectStandardError = $false
+  $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $ProofDataRoot
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Started = $Process.Start()
+  return [ordered]@{
+    started = $Started
+    process = $Process
+    stdout_path = $StdoutPath
+    stderr_path = $StderrPath
+    error = ''
+  }
+}
+
+function Complete-JsonScript {
+  param(
+    [object]$StartedProcess,
+    [int]$TimeoutSeconds = 20
+  )
+
+  $Process = Get-PropertyValue -Payload $StartedProcess -Name 'process'
+  if (-not [bool](Get-PropertyValue -Payload $StartedProcess -Name 'started' -Default $false) -or $null -eq $Process) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string](Get-PropertyValue -Payload $StartedProcess -Name 'error' -Default 'not_started')
+    }
+  }
+
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+    }
+  }
+
+  $StdoutPath = [string](Get-PropertyValue -Payload $StartedProcess -Name 'stdout_path' -Default '')
+  $StderrPath = [string](Get-PropertyValue -Payload $StartedProcess -Name 'stderr_path' -Default '')
+  $Stdout = ''
+  $Stderr = ''
+  if (-not [string]::IsNullOrWhiteSpace($StdoutPath) -and (Test-Path -LiteralPath $StdoutPath -PathType Leaf)) {
+    $Stdout = Get-Content -LiteralPath $StdoutPath -Raw -ErrorAction SilentlyContinue
+  }
+  if (-not [string]::IsNullOrWhiteSpace($StderrPath) -and (Test-Path -LiteralPath $StderrPath -PathType Leaf)) {
+    $Stderr = Get-Content -LiteralPath $StderrPath -Raw -ErrorAction SilentlyContinue
+  }
+  $Payload = $null
+  try {
+    $Payload = $Stdout | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $Payload = $null
+  }
+
+  return [ordered]@{
+    exit_code = [int]$Process.ExitCode
+    payload = $Payload
+    output = $Stdout
+    error = $Stderr
+  }
+}
+
 $PowerShellPath = Get-PowerShellPath
 $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
+$SupervisorScriptPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
 $HostScriptExists = Test-Path -LiteralPath $HostScriptPath -PathType Leaf
+$SupervisorScriptExists = Test-Path -LiteralPath $SupervisorScriptPath -PathType Leaf
 
 if ([string]::IsNullOrWhiteSpace($DataDir)) {
   $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-host-supervisor-proof\" + [guid]::NewGuid().ToString('N') + "\data")
@@ -207,38 +348,40 @@ $PidPath = Join-Path $RuntimeDir 'lens-host.pid'
 $Checks = [System.Collections.ArrayList]::new()
 [void]$Checks.Add((New-Check -Id 'powershell_runtime' -Status $(if ($PowerShellPath) { 'present' } else { 'missing' }) -Passed (-not [string]::IsNullOrWhiteSpace($PowerShellPath)) -Evidence $PowerShellPath -Reason 'PowerShell is required for bounded supervisor observation.'))
 [void]$Checks.Add((New-Check -Id 'host_status_runner' -Status $(if ($HostScriptExists) { 'present' } else { 'missing' }) -Passed $HostScriptExists -Evidence 'scripts/lens-host.ps1' -Reason 'The proof observes the existing bounded Lens host runner.'))
+[void]$Checks.Add((New-Check -Id 'host_supervisor_runner' -Status $(if ($SupervisorScriptExists) { 'present' } else { 'missing' }) -Passed $SupervisorScriptExists -Evidence 'scripts/lens-host-supervisor.ps1' -Reason 'The proof consumes the reusable bounded host supervisor runner.'))
 
 $LaunchResult = $null
 $LaunchPayload = $null
 $LaunchProcess = $null
 $LaunchGovernance = $null
-$RunningState = $null
-$StoppedState = $null
+$SupervisorResult = $null
+$SupervisorPayload = $null
+$SupervisorProof = $null
+$SupervisorGovernance = $null
 $FinalStatusResult = $null
 $FinalStatusPayload = $null
 $FinalProcessReadback = $null
 $RunningPid = 0
 $StoppedPid = 0
 $LaunchObserved = $false
+$SupervisorObserved = $false
 $RunningObserved = $false
 $StoppedObserved = $false
 $FinalStatusObserved = $false
 $AuthorityBounded = $false
 
-if ($PowerShellPath -and $HostScriptExists) {
+if ($PowerShellPath -and $HostScriptExists -and $SupervisorScriptExists) {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-  $LaunchResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds)
+  $LaunchStartedProcess = Start-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds)
+  $SupervisorResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $SupervisorScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Observe', '-RunSeconds', [string]$RunSeconds, '-DataDir', $ProofDataRoot)
+  $LaunchResult = Complete-JsonScript -StartedProcess $LaunchStartedProcess -TimeoutSeconds ($RunSeconds + 15)
   $LaunchPayload = Get-PropertyValue -Payload $LaunchResult -Name 'payload'
   $LaunchProcess = Get-PropertyValue -Payload $LaunchPayload -Name 'process_readback'
   $LaunchGovernance = Get-PropertyValue -Payload $LaunchPayload -Name 'governance'
   $Launch = Get-PropertyValue -Payload $LaunchPayload -Name 'launch'
 
-  $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 5
   $LaunchReadbackPid = [int](Get-PropertyValue -Payload $LaunchProcess -Name 'pid' -Default 0)
   $RunningPid = $LaunchReadbackPid
-  if ($RunningPid -le 0) {
-    $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
-  }
   $LaunchObserved = (
     [int](Get-PropertyValue -Payload $LaunchResult -Name 'exit_code' -Default -1) -eq 0 -and
     [string](Get-PropertyValue -Payload $LaunchPayload -Name 'kind' -Default '') -eq 'lens.host.status_runner' -and
@@ -246,11 +389,34 @@ if ($PowerShellPath -and $HostScriptExists) {
     [string](Get-PropertyValue -Payload $Launch -Name 'status' -Default '') -eq 'started_observed' -and
     [string](Get-PropertyValue -Payload $LaunchProcess -Name 'status' -Default '') -eq 'process_observed'
   )
-  $RunningObserved = (
+
+  $SupervisorPayload = Get-PropertyValue -Payload $SupervisorResult -Name 'payload'
+  $SupervisorProof = Get-PropertyValue -Payload $SupervisorPayload -Name 'proof'
+  $SupervisorGovernance = Get-PropertyValue -Payload $SupervisorPayload -Name 'governance'
+  $RunningPid = [int](Get-PropertyValue -Payload $SupervisorProof -Name 'running_pid' -Default $RunningPid)
+  $StoppedPid = [int](Get-PropertyValue -Payload $SupervisorProof -Name 'stopped_pid' -Default 0)
+  $SupervisorObserved = (
     $LaunchObserved -and
-    [string](Get-PropertyValue -Payload $LaunchProcess -Name 'state_status' -Default '') -eq 'foreground_running' -and
-    [bool](Get-PropertyValue -Payload $LaunchProcess -Name 'process_alive' -Default $false) -and
+    [int](Get-PropertyValue -Payload $SupervisorResult -Name 'exit_code' -Default -1) -eq 0 -and
+    [string](Get-PropertyValue -Payload $SupervisorPayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_runner' -and
+    [string](Get-PropertyValue -Payload $SupervisorPayload -Name 'status' -Default '') -eq 'observation_completed' -and
+    [bool](Get-PropertyValue -Payload $SupervisorPayload -Name 'bounded_supervisor_observed' -Default $false)
+  )
+  $RunningObserved = (
+    $SupervisorObserved -and
+    [bool](Get-PropertyValue -Payload $SupervisorPayload -Name 'supervisor_observed_running_state' -Default $false) -and
+    [string](Get-PropertyValue -Payload $SupervisorProof -Name 'running_state_status' -Default '') -eq 'foreground_running' -and
+    [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'running_process_alive' -Default $false) -and
     $RunningPid -gt 0
+  )
+  $StoppedObserved = (
+    $SupervisorObserved -and
+    [bool](Get-PropertyValue -Payload $SupervisorPayload -Name 'supervisor_observed_stopped_state' -Default $false) -and
+    [string](Get-PropertyValue -Payload $SupervisorProof -Name 'stopped_state_status' -Default '') -eq 'foreground_stopped' -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'stopped_process_alive' -Default $true) -and
+    [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'same_process_observed' -Default $false) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'pid_file_present_after_stop' -Default $true) -and
+    $StoppedPid -eq $RunningPid
   )
   $AuthorityBounded = (
     [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'diagnostic_only' -Default $false) -and
@@ -259,17 +425,15 @@ if ($PowerShellPath -and $HostScriptExists) {
     -not [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'product_execution_authority' -Default $true) -and
     -not [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'api_local_process_launch_authority' -Default $true) -and
     -not [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'service_control_authority' -Default $true) -and
-    -not [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'memory_write' -Default $true)
-  )
-
-  $StoppedState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_stopped' -TimeoutSeconds ($RunSeconds + 10)
-  $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
-  $StoppedObserved = (
-    [string](Get-PropertyValue -Payload $StoppedState -Name 'status' -Default '') -eq 'foreground_stopped' -and
-    -not [bool](Get-PropertyValue -Payload $StoppedState -Name 'process_alive' -Default $true) -and
-    $StoppedPid -eq $RunningPid -and
-    -not (Test-ProcessAlive -ProcessId $StoppedPid) -and
-    -not (Test-Path -LiteralPath $PidPath -PathType Leaf)
+    -not [bool](Get-PropertyValue -Payload $LaunchGovernance -Name 'memory_write' -Default $true) -and
+    [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'diagnostic_only' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'bounded_supervisor_observation' -Default $false) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'local_process_launch_authority' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'product_execution_authority' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'process_supervision_authority' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'process_restart_authority' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'service_control_authority' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'memory_write' -Default $true)
   )
 
   $FinalStatusResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Status')
@@ -284,12 +448,13 @@ if ($PowerShellPath -and $HostScriptExists) {
 }
 
 [void]$Checks.Add((New-Check -Id 'bounded_launch_started' -Status $(if ($LaunchObserved) { 'launch_started_observed' } else { 'not_observed' }) -Passed $LaunchObserved -Evidence 'scripts/lens-host.ps1 -Mode Launch' -Reason 'Supervisor observation starts from one bounded host launch.'))
-[void]$Checks.Add((New-Check -Id 'supervisor_observed_running_state' -Status $(if ($RunningObserved) { 'foreground_running_observed' } else { 'not_observed' }) -Passed $RunningObserved -Evidence 'runtime/lens-host/status.json' -Reason 'The observer must see the temporary foreground process while it is alive.'))
-[void]$Checks.Add((New-Check -Id 'supervisor_observed_stopped_state' -Status $(if ($StoppedObserved) { 'foreground_stopped_observed' } else { 'not_observed' }) -Passed $StoppedObserved -Evidence 'runtime/lens-host/status.json' -Reason 'The observer must see the same process self-stop and leave no pid file.'))
+[void]$Checks.Add((New-Check -Id 'supervisor_runner_consumed' -Status $(if ($SupervisorObserved) { 'observation_completed' } else { 'not_observed' }) -Passed $SupervisorObserved -Evidence 'scripts/lens-host-supervisor.ps1 -Mode Observe' -Reason 'The proof must consume the reusable bounded supervisor runner.'))
+[void]$Checks.Add((New-Check -Id 'supervisor_observed_running_state' -Status $(if ($RunningObserved) { 'foreground_running_observed' } else { 'not_observed' }) -Passed $RunningObserved -Evidence 'scripts/lens-host-supervisor.ps1 -Mode Observe' -Reason 'The observer must see the temporary foreground process while it is alive.'))
+[void]$Checks.Add((New-Check -Id 'supervisor_observed_stopped_state' -Status $(if ($StoppedObserved) { 'foreground_stopped_observed' } else { 'not_observed' }) -Passed $StoppedObserved -Evidence 'scripts/lens-host-supervisor.ps1 -Mode Observe' -Reason 'The observer must see the same process self-stop and leave no pid file.'))
 [void]$Checks.Add((New-Check -Id 'status_readback_after_stop' -Status $(if ($FinalStatusObserved) { 'stopped_readback_ready' } else { 'not_observed' }) -Passed $FinalStatusObserved -Evidence 'scripts/lens-host.ps1 -Mode Status' -Reason 'Post-stop host status must report state present and process not running.'))
 [void]$Checks.Add((New-Check -Id 'launch_authority_boundary' -Status $(if ($AuthorityBounded) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBounded -Evidence 'launch.governance' -Reason 'Supervisor observation must not grant product/API execution, service control, or memory-write authority.'))
 
-$ProofPassed = $LaunchObserved -and $RunningObserved -and $StoppedObserved -and $FinalStatusObserved -and $AuthorityBounded
+$ProofPassed = $LaunchObserved -and $SupervisorObserved -and $RunningObserved -and $StoppedObserved -and $FinalStatusObserved -and $AuthorityBounded
 $Blockers = @(
   'resident_host_process_not_supervised',
   'resident_supervision_disabled',
@@ -328,6 +493,7 @@ $Payload = [ordered]@{
   blockers = @($Blockers)
   proof = [ordered]@{
     status_runner = 'scripts/lens-host.ps1'
+    supervisor_runner = 'scripts/lens-host-supervisor.ps1'
     runtime_state_path = 'runtime/lens-host/status.json'
     pid_path = 'runtime/lens-host/lens-host.pid'
     launch_exit_code = [int](Get-PropertyValue -Payload $LaunchResult -Name 'exit_code' -Default -1)
@@ -335,16 +501,20 @@ $Payload = [ordered]@{
     launch_supported = [bool](Get-PropertyValue -Payload $LaunchPayload -Name 'launch_supported' -Default $false)
     launch_authority = [bool](Get-PropertyValue -Payload $LaunchPayload -Name 'launch_authority' -Default $true)
     diagnostic_launch_authority = [bool](Get-PropertyValue -Payload $LaunchPayload -Name 'diagnostic_launch_authority' -Default $false)
-    running_state_source = 'launch_process_readback'
-    running_state_status = [string](Get-PropertyValue -Payload $LaunchProcess -Name 'state_status' -Default '')
+    supervisor_runner_exit_code = [int](Get-PropertyValue -Payload $SupervisorResult -Name 'exit_code' -Default -1)
+    supervisor_runner_status = [string](Get-PropertyValue -Payload $SupervisorPayload -Name 'status' -Default '')
+    supervisor_state_path = 'runtime/lens-host-supervisor/status.json'
+    running_state_source = 'supervisor_runner_observe'
+    running_state_status = [string](Get-PropertyValue -Payload $SupervisorProof -Name 'running_state_status' -Default '')
     running_pid = $RunningPid
     running_process_alive = $RunningObserved
-    stopped_state_status = [string](Get-PropertyValue -Payload $StoppedState -Name 'status' -Default '')
+    stopped_state_status = [string](Get-PropertyValue -Payload $SupervisorProof -Name 'stopped_state_status' -Default '')
     stopped_pid = $StoppedPid
-    same_process_observed = ($RunningPid -gt 0 -and $RunningPid -eq $StoppedPid)
+    stopped_process_alive = [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'stopped_process_alive' -Default $true)
+    same_process_observed = [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'same_process_observed' -Default $false)
     final_status_readback = [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'status' -Default '')
     final_status_state = [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'state_status' -Default '')
-    pid_file_present_after_stop = Test-Path -LiteralPath $PidPath -PathType Leaf
+    pid_file_present_after_stop = [bool](Get-PropertyValue -Payload $SupervisorProof -Name 'pid_file_present_after_stop' -Default (Test-Path -LiteralPath $PidPath -PathType Leaf))
   }
   next_smallest_truthful_gap = 'resident_host_process_supervision_or_resident_overlay_runtime'
   governance = [ordered]@{

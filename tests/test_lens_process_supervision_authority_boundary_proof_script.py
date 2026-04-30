@@ -48,7 +48,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         "-HostLaunchRunSeconds",
         "3",
         "-SupervisorRunSeconds",
-        "4",
+        "10",
     )
 
     assert proc.returncode == 0, proc.stderr

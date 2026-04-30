@@ -7,7 +7,7 @@ param(
   [int]$StartupTimeoutSeconds = 20,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 4,
+  [int]$SupervisorRunSeconds = 10,
 
   [string]$DataDir = '',
 

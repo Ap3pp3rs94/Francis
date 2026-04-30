@@ -253,7 +253,8 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
-$RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds 5
+$RunningObservationTimeout = [Math]::Max(5, $RunSeconds)
+$RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
 $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
 $RunningObserved = (
   [string](Get-PropertyValue -Payload $RunningState -Name 'state_status' -Default '') -eq 'foreground_running' -and

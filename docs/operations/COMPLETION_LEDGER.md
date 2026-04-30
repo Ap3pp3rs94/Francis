@@ -13528,6 +13528,60 @@ it; status/read-only coverage remains cross-platform:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-29 - Stage 6/Lens supervisor proof consumes bounded runner
+
+Stage 6/Lens host-supervisor observation proof now consumes the reusable
+`scripts/lens-host-supervisor.ps1 -Mode Observe` runner instead of duplicating
+the lifecycle observation inline. The proof starts one bounded diagnostic
+`scripts/lens-host.ps1 -Mode Launch` process asynchronously, lets the reusable
+supervisor runner observe the `foreground_running` and `foreground_stopped`
+runtime receipts, then verifies post-stop status readback.
+
+The proof payload now records `supervisor_runner`,
+`supervisor_runner_status`, `supervisor_runner_exit_code`,
+`supervisor_state_path`, `running_state_source:
+supervisor_runner_observe`, `stopped_process_alive`, and a
+`supervisor_runner_consumed` check. Downstream resident-overlay, activation,
+checkpoint, and process-supervision boundary proofs use a 10-second bounded
+supervisor observation window because the previous 4-second window was too
+tight when the reusable runner was consumed through nested proof chains. The
+supervisor runner now waits up to the bounded run window for the initial
+running-state receipt, and the Stage 6 checkpoint treats any passed
+supervisor-consuming proof in the chain as evidence for bounded supervisor
+observation.
+
+This is diagnostic/readback proof wiring only. It does not create a resident
+host, supervise or restart a process, install/start/stop/control a service,
+register tray presence, bind a global hotkey, open or control an overlay,
+summon Francis anywhere, write memory, decide approvals, create UI controls, or
+grant execution, approval-decision, memory-write, process-supervision,
+process-restart, service-control, overlay-control, window-management, summon,
+hotkey-registration, tray-registration, sensing, capture, telemetry, or
+resident-claim authority.
+
+Stage 6 remains blocked. This removes a proof-chain duplication gap and makes
+the existing supervisor runner a consumed source of truth, but it does not
+satisfy the resident host, resident overlay runtime, tray, hotkey, or
+summon-anywhere acceptance criteria.
+
+Latest targeted validation for the `2026-04-29` Stage 6/Lens supervisor proof
+runner consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor-observation-proof.ps1 -Mode Status`
+  Result: `passed`; proof reported `supervisor_runner_consumed` and
+  `supervisor_runner_status: observation_completed`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed` after checkpoint governance aggregation used the strongest
+  passed supervisor-consuming proof in the chain
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with expected PowerShell LF-to-CRLF warnings only
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

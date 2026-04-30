@@ -41,14 +41,14 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
-    proc = _run_proof("-Mode", "Status", "-RunSeconds", "4", "-DataDir", str(data_dir))
+    proc = _run_proof("-Mode", "Status", "-RunSeconds", "10", "-DataDir", str(data_dir))
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.host.supervisor_observation_proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["run_seconds"] == 4
+    assert payload["run_seconds"] == 10
     assert payload["bounded_supervisor_observed"] is True
     assert payload["supervision_observation_ready"] is True
     assert payload["supervisor_observed_running_state"] is True
@@ -72,7 +72,9 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["powershell_runtime"]["passed"] is True
     assert checks["host_status_runner"]["passed"] is True
+    assert checks["host_supervisor_runner"]["passed"] is True
     assert checks["bounded_launch_started"]["status"] == "launch_started_observed"
+    assert checks["supervisor_runner_consumed"]["status"] == "observation_completed"
     assert checks["supervisor_observed_running_state"]["status"] == "foreground_running_observed"
     assert checks["supervisor_observed_stopped_state"]["status"] == "foreground_stopped_observed"
     assert checks["status_readback_after_stop"]["status"] == "stopped_readback_ready"
@@ -85,6 +87,10 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert proof["launch_supported"] is True
     assert proof["launch_authority"] is False
     assert proof["diagnostic_launch_authority"] is True
+    assert proof["supervisor_runner"] == "scripts/lens-host-supervisor.ps1"
+    assert proof["supervisor_runner_exit_code"] == 0
+    assert proof["supervisor_runner_status"] == "observation_completed"
+    assert proof["running_state_source"] == "supervisor_runner_observe"
     assert proof["running_state_status"] == "foreground_running"
     assert proof["running_pid"] > 0
     assert proof["running_process_alive"] is True
@@ -121,4 +127,5 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     }
 
     assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
+    assert (data_dir / "runtime" / "lens-host-supervisor" / "status.json").is_file()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()

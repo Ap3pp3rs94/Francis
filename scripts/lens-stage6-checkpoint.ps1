@@ -10,7 +10,7 @@ param(
   [int]$HostLaunchRunSeconds = 3,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 4
+  [int]$SupervisorRunSeconds = 10
 )
 
 Set-StrictMode -Version 2
@@ -1044,8 +1044,8 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     live_http_readback = $true
     temporary_api_process = $true
-    bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
-    bounded_supervisor_observation = $HostSupervisorProofPassed
+    bounded_host_launch = ($HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
+    bounded_supervisor_observation = ($HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
     resident_overlay_boundary_observed = $ResidentOverlayRuntimeProofPassed
     resident_overlay_activation_boundary_observed = $ResidentOverlayActivationBoundaryProofPassed
     resident_runtime_authority_boundary_observed = $RuntimeBoundaryObserved
@@ -1067,7 +1067,7 @@ $Payload = [ordered]@{
     summon_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    local_process_launch_authority = ($HostLaunchProofPassed -or $HostSupervisorProofPassed)
+    local_process_launch_authority = ($HostLaunchProofPassed -or $HostSupervisorProofPassed -or $ResidentOverlayRuntimeProofPassed -or $ResidentOverlayActivationBoundaryProofPassed)
     api_local_process_launch_authority = $false
     activation_local_process_launch_authority = $false
     process_restart_authority = $false

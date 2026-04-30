@@ -13,7 +13,7 @@ param(
   [int]$HostLaunchRunSeconds = 3,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 4
+  [int]$SupervisorRunSeconds = 10
 )
 
 Set-StrictMode -Version 2
