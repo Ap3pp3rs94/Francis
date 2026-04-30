@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from francis.lens import (
     deny_lens_host_activation_execution,
+    deny_lens_host_persistent_supervision_enablement,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
     grant_lens_host_supervision_authority,
@@ -80,6 +81,11 @@ class LensHostSupervisionAuthorityRequestIn(BaseModel):
     reason: str = "request Lens host supervision authority review"
 
 
+class LensHostPersistentSupervisionEnablementIn(BaseModel):
+    actor: str | None = None
+    reason: str = "attempt Lens persistent supervision enablement"
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -129,6 +135,19 @@ def host_persistent_supervision() -> dict[str, Any]:
 @router.get("/host/persistent-supervision/enablement")
 def host_persistent_supervision_enablement() -> dict[str, Any]:
     return lens_host_persistent_supervision_enablement_preflight()
+
+
+@router.post("/host/persistent-supervision/enablement")
+def host_persistent_supervision_enablement_denial(
+    request: Request,
+    payload: LensHostPersistentSupervisionEnablementIn,
+) -> dict[str, Any]:
+    return deny_lens_host_persistent_supervision_enablement(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.get("/host/supervision/authority")

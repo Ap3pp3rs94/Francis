@@ -2773,9 +2773,60 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "mutation_authority_granted": False,
     }
 
+    enablement_denial = client.post(
+        "/lens/host/persistent-supervision/enablement",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove persistent supervision enablement stays denied without authority",
+        },
+    )
+    assert enablement_denial.status_code == 200
+    enablement_denial_body = enablement_denial.json()
+    assert enablement_denial_body["kind"] == "lens.host.persistent_supervision_enablement.denial"
+    assert enablement_denial_body["status"] == "blocked"
+    assert enablement_denial_body["route"] == "/lens/host/persistent-supervision/enablement"
+    assert enablement_denial_body["preflight_route"] == "/lens/host/persistent-supervision/enablement"
+    assert enablement_denial_body["plan_route"] == "/lens/host/persistent-supervision"
+    assert enablement_denial_body["authority_route"] == "/lens/host/supervision/authority"
+    assert enablement_denial_body["applied"] is False
+    assert enablement_denial_body["executed"] is False
+    assert enablement_denial_body["boundary_ready"] is True
+    assert enablement_denial_body["ready"] is False
+    assert enablement_denial_body["enablement_ready"] is False
+    assert enablement_denial_body["authority_grant_active"] is False
+    assert enablement_denial_body["active_grant_receipt_id"] == ""
+    assert enablement_denial_body["service_config_updated"] is False
+    assert "host_supervision_authority_grant_not_active" in enablement_denial_body["blockers"]
+    assert "persistent_supervision_enablement_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "service_config_write_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "system_write_scope_not_ready" not in enablement_denial_body["blockers"]
+    assert enablement_denial_body["denial"]["reason"] == "host_supervision_authority_grant_not_active"
+    assert enablement_denial_body["denial"]["would_update_service_config"] is False
+    assert enablement_denial_body["denial"]["would_enable_process_supervision"] is False
+    assert enablement_denial_body["denial"]["would_enable_persistent_supervision"] is False
+    assert enablement_denial_body["denial"]["would_install_service"] is False
+    assert enablement_denial_body["denial"]["would_start_service"] is False
+    assert enablement_denial_body["denial"]["would_supervise_process"] is False
+    assert enablement_denial_body["denial"]["would_restart_process"] is False
+    assert enablement_denial_body["denial"]["would_write_memory"] is False
+    assert enablement_denial_body["denial"]["would_claim_resident"] is False
+    assert enablement_denial_body["governance"]["gate"] == (
+        "lens_host_persistent_supervision_enablement_denial_boundary"
+    )
+    assert enablement_denial_body["governance"]["denial_boundary"] is True
+    assert enablement_denial_body["governance"]["execution_authority"] is False
+    assert enablement_denial_body["governance"]["approval_decision_authority"] is False
+    assert enablement_denial_body["governance"]["process_supervision_authority"] is False
+    assert enablement_denial_body["governance"]["service_config_write_authority"] is False
+    assert enablement_denial_body["governance"]["memory_write"] is False
+    assert enablement_denial_body["governance"]["resident_claim_authority"] is False
+    assert enablement_denial_body["governance"]["mutation_authority_granted"] is False
+
     status = client.get("/lens/status")
     assert status.status_code == 200
-    resident_host = status.json()["resident_host"]
+    status_body = status.json()
+    resident_host = status_body["resident_host"]
     assert resident_host["persistent_supervision_plan_route"] == "/lens/host/persistent-supervision"
     assert resident_host["persistent_supervision_plan"]["next_smallest_truthful_gap"] == (
         "persistent_supervision_authority_not_granted"
@@ -2786,6 +2837,19 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "persistent_supervision_authority_not_granted"
     )
     assert resident_host["persistent_supervision_enablement"]["plan"]["would_update_service_config"] is False
+    assert resident_host["persistent_supervision_enablement_denial_route"] == (
+        "/lens/host/persistent-supervision/enablement"
+    )
+    assert resident_host["persistent_supervision_enablement_denial"]["boundary_ready"] is True
+    persistent_denial_criterion = _criterion(status_body, "persistent_supervision_enablement_denial_boundary")
+    assert persistent_denial_criterion["status"] == "blocked"
+    assert persistent_denial_criterion["boundary_ready"] is True
+    assert persistent_denial_criterion["applied"] is False
+    assert persistent_denial_criterion["executed"] is False
+    assert persistent_denial_criterion["service_config_updated"] is False
+    assert persistent_denial_criterion["execution_authority"] is False
+    assert persistent_denial_criterion["service_config_write_authority"] is False
+    assert persistent_denial_criterion["memory_write"] is False
 
 
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
@@ -3487,14 +3551,72 @@ def test_lens_host_supervision_authority_grant_requires_approved_request_before_
     assert enablement_body["governance"]["memory_write"] is False
     assert enablement_body["governance"]["mutation_authority_granted"] is False
 
+    enablement_denial = client.post(
+        "/lens/host/persistent-supervision/enablement",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove persistent supervision enablement denies config mutation after authority lease",
+        },
+    )
+    assert enablement_denial.status_code == 200
+    enablement_denial_body = enablement_denial.json()
+    assert enablement_denial_body["kind"] == "lens.host.persistent_supervision_enablement.denial"
+    assert enablement_denial_body["status"] == "denied_no_service_config_write_authority"
+    assert enablement_denial_body["applied"] is False
+    assert enablement_denial_body["executed"] is False
+    assert enablement_denial_body["boundary_ready"] is True
+    assert enablement_denial_body["authority_grant_active"] is True
+    assert enablement_denial_body["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert enablement_denial_body["service_config_updated"] is False
+    assert "host_supervision_authority_grant_not_active" not in enablement_denial_body["blockers"]
+    assert "process_supervision_disabled" in enablement_denial_body["blockers"]
+    assert "persistent_supervision_disabled" in enablement_denial_body["blockers"]
+    assert "persistent_supervision_enablement_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "service_config_write_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in enablement_denial_body["blockers"]
+    assert "system_write_scope_not_ready" not in enablement_denial_body["blockers"]
+    assert enablement_denial_body["denial"]["reason"] == "service_config_write_authority_not_granted"
+    assert enablement_denial_body["denial"]["would_update_service_config"] is False
+    assert enablement_denial_body["denial"]["would_enable_process_supervision"] is False
+    assert enablement_denial_body["denial"]["would_enable_persistent_supervision"] is False
+    assert enablement_denial_body["denial"]["would_install_service"] is False
+    assert enablement_denial_body["denial"]["would_start_service"] is False
+    assert enablement_denial_body["denial"]["would_supervise_process"] is False
+    assert enablement_denial_body["denial"]["would_restart_process"] is False
+    assert enablement_denial_body["denial"]["would_write_memory"] is False
+    assert enablement_denial_body["denial"]["would_claim_resident"] is False
+    assert enablement_denial_body["governance"]["denial_boundary"] is True
+    assert enablement_denial_body["governance"]["execution_authority"] is False
+    assert enablement_denial_body["governance"]["approval_decision_authority"] is False
+    assert enablement_denial_body["governance"]["process_supervision_authority"] is False
+    assert enablement_denial_body["governance"]["service_config_write_authority"] is False
+    assert enablement_denial_body["governance"]["memory_write"] is False
+    assert enablement_denial_body["governance"]["resident_claim_authority"] is False
+
     status = client.get("/lens/status?limit=10")
     assert status.status_code == 200
-    resident_host = status.json()["resident_host"]
+    status_body = status.json()
+    resident_host = status_body["resident_host"]
     assert resident_host["persistent_supervision_enablement_route"] == ("/lens/host/persistent-supervision/enablement")
     assert resident_host["persistent_supervision_enablement"]["active_grant_receipt_id"] == receipt["receipt_id"]
     assert resident_host["persistent_supervision_enablement"]["next_smallest_truthful_gap"] == (
         "persistent_supervision_enablement_disabled"
     )
+    assert resident_host["persistent_supervision_enablement_denial_route"] == (
+        "/lens/host/persistent-supervision/enablement"
+    )
+    assert resident_host["persistent_supervision_enablement_denial"]["boundary_ready"] is True
+    assert resident_host["persistent_supervision_enablement_denial"]["authority_grant_active"] is True
+    assert resident_host["persistent_supervision_enablement_denial"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    persistent_denial_criterion = _criterion(status_body, "persistent_supervision_enablement_denial_boundary")
+    assert persistent_denial_criterion["boundary_ready"] is True
+    assert persistent_denial_criterion["applied"] is False
+    assert persistent_denial_criterion["executed"] is False
+    assert persistent_denial_criterion["authority_grant_active"] is True
+    assert persistent_denial_criterion["service_config_updated"] is False
+    assert persistent_denial_criterion["execution_authority"] is False
+    assert persistent_denial_criterion["service_config_write_authority"] is False
+    assert persistent_denial_criterion["memory_write"] is False
     assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

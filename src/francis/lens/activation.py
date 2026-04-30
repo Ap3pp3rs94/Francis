@@ -14,6 +14,7 @@ from francis.governance.redaction import redact_governed_display_value, redact_s
 from francis.kernel.paths import data_dir
 from francis.lens.host_manifest import (
     lens_host_launch_manifest,
+    lens_host_persistent_supervision_enablement_preflight,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
@@ -39,6 +40,7 @@ LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE = "/lens/host/supervision/author
 LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION = "lens.host.supervision_authority"
 LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE = "/lens/host/supervision/authority/request"
 LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE = "/lens/host/supervision/authority/requests"
+LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE = "/lens/host/persistent-supervision/enablement"
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
@@ -3402,6 +3404,134 @@ def deny_lens_host_supervision_authority_grant(
         record_receipt=record_receipt,
         lease_seconds=lease_seconds,
     )
+
+
+def _persistent_supervision_enablement_boundary_status(blockers: list[str]) -> tuple[str, str]:
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_persistent_supervision_enablement"
+    if "host_supervision_authority_grant_not_active" in blockers:
+        return "blocked", "grant_host_supervision_authority_before_persistent_supervision_enablement"
+    return (
+        "denied_no_service_config_write_authority",
+        "review_persistent_supervision_enablement_denial_before_config_write_authority",
+    )
+
+
+def deny_lens_host_persistent_supervision_enablement(
+    *,
+    actor: Any = "",
+    reason: Any = "attempt Lens persistent supervision enablement",
+    route: str = LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE
+    safe_method = _safe_str(method).strip() or "POST"
+    permission = _permission_readiness(actor, route=safe_route, method=safe_method)
+    preflight = lens_host_persistent_supervision_enablement_preflight()
+    preflight_plan = _as_dict(preflight.get("plan"))
+    blockers = _str_list(preflight.get("blockers"))
+    if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
+        blockers.append("system_write_scope_not_ready")
+    blockers.extend(
+        [
+            "persistent_supervision_enablement_authority_not_granted",
+            "service_config_write_authority_not_granted",
+            "persistent_supervision_execution_authority_not_granted",
+        ]
+    )
+    deduped_blockers = _dedupe_strs(blockers)
+    status, next_step = _persistent_supervision_enablement_boundary_status(deduped_blockers)
+    denial = {
+        "reason": (
+            "host_supervision_authority_grant_not_active"
+            if "host_supervision_authority_grant_not_active" in deduped_blockers
+            else "service_config_write_authority_not_granted"
+        ),
+        "message": (
+            "Persistent Lens host supervision enablement is denied until an explicit service-config "
+            "write boundary exists; this route does not enable supervision or mutate resident runtime state."
+        ),
+        "would_update_service_config": False,
+        "would_enable_process_supervision": False,
+        "would_enable_persistent_supervision": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+        "denial_receipt_written": False,
+    }
+    return {
+        "ok": True,
+        "kind": "lens.host.persistent_supervision_enablement.denial",
+        "status": status,
+        "route": safe_route,
+        "method": safe_method,
+        "preflight_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
+        "plan_route": "/lens/host/persistent-supervision",
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "authority_grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "applied": False,
+        "executed": False,
+        "boundary_ready": True,
+        "ready": False,
+        "enablement_ready": False,
+        "persistent_supervision_ready": False,
+        "resident_claim_allowed": False,
+        "authority_granted": False,
+        "authority_grant_active": bool(preflight.get("authority_grant_active")),
+        "active_grant_receipt_id": _safe_str(preflight.get("active_grant_receipt_id")).strip(),
+        "process_supervision_enabled": bool(preflight.get("process_supervision_enabled")),
+        "persistent_supervision_enabled": bool(preflight.get("persistent_supervision_enabled")),
+        "service_config_updated": False,
+        "permission": permission,
+        "preflight": preflight,
+        "plan": {
+            "mode": "persistent_supervision_enablement_denial",
+            "service_name": _safe_str(preflight_plan.get("service_name")).strip(),
+            "would_update_service_config": False,
+            "would_enable_process_supervision": False,
+            "would_enable_persistent_supervision": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_write_receipt": False,
+            "would_write_memory": False,
+            "would_claim_resident": False,
+        },
+        "blockers": deduped_blockers,
+        "denial": denial,
+        "governance": {
+            "gate": "lens_host_persistent_supervision_enablement_denial_boundary",
+            "route": safe_route,
+            "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+            "denial_boundary": True,
+            "persistent_supervision_boundary": True,
+            "read_only_contract": False,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "service_config_write_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "memory_write": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+            "authority_granted": False,
+            "next_step": next_step,
+        },
+    }
 
 
 def lens_resident_runtime_activation_plan(

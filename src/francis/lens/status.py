@@ -8,6 +8,7 @@ from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
+    deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_supervision_authority_grant,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
@@ -262,6 +263,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     persistent_supervision_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
     persistent_supervision_enablement = lens_host_persistent_supervision_enablement_preflight(manifest=launch_manifest)
+    persistent_supervision_enablement_denial = deny_lens_host_persistent_supervision_enablement()
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     supervision_authority_request = lens_host_supervision_authority_request_contract()
     supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
@@ -417,6 +419,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "persistent_supervision_plan": persistent_supervision_plan,
         "persistent_supervision_enablement_route": _safe_str(persistent_supervision_enablement.get("route")).strip(),
         "persistent_supervision_enablement": persistent_supervision_enablement,
+        "persistent_supervision_enablement_denial_route": _safe_str(
+            persistent_supervision_enablement_denial.get("route")
+        ).strip(),
+        "persistent_supervision_enablement_denial": persistent_supervision_enablement_denial,
         "supervision_authority_request_route": _safe_str(supervision_authority_request.get("route")).strip(),
         "supervision_authority_request": supervision_authority_request,
         "supervision_authority_requests_route": _safe_str(supervision_authority_requests.get("route")).strip(),
@@ -1230,6 +1236,62 @@ def _stage6_readiness(
                 "receipt_write_authority": False,
                 "resident_claim_authority": False,
                 "blockers": _as_list(_as_dict(resident_host.get("supervision_gate")).get("blockers")),
+            },
+            {
+                "id": "persistent_supervision_enablement_denial_boundary",
+                "status": _safe_str(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("status")
+                ).strip()
+                or "missing",
+                "evidence": [
+                    "/lens/host/persistent-supervision/enablement",
+                    "/lens/host/persistent-supervision",
+                    "/lens/status",
+                ],
+                "boundary_ready": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("boundary_ready")
+                ),
+                "applied": bool(_as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("applied")),
+                "executed": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("executed")
+                ),
+                "ready": bool(_as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("ready")),
+                "enablement_ready": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("enablement_ready")
+                ),
+                "authority_granted": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("authority_granted")
+                ),
+                "authority_grant_active": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get(
+                        "authority_grant_active"
+                    )
+                ),
+                "service_config_updated": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get(
+                        "service_config_updated"
+                    )
+                ),
+                "resident_claim_allowed": bool(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get(
+                        "resident_claim_allowed"
+                    )
+                ),
+                "blockers": _as_list(
+                    _as_dict(resident_host.get("persistent_supervision_enablement_denial")).get("blockers")
+                ),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "service_config_write_authority": False,
+                "receipt_write_authority": False,
+                "denial_receipt_write_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
             },
             {
                 "id": "resident_host_supervision_authority_preflight",
