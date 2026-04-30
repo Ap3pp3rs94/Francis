@@ -405,6 +405,41 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_readiness_audit"]["memory_write"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["receipt_write_authority"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["denial_receipt_write_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["status"] == "blocked"
+    assert payload["persistent_supervision_enablement_denial_boundary"]["ok"] is True
+    assert (
+        "/lens/host/persistent-supervision/enablement"
+        in (payload["persistent_supervision_enablement_denial_boundary"]["evidence"])
+    )
+    assert payload["persistent_supervision_enablement_denial_boundary"]["boundary_ready"] is True
+    assert payload["persistent_supervision_enablement_denial_boundary"]["applied"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["executed"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["authority_granted"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["enablement_ready"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["resident_claim_allowed"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["service_config_updated"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["authority_grant_active"] is False
+    assert (
+        "host_supervision_authority_grant_not_active"
+        in (payload["persistent_supervision_enablement_denial_boundary"]["blockers"])
+    )
+    assert (
+        "persistent_supervision_enablement_authority_not_granted"
+        in (payload["persistent_supervision_enablement_denial_boundary"]["blockers"])
+    )
+    assert (
+        "service_config_write_authority_not_granted"
+        in (payload["persistent_supervision_enablement_denial_boundary"]["blockers"])
+    )
+    assert payload["persistent_supervision_enablement_denial_boundary"]["execution_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["approval_decision_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["process_supervision_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["process_restart_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["service_config_write_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["service_control_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["memory_write"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["receipt_write_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["denial_receipt_write_authority"] is False
     assert payload["resident_runtime_activation_plan"]["status"] == "blocked"
     assert payload["resident_runtime_activation_plan"]["ok"] is True
     assert payload["resident_runtime_activation_plan"]["plan_available"] is True
@@ -613,6 +648,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,
         "resident_host_supervision_authority_grant_receipt_readback_observed": True,
         "resident_host_supervision_authority_readiness_audit_observed": True,
+        "persistent_supervision_enablement_denial_boundary_observed": True,
         "temporary_runtime_state_write": True,
         "execution_authority": False,
         "approval_decision_authority": False,

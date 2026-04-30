@@ -14775,6 +14775,38 @@ supervision enablement denial boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens audit consumes persistent supervision enablement denial
+
+Stage 6/Lens checkpoint and completion-audit proof now consume the
+`persistent_supervision_enablement_denial_boundary` readiness criterion exposed
+by `/lens/status`. `scripts/lens-stage6-checkpoint.ps1 -Mode Status` now
+includes the denial boundary in its readback payload and requires it before
+handing off to `stage6_lens_completion_audit`. The completion audit now
+projects the same boundary into closure blockers, evidence, governance readback,
+and `persistent_supervision_enablement_denial_boundary` details.
+
+This is proof/readback-only. It does not update service configuration, enable
+process or persistent supervision, install or start a service, supervise or
+restart a process, write receipts, write memory, decide approvals, grant UI
+authority, or claim a resident Lens host. Stage 6 remains active and blocked.
+The audit now names the current next smallest truthful gap as
+`persistent_supervision_enablement_authority_not_granted` instead of the older
+plan-only `persistent_supervision_authority_not_granted` blocker.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens audit consumption
+of persistent-supervision enablement denial:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -14866,11 +14898,16 @@ These remain true and should block any "finished" claim:
   service-control authority blockers,
   plus a direct read-only `/lens/host/persistent-supervision` API plan readback
   that exposes the remaining persistent-supervision, restart, service-control,
-  receipt-write, and resident-claim blockers through `/lens/status`,
+  receipt-write, and resident-claim blockers through `/lens/status`, plus a
+  governed non-mutating `POST /lens/host/persistent-supervision/enablement`
+  denial boundary and Stage 6 checkpoint/completion-audit consumption that keep
+  service-config write, persistent-supervision execution, receipt-write, memory,
+  and resident-claim authority denied while naming
+  `persistent_supervision_enablement_authority_not_granted` as the current
+  audit blocker,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
-  reports `do_not_close_stage6`, groups closure blockers, and now moves the next
-  concrete blocker past direct content readback and toward resident runtime
-  supervision,
+  reports `do_not_close_stage6` and groups closure blockers without allowing
+  Stage 6 transition,
   plus a live HTTP operator-experience readback proof that verifies the Lens
   status payload through a temporary local API process, plus resident-surface
   proof consumption of that live operator proof so operator experience is no
