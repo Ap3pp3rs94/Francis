@@ -2062,9 +2062,31 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     supervision_authority_response = client.get("/lens/host/supervision/authority")
     assert supervision_authority_response.status_code == 200
     assert supervision_authority_response.json() == supervision_authority
+    supervision_authority_request = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants to review host supervision authority",
+        },
+    )
+    assert supervision_authority_request.status_code == 200
+    supervision_authority_approval_id = str(supervision_authority_request.json()["approval_id"])
+    assert supervision_authority_approval_id
+    supervision_authority_decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": supervision_authority_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as a host supervision authority review decision",
+        },
+    )
+    assert supervision_authority_decision.status_code == 200
+    assert supervision_authority_decision.json()["status"] == "approved"
     supervision_authority_denial_response = client.post(
         "/lens/host/supervision/authority",
         json={
+            "approval_id": supervision_authority_approval_id,
             "actor": "test.system.write",
             "reason": "operator asked to prove host supervision authority stays denied",
         },
@@ -2075,6 +2097,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_body["status"] == "denied_no_supervision_authority"
     assert supervision_authority_denial_body["route"] == "/lens/host/supervision/authority"
     assert supervision_authority_denial_body["method"] == "POST"
+    assert supervision_authority_denial_body["approval_id"] == supervision_authority_approval_id
+    assert supervision_authority_denial_body["approval"]["found"] is True
+    assert supervision_authority_denial_body["approval"]["status"] == "approved"
+    assert supervision_authority_denial_body["approval"]["approved"] is True
     assert supervision_authority_denial_body["actor"] == "test.system.write"
     assert supervision_authority_denial_body["permission"]["ready"] is True
     assert supervision_authority_denial_body["boundary_ready"] is True
@@ -2105,6 +2131,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_receipt["status"] == "denied_no_supervision_authority"
     assert supervision_authority_denial_receipt["route"] == "/lens/host/supervision/authority"
     assert supervision_authority_denial_receipt["source_kind"] == "lens.host.supervision_authority.denial"
+    assert supervision_authority_denial_receipt["approval_id"] == supervision_authority_approval_id
+    assert supervision_authority_denial_receipt["approval"]["approved"] is True
     assert supervision_authority_denial_receipt["actor"] == "test.system.write"
     assert supervision_authority_denial_receipt["permission"]["ready"] is True
     assert supervision_authority_denial_receipt["preflight"]["preflight_ready"] is True
@@ -2137,7 +2165,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denial_body["governance"]["receipt_write_authority"] is False
     assert supervision_authority_denial_body["governance"]["denial_receipt_write_authority"] is True
     supervision_authority_denials_response = client.get(
-        "/lens/host/supervision/authority/denials?limit=10&status=denied_no_supervision_authority"
+        "/lens/host/supervision/authority/denials"
+        f"?limit=10&approval_id={supervision_authority_approval_id}&status=denied_no_supervision_authority"
     )
     assert supervision_authority_denials_response.status_code == 200
     supervision_authority_denials_body = supervision_authority_denials_response.json()
@@ -2145,6 +2174,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denials_body["status"] == "readback_ready"
     assert supervision_authority_denials_body["route"] == "/lens/host/supervision/authority/denials"
     assert supervision_authority_denials_body["authority_route"] == "/lens/host/supervision/authority"
+    assert supervision_authority_denials_body["approval_id"] == supervision_authority_approval_id
     assert supervision_authority_denials_body["filter_status"] == "denied_no_supervision_authority"
     assert supervision_authority_denials_body["total"] == 1
     assert (
@@ -2164,7 +2194,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_denials_body["governance"]["service_control_authority"] is False
     assert supervision_authority_denials_body["governance"]["memory_write"] is False
     supervision_authority_readiness_response = client.get(
-        "/lens/host/supervision/authority/readiness?limit=10&actor=test.system.write"
+        "/lens/host/supervision/authority/readiness"
+        f"?limit=10&approval_id={supervision_authority_approval_id}&actor=test.system.write"
     )
     assert supervision_authority_readiness_response.status_code == 200
     supervision_authority_readiness_body = supervision_authority_readiness_response.json()
@@ -2174,6 +2205,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness_body["route"] == "/lens/host/supervision/authority/readiness"
     assert supervision_authority_readiness_body["authority_route"] == "/lens/host/supervision/authority"
     assert supervision_authority_readiness_body["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert supervision_authority_readiness_body["approval_id"] == supervision_authority_approval_id
     assert supervision_authority_readiness_body["ready"] is False
     assert supervision_authority_readiness_body["preflight_ready"] is True
     assert supervision_authority_readiness_body["authority_ready"] is False
@@ -2186,12 +2218,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         supervision_authority_readiness_body["latest_receipt_id"] == supervision_authority_denial_receipt["receipt_id"]
     )
     direct_readiness_requirements = {item["id"]: item for item in supervision_authority_readiness_body["requirements"]}
+    assert direct_readiness_requirements["exact_supervision_authority_approval"]["ready"] is True
     assert direct_readiness_requirements["actor_scope"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
     assert direct_readiness_requirements["authority_grant_implementation"]["ready"] is False
     assert "actor_scope" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert "exact_supervision_authority_approval" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "process_supervision_authority" in supervision_authority_readiness_body["blocked_requirements"]
     assert "service_control_authority" in supervision_authority_readiness_body["blocked_requirements"]
     assert "resident_claim_authority" in supervision_authority_readiness_body["blocked_requirements"]
@@ -2930,6 +2964,139 @@ def test_lens_host_supervision_authority_request_creates_approval_only_receipt(
     assert command["write_guard"] == "system.write approval request; no supervision authority"
     assert command["execution_authority"] is False
     assert command["approval_decision_authority"] is False
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervision_authority_grant_requires_approved_request_before_denial_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    missing_approval = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "actor": "test.system.write",
+            "reason": "try host supervision authority without exact approval",
+        },
+    )
+    assert missing_approval.status_code == 200
+    missing_body = missing_approval.json()
+    assert missing_body["status"] == "blocked"
+    assert missing_body["approval_id"] == ""
+    assert missing_body["approval"]["required"] is True
+    assert missing_body["approval"]["found"] is False
+    assert missing_body["approval"]["approved"] is False
+    assert "approval_id_required" in missing_body["blockers"]
+    assert missing_body["receipt_written"] is False
+    assert missing_body["governance"]["denial_receipt_write_authority"] is False
+    assert missing_body["governance"]["denial_receipt_write_blocker"] == "host_supervision_authority_not_ready"
+
+    requested = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants host supervision authority reviewed",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+    assert approval_id
+
+    pending_attempt = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "try host supervision authority before approval decision",
+        },
+    )
+    assert pending_attempt.status_code == 200
+    pending_body = pending_attempt.json()
+    assert pending_body["status"] == "blocked"
+    assert pending_body["approval_id"] == approval_id
+    assert pending_body["approval"]["status"] == "pending"
+    assert pending_body["approval"]["approved"] is False
+    assert "supervision_authority_approval_not_approved" in pending_body["blockers"]
+    assert pending_body["receipt_written"] is False
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as a host supervision authority review decision",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    approved_attempt = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "prove approved host supervision authority still denies execution",
+        },
+    )
+    assert approved_attempt.status_code == 200
+    approved_body = approved_attempt.json()
+    assert approved_body["status"] == "denied_no_supervision_authority"
+    assert approved_body["approval_id"] == approval_id
+    assert approved_body["approval"]["found"] is True
+    assert approved_body["approval"]["status"] == "approved"
+    assert approved_body["approval"]["approved"] is True
+    assert "approval_id_required" not in approved_body["blockers"]
+    assert "supervision_authority_approval_not_approved" not in approved_body["blockers"]
+    assert "host_supervision_authority_grant_not_implemented" in approved_body["blockers"]
+    assert "process_supervision_authority_not_granted" in approved_body["blockers"]
+    assert approved_body["authority_granted"] is False
+    assert approved_body["applied"] is False
+    assert approved_body["executed"] is False
+    assert approved_body["receipt_written"] is True
+    receipt = approved_body["receipt"]
+    assert receipt["approval_id"] == approval_id
+    assert receipt["approval"]["approved"] is True
+    assert receipt["authority_boundary"]["authority_granted"] is False
+
+    denials = client.get(f"/lens/host/supervision/authority/denials?limit=10&approval_id={approval_id}")
+    assert denials.status_code == 200
+    denials_body = denials.json()
+    assert denials_body["approval_id"] == approval_id
+    assert denials_body["total"] == 1
+    assert denials_body["items"][0]["approval_id"] == approval_id
+    assert denials_body["items"][0]["approval"]["approved"] is True
+
+    readiness = client.get(
+        f"/lens/host/supervision/authority/readiness?limit=10&approval_id={approval_id}&actor=test.system.write"
+    )
+    assert readiness.status_code == 200
+    readiness_body = readiness.json()
+    assert readiness_body["approval_id"] == approval_id
+    requirements = {item["id"]: item for item in readiness_body["requirements"]}
+    assert requirements["exact_supervision_authority_approval"]["ready"] is True
+    assert "exact_supervision_authority_approval" not in readiness_body["blocked_requirements"]
+    assert "host_supervision_authority_grant_not_implemented" in readiness_body["blockers"]
+    assert readiness_body["receipt_count"] == 1
     assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

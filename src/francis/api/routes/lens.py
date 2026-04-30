@@ -67,6 +67,7 @@ class LensResidentRuntimeAuthorityGrantIn(BaseModel):
 
 class LensHostSupervisionAuthorityGrantIn(BaseModel):
     actor: str | None = None
+    approval_id: str = ""
     reason: str = "attempt Lens host supervision authority grant"
 
 
@@ -124,9 +125,10 @@ def host_supervision_authority() -> dict[str, Any]:
 @router.get("/host/supervision/authority/readiness")
 def host_supervision_authority_readiness(
     limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
     actor: str = "",
 ) -> dict[str, Any]:
-    return lens_host_supervision_authority_readiness_audit(actor=actor, limit=limit)
+    return lens_host_supervision_authority_readiness_audit(approval_id=approval_id, actor=actor, limit=limit)
 
 
 @router.get("/host/supervision/authority/requests")
@@ -137,9 +139,10 @@ def host_supervision_authority_requests(limit: int = Query(5, ge=1, le=50)) -> d
 @router.get("/host/supervision/authority/denials")
 def host_supervision_authority_denials(
     limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
     status: str = "",
 ) -> dict[str, Any]:
-    return lens_host_supervision_authority_denial_receipts(limit=limit, status=status)
+    return lens_host_supervision_authority_denial_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
 @router.post("/host/supervision/authority/request")
@@ -161,6 +164,7 @@ def host_supervision_authority_grant(
     payload: LensHostSupervisionAuthorityGrantIn,
 ) -> dict[str, Any]:
     return deny_lens_host_supervision_authority_grant(
+        approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,

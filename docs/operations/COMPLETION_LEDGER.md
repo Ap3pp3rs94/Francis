@@ -14264,6 +14264,47 @@ authority request readback:
 - `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens host supervision authority grant approval binding
+
+Stage 6/Lens now requires an exact approved host supervision authority request
+before the `POST /lens/host/supervision/authority` grant boundary can advance
+from `blocked` into its existing denial receipt path. The grant boundary now
+accepts `approval_id`, verifies the request action `lens.host.supervision_authority`,
+distinguishes missing, wrong, pending, and approved approval states, and records
+the selected approval id/status in denial receipts only after the exact request
+is approved. The denial receipt readback route and readiness audit now accept
+`approval_id` filters, and the readiness audit includes an explicit
+`exact_supervision_authority_approval` requirement.
+
+This slice still does not grant process supervision, process restart, service
+install, service control, local process launch, resident claim, approval-decision,
+memory-write, overlay, tray, hotkey, summon, or execution authority. It does not
+start, supervise, restart, install, or stop a Lens host process. It only tightens
+the approval-bound grant preflight and receipt readback needed before a truthful
+resident host supervision implementation can exist.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+actual supervised resident host process path behind explicit process supervision,
+restart, service-control, resident-claim, and receipt authority.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervision
+authority grant approval binding:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_denial_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_request_creates_approval_only_receipt tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_denial_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
