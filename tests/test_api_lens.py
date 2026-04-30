@@ -893,6 +893,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["supervision_ready"] is False
     assert supervision_gate["resident_claim_allowed"] is False
     assert supervision_gate["resident_host_process"] is False
+    assert supervision_gate["foreground_process_observed"] is False
+    assert supervision_gate["resident_host_process_state"] == "missing"
+    assert supervision_gate["resident_host_process_blocker"] == "resident_host_process_missing"
     assert supervision_gate["resident_host_supervised"] is False
     assert supervision_gate["service_installed"] is False
     assert supervision_gate["service_managed"] is False
@@ -904,6 +907,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["would_supervise_process"] is False
     assert supervision_gate["would_restart_process"] is False
     assert supervision_gate["next_allowed_transition"] == "foreground_status_session_only"
+    assert "resident_host_process_missing" in supervision_gate["blockers"]
     assert "process_supervision_enabled" in supervision_gate["blockers"]
     assert "service_install_authority" in supervision_gate["blockers"]
     assert "service_control_authority" in supervision_gate["blockers"]
@@ -2515,6 +2519,13 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     ]
     assert resident_host["supervision_readiness"]["prerequisites"][3]["id"] == "foreground_process_readback"
     assert resident_host["supervision_readiness"]["prerequisites"][3]["status"] == "process_observed"
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["resident_host_process"] is True
+    assert supervision_gate["foreground_process_observed"] is True
+    assert supervision_gate["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert supervision_gate["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert "resident_host_process_missing" not in supervision_gate["blockers"]
+    assert "resident_host_process_not_supervised" in supervision_gate["blockers"]
     assert "resident_host_process_missing" not in resident_host["blockers"]
     assert "lens_host_runtime_not_implemented" in resident_host["blockers"]
     assert resident_host["governance"]["service_control_authority"] is False

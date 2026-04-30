@@ -376,6 +376,8 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
     blocked_by = sorted({*service_plan_blockers, *supervision_blockers, *manifest_blockers})
     supervision_ready = bool(supervision_readiness.get("ready"))
     process_alive = bool(process_readback.get("process_alive"))
+    host_process_blocker = "resident_host_process_not_supervised" if process_alive else "resident_host_process_missing"
+    blocked_by = sorted({*blocked_by, host_process_blocker})
     service_managed = bool(service_readback.get("installed")) and bool(
         supervision_readiness.get("service_control_authority")
     )
@@ -397,6 +399,9 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "supervision_ready": supervision_ready,
         "resident_claim_allowed": resident_claim_allowed,
         "resident_host_process": process_alive,
+        "foreground_process_observed": process_alive,
+        "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
+        "resident_host_process_blocker": host_process_blocker,
         "resident_host_supervised": False,
         "service_installed": bool(service_readback.get("installed")),
         "service_managed": service_managed,

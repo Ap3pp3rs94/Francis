@@ -13944,6 +13944,52 @@ window stabilization:
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens host supervision process-state blockers
+
+Stage 6/Lens direct resident-host supervision readback now normalizes host
+process state into explicit blocker language on `/lens/host/supervision` and
+the embedded `/lens/status` resident-host surface. When no foreground Lens host
+process is present, the supervision gate includes
+`resident_host_process_missing`. When a bounded foreground host process is
+observed, the same gate reports `foreground_process_observed: true`,
+`resident_host_process_state: foreground_observed_not_supervised`, and includes
+`resident_host_process_not_supervised` instead of the missing-process blocker.
+
+This is backend readback/API contract truth only. It does not launch a resident
+host, supervise or restart a process, install/start/stop/control a service,
+register tray presence, bind a hotkey, open/control an overlay, summon Francis
+anywhere, write memory, decide approvals, create UI controls, or grant
+execution, approval-decision, memory-write, process-supervision,
+process-restart, service-control, overlay-control, summon, hotkey-registration,
+tray-registration, capture, telemetry, or resident-claim authority.
+
+Stage 6 remains blocked. The direct gate now gives downstream Lens surfaces a
+truthful distinction between "no host process" and "foreground host observed but
+not supervised"; the next truthful gap remains making a supervised resident
+runtime real behind the existing approval, authority, supervision,
+service-control, tray, hotkey, overlay, and resident-claim gates.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens host supervision
+process-state blockers:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed` with expected local Ruff cache access warning.
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed` with expected local Ruff cache access warning.
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; status remains `blocked`, `ready_to_close: false`,
+  `next_smallest_truthful_gap: resident_surface_runtime_not_supervised`.
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
