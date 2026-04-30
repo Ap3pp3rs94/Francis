@@ -117,3 +117,119 @@ def test_service_install_plan_accepts_lens_host_config_without_mutation(tmp_path
         "mutation_authority_granted": False,
     }
     assert not (root / "data" / "runtime" / "services" / "Francis-LensHost" / "run.cmd").exists()
+
+
+@pytest.mark.parametrize(
+    ("mode", "extra_args", "expected_blockers"),
+    [
+        (
+            "Install",
+            [],
+            {
+                "installable_false",
+                "install_authority_false",
+                "service_install_authority_false",
+                "service_control_authority_false",
+            },
+        ),
+        (
+            "Update",
+            [],
+            {
+                "installable_false",
+                "install_authority_false",
+                "service_install_authority_false",
+                "service_control_authority_false",
+            },
+        ),
+        ("Start", [], {"service_control_authority_false"}),
+        ("Stop", [], {"service_control_authority_false"}),
+        ("Restart", [], {"service_control_authority_false"}),
+        ("Uninstall", ["-Force"], {"service_install_authority_false", "service_control_authority_false"}),
+    ],
+)
+def test_service_install_mutating_modes_fail_closed_when_config_denies_authority(
+    tmp_path: Path,
+    mode: str,
+    extra_args: list[str],
+    expected_blockers: set[str],
+) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows service mutation authority is only asserted on Windows")
+
+    root = tmp_path / "francis-root"
+    script_dir = root / "scripts"
+    script_dir.mkdir(parents=True)
+    (script_dir / "lens-host.ps1").write_text("'status only'\n", encoding="utf-8")
+
+    config_dir = root / "config" / "runtime" / "services"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "lens-host.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.service_config",
+                "version": 1,
+                "enabled": False,
+                "service_name": "Francis-LensHost",
+                "display_name": "Francis Lens Host",
+                "description": "Disabled readiness baseline for the future resident Lens host.",
+                "service_executable": _powershell(),
+                "service_arguments": [
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "scripts/lens-host.ps1",
+                    "-Mode",
+                    "Foreground",
+                ],
+                "working_dir": str(root),
+                "use_wrapper": True,
+                "start_type": "Manual",
+                "installable": False,
+                "install_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "start_after_install": False,
+                "blocked_reason": "lens_host_runtime_not_implemented",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "service-install.ps1"),
+            "-Mode",
+            mode,
+            "-Root",
+            str(root),
+            "-ConfigPath",
+            str(config_path),
+            *extra_args,
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 1
+    reports = sorted((root / "data" / "logs" / "operations").glob("service_install_report_*.json"))
+    assert reports, proc.stdout
+    report = json.loads(reports[-1].read_text(encoding="utf-8-sig"))
+    assert report["mode"] == mode
+    assert len(report["actions"]) == 1
+    action = report["actions"][0]
+    assert action["Service"] == "Francis-LensHost"
+    assert action["Action"] == mode
+    assert action["Result"] == "BLOCKED"
+    for blocker in expected_blockers:
+        assert blocker in action["Notes"]
+    assert not (root / "data" / "runtime" / "services" / "Francis-LensHost" / "run.cmd").exists()

@@ -733,6 +733,31 @@ function Get-ServiceDefs {
   return @($def)
 }
 
+function Get-ServiceAuthorityBlockers {
+  param(
+    [Parameter(Mandatory=$true)]$Definition,
+    [Parameter(Mandatory=$true)][string]$Operation
+  )
+
+  $blockers = New-Object System.Collections.Generic.List[string]
+
+  if($Operation -in @('Install','Update')){
+    if(-not [bool]$Definition.installable){ $blockers.Add('installable_false') | Out-Null }
+    if(-not [bool]$Definition.installAuthority){ $blockers.Add('install_authority_false') | Out-Null }
+    if(-not [bool]$Definition.serviceInstallAuthority){ $blockers.Add('service_install_authority_false') | Out-Null }
+    if(-not [bool]$Definition.serviceControlAuthority){ $blockers.Add('service_control_authority_false') | Out-Null }
+  }
+  elseif($Operation -in @('Start','Stop','Restart')){
+    if(-not [bool]$Definition.serviceControlAuthority){ $blockers.Add('service_control_authority_false') | Out-Null }
+  }
+  elseif($Operation -eq 'Uninstall'){
+    if(-not [bool]$Definition.serviceInstallAuthority){ $blockers.Add('service_install_authority_false') | Out-Null }
+    if(-not [bool]$Definition.serviceControlAuthority){ $blockers.Add('service_control_authority_false') | Out-Null }
+  }
+
+  return @($blockers.ToArray())
+}
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -760,6 +785,25 @@ try {
   foreach($d in $defs){
     if([string]::IsNullOrWhiteSpace($d.name)){
       throw "Service definition missing name."
+    }
+  }
+
+  $authorityBlockedServices = @{}
+  $authorityAllowedServiceCount = 0
+  if($Mode -in @('Install','Update','Uninstall','Start','Stop','Restart')){
+    foreach($d in $defs){
+      $name = [string]$d.name
+      $authorityBlockers = @(Get-ServiceAuthorityBlockers -Definition $d -Operation $Mode)
+      if($authorityBlockers.Count -gt 0){
+        $authorityBlockedServices[$name] = $true
+        $notes = "authority_blocked: " + (($authorityBlockers | Sort-Object) -join ',')
+        Add-Action $name $Mode "BLOCKED" $notes
+        Write-Section ("Authority blocked: {0}" -f $name)
+        Write-Host ("Mode       : {0}" -f $Mode)
+        Write-Host ("Blocked by : {0}" -f (($authorityBlockers | Sort-Object) -join ', '))
+      } else {
+        $authorityAllowedServiceCount += 1
+      }
     }
   }
 
@@ -868,13 +912,16 @@ try {
   }
 
   $mutating = $Mode -in @('Install','Update','Uninstall')
-  if($mutating){
+  if($mutating -and $authorityAllowedServiceCount -gt 0){
     Require-Admin $Mode
   }
 
   if($Mode -ne 'Plan'){
   foreach($d in $defs){
     $name = [string]$d.name
+    if($authorityBlockedServices.ContainsKey($name)){
+      continue
+    }
 
     Write-Section ("Service: {0}" -f $name)
 

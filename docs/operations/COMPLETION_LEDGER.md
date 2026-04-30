@@ -14455,6 +14455,43 @@ supervision prerequisite readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens service manager authority enforcement
+
+Stage 6/Lens service management now fails closed when a service config denies
+install or control authority. `scripts/service-install.ps1` already projected a
+blocked Lens host service plan in `Plan` mode; it now also checks config-declared
+authority before mutating service modes. `Install` and `Update` are blocked when
+`installable`, `install_authority`, `service_install_authority`, or
+`service_control_authority` are false. `Start`, `Stop`, and `Restart` are blocked
+when `service_control_authority` is false. `Uninstall` is blocked through a
+config-driven path when service install/control authority is false. Blocked
+attempts write a `BLOCKED` action into the service manager report and exit
+nonzero before admin checks, wrapper creation, service install/update, or service
+control.
+
+This is fail-closed authority enforcement for the future resident Lens host
+service path. It does not grant execution, approval decision, memory-write,
+local-process-launch, process-supervision, process-restart, service-install,
+service-control, receipt-write, telemetry, tray, hotkey, overlay, summon, or
+resident-claim authority. It does not install, update, start, stop, restart, or
+remove a Lens host service.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+actual persistent resident supervision path behind explicit process-supervision,
+restart, service-control, receipt-write, and resident-claim authority.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens service manager
+authority enforcement:
+
+- `python -m pytest tests\test_service_install_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_preflight_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache tests\test_service_install_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_service_install_plan_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
