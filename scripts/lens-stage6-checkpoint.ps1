@@ -247,6 +247,7 @@ $HostSupervisionAuthorityDenialReceiptsCriterion = Get-ReadinessCriterion -LensS
 $HostSupervisionAuthorityGrantReceiptsCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_grant_receipt_readback'
 $HostSupervisionAuthorityReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_supervision_authority_readiness_audit'
 $PersistentSupervisionEnablementDenialCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'persistent_supervision_enablement_denial_boundary'
+$PersistentSupervisionEnablementExecutionDenialCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'persistent_supervision_enablement_execution_denial_boundary'
 $RuntimePlanCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_activation_plan'
 $RuntimeGrantCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_authority_grant_preflight'
 $RuntimePolicyCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_runtime_execution_policy_contract'
@@ -407,6 +408,36 @@ $PersistentSupervisionEnablementDenialObserved = (
   $PersistentSupervisionEnablementDenialBlockers -contains 'host_supervision_authority_grant_not_active' -and
   $PersistentSupervisionEnablementDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
   $PersistentSupervisionEnablementDenialBlockers -contains 'service_config_write_authority_not_granted'
+)
+$PersistentSupervisionEnablementExecutionDenialStatus = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'status' -Default 'missing')
+$PersistentSupervisionEnablementExecutionDenialBoundaryReady = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'boundary_ready' -Default $false)
+$PersistentSupervisionEnablementExecutionDenialApplied = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'applied' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialExecuted = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'executed' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialReady = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'ready' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialApprovalReady = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'approval_ready' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialEnablementAuthorityGranted = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'enablement_authority_granted' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialEnablementAllowed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'persistent_supervision_enablement_allowed' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialServiceConfigUpdated = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'service_config_updated' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialResidentClaimAllowed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'resident_claim_allowed' -Default $true)
+$PersistentSupervisionEnablementExecutionDenialEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'evidence' -Default @())
+$PersistentSupervisionEnablementExecutionDenialBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionDenialCriterion -Name 'blockers' -Default @())
+$PersistentSupervisionEnablementExecutionDenialObserved = (
+  $PersistentSupervisionEnablementExecutionDenialStatus -ne 'missing' -and
+  $PersistentSupervisionEnablementExecutionDenialBoundaryReady -and
+  -not $PersistentSupervisionEnablementExecutionDenialApplied -and
+  -not $PersistentSupervisionEnablementExecutionDenialExecuted -and
+  -not $PersistentSupervisionEnablementExecutionDenialReady -and
+  -not $PersistentSupervisionEnablementExecutionDenialApprovalReady -and
+  -not $PersistentSupervisionEnablementExecutionDenialEnablementAuthorityGranted -and
+  -not $PersistentSupervisionEnablementExecutionDenialEnablementAllowed -and
+  -not $PersistentSupervisionEnablementExecutionDenialServiceConfigUpdated -and
+  -not $PersistentSupervisionEnablementExecutionDenialResidentClaimAllowed -and
+  $PersistentSupervisionEnablementExecutionDenialEvidence -contains '/lens/host/persistent-supervision/enablement/execution' -and
+  $PersistentSupervisionEnablementExecutionDenialEvidence -contains '/lens/host/persistent-supervision/enablement/execution/readiness' -and
+  $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'approval_id_required' -and
+  $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
+  $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'service_config_write_authority_not_granted' -and
+  $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'persistent_supervision_execution_authority_not_granted'
 )
 $RuntimePlanStatus = [string](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'status' -Default 'missing')
 $RuntimePlanAvailable = [bool](Get-PropertyValue -Payload $RuntimePlanCriterion -Name 'plan_available' -Default $false)
@@ -1037,6 +1068,39 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     blockers = $PersistentSupervisionEnablementDenialBlockers
   }
+  persistent_supervision_enablement_execution_denial_boundary = [ordered]@{
+    status = $PersistentSupervisionEnablementExecutionDenialStatus
+    ok = $PersistentSupervisionEnablementExecutionDenialObserved
+    evidence = $PersistentSupervisionEnablementExecutionDenialEvidence
+    boundary_ready = $PersistentSupervisionEnablementExecutionDenialBoundaryReady
+    applied = $PersistentSupervisionEnablementExecutionDenialApplied
+    executed = $PersistentSupervisionEnablementExecutionDenialExecuted
+    ready = $PersistentSupervisionEnablementExecutionDenialReady
+    approval_ready = $PersistentSupervisionEnablementExecutionDenialApprovalReady
+    enablement_authority_granted = $PersistentSupervisionEnablementExecutionDenialEnablementAuthorityGranted
+    persistent_supervision_enablement_allowed = $PersistentSupervisionEnablementExecutionDenialEnablementAllowed
+    service_config_updated = $PersistentSupervisionEnablementExecutionDenialServiceConfigUpdated
+    resident_claim_allowed = $PersistentSupervisionEnablementExecutionDenialResidentClaimAllowed
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    persistent_supervision_enablement_authority = $false
+    service_config_write_authority = $false
+    persistent_supervision_execution_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    denial_receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $PersistentSupervisionEnablementExecutionDenialBlockers
+  }
   resident_runtime_authority_grant_preflight = [ordered]@{
     status = $RuntimeGrantStatus
     ok = $RuntimeGrantObserved
@@ -1351,8 +1415,10 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved) {
+  next_smallest_truthful_gap = if ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved -and $PersistentSupervisionEnablementExecutionDenialObserved) {
     'stage6_lens_completion_audit'
+  } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved) {
+    'persistent_supervision_enablement_execution_denial_boundary'
   } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved) {
     'persistent_supervision_enablement_denial_boundary'
   } elseif ($LiveOperatorProofPassed -and $ResidentOverlayActivationBoundaryProofPassed -and $RuntimePlanAvailable -and $RuntimeBoundaryObserved -and $RuntimeGrantObserved -and $RuntimePolicyObserved -and $RuntimeAuthorityGrantBoundaryObserved -and $RuntimeAuthorityGrantDenialReceiptsObserved -and $RuntimeAuthorityGrantReadinessObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved) {
@@ -1413,6 +1479,7 @@ $Payload = [ordered]@{
     resident_host_supervision_authority_grant_receipt_readback_observed = $HostSupervisionAuthorityGrantReceiptsObserved
     resident_host_supervision_authority_readiness_audit_observed = $HostSupervisionAuthorityReadinessObserved
     persistent_supervision_enablement_denial_boundary_observed = $PersistentSupervisionEnablementDenialObserved
+    persistent_supervision_enablement_execution_denial_boundary_observed = $PersistentSupervisionEnablementExecutionDenialObserved
     temporary_runtime_state_write = $true
     execution_authority = $false
     approval_decision_authority = $false

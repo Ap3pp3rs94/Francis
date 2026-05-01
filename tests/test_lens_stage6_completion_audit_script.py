@@ -55,6 +55,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_authority_not_granted"
     assert "enablement denial boundary" in payload["next_smallest_truthful_gap_basis"]
+    assert "execution denial boundary" in payload["next_smallest_truthful_gap_basis"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -97,6 +98,19 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         "service_config_write_authority_not_granted"
         in (payload["closure_blockers"]["persistent_supervision_enablement"])
+    )
+    assert "approval_id_required" in payload["closure_blockers"]["persistent_supervision_enablement_execution"]
+    assert (
+        "persistent_supervision_enablement_authority_not_granted"
+        in (payload["closure_blockers"]["persistent_supervision_enablement_execution"])
+    )
+    assert (
+        "persistent_supervision_execution_authority_not_granted"
+        in (payload["closure_blockers"]["persistent_supervision_enablement_execution"])
+    )
+    assert (
+        "service_config_write_authority_not_granted"
+        in (payload["closure_blockers"]["persistent_supervision_enablement_execution"])
     )
 
     process_boundary = payload["process_supervision_authority_boundary_proof"]
@@ -174,11 +188,45 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert enablement_denial["denial_receipt_write_authority"] is False
     assert enablement_denial["resident_claim_authority"] is False
 
+    execution_denial = payload["persistent_supervision_enablement_execution_denial_boundary"]
+    assert execution_denial["status"] == "blocked"
+    assert execution_denial["ok"] is True
+    assert "/lens/host/persistent-supervision/enablement/execution" in execution_denial["evidence"]
+    assert "/lens/host/persistent-supervision/enablement/execution/readiness" in execution_denial["evidence"]
+    assert execution_denial["boundary_ready"] is True
+    assert execution_denial["applied"] is False
+    assert execution_denial["executed"] is False
+    assert execution_denial["ready"] is False
+    assert execution_denial["approval_ready"] is False
+    assert execution_denial["enablement_authority_granted"] is False
+    assert execution_denial["persistent_supervision_enablement_allowed"] is False
+    assert execution_denial["service_config_updated"] is False
+    assert execution_denial["resident_claim_allowed"] is False
+    assert "approval_id_required" in execution_denial["blockers"]
+    assert "persistent_supervision_enablement_authority_not_granted" in execution_denial["blockers"]
+    assert "service_config_write_authority_not_granted" in execution_denial["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in execution_denial["blockers"]
+    assert execution_denial["execution_authority"] is False
+    assert execution_denial["approval_decision_authority"] is False
+    assert execution_denial["local_process_launch_authority"] is False
+    assert execution_denial["process_supervision_authority"] is False
+    assert execution_denial["process_restart_authority"] is False
+    assert execution_denial["persistent_supervision_enablement_authority"] is False
+    assert execution_denial["service_config_write_authority"] is False
+    assert execution_denial["persistent_supervision_execution_authority"] is False
+    assert execution_denial["service_control_authority"] is False
+    assert execution_denial["memory_write"] is False
+    assert execution_denial["receipt_write_authority"] is False
+    assert execution_denial["denial_receipt_write_authority"] is False
+    assert execution_denial["resident_claim_authority"] is False
+
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement" in payload["evidence"]
+    assert "/lens/host/persistent-supervision/enablement/execution" in payload["evidence"]
+    assert "/lens/host/persistent-supervision/enablement/execution/readiness" in payload["evidence"]
     assert "/lens/resident-surface" in payload["evidence"]
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
@@ -187,6 +235,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["process_supervision_authority_boundary_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True
+    assert governance["persistent_supervision_enablement_execution_denial_boundary_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

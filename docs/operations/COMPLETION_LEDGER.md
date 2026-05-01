@@ -14987,6 +14987,46 @@ supervision execution denial boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens audit consumes persistent supervision execution denial
+
+Stage 6/Lens checkpoint and completion audit scripts now consume the
+`persistent_supervision_enablement_execution_denial_boundary` criterion exposed
+by `/lens/status`. The checkpoint reports the execution-specific denial boundary
+as a first-class readback object, and the completion audit requires that readback
+before it reports the remaining persistent-supervision authority gap. The audit
+now distinguishes "missing execution-denial proof" from the real remaining
+blockers: persistent-supervision enablement authority, service-configuration
+write authority, persistent-supervision execution authority, receipt-write
+authority, and resident-claim authority.
+
+This is a script/readback/test slice only. It does not grant execution
+authority, approval-decision authority, service-configuration write authority,
+receipt-write authority, memory-write behavior, process supervision, service
+control, service installation, UI authority, or resident-claim authority.
+
+Stage 6 remains active and blocked. The next smallest truthful gap remains the
+service-configuration write / persistent-supervision execution authority model:
+the backend can request, read back, approve, and deny the execution path without
+mutation, and the Stage 6 audit chain now sees that denial boundary, but Francis
+still has not defined or granted the separate authority needed to write service
+configuration or enable persistent resident supervision.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens audit consumption
+slice:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed before basis wording fix; passed after fix`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
