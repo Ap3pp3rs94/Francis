@@ -3589,6 +3589,29 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert pending_readiness_body["service_config_write_authority"] is False
     assert pending_readiness_body["persistent_supervision_execution_authority"] is False
 
+    pending_denial = client.post(
+        "/lens/host/persistent-supervision/enablement/execution",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "attempt persistent supervision execution before approval decision",
+        },
+    )
+    assert pending_denial.status_code == 200
+    pending_denial_body = pending_denial.json()
+    assert pending_denial_body["kind"] == "lens.host.persistent_supervision_enablement_execution.denial"
+    assert pending_denial_body["status"] == "blocked"
+    assert pending_denial_body["approval_id"] == approval_id
+    assert pending_denial_body["approval"]["ready"] is False
+    assert pending_denial_body["persistent_supervision_enablement_authority_granted"] is True
+    assert pending_denial_body["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert pending_denial_body["applied"] is False
+    assert pending_denial_body["executed"] is False
+    assert pending_denial_body["service_config_updated"] is False
+    assert pending_denial_body["service_config_write_authority"] is False
+    assert pending_denial_body["persistent_supervision_execution_authority"] is False
+    assert "persistent_supervision_enablement_execution_approval_not_approved" in pending_denial_body["blockers"]
+
     decided = client.post(
         "/approvals/decision",
         json={
@@ -3600,6 +3623,46 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     )
     assert decided.status_code == 200
     assert decided.json()["status"] == "approved"
+
+    approved_denial = client.post(
+        "/lens/host/persistent-supervision/enablement/execution",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "attempt persistent supervision execution after approval decision",
+        },
+    )
+    assert approved_denial.status_code == 200
+    approved_denial_body = approved_denial.json()
+    assert approved_denial_body["kind"] == "lens.host.persistent_supervision_enablement_execution.denial"
+    assert approved_denial_body["status"] == "denied_no_service_config_write_authority"
+    assert approved_denial_body["approval_id"] == approval_id
+    assert approved_denial_body["approval"]["ready"] is True
+    assert approved_denial_body["approval"]["status"] == "approved"
+    assert approved_denial_body["persistent_supervision_enablement_authority_granted"] is True
+    assert approved_denial_body["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert approved_denial_body["boundary_ready"] is True
+    assert approved_denial_body["applied"] is False
+    assert approved_denial_body["executed"] is False
+    assert approved_denial_body["service_config_updated"] is False
+    assert approved_denial_body["persistent_supervision_enablement_allowed"] is False
+    assert approved_denial_body["resident_claim_allowed"] is False
+    assert approved_denial_body["service_config_write_authority"] is False
+    assert approved_denial_body["persistent_supervision_execution_authority"] is False
+    assert approved_denial_body["receipt_write_authority"] is False
+    assert "persistent_supervision_enablement_execution_approval_not_approved" not in (approved_denial_body["blockers"])
+    assert "service_config_write_authority_not_granted" in approved_denial_body["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in approved_denial_body["blockers"]
+    assert approved_denial_body["denial"]["would_update_service_config"] is False
+    assert approved_denial_body["denial"]["would_enable_persistent_supervision"] is False
+    assert approved_denial_body["denial"]["would_start_service"] is False
+    assert approved_denial_body["denial"]["would_write_receipt"] is False
+    assert approved_denial_body["denial"]["would_write_memory"] is False
+    assert approved_denial_body["denial"]["would_claim_resident"] is False
+    assert approved_denial_body["governance"]["denial_boundary"] is True
+    assert approved_denial_body["governance"]["approval_request_write"] is False
+    assert approved_denial_body["governance"]["service_config_write_authority"] is False
+    assert approved_denial_body["governance"]["persistent_supervision_execution_authority"] is False
 
     approved_readiness = client.get(
         "/lens/host/persistent-supervision/enablement/execution/readiness"
@@ -3621,6 +3684,7 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert requirements["exact_persistent_supervision_enablement_execution_approval"]["ready"] is True
     assert requirements["active_persistent_supervision_enablement_authority_grant"]["ready"] is True
     assert requirements["persistent_supervision_enablement_execution_request_readback"]["ready"] is True
+    assert requirements["persistent_supervision_enablement_execution_denial_boundary"]["ready"] is True
     assert requirements["service_config_write_authority"]["ready"] is False
     assert requirements["persistent_supervision_execution_authority"]["ready"] is False
 
@@ -3643,6 +3707,13 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
         "/lens/host/persistent-supervision/enablement/execution/request"
     )
     assert resident_host["persistent_supervision_enablement_execution_requests"]["approved_count"] == 1
+    assert resident_host["persistent_supervision_enablement_execution_denial_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution"
+    )
+    assert resident_host["persistent_supervision_enablement_execution_denial"]["boundary_ready"] is True
+    assert resident_host["persistent_supervision_enablement_execution_denial"]["applied"] is False
+    assert resident_host["persistent_supervision_enablement_execution_denial"]["executed"] is False
+    assert resident_host["persistent_supervision_enablement_execution_denial"]["service_config_updated"] is False
     assert resident_host["persistent_supervision_enablement_execution_readiness"]["request_readback_ready"] is True
     criterion = _criterion(status_body, "persistent_supervision_enablement_execution_readiness_audit")
     assert criterion["status"] == "blocked"
@@ -3652,6 +3723,14 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert criterion["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
     assert criterion["service_config_write_authority"] is False
     assert criterion["persistent_supervision_execution_authority"] is False
+    denial_criterion = _criterion(status_body, "persistent_supervision_enablement_execution_denial_boundary")
+    assert denial_criterion["status"] == "blocked"
+    assert denial_criterion["boundary_ready"] is True
+    assert denial_criterion["applied"] is False
+    assert denial_criterion["executed"] is False
+    assert denial_criterion["service_config_updated"] is False
+    assert denial_criterion["service_config_write_authority"] is False
+    assert denial_criterion["persistent_supervision_execution_authority"] is False
     command = next(
         item
         for item in status_body["command_palette"]["commands"]

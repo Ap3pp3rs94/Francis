@@ -9,6 +9,7 @@ from francis.governance.redaction import redact_governed_display_value
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
+    deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_supervision_authority_grant,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
@@ -291,6 +292,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     persistent_supervision_enablement_execution_requests = (
         lens_host_persistent_supervision_enablement_execution_request_readback(limit=limit)
     )
+    persistent_supervision_enablement_execution_denial = deny_lens_host_persistent_supervision_enablement_execution()
     persistent_supervision_enablement_execution_readiness = (
         lens_host_persistent_supervision_enablement_execution_readiness_audit(limit=limit)
     )
@@ -486,6 +488,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             persistent_supervision_enablement_execution_requests.get("route")
         ).strip(),
         "persistent_supervision_enablement_execution_requests": persistent_supervision_enablement_execution_requests,
+        "persistent_supervision_enablement_execution_denial_route": _safe_str(
+            persistent_supervision_enablement_execution_denial.get("route")
+        ).strip(),
+        "persistent_supervision_enablement_execution_denial": persistent_supervision_enablement_execution_denial,
         "persistent_supervision_enablement_execution_readiness_route": _safe_str(
             persistent_supervision_enablement_execution_readiness.get("route")
         ).strip(),
@@ -926,6 +932,9 @@ def _stage6_readiness(
     )
     persistent_supervision_enablement_execution_readiness = _as_dict(
         resident_host.get("persistent_supervision_enablement_execution_readiness")
+    )
+    persistent_supervision_enablement_execution_denial = _as_dict(
+        resident_host.get("persistent_supervision_enablement_execution_denial")
     )
     supervision_authority_denial = _as_dict(resident_host.get("supervision_authority_denial"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
@@ -1601,6 +1610,61 @@ def _stage6_readiness(
                         "persistent_supervision_enablement_authority"
                     )
                 ),
+                "denial_receipt_write_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+            },
+            {
+                "id": "persistent_supervision_enablement_execution_denial_boundary",
+                "status": _safe_str(persistent_supervision_enablement_execution_denial.get("status")).strip()
+                or "missing",
+                "evidence": [
+                    "/lens/host/persistent-supervision/enablement/execution",
+                    "/lens/host/persistent-supervision/enablement/execution/readiness",
+                    "/lens/status",
+                ],
+                "boundary_ready": bool(persistent_supervision_enablement_execution_denial.get("boundary_ready")),
+                "applied": bool(persistent_supervision_enablement_execution_denial.get("applied")),
+                "executed": bool(persistent_supervision_enablement_execution_denial.get("executed")),
+                "ready": bool(persistent_supervision_enablement_execution_denial.get("ready")),
+                "approval_ready": bool(
+                    _as_dict(persistent_supervision_enablement_execution_denial.get("approval")).get("ready")
+                ),
+                "enablement_authority_granted": bool(
+                    persistent_supervision_enablement_execution_denial.get(
+                        "persistent_supervision_enablement_authority_granted"
+                    )
+                ),
+                "active_enablement_authority_grant_receipt_id": _safe_str(
+                    persistent_supervision_enablement_execution_denial.get(
+                        "active_enablement_authority_grant_receipt_id"
+                    )
+                ).strip(),
+                "persistent_supervision_enablement_allowed": bool(
+                    persistent_supervision_enablement_execution_denial.get("persistent_supervision_enablement_allowed")
+                ),
+                "service_config_updated": bool(
+                    persistent_supervision_enablement_execution_denial.get("service_config_updated")
+                ),
+                "resident_claim_allowed": bool(
+                    persistent_supervision_enablement_execution_denial.get("resident_claim_allowed")
+                ),
+                "blockers": _as_list(persistent_supervision_enablement_execution_denial.get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "persistent_supervision_enablement_authority": bool(
+                    _as_dict(persistent_supervision_enablement_execution_denial.get("governance")).get(
+                        "persistent_supervision_enablement_authority"
+                    )
+                ),
+                "service_config_write_authority": False,
+                "persistent_supervision_execution_authority": False,
+                "receipt_write_authority": False,
                 "denial_receipt_write_authority": False,
                 "memory_write": False,
                 "resident_claim_authority": False,

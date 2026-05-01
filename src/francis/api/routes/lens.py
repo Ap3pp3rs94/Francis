@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from francis.lens import (
     deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
+    deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
     grant_lens_host_persistent_supervision_enablement_authority,
@@ -109,6 +110,12 @@ class LensHostPersistentSupervisionEnablementAuthorityGrantIn(BaseModel):
 class LensHostPersistentSupervisionEnablementExecutionRequestIn(BaseModel):
     actor: str | None = None
     reason: str = "request Lens persistent supervision execution authority review"
+
+
+class LensHostPersistentSupervisionEnablementExecutionIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens persistent supervision execution enablement"
 
 
 @router.get("/status")
@@ -249,6 +256,20 @@ def host_persistent_supervision_enablement_execution(
         approval_id=approval_id,
         actor=actor,
         limit=limit,
+    )
+
+
+@router.post("/host/persistent-supervision/enablement/execution")
+def host_persistent_supervision_enablement_execution_denial(
+    request: Request,
+    payload: LensHostPersistentSupervisionEnablementExecutionIn,
+) -> dict[str, Any]:
+    return deny_lens_host_persistent_supervision_enablement_execution(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
     )
 
 

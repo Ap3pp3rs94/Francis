@@ -14944,6 +14944,49 @@ supervision execution authority request readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens persistent supervision execution denial boundary
+
+Stage 6/Lens now has a governed POST denial boundary for the future persistent
+supervision execution path. `POST
+/lens/host/persistent-supervision/enablement/execution` requires `system.write`,
+an exact persistent-supervision execution-authority approval id, and an active
+persistent-supervision enablement-authority grant before it will even classify
+the request as ready for the remaining execution boundary. Even when those
+prerequisites are satisfied, the route returns
+`denied_no_service_config_write_authority`, keeps `applied: false` and
+`executed: false`, and explicitly reports that it did not update service config,
+start or supervise a process, write a receipt, write memory, or claim resident
+state. The execution readiness audit now observes this execution-specific denial
+boundary, and `/lens/status` embeds the denial route and Stage 6 criterion.
+
+This is a backend route/readback/readiness slice only. It does not grant service
+configuration write authority, persistent-supervision execution authority,
+receipt-write authority, process supervision, service control, service
+installation, approval-decision authority, memory writes, UI authority,
+resident-claim authority, or actual persistent supervision.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is still the
+service-configuration write / persistent-supervision execution authority model:
+Francis can now request, read back, approve, and deny the execution path without
+mutation, but it has not yet defined the separate authority needed to actually
+write service configuration or enable persistent resident supervision.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens persistent
+supervision execution denial boundary:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
