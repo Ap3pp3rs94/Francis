@@ -702,6 +702,58 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_service_boundary["governance"]["diagnostic_only"] is True
     assert runtime_service_boundary["governance"]["service_install_authority"] is False
     assert runtime_service_boundary["governance"]["service_control_authority"] is False
+    runtime_tray_boundary = payload["resident_runtime_tray_presence_boundary_proof"]
+    assert runtime_tray_boundary["status"] == "proof_passed"
+    assert runtime_tray_boundary["ok"] is True
+    assert runtime_tray_boundary["exit_code"] == 0
+    assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1" in runtime_tray_boundary["evidence"]
+    assert "scripts/lens-tray-preflight.ps1" in runtime_tray_boundary["evidence"]
+    assert runtime_tray_boundary["authority_family"] == "tray_presence"
+    assert runtime_tray_boundary["previous_authority_family"] == "service_control"
+    assert runtime_tray_boundary["next_authority_family"] == "hotkey_summon"
+    assert runtime_tray_boundary["tray_presence_boundary_observed"] is True
+    assert runtime_tray_boundary["previous_service_control_family_observed"] is True
+    assert runtime_tray_boundary["tray_preflight_observed"] is True
+    assert runtime_tray_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_tray_boundary["side_effects_denied"] is True
+    assert runtime_tray_boundary["third_authority_family_consumed"] is True
+    assert runtime_tray_boundary["resident_runtime_execution_authority"] is True
+    assert runtime_tray_boundary["local_process_launch_authority"] is False
+    assert runtime_tray_boundary["process_supervision_authority"] is False
+    assert runtime_tray_boundary["process_restart_authority"] is False
+    assert runtime_tray_boundary["service_install_authority"] is False
+    assert runtime_tray_boundary["service_control_authority"] is False
+    assert runtime_tray_boundary["tray_registration_authority"] is False
+    assert runtime_tray_boundary["tray_icon_authority"] is False
+    assert runtime_tray_boundary["notification_authority"] is False
+    assert runtime_tray_boundary["resident_claim_authority"] is False
+    assert runtime_tray_boundary["would_launch_process"] is False
+    assert runtime_tray_boundary["would_supervise_process"] is False
+    assert runtime_tray_boundary["would_restart_process"] is False
+    assert runtime_tray_boundary["would_install_service"] is False
+    assert runtime_tray_boundary["would_start_service"] is False
+    assert runtime_tray_boundary["would_register_tray"] is False
+    assert runtime_tray_boundary["would_register_hotkey"] is False
+    assert runtime_tray_boundary["would_open_overlay"] is False
+    assert runtime_tray_boundary["would_write_memory"] is False
+    assert runtime_tray_boundary["would_claim_resident"] is False
+    assert runtime_tray_boundary["tray_presence"]["status"] == "blocked"
+    assert "tray_registration_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert "tray_icon_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert "notification_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert runtime_tray_boundary["tray_preflight"]["status"] == "blocked"
+    assert runtime_tray_boundary["tray_preflight"]["presence_name"] == "Francis Lens Tray Presence"
+    assert runtime_tray_boundary["remaining_authority_families_after_this_boundary"] == [
+        "hotkey_summon",
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert runtime_tray_boundary["next_smallest_truthful_gap"] == ("resident_runtime_hotkey_summon_authority_boundary")
+    assert runtime_tray_boundary["governance"]["diagnostic_only"] is True
+    assert runtime_tray_boundary["governance"]["tray_preflight_readback"] is True
+    assert runtime_tray_boundary["governance"]["tray_registration_authority"] is False
+    assert runtime_tray_boundary["governance"]["tray_icon_authority"] is False
+    assert runtime_tray_boundary["governance"]["notification_authority"] is False
     assert payload["resident_surface_content_readback"]["status"] == "blocked"
     assert payload["resident_surface_content_readback"]["ok"] is True
     assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
@@ -866,6 +918,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_authority_blockers_proof_observed": True,
         "resident_runtime_process_supervision_boundary_proof_observed": True,
         "resident_runtime_service_control_boundary_proof_observed": True,
+        "resident_runtime_tray_presence_boundary_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

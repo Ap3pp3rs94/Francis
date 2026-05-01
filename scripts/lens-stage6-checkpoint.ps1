@@ -567,6 +567,7 @@ $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overla
 $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $ResidentRuntimeGrantedBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-boundary-proof.ps1'
 $ResidentRuntimeAuthorityBlockersProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-authority-blockers-proof.ps1'
+$TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -916,6 +917,66 @@ $ResidentRuntimeServiceControlBoundaryProofPassed = (
   -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'service_control_authority' -Default $true) -and
   $ResidentRuntimeServiceControlBoundaryBlockers -contains 'service_install_authority_not_granted' -and
   $ResidentRuntimeServiceControlBoundaryBlockers -contains 'service_control_authority_not_granted'
+)
+$TrayPreflightResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status'))
+$TrayPreflightProof = if ($TrayPreflightResult.Count -gt 0) { $TrayPreflightResult[-1] } else { $null }
+$TrayPreflightExitCode = -1
+$TrayPreflightPayload = $null
+if ($TrayPreflightProof -is [System.Collections.IDictionary]) {
+  if ($TrayPreflightProof.Contains('exit_code') -and $null -ne $TrayPreflightProof['exit_code']) {
+    $TrayPreflightExitCode = [int]$TrayPreflightProof['exit_code']
+  }
+  if ($TrayPreflightProof.Contains('payload') -and $null -ne $TrayPreflightProof['payload']) {
+    $TrayPreflightPayload = $TrayPreflightProof['payload']
+  }
+}
+$TrayPreflightBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $TrayPreflightPayload -Name 'blockers' -Default @()
+)
+$TrayPreflightRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $TrayPreflightPayload -Name 'required_before_enable' -Default @()
+)
+$TrayPreflightGovernance = Get-PropertyValue -Payload $TrayPreflightPayload -Name 'governance'
+$TrayPreflightObserved = (
+  $TrayPreflightExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'kind' -Default '') -eq 'lens.tray.preflight' -and
+  [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'status' -Default '') -eq 'blocked' -and
+  -not [bool](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'ready' -Default $true) -and
+  $TrayPreflightBlockers -contains 'tray_registration_authority_not_granted' -and
+  $TrayPreflightBlockers -contains 'tray_icon_authority_not_granted' -and
+  $TrayPreflightBlockers -contains 'notification_authority_not_granted' -and
+  [bool](Get-PropertyValue -Payload $TrayPreflightGovernance -Name 'read_only_contract' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $TrayPreflightGovernance -Name 'tray_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $TrayPreflightGovernance -Name 'tray_icon_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $TrayPreflightGovernance -Name 'notification_authority' -Default $true)
+)
+$ResidentRuntimeTrayPresenceBoundaryGroup = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockerGroups -Name 'tray_presence'
+$ResidentRuntimeTrayPresenceBoundaryBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'blockers' -Default @()
+)
+$ResidentRuntimeTrayPresenceBoundaryRequiredBefore = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'required_before' -Default @()
+)
+$ResidentRuntimeTrayPresenceRemainingFamilies = [string[]]@(
+  $ResidentRuntimeAuthorityBlockerFamilies | Where-Object {
+    $_ -ne 'process_supervision' -and $_ -ne 'service_control' -and $_ -ne 'tray_presence'
+  }
+)
+$ResidentRuntimeTrayPresenceBoundaryExitCode = if ($ResidentRuntimeServiceControlBoundaryProofPassed -and $TrayPreflightObserved) { 0 } else { 1 }
+$ResidentRuntimeTrayPresenceBoundaryProofPassed = (
+  $ResidentRuntimeServiceControlBoundaryProofPassed -and
+  $TrayPreflightObserved -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'id' -Default '') -eq 'tray_presence' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'status' -Default '') -eq 'blocked' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'would_execute' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'route' -Default '') -eq '/lens/tray' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_tray' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'tray_registration_authority' -Default $true) -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'tray_icon_authority_not_granted' -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'notification_authority_not_granted'
 )
 
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $HostSupervisorOwnedSessionBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
@@ -1628,6 +1689,87 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  resident_runtime_tray_presence_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeTrayPresenceBoundaryProofPassed) { 'proof_passed' } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+    exit_code = $ResidentRuntimeTrayPresenceBoundaryExitCode
+    evidence = @('scripts/lens-resident-runtime-authority-blockers-proof.ps1', 'scripts/lens-tray-preflight.ps1', '/lens/tray', '/lens/resident-runtime/execute')
+    authority_family = 'tray_presence'
+    previous_authority_family = 'service_control'
+    next_authority_family = 'hotkey_summon'
+    tray_presence_boundary_observed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+    previous_service_control_family_observed = $ResidentRuntimeServiceControlBoundaryProofPassed
+    tray_preflight_observed = $TrayPreflightObserved
+    authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
+    side_effects_denied = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+    third_authority_family_consumed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+    resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    tray_icon_authority = $false
+    notification_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_launch_process' -Default $false)
+    would_supervise_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_supervise_process' -Default $false)
+    would_restart_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_restart_process' -Default $false)
+    would_install_service = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_install_service' -Default $false)
+    would_start_service = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_start_service' -Default $false)
+    would_register_tray = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_tray' -Default $false)
+    would_register_hotkey = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_hotkey' -Default $false)
+    would_open_overlay = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_open_overlay' -Default $false)
+    would_write_memory = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_write_memory' -Default $false)
+    would_claim_resident = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_claim_resident' -Default $false)
+    tray_presence = [ordered]@{
+      status = [string](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'status' -Default 'missing')
+      ready = [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'ready' -Default $false)
+      authority_granted = [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'authority_granted' -Default $false)
+      would_execute = [bool](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'would_execute' -Default $false)
+      route = [string](Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'route' -Default '')
+      evidence = [string[]]@(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentRuntimeTrayPresenceBoundaryGroup -Name 'evidence' -Default @()))
+      required_before = [string[]]@($ResidentRuntimeTrayPresenceBoundaryRequiredBefore)
+      blockers = [string[]]@($ResidentRuntimeTrayPresenceBoundaryBlockers)
+    }
+    tray_preflight = [ordered]@{
+      status = [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'status' -Default 'missing')
+      ready = [bool](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'ready' -Default $false)
+      presence_name = [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'presence_name' -Default '')
+      config_path = [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'config_path' -Default '')
+      tray_scope = [string](Get-PropertyValue -Payload $TrayPreflightPayload -Name 'tray_scope' -Default '')
+      required_before_enable = [string[]]@($TrayPreflightRequiredBeforeEnable)
+      blockers = [string[]]@($TrayPreflightBlockers)
+    }
+    blockers = $ResidentRuntimeTrayPresenceBoundaryBlockers
+    remaining_authority_families_after_this_boundary = $ResidentRuntimeTrayPresenceRemainingFamilies
+    next_smallest_truthful_gap = 'resident_runtime_hotkey_summon_authority_boundary'
+    governance = [ordered]@{
+      diagnostic_only = $true
+      wraps_existing_authority_blockers_proof = $true
+      tray_preflight_readback = $TrayPreflightObserved
+      approval_request_write = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'approval_request_write' -Default $false)
+      resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      tray_registration_authority = $false
+      tray_icon_authority = $false
+      notification_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   resident_surface_content_readback = [ordered]@{
     status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default 'missing')
     ok = $ResidentSurfaceReadbackReady
@@ -1837,6 +1979,7 @@ $Payload = [ordered]@{
     resident_runtime_authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
     resident_runtime_process_supervision_boundary_proof_observed = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
     resident_runtime_service_control_boundary_proof_observed = $ResidentRuntimeServiceControlBoundaryProofPassed
+    resident_runtime_tray_presence_boundary_proof_observed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved

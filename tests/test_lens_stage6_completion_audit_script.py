@@ -53,9 +53,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "resident_runtime_tray_presence_authority_boundary"
-    assert "service-control boundary proof" in payload["next_smallest_truthful_gap_basis"]
-    assert "next bounded family proof is tray presence" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "resident_runtime_hotkey_summon_authority_boundary"
+    assert "tray-presence boundary proof" in payload["next_smallest_truthful_gap_basis"]
+    assert "next bounded family proof is hotkey summon" in payload["next_smallest_truthful_gap_basis"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -142,6 +142,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         in (payload["closure_blockers"]["resident_runtime_service_control_boundary"])
     )
     assert "tray_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime_tray_presence"]
+    assert (
+        "tray_registration_authority_not_granted"
+        in payload["closure_blockers"]["resident_runtime_tray_presence_boundary"]
+    )
     assert "hotkey_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime_hotkey_summon"]
     assert "overlay_control_authority_not_granted" in payload["closure_blockers"]["resident_runtime_overlay_window"]
     assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["resident_runtime_resident_claim"]
@@ -323,6 +327,50 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_service_boundary["next_smallest_truthful_gap"] == (
         "resident_runtime_tray_presence_authority_boundary"
     )
+    runtime_tray_boundary = payload["resident_runtime_tray_presence_boundary_proof"]
+    assert runtime_tray_boundary["status"] == "proof_passed"
+    assert runtime_tray_boundary["ok"] is True
+    assert runtime_tray_boundary["exit_code"] == 0
+    assert runtime_tray_boundary["authority_family"] == "tray_presence"
+    assert runtime_tray_boundary["previous_authority_family"] == "service_control"
+    assert runtime_tray_boundary["next_authority_family"] == "hotkey_summon"
+    assert runtime_tray_boundary["tray_presence_boundary_observed"] is True
+    assert runtime_tray_boundary["previous_service_control_family_observed"] is True
+    assert runtime_tray_boundary["tray_preflight_observed"] is True
+    assert runtime_tray_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_tray_boundary["side_effects_denied"] is True
+    assert runtime_tray_boundary["third_authority_family_consumed"] is True
+    assert runtime_tray_boundary["resident_runtime_execution_authority"] is True
+    assert runtime_tray_boundary["local_process_launch_authority"] is False
+    assert runtime_tray_boundary["process_supervision_authority"] is False
+    assert runtime_tray_boundary["process_restart_authority"] is False
+    assert runtime_tray_boundary["service_install_authority"] is False
+    assert runtime_tray_boundary["service_control_authority"] is False
+    assert runtime_tray_boundary["tray_registration_authority"] is False
+    assert runtime_tray_boundary["tray_icon_authority"] is False
+    assert runtime_tray_boundary["notification_authority"] is False
+    assert runtime_tray_boundary["resident_claim_authority"] is False
+    assert runtime_tray_boundary["would_launch_process"] is False
+    assert runtime_tray_boundary["would_supervise_process"] is False
+    assert runtime_tray_boundary["would_restart_process"] is False
+    assert runtime_tray_boundary["would_install_service"] is False
+    assert runtime_tray_boundary["would_start_service"] is False
+    assert runtime_tray_boundary["would_register_tray"] is False
+    assert runtime_tray_boundary["would_register_hotkey"] is False
+    assert runtime_tray_boundary["would_open_overlay"] is False
+    assert runtime_tray_boundary["would_write_memory"] is False
+    assert runtime_tray_boundary["would_claim_resident"] is False
+    assert runtime_tray_boundary["tray_presence"]["status"] == "blocked"
+    assert runtime_tray_boundary["tray_preflight"]["status"] == "blocked"
+    assert "tray_registration_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert "tray_icon_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert "notification_authority_not_granted" in runtime_tray_boundary["blockers"]
+    assert runtime_tray_boundary["remaining_authority_families_after_this_boundary"] == [
+        "hotkey_summon",
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert runtime_tray_boundary["next_smallest_truthful_gap"] == ("resident_runtime_hotkey_summon_authority_boundary")
 
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
@@ -453,6 +501,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["resident_runtime_authority_blockers_proof_readback"] is True
     assert governance["resident_runtime_process_supervision_boundary_proof_readback"] is True
     assert governance["resident_runtime_service_control_boundary_proof_readback"] is True
+    assert governance["resident_runtime_tray_presence_boundary_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

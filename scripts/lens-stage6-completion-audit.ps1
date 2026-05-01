@@ -293,9 +293,49 @@ $ResidentRuntimeServiceControlBoundaryObserved = (
   $ResidentRuntimeServiceControlBoundaryBlockers -contains 'service_control_authority_not_granted' -and
   [string]$ResidentRuntimeServiceControlBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_tray_presence_authority_boundary'
 )
+$ResidentRuntimeTrayPresenceBoundaryProof = $Checkpoint.resident_runtime_tray_presence_boundary_proof
+$ResidentRuntimeTrayPresenceBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeTrayPresenceBoundaryProof.blockers
+$ResidentRuntimeTrayPresenceBoundaryObserved = (
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.ok -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.authority_family -eq 'tray_presence' -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.previous_authority_family -eq 'service_control' -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_authority_family -eq 'hotkey_summon' -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_presence_boundary_observed -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.previous_service_control_family_observed -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_preflight_observed -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.authority_blockers_proof_observed -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.side_effects_denied -and
+  [bool]$ResidentRuntimeTrayPresenceBoundaryProof.third_authority_family_consumed -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.local_process_launch_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.process_supervision_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.process_restart_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.service_install_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.service_control_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_registration_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_icon_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.notification_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.resident_claim_authority -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_launch_process -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_supervise_process -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_restart_process -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_install_service -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_start_service -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_register_tray -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_register_hotkey -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_open_overlay -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_write_memory -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_claim_resident -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'tray_icon_authority_not_granted' -and
+  $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'notification_authority_not_granted' -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_hotkey_summon_authority_boundary'
+)
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ResidentRuntimeTrayPresenceBoundaryObserved) {
+  'resident_runtime_hotkey_summon_authority_boundary'
 } elseif ($ResidentRuntimeServiceControlBoundaryObserved) {
   'resident_runtime_tray_presence_authority_boundary'
 } elseif ($ResidentRuntimeProcessSupervisionBoundaryObserved) {
@@ -359,7 +399,9 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_tray_presence_authority_boundary') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_hotkey_summon_authority_boundary') {
+    'The audit consumes the resident-runtime tray-presence boundary proof: the third authority family is now read back as blocked and non-mutating, so the next bounded family proof is hotkey summon.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_tray_presence_authority_boundary') {
     'The audit consumes the resident-runtime service-control boundary proof: the second authority family is now read back as blocked and non-mutating, so the next bounded family proof is tray presence.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_service_control_authority_boundary') {
     'The audit consumes the resident-runtime process-supervision boundary proof: the first authority family is now read back as blocked and non-mutating, so the next bounded family proof is service control.'
@@ -442,6 +484,7 @@ $Payload = [ordered]@{
     resident_runtime_tray_presence = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.tray_presence.blockers
     )
+    resident_runtime_tray_presence_boundary = [string[]]@($ResidentRuntimeTrayPresenceBoundaryBlockers)
     resident_runtime_hotkey_summon = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.hotkey_summon.blockers
     )
@@ -602,6 +645,46 @@ $Payload = [ordered]@{
     remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeServiceControlBoundaryProof.remaining_authority_families_after_this_boundary)
     next_smallest_truthful_gap = [string]$ResidentRuntimeServiceControlBoundaryProof.next_smallest_truthful_gap
   }
+  resident_runtime_tray_presence_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeTrayPresenceBoundaryObserved) { [string]$ResidentRuntimeTrayPresenceBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeTrayPresenceBoundaryObserved
+    exit_code = [int]$ResidentRuntimeTrayPresenceBoundaryProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeTrayPresenceBoundaryProof.evidence)
+    authority_family = [string]$ResidentRuntimeTrayPresenceBoundaryProof.authority_family
+    previous_authority_family = [string]$ResidentRuntimeTrayPresenceBoundaryProof.previous_authority_family
+    next_authority_family = [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_authority_family
+    tray_presence_boundary_observed = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_presence_boundary_observed
+    previous_service_control_family_observed = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.previous_service_control_family_observed
+    tray_preflight_observed = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.tray_preflight_observed
+    authority_blockers_proof_observed = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.authority_blockers_proof_observed
+    side_effects_denied = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.side_effects_denied
+    third_authority_family_consumed = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.third_authority_family_consumed
+    tray_presence = $ResidentRuntimeTrayPresenceBoundaryProof.tray_presence
+    tray_preflight = $ResidentRuntimeTrayPresenceBoundaryProof.tray_preflight
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.resident_runtime_execution_authority
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    tray_icon_authority = $false
+    notification_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_launch_process
+    would_supervise_process = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_supervise_process
+    would_restart_process = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_restart_process
+    would_install_service = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_install_service
+    would_start_service = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_start_service
+    would_register_tray = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_register_tray
+    would_register_hotkey = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_register_hotkey
+    would_open_overlay = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_open_overlay
+    would_write_memory = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_write_memory
+    would_claim_resident = [bool]$ResidentRuntimeTrayPresenceBoundaryProof.would_claim_resident
+    blockers = [string[]]@($ResidentRuntimeTrayPresenceBoundaryBlockers)
+    remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeTrayPresenceBoundaryProof.remaining_authority_families_after_this_boundary)
+    next_smallest_truthful_gap = [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_smallest_truthful_gap
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -735,6 +818,7 @@ $Payload = [ordered]@{
     resident_runtime_authority_blockers_proof_readback = $ResidentRuntimeAuthorityBlockersProofObserved
     resident_runtime_process_supervision_boundary_proof_readback = $ResidentRuntimeProcessSupervisionBoundaryObserved
     resident_runtime_service_control_boundary_proof_readback = $ResidentRuntimeServiceControlBoundaryObserved
+    resident_runtime_tray_presence_boundary_proof_readback = $ResidentRuntimeTrayPresenceBoundaryObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false
