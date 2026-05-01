@@ -15089,10 +15089,10 @@ This is a backend/API and readback prerequisite. It does not implement the
 resident runtime authority grant, does not launch or supervise a process, does
 not install/start/control a service, does not register tray or hotkey behavior,
 does not open an overlay, does not write memory, does not decide approvals, and
-does not claim resident state. The existing
-`/lens/resident-runtime/authority-grant` boundary still returns a denial with
+does not claim resident state. At that point, the existing
+`/lens/resident-runtime/authority-grant` boundary still returned a denial with
 `resident_runtime_authority_grant_not_implemented` until a separate grant slice
-is explicitly built and validated.
+was explicitly built and validated.
 
 Stage 6 remains active and blocked. This removes ambiguity before the final
 resident runtime authority boundary by separating the operator approval request
@@ -15114,6 +15114,53 @@ execution authority request readback:
   Result: `passed`
 - `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `failed before formatting; passed after formatting`
+
+### 2026-05-01 - Stage 6/Lens resident runtime execution authority grant receipt
+
+Stage 6/Lens now has an exact approved-request-bound resident runtime execution
+authority grant receipt seam. `POST /lens/resident-runtime/authority-grant`
+requires an approved `lens.resident_runtime.execution_authority` approval request
+plus the existing `system.write` actor/posture checks before writing a durable
+grant receipt under `data/lens/resident_runtime_authority_grants/`. `GET
+/lens/resident-runtime/authority-grant/grants` reads those grant receipts back,
+including the active grant lease. The resident runtime request readback,
+preflight, policy, plan, surface activation boundary, `/lens/status`, and Stage
+6 checkpoint now consume the active grant receipt instead of reporting the
+authority boundary as not implemented.
+
+This is a backend/API, receipt persistence, readback, and proof-script update.
+It grants only the narrow resident-runtime execution authority flag represented
+by the explicit receipt. It does not grant general execution authority, process
+launch authority, process supervision authority, process restart authority,
+service install/control authority, tray or hotkey registration authority, overlay
+control authority, approval-decision authority, memory-write authority, or
+resident-claim authority. The resident runtime execute path remains blocked by
+`denied_no_resident_runtime_execution_boundary` until a separate supervised
+resident runtime implementation proves those boundaries.
+
+Stage 6 remains active and blocked. The next smallest truthful gap moves from
+the resident runtime authority grant model to the supervised resident runtime
+execution boundary and the still-blocked persistent-supervision/service/tray/
+hotkey/overlay gates. This slice does not close Stage 6 and does not start Stage
+7.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+execution authority grant receipt:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_readback_tracks_decision_without_execution -q`
+  Result: `failed while aligning stale surface/status expectations; passed after the grant receipt and readback contract were corrected`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed while checkpoint predicates still expected the old not-implemented blocker; passed after checkpoint/readiness proof consumed the new grant receipt readback`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
 
 ## 5. Known truthful gaps
 
@@ -15180,16 +15227,20 @@ These remain true and should block any "finished" claim:
   actor, posture, supervision, summon, tray, overlay, receipt, and resident-claim
   blockers explicit, plus a direct `/lens/resident-runtime/policy` execution
   policy contract that defines the deny-by-default requirements before any
-  future resident runtime authority grant boundary, plus a governed
-  `/lens/resident-runtime/authority-grant` denial boundary that keeps execution,
-  process supervision, service control, tray/hotkey/overlay control, memory
-  writes, and resident claims denied, plus a read-only
-  `/lens/resident-runtime/authority-grant/denials` receipt readback route that
-  records bounded denial receipts for denied authority-grant attempts after the
-  existing approval/scope/posture gate is ready, plus a direct read-only
+  resident runtime activation, plus a governed exact-approved-request-bound
+  `/lens/resident-runtime/authority-grant` receipt boundary and read-only
+  `/lens/resident-runtime/authority-grant/grants` receipt readback that can
+  grant only the narrow resident runtime execution-authority flag while keeping
+  general execution, process launch, process supervision, service control,
+  tray/hotkey/overlay control, memory writes, and resident claims denied, plus a
+  read-only `/lens/resident-runtime/authority-grant/denials` receipt readback
+  route that records bounded denial receipts for denied authority-grant attempts
+  after the existing approval/scope/posture gate is ready, plus a direct
+  read-only
   `/lens/resident-runtime/authority-grant/readiness` audit that composes the
-  preflight, policy, denial boundary, denial receipt readback, runtime plan, and
-  host/summon/tray/overlay gates into exact authority-grant blockers,
+  preflight, policy, grant boundary, grant receipt readback, denial receipt
+  readback, runtime plan, and host/summon/tray/overlay gates into exact
+  authority-grant blockers,
   plus a direct read-only `/lens/host/supervision/authority` preflight that
   separates resident host operational prerequisites from missing
   process-supervision, restart, service-install, service-control, and

@@ -10,7 +10,7 @@ from francis.lens import (
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_resident_runtime_activation_execution,
-    deny_lens_resident_runtime_execution_authority_grant,
+    grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     grant_lens_host_supervision_authority,
@@ -39,6 +39,7 @@ from francis.lens import (
     lens_preflight,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
+    lens_resident_runtime_execution_authority_grant_receipts,
     lens_resident_runtime_execution_authority_request_readback,
     lens_resident_runtime_activation_preflight,
     lens_resident_runtime_activation_plan,
@@ -80,6 +81,7 @@ class LensResidentRuntimeAuthorityGrantIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime execution authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
 class LensResidentRuntimeAuthorityRequestIn(BaseModel):
@@ -510,6 +512,21 @@ def resident_runtime_authority_grant_requests(
     return lens_resident_runtime_execution_authority_request_readback(limit=limit)
 
 
+@router.get("/resident-runtime/authority-grant/grants")
+def resident_runtime_authority_grant_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_resident_runtime_execution_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
 @router.post("/resident-runtime/authority-grant/request")
 def resident_runtime_authority_grant_request(
     request: Request,
@@ -528,13 +545,14 @@ def resident_runtime_authority_grant(
     request: Request,
     payload: LensResidentRuntimeAuthorityGrantIn,
 ) -> dict[str, Any]:
-    return deny_lens_resident_runtime_execution_authority_grant(
+    return grant_lens_resident_runtime_execution_authority(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
         record_receipt=True,
+        lease_seconds=payload.lease_seconds,
     )
 
 

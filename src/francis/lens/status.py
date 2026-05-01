@@ -12,7 +12,7 @@ from francis.lens.activation import (
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_supervision_authority_grant,
     deny_lens_resident_runtime_activation_execution,
-    deny_lens_resident_runtime_execution_authority_grant,
+    grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     lens_host_activation_denial_receipts,
@@ -36,6 +36,7 @@ from francis.lens.activation import (
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
+    lens_resident_runtime_execution_authority_grant_receipts,
     lens_resident_runtime_execution_authority_request_contract,
     lens_resident_runtime_execution_authority_request_readback,
     lens_resident_runtime_execution_policy_contract,
@@ -321,7 +322,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     resident_runtime_policy = lens_resident_runtime_execution_policy_contract()
     resident_runtime_authority_request = lens_resident_runtime_execution_authority_request_contract()
     resident_runtime_authority_requests = lens_resident_runtime_execution_authority_request_readback(limit=limit)
-    resident_runtime_authority_grant = deny_lens_resident_runtime_execution_authority_grant()
+    resident_runtime_authority_grant = grant_lens_resident_runtime_execution_authority()
+    resident_runtime_authority_grant_receipts = lens_resident_runtime_execution_authority_grant_receipts(limit=limit)
     resident_runtime_plan = lens_resident_runtime_activation_plan()
     resident_runtime_denial = deny_lens_resident_runtime_activation_execution()
     resident_runtime_denial_receipts = lens_resident_runtime_activation_denial_receipts(limit=limit)
@@ -443,6 +445,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "resident_runtime_authority_requests": resident_runtime_authority_requests,
         "resident_runtime_authority_grant_route": _safe_str(resident_runtime_authority_grant.get("route")).strip(),
         "resident_runtime_authority_grant": resident_runtime_authority_grant,
+        "resident_runtime_authority_grant_receipts_route": _safe_str(
+            resident_runtime_authority_grant_receipts.get("route")
+        ).strip(),
+        "resident_runtime_authority_grant_receipts": resident_runtime_authority_grant_receipts,
         "resident_runtime_authority_grant_denial_receipts_route": _safe_str(
             resident_runtime_authority_grant_denial_receipts.get("route")
         ).strip(),
@@ -977,6 +983,7 @@ def _stage6_readiness(
     resident_runtime_policy = _as_dict(resident_host.get("resident_runtime_policy"))
     resident_runtime_authority_requests = _as_dict(resident_host.get("resident_runtime_authority_requests"))
     resident_runtime_authority_grant = _as_dict(resident_host.get("resident_runtime_authority_grant"))
+    resident_runtime_authority_grant_receipts = _as_dict(resident_host.get("resident_runtime_authority_grant_receipts"))
     resident_runtime_authority_grant_denial_receipts = _as_dict(
         resident_host.get("resident_runtime_authority_grant_denial_receipts")
     )
@@ -1244,6 +1251,7 @@ def _stage6_readiness(
                 "status": _safe_str(resident_runtime_authority_grant.get("status")).strip() or "missing",
                 "evidence": [
                     "/lens/resident-runtime/authority-grant",
+                    "/lens/resident-runtime/authority-grant/grants",
                     "/lens/resident-runtime/policy",
                     "/lens/status",
                 ],
@@ -1253,6 +1261,9 @@ def _stage6_readiness(
                 "authority_granted": bool(resident_runtime_authority_grant.get("authority_granted")),
                 "grant_ready": bool(resident_runtime_authority_grant.get("grant_ready")),
                 "authority_grant_ready": bool(resident_runtime_authority_grant.get("authority_grant_ready")),
+                "resident_runtime_execution_authority": bool(
+                    resident_runtime_authority_grant.get("resident_runtime_execution_authority")
+                ),
                 "runtime_ready": bool(resident_runtime_authority_grant.get("runtime_ready")),
                 "resident_claim_allowed": bool(resident_runtime_authority_grant.get("resident_claim_allowed")),
                 "blockers": _as_list(resident_runtime_authority_grant.get("blockers")),
@@ -1269,6 +1280,41 @@ def _stage6_readiness(
                 "memory_write": False,
                 "receipt_write_authority": False,
                 "resident_claim_authority": False,
+            },
+            {
+                "id": "resident_runtime_authority_grant_receipt_readback",
+                "status": _safe_str(resident_runtime_authority_grant_receipts.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/resident-runtime/authority-grant/grants",
+                    "/lens/resident-runtime/authority-grant",
+                    "/lens/status",
+                ],
+                "receipt_count": _safe_int(resident_runtime_authority_grant_receipts.get("total")),
+                "latest_receipt_id": _safe_str(
+                    _as_dict(resident_runtime_authority_grant_receipts.get("latest")).get("receipt_id")
+                ).strip(),
+                "active_receipt_id": _safe_str(
+                    _as_dict(resident_runtime_authority_grant_receipts.get("active_latest")).get("receipt_id")
+                ).strip(),
+                "authority_granted": bool(resident_runtime_authority_grant_receipts.get("authority_granted")),
+                "resident_runtime_execution_authority": bool(
+                    resident_runtime_authority_grant_receipts.get("resident_runtime_execution_authority")
+                ),
+                "resident_claim_allowed": bool(resident_runtime_authority_grant_receipts.get("resident_claim_allowed")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": False,
+                "receipt_write_authority": False,
             },
             {
                 "id": "resident_runtime_authority_grant_denial_receipt_readback",
@@ -1304,6 +1350,7 @@ def _stage6_readiness(
                 "audit_status": _safe_str(resident_runtime_authority_grant_readiness.get("audit_status")).strip(),
                 "evidence": [
                     "/lens/resident-runtime/authority-grant/readiness",
+                    "/lens/resident-runtime/authority-grant/grants",
                     "/lens/resident-runtime/authority-grant/denials",
                     "/lens/resident-runtime/authority-grant",
                     "/lens/resident-runtime/policy",
@@ -1318,6 +1365,13 @@ def _stage6_readiness(
                     resident_runtime_authority_grant_readiness.get("resident_claim_allowed")
                 ),
                 "boundary_observed": bool(resident_runtime_authority_grant_readiness.get("boundary_observed")),
+                "authority_granted": bool(resident_runtime_authority_grant_readiness.get("authority_granted")),
+                "resident_runtime_execution_authority": bool(
+                    resident_runtime_authority_grant_readiness.get("resident_runtime_execution_authority")
+                ),
+                "grant_receipt_readback_ready": bool(
+                    resident_runtime_authority_grant_readiness.get("grant_receipt_readback_ready")
+                ),
                 "denial_receipt_readback_ready": bool(
                     resident_runtime_authority_grant_readiness.get("denial_receipt_readback_ready")
                 ),
@@ -1366,6 +1420,10 @@ def _stage6_readiness(
                 ),
                 "blockers": _as_list(_as_dict(resident_host.get("resident_runtime_plan")).get("blockers")),
                 "execution_authority": False,
+                "resident_runtime_execution_authority": bool(
+                    _as_dict(resident_host.get("resident_runtime_plan")).get("resident_runtime_execution_authority")
+                    or _as_dict(resident_host.get("resident_runtime_plan")).get("active_authority_grant_receipt_id")
+                ),
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
                 "process_supervision_authority": False,
@@ -1385,6 +1443,9 @@ def _stage6_readiness(
                 "executed": bool(_as_dict(resident_host.get("resident_runtime_denial")).get("executed")),
                 "blockers": _as_list(_as_dict(resident_host.get("resident_runtime_denial")).get("blockers")),
                 "execution_authority": False,
+                "resident_runtime_execution_authority": bool(
+                    _as_dict(resident_host.get("resident_runtime_denial")).get("resident_runtime_execution_authority")
+                ),
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
                 "process_supervision_authority": False,
@@ -2412,6 +2473,9 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_runtime_policy": resident_runtime_policy,
         "resident_runtime_authority_requests": _as_dict(resident_host.get("resident_runtime_authority_requests")),
         "resident_runtime_authority_grant": resident_runtime_authority_grant,
+        "resident_runtime_authority_grant_receipts": _as_dict(
+            resident_host.get("resident_runtime_authority_grant_receipts")
+        ),
         "resident_runtime_authority_grant_denial_receipts": resident_runtime_authority_grant_denial_receipts,
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
         "resident_runtime_denial_receipts": resident_runtime_denial_receipts,
@@ -2480,6 +2544,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             ),
             "lens_resident_runtime_authority_grant_request_route": ("/lens/resident-runtime/authority-grant/request"),
             "lens_resident_runtime_authority_grant_requests_route": ("/lens/resident-runtime/authority-grant/requests"),
+            "lens_resident_runtime_authority_grant_grants_route": ("/lens/resident-runtime/authority-grant/grants"),
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (
                 "/lens/resident-runtime/authority-grant/readiness"
