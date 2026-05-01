@@ -46,7 +46,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "-HostLaunchRunSeconds",
         "2",
         "-ResidentSurfaceForegroundRunSeconds",
-        "2",
+        "5",
         "-SupervisorRunSeconds",
         "3",
     )
