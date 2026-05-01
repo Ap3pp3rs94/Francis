@@ -15288,6 +15288,54 @@ granted runtime proof consumption:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,checkpoint_next_smallest_truthful_gap | ConvertTo-Json -Depth 5`
   Result: `passed; reported supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`
 
+### 2026-05-01 - Stage 6/Lens resident runtime authority blocker split proof
+
+Stage 6/Lens now has a standalone authority blocker split proof at
+`scripts/lens-resident-runtime-authority-blockers-proof.ps1`. The proof wraps
+the existing granted resident runtime boundary proof, keeps its isolated
+temporary proof data root behavior, and converts the completion-audit handoff
+from one combined
+`supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`
+blocker into explicit authority families:
+
+- `process_supervision`
+- `service_control`
+- `tray_presence`
+- `hotkey_summon`
+- `overlay_window`
+- `resident_claim`
+
+The proof confirms the exact granted resident runtime execution-authority lease
+still does not become local process launch, process supervision/restart,
+service install/control, tray registration, hotkey registration, overlay
+control, memory write, receipt-write, or resident-claim authority. It reports
+`resident_runtime_process_supervision_authority_boundary` as the next smallest
+truthful gap because process launch/supervision is the first concrete boundary
+the resident runtime must satisfy before service, tray, hotkey, overlay, and
+resident-claim work can be made truthful.
+
+This is diagnostic/proof and test work only. It does not change Lens API route
+behavior, product execution authority, product approval authority,
+memory-write behavior, UI claims, telemetry authority, service control, tray or
+hotkey registration, overlay control, or resident-claim authority. The Stage 6
+completion audit still reports the combined blocker until a later slice consumes
+this split proof or advances one of the underlying authority gates. Stage 6
+remains active and blocked. Stage 7/Telemetry is not started.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+authority blocker split proof:
+
+- `python -m pytest tests\test_lens_resident_runtime_authority_blockers_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,remaining_authority_families | ConvertTo-Json -Depth 6`
+  Result: `passed; reported process_supervision, service_control, tray_presence, hotkey_summon, overlay_window, and resident_claim families`
+- `python -m pytest tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_resident_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_runtime_authority_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_authority_blockers_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
