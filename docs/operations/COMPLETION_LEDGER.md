@@ -15417,6 +15417,48 @@ process-supervision boundary readback:
 - `python -m ruff format --check tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `failed before formatting tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py; passed after formatting`
 
+### 2026-05-01 - Stage 6/Lens resident runtime service-control boundary readback
+
+Stage 6/Lens now has a focused resident-runtime service-control boundary
+diagnostic at
+`scripts/lens-resident-runtime-service-control-boundary-proof.ps1`. The proof
+consumes the resident runtime authority blocker split, verifies that the second
+authority family is `service_control`, and proves that the boundary remains
+readback-only: no service install/control, local process launch, process
+supervision, process restart, tray registration, hotkey registration, overlay
+control, memory write, approval-decision, or resident-claim authority is
+granted.
+
+The Stage 6 checkpoint now emits
+`resident_runtime_service_control_boundary_proof` from the authority blocker
+data it already collected. The completion audit consumes that readback and
+advances its `next_smallest_truthful_gap` from
+`resident_runtime_service_control_authority_boundary` to
+`resident_runtime_tray_presence_authority_boundary`. This does not resolve or
+grant service installation/control; it proves the second resident-runtime
+authority family as a bounded, non-mutating readback boundary and hands off to
+the next family proof.
+
+Stage 6 remains active and blocked. Stage 7/Telemetry is not started.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+service-control boundary readback:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-service-control-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,service_control_boundary_observed,side_effects_denied,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; reported resident_runtime_tray_presence_authority_boundary with side_effects_denied`
+- `python -m pytest tests\test_lens_resident_runtime_service_control_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting tests\test_lens_stage6_completion_audit_script.py; passed after formatting`
+- `git diff --check`
+  Result: `passed; PowerShell LF-to-CRLF warnings only`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15557,8 +15599,11 @@ These remain true and should block any "finished" claim:
   process/service/tray/hotkey/overlay/resident-claim handoff into authority
   families, plus resident-runtime process-supervision boundary readback that
   keeps process launch, supervision, restart, service, tray, hotkey, overlay,
+  memory, approval-decision, and resident-claim authority denied, plus
+  resident-runtime service-control boundary readback that keeps service
+  install/control, process launch, supervision, restart, tray, hotkey, overlay,
   memory, approval-decision, and resident-claim authority denied and names
-  `resident_runtime_service_control_authority_boundary` as the current handoff,
+  `resident_runtime_tray_presence_authority_boundary` as the current handoff,
   but no
   supervised
   resident host process, process-restart authority,

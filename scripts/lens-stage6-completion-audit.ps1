@@ -260,9 +260,44 @@ $ResidentRuntimeProcessSupervisionBoundaryObserved = (
   $ResidentRuntimeProcessSupervisionBoundaryBlockers -contains 'process_restart_authority_not_granted' -and
   [string]$ResidentRuntimeProcessSupervisionBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_service_control_authority_boundary'
 )
+$ResidentRuntimeServiceControlBoundaryProof = $Checkpoint.resident_runtime_service_control_boundary_proof
+$ResidentRuntimeServiceControlBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeServiceControlBoundaryProof.blockers
+$ResidentRuntimeServiceControlBoundaryObserved = (
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.ok -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.authority_family -eq 'service_control' -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.previous_authority_family -eq 'process_supervision' -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.next_authority_family -eq 'tray_presence' -and
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.service_control_boundary_observed -and
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.previous_process_supervision_family_observed -and
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.authority_blockers_proof_observed -and
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.side_effects_denied -and
+  [bool]$ResidentRuntimeServiceControlBoundaryProof.second_authority_family_consumed -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.local_process_launch_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.process_supervision_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.process_restart_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.service_install_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.service_control_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.resident_claim_authority -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_launch_process -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_supervise_process -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_restart_process -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_install_service -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_start_service -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_register_tray -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_register_hotkey -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_open_overlay -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_write_memory -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.would_claim_resident -and
+  $ResidentRuntimeServiceControlBoundaryBlockers -contains 'service_install_authority_not_granted' -and
+  $ResidentRuntimeServiceControlBoundaryBlockers -contains 'service_control_authority_not_granted' -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_tray_presence_authority_boundary'
+)
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ResidentRuntimeServiceControlBoundaryObserved) {
+  'resident_runtime_tray_presence_authority_boundary'
 } elseif ($ResidentRuntimeProcessSupervisionBoundaryObserved) {
   'resident_runtime_service_control_authority_boundary'
 } elseif ($ResidentRuntimeAuthorityBlockersProofObserved) {
@@ -324,7 +359,9 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_service_control_authority_boundary') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_tray_presence_authority_boundary') {
+    'The audit consumes the resident-runtime service-control boundary proof: the second authority family is now read back as blocked and non-mutating, so the next bounded family proof is tray presence.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_service_control_authority_boundary') {
     'The audit consumes the resident-runtime process-supervision boundary proof: the first authority family is now read back as blocked and non-mutating, so the next bounded family proof is service control.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_process_supervision_authority_boundary') {
     'The audit consumes the resident runtime authority blocker split proof: the previous combined process/service/tray/hotkey/overlay/resident-claim handoff is now grouped into explicit authority families, with process supervision as the first bounded boundary to resolve.'
@@ -401,6 +438,7 @@ $Payload = [ordered]@{
     resident_runtime_service_control = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.service_control.blockers
     )
+    resident_runtime_service_control_boundary = [string[]]@($ResidentRuntimeServiceControlBoundaryBlockers)
     resident_runtime_tray_presence = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.tray_presence.blockers
     )
@@ -528,6 +566,41 @@ $Payload = [ordered]@{
     would_claim_resident = [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.would_claim_resident
     blockers = [string[]]@($ResidentRuntimeProcessSupervisionBoundaryBlockers)
     next_smallest_truthful_gap = [string]$ResidentRuntimeProcessSupervisionBoundaryProof.next_smallest_truthful_gap
+  }
+  resident_runtime_service_control_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeServiceControlBoundaryObserved) { [string]$ResidentRuntimeServiceControlBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeServiceControlBoundaryObserved
+    exit_code = [int]$ResidentRuntimeServiceControlBoundaryProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeServiceControlBoundaryProof.evidence)
+    authority_family = [string]$ResidentRuntimeServiceControlBoundaryProof.authority_family
+    previous_authority_family = [string]$ResidentRuntimeServiceControlBoundaryProof.previous_authority_family
+    next_authority_family = [string]$ResidentRuntimeServiceControlBoundaryProof.next_authority_family
+    service_control_boundary_observed = [bool]$ResidentRuntimeServiceControlBoundaryProof.service_control_boundary_observed
+    previous_process_supervision_family_observed = [bool]$ResidentRuntimeServiceControlBoundaryProof.previous_process_supervision_family_observed
+    authority_blockers_proof_observed = [bool]$ResidentRuntimeServiceControlBoundaryProof.authority_blockers_proof_observed
+    side_effects_denied = [bool]$ResidentRuntimeServiceControlBoundaryProof.side_effects_denied
+    second_authority_family_consumed = [bool]$ResidentRuntimeServiceControlBoundaryProof.second_authority_family_consumed
+    service_control = $ResidentRuntimeServiceControlBoundaryProof.service_control
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeServiceControlBoundaryProof.resident_runtime_execution_authority
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_launch_process
+    would_supervise_process = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_supervise_process
+    would_restart_process = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_restart_process
+    would_install_service = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_install_service
+    would_start_service = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_start_service
+    would_register_tray = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_register_tray
+    would_register_hotkey = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_register_hotkey
+    would_open_overlay = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_open_overlay
+    would_write_memory = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_write_memory
+    would_claim_resident = [bool]$ResidentRuntimeServiceControlBoundaryProof.would_claim_resident
+    blockers = [string[]]@($ResidentRuntimeServiceControlBoundaryBlockers)
+    remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeServiceControlBoundaryProof.remaining_authority_families_after_this_boundary)
+    next_smallest_truthful_gap = [string]$ResidentRuntimeServiceControlBoundaryProof.next_smallest_truthful_gap
   }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
@@ -661,6 +734,7 @@ $Payload = [ordered]@{
     resident_runtime_granted_boundary_proof_readback = $ResidentRuntimeGrantedBoundaryProofObserved
     resident_runtime_authority_blockers_proof_readback = $ResidentRuntimeAuthorityBlockersProofObserved
     resident_runtime_process_supervision_boundary_proof_readback = $ResidentRuntimeProcessSupervisionBoundaryObserved
+    resident_runtime_service_control_boundary_proof_readback = $ResidentRuntimeServiceControlBoundaryObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

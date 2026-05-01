@@ -657,6 +657,51 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_process_boundary["governance"]["diagnostic_only"] is True
     assert runtime_process_boundary["governance"]["process_supervision_authority"] is False
     assert runtime_process_boundary["governance"]["service_control_authority"] is False
+    runtime_service_boundary = payload["resident_runtime_service_control_boundary_proof"]
+    assert runtime_service_boundary["status"] == "proof_passed"
+    assert runtime_service_boundary["ok"] is True
+    assert runtime_service_boundary["exit_code"] == 0
+    assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1" in runtime_service_boundary["evidence"]
+    assert runtime_service_boundary["authority_family"] == "service_control"
+    assert runtime_service_boundary["previous_authority_family"] == "process_supervision"
+    assert runtime_service_boundary["next_authority_family"] == "tray_presence"
+    assert runtime_service_boundary["service_control_boundary_observed"] is True
+    assert runtime_service_boundary["previous_process_supervision_family_observed"] is True
+    assert runtime_service_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_service_boundary["side_effects_denied"] is True
+    assert runtime_service_boundary["second_authority_family_consumed"] is True
+    assert runtime_service_boundary["resident_runtime_execution_authority"] is True
+    assert runtime_service_boundary["local_process_launch_authority"] is False
+    assert runtime_service_boundary["process_supervision_authority"] is False
+    assert runtime_service_boundary["process_restart_authority"] is False
+    assert runtime_service_boundary["service_install_authority"] is False
+    assert runtime_service_boundary["service_control_authority"] is False
+    assert runtime_service_boundary["resident_claim_authority"] is False
+    assert runtime_service_boundary["would_launch_process"] is False
+    assert runtime_service_boundary["would_supervise_process"] is False
+    assert runtime_service_boundary["would_restart_process"] is False
+    assert runtime_service_boundary["would_install_service"] is False
+    assert runtime_service_boundary["would_start_service"] is False
+    assert runtime_service_boundary["would_register_tray"] is False
+    assert runtime_service_boundary["would_register_hotkey"] is False
+    assert runtime_service_boundary["would_open_overlay"] is False
+    assert runtime_service_boundary["would_write_memory"] is False
+    assert runtime_service_boundary["would_claim_resident"] is False
+    assert runtime_service_boundary["service_control"]["status"] == "blocked"
+    assert "service_install_authority_not_granted" in runtime_service_boundary["blockers"]
+    assert "service_control_authority_not_granted" in runtime_service_boundary["blockers"]
+    assert runtime_service_boundary["remaining_authority_families_after_this_boundary"] == [
+        "tray_presence",
+        "hotkey_summon",
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert runtime_service_boundary["next_smallest_truthful_gap"] == (
+        "resident_runtime_tray_presence_authority_boundary"
+    )
+    assert runtime_service_boundary["governance"]["diagnostic_only"] is True
+    assert runtime_service_boundary["governance"]["service_install_authority"] is False
+    assert runtime_service_boundary["governance"]["service_control_authority"] is False
     assert payload["resident_surface_content_readback"]["status"] == "blocked"
     assert payload["resident_surface_content_readback"]["ok"] is True
     assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
@@ -820,6 +865,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_granted_boundary_proof_observed": True,
         "resident_runtime_authority_blockers_proof_observed": True,
         "resident_runtime_process_supervision_boundary_proof_observed": True,
+        "resident_runtime_service_control_boundary_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,
