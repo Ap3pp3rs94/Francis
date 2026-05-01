@@ -15162,6 +15162,47 @@ execution authority grant receipt:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens completion audit resident runtime gap priority
+
+Stage 6/Lens completion audit now reports the supervised resident runtime
+execution boundary as the next smallest truthful gap after the resident runtime
+authority grant/readback spine became real. The audit payload now includes a
+dedicated `resident_runtime_execution_boundary` readback object and a
+`closure_blockers.resident_runtime` group so the operator-facing audit names the
+remaining local-process-launch, process-supervision, service-control, tray,
+hotkey, overlay, receipt-write, and resident-claim blockers directly instead of
+continuing to prioritize the older persistent-supervision enablement authority
+gap.
+
+This is a diagnostic/readback and test update only. It does not grant execution
+authority, process launch, process supervision, process restart, service install
+or control, tray or hotkey registration, overlay control, memory writes,
+approval decisions, receipt-write authority, or resident-claim authority. The
+persistent-supervision enablement blockers remain visible in the audit closure
+blockers, but they no longer mask the resident runtime execution boundary as the
+current handoff.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is still the
+supervised resident runtime execution boundary and the supporting persistent
+supervision, service, tray, hotkey, overlay, receipt, and resident-claim gates.
+This slice does not close Stage 6 and does not start Stage 7.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens completion audit
+resident runtime gap priority:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,next_smallest_truthful_gap_basis | ConvertTo-Json -Depth 5`
+  Result: `passed; reported supervised_resident_runtime_execution_boundary`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15261,9 +15302,8 @@ These remain true and should block any "finished" claim:
   governed non-mutating `POST /lens/host/persistent-supervision/enablement`
   denial boundary and Stage 6 checkpoint/completion-audit consumption that keep
   service-config write, persistent-supervision execution, receipt-write, memory,
-  and resident-claim authority denied while naming
-  `persistent_supervision_enablement_authority_not_granted` as the current
-  audit blocker, plus governed approval-request/readback/readiness routes at
+  and resident-claim authority denied while preserving those blockers in audit
+  closure readback, plus governed approval-request/readback/readiness routes at
   `/lens/host/persistent-supervision/enablement/authority/request`,
   `/lens/host/persistent-supervision/enablement/authority/requests`, and
   `/lens/host/persistent-supervision/enablement/authority/readiness` that create
@@ -15292,7 +15332,9 @@ These remain true and should block any "finished" claim:
   runtime rather than missing runtime, plus resident runtime activation route
   blocker normalization so direct preflight/policy/authority-grant/plan/denial
   and resident-surface activation readbacks also distinguish foreground runtime
-  observation from supervised resident runtime, but no
+  observation from supervised resident runtime, plus completion-audit resident
+  runtime boundary readback that names the supervised resident runtime execution
+  boundary as the current handoff, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

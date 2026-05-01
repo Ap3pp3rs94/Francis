@@ -173,9 +173,25 @@ $HostSupervisorOwnedSessionObserved = (
   -not [bool]$HostSupervisorOwnedSession.resident_supervised_runtime -and
   -not [bool]$HostSupervisorOwnedSession.resident_claim_allowed
 )
+$ResidentRuntimeBoundary = $Checkpoint.resident_runtime_authority_boundary
+$ResidentRuntimeBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeBoundary.blockers
+$ResidentRuntimeBoundaryObserved = (
+  [bool]$ResidentRuntimeBoundary.ok -and
+  [string]$ResidentRuntimeBoundary.status -ne 'missing' -and
+  -not [bool]$ResidentRuntimeBoundary.applied -and
+  -not [bool]$ResidentRuntimeBoundary.executed -and
+  $ResidentRuntimeBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'service_control_authority_not_granted' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'resident_claim_authority_not_granted'
+)
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ResidentRuntimeBoundaryObserved) {
+  'supervised_resident_runtime_execution_boundary'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   -not $PersistentSupervisionEnablementExecutionDenialObserved
@@ -229,7 +245,9 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_authority_not_granted') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'supervised_resident_runtime_execution_boundary') {
+    'The audit observes the resident runtime grant/readback spine and the resident runtime execute boundary; it now blocks on supervised process, service, tray, hotkey, overlay, receipt, and resident-claim authorities without launching or claiming a resident runtime.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_authority_not_granted') {
     'The audit now consumes the persistent-supervision enablement denial boundary and execution denial boundary; it shows enablement is blocked by explicit enablement, service-config write, execution, and resident-claim authority, not by missing proof readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
     'The checkpoint must observe the persistent-supervision execution denial boundary before the completion audit can make an authority-gap read.'
@@ -281,9 +299,34 @@ $Payload = [ordered]@{
     persistent_supervision_enablement_execution = [string[]]@(
       $PersistentSupervisionEnablementExecutionDenialBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|approval_id' } | Sort-Object -Unique
     )
+    resident_runtime = [string[]]@(
+      $ResidentRuntimeBoundaryBlockers | Where-Object { $_ -match 'resident_runtime|process_supervision|process_restart|service_|tray|hotkey|overlay|resident_claim|receipt_write|local_process_launch' } | Sort-Object -Unique
+    )
     authority = [string[]]@(
       $Blockers | Where-Object { $_ -match 'authority|not_granted|not_authorized' } | Sort-Object -Unique
     )
+  }
+  resident_runtime_execution_boundary = [ordered]@{
+    status = if ($ResidentRuntimeBoundaryObserved) { [string]$ResidentRuntimeBoundary.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeBoundaryObserved
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeBoundary.evidence)
+    applied = [bool]$ResidentRuntimeBoundary.applied
+    executed = [bool]$ResidentRuntimeBoundary.executed
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeBoundary.resident_runtime_execution_authority
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = [string[]]@($ResidentRuntimeBoundaryBlockers)
   }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
