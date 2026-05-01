@@ -38,7 +38,18 @@ def _run_checkpoint(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
-    proc = _run_checkpoint("-Mode", "Status")
+    proc = _run_checkpoint(
+        "-Mode",
+        "Status",
+        "-StartupTimeoutSeconds",
+        "5",
+        "-HostLaunchRunSeconds",
+        "2",
+        "-ResidentSurfaceForegroundRunSeconds",
+        "2",
+        "-SupervisorRunSeconds",
+        "3",
+    )
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
@@ -754,6 +765,114 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_tray_boundary["governance"]["tray_registration_authority"] is False
     assert runtime_tray_boundary["governance"]["tray_icon_authority"] is False
     assert runtime_tray_boundary["governance"]["notification_authority"] is False
+
+    runtime_hotkey_boundary = payload["resident_runtime_hotkey_summon_boundary_proof"]
+    assert runtime_hotkey_boundary["status"] == "proof_passed"
+    assert runtime_hotkey_boundary["ok"] is True
+    assert runtime_hotkey_boundary["exit_code"] == 0
+    assert runtime_hotkey_boundary["authority_family"] == "hotkey_summon"
+    assert runtime_hotkey_boundary["previous_authority_family"] == "tray_presence"
+    assert runtime_hotkey_boundary["next_authority_family"] == "overlay_window"
+    assert runtime_hotkey_boundary["hotkey_summon_boundary_observed"] is True
+    assert runtime_hotkey_boundary["previous_tray_presence_family_observed"] is True
+    assert runtime_hotkey_boundary["summon_preflight_observed"] is True
+    assert runtime_hotkey_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_hotkey_boundary["side_effects_denied"] is True
+    assert runtime_hotkey_boundary["fourth_authority_family_consumed"] is True
+    assert runtime_hotkey_boundary["resident_runtime_execution_authority"] is True
+    assert runtime_hotkey_boundary["local_process_launch_authority"] is False
+    assert runtime_hotkey_boundary["process_supervision_authority"] is False
+    assert runtime_hotkey_boundary["process_restart_authority"] is False
+    assert runtime_hotkey_boundary["service_install_authority"] is False
+    assert runtime_hotkey_boundary["service_control_authority"] is False
+    assert runtime_hotkey_boundary["tray_registration_authority"] is False
+    assert runtime_hotkey_boundary["tray_icon_authority"] is False
+    assert runtime_hotkey_boundary["notification_authority"] is False
+    assert runtime_hotkey_boundary["summon_authority"] is False
+    assert runtime_hotkey_boundary["hotkey_registration_authority"] is False
+    assert runtime_hotkey_boundary["overlay_control_authority"] is False
+    assert runtime_hotkey_boundary["resident_claim_authority"] is False
+    assert runtime_hotkey_boundary["would_launch_process"] is False
+    assert runtime_hotkey_boundary["would_supervise_process"] is False
+    assert runtime_hotkey_boundary["would_restart_process"] is False
+    assert runtime_hotkey_boundary["would_install_service"] is False
+    assert runtime_hotkey_boundary["would_start_service"] is False
+    assert runtime_hotkey_boundary["would_register_tray"] is False
+    assert runtime_hotkey_boundary["would_register_hotkey"] is False
+    assert runtime_hotkey_boundary["would_open_overlay"] is False
+    assert runtime_hotkey_boundary["would_write_memory"] is False
+    assert runtime_hotkey_boundary["would_claim_resident"] is False
+    assert runtime_hotkey_boundary["hotkey_summon"]["status"] == "blocked"
+    assert runtime_hotkey_boundary["summon_preflight"]["status"] == "blocked"
+    assert "global_hotkey_binding_disabled" in runtime_hotkey_boundary["blockers"]
+    assert "global_hotkey_registration_disabled" in runtime_hotkey_boundary["blockers"]
+    assert "hotkey_registration_authority_not_granted" in runtime_hotkey_boundary["blockers"]
+    assert "summon_authority_not_granted" in runtime_hotkey_boundary["blockers"]
+    assert runtime_hotkey_boundary["remaining_authority_families_after_this_boundary"] == [
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert runtime_hotkey_boundary["next_smallest_truthful_gap"] == (
+        "resident_runtime_overlay_window_authority_boundary"
+    )
+    assert runtime_hotkey_boundary["governance"]["diagnostic_only"] is True
+    assert runtime_hotkey_boundary["governance"]["summon_preflight_readback"] is True
+    assert runtime_hotkey_boundary["governance"]["summon_authority"] is False
+    assert runtime_hotkey_boundary["governance"]["hotkey_registration_authority"] is False
+    runtime_overlay_boundary = payload["resident_runtime_overlay_window_boundary_proof"]
+    assert runtime_overlay_boundary["status"] == "proof_passed"
+    assert runtime_overlay_boundary["ok"] is True
+    assert runtime_overlay_boundary["exit_code"] == 0
+    assert runtime_overlay_boundary["authority_family"] == "overlay_window"
+    assert runtime_overlay_boundary["previous_authority_family"] == "hotkey_summon"
+    assert runtime_overlay_boundary["next_authority_family"] == "resident_claim"
+    assert runtime_overlay_boundary["overlay_window_boundary_observed"] is True
+    assert runtime_overlay_boundary["previous_hotkey_summon_family_observed"] is True
+    assert runtime_overlay_boundary["overlay_preflight_observed"] is True
+    assert runtime_overlay_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_overlay_boundary["side_effects_denied"] is True
+    assert runtime_overlay_boundary["fifth_authority_family_consumed"] is True
+    assert runtime_overlay_boundary["local_process_launch_authority"] is False
+    assert runtime_overlay_boundary["process_supervision_authority"] is False
+    assert runtime_overlay_boundary["process_restart_authority"] is False
+    assert runtime_overlay_boundary["service_install_authority"] is False
+    assert runtime_overlay_boundary["service_control_authority"] is False
+    assert runtime_overlay_boundary["tray_registration_authority"] is False
+    assert runtime_overlay_boundary["tray_icon_authority"] is False
+    assert runtime_overlay_boundary["notification_authority"] is False
+    assert runtime_overlay_boundary["summon_authority"] is False
+    assert runtime_overlay_boundary["hotkey_registration_authority"] is False
+    assert runtime_overlay_boundary["overlay_control_authority"] is False
+    assert runtime_overlay_boundary["window_management_authority"] is False
+    assert runtime_overlay_boundary["capture_authority"] is False
+    assert runtime_overlay_boundary["new_sensing_authority"] is False
+    assert runtime_overlay_boundary["resident_claim_authority"] is False
+    assert runtime_overlay_boundary["would_launch_process"] is False
+    assert runtime_overlay_boundary["would_supervise_process"] is False
+    assert runtime_overlay_boundary["would_restart_process"] is False
+    assert runtime_overlay_boundary["would_install_service"] is False
+    assert runtime_overlay_boundary["would_start_service"] is False
+    assert runtime_overlay_boundary["would_register_tray"] is False
+    assert runtime_overlay_boundary["would_register_hotkey"] is False
+    assert runtime_overlay_boundary["would_open_overlay"] is False
+    assert runtime_overlay_boundary["would_write_memory"] is False
+    assert runtime_overlay_boundary["would_claim_resident"] is False
+    assert runtime_overlay_boundary["overlay_window"]["status"] == "blocked"
+    assert runtime_overlay_boundary["overlay_preflight"]["status"] == "blocked"
+    assert "overlay_window_disabled" in runtime_overlay_boundary["blockers"]
+    assert "overlay_control_authority_not_granted" in runtime_overlay_boundary["blockers"]
+    assert "window_management_authority_not_granted" in runtime_overlay_boundary["blockers"]
+    assert "capture_authority_not_granted" in runtime_overlay_boundary["blockers"]
+    assert runtime_overlay_boundary["remaining_authority_families_after_this_boundary"] == ["resident_claim"]
+    assert runtime_overlay_boundary["next_smallest_truthful_gap"] == (
+        "resident_runtime_resident_claim_authority_boundary"
+    )
+    assert runtime_overlay_boundary["governance"]["diagnostic_only"] is True
+    assert runtime_overlay_boundary["governance"]["overlay_preflight_readback"] is True
+    assert runtime_overlay_boundary["governance"]["overlay_control_authority"] is False
+    assert runtime_overlay_boundary["governance"]["window_management_authority"] is False
+    assert runtime_overlay_boundary["governance"]["capture_authority"] is False
+    assert runtime_overlay_boundary["governance"]["new_sensing_authority"] is False
     assert payload["resident_surface_content_readback"]["status"] == "blocked"
     assert payload["resident_surface_content_readback"]["ok"] is True
     assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
@@ -919,6 +1038,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_process_supervision_boundary_proof_observed": True,
         "resident_runtime_service_control_boundary_proof_observed": True,
         "resident_runtime_tray_presence_boundary_proof_observed": True,
+        "resident_runtime_hotkey_summon_boundary_proof_observed": True,
+        "resident_runtime_overlay_window_boundary_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

@@ -15503,6 +15503,92 @@ tray-presence boundary readback:
 - `python -m ruff format --check tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_runtime_process_supervision_boundary_proof_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `failed before formatting tests\test_lens_stage6_checkpoint_script.py and tests\test_lens_stage6_completion_audit_script.py; passed after formatting`
 
+### 2026-05-01 - Stage 6/Lens resident runtime hotkey-summon boundary readback
+
+Stage 6/Lens now has a focused resident-runtime hotkey-summon boundary
+diagnostic at
+`scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1`. The proof
+consumes the resident runtime authority blocker split, verifies that the fourth
+authority family is `hotkey_summon`, consumes the direct
+`scripts/lens-summon-preflight.ps1` readback, and proves that the boundary
+remains readback-only: no global hotkey registration, summon-anywhere action,
+overlay control, tray control, service control, local process launch, process
+supervision, memory write, approval-decision, or resident-claim authority is
+granted.
+
+The Stage 6 checkpoint now emits
+`resident_runtime_hotkey_summon_boundary_proof` from the already-collected
+authority blocker data plus the direct summon preflight. The completion audit
+consumes that readback and advances its `next_smallest_truthful_gap` from
+`resident_runtime_hotkey_summon_authority_boundary` to
+`resident_runtime_overlay_window_authority_boundary`. This does not resolve or
+grant hotkey/summon behavior; it proves the fourth resident-runtime authority
+family as a bounded, non-mutating readback boundary and hands off to the overlay
+window family proof.
+
+Stage 6 remains active and blocked. Stage 7/Telemetry is not started.
+
+The Stage 6 completion audit also now accepts the same bounded observation
+window knobs as the checkpoint and passes them through to nested checkpoint and
+process-supervision boundary proof calls. The production defaults remain
+unchanged, while focused tests use shorter valid windows to avoid local timing
+flake/long-run behavior without weakening the blocked authority assertions.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+hotkey-summon boundary readback:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-hotkey-summon-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,hotkey_summon_boundary_observed,summon_preflight_observed,side_effects_denied,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; reported resident_runtime_overlay_window_authority_boundary with summon preflight observed and side_effects_denied`
+- `python -m pytest tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed after adding bounded test observation windows`
+- `python -m ruff check --no-cache tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell LF-to-CRLF warnings only`
+
+### 2026-05-01 - Stage 6/Lens resident runtime overlay-window boundary readback
+
+Stage 6/Lens now has a focused resident-runtime overlay-window boundary
+proof at `scripts/lens-resident-runtime-overlay-window-boundary-proof.ps1`.
+The proof composes the resident runtime authority blocker split, the previously
+consumed hotkey-summon boundary, and the direct overlay preflight readback. It
+proves the fifth authority family is `overlay_window` while keeping overlay
+window creation, overlay control, window-management, capture, sensing, local
+process launch, process supervision, service control, tray registration, hotkey
+registration, memory write, approval-decision, and resident-claim authority
+denied.
+
+The Stage 6 checkpoint now emits
+`resident_runtime_overlay_window_boundary_proof` through an isolated temporary
+proof data directory so the proof does not reuse checkpoint runtime state written
+by earlier bounded host/supervisor diagnostics. The completion audit consumes the
+same proof, exposes a dedicated
+`closure_blockers.resident_runtime_overlay_window_boundary` bucket, and advances
+its `next_smallest_truthful_gap` from
+`resident_runtime_overlay_window_authority_boundary` to
+`resident_runtime_resident_claim_authority_boundary`.
+
+Stage 6 remains active and blocked. This does not open an overlay, bind a hotkey,
+register tray presence, capture screen content, write memory, decide approvals,
+claim resident status, or start Stage 7/Telemetry.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+overlay-window boundary readback:
+
+- `python -m pytest tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `failed before isolating the overlay proof data directory; passed after fix`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed before adding the overlay-window boundary closure-blocker bucket; passed after fix`
+- `python -m ruff check --no-cache tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed; PowerShell LF-to-CRLF warnings only`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15650,7 +15736,14 @@ These remain true and should block any "finished" claim:
   resident-runtime tray-presence boundary readback that keeps tray registration,
   tray icon, notification, service, process, hotkey, overlay, memory,
   approval-decision, and resident-claim authority denied and names
-  `resident_runtime_hotkey_summon_authority_boundary` as the current handoff,
+  `resident_runtime_hotkey_summon_authority_boundary` as its handoff, plus
+  resident-runtime hotkey-summon boundary readback that keeps global hotkey
+  registration, summon-anywhere, process, service, tray, overlay, memory,
+  approval-decision, and resident-claim authority denied, plus resident-runtime
+  overlay-window boundary readback that keeps overlay open/control,
+  window-management, capture, sensing, process, service, tray, hotkey, memory,
+  approval-decision, and resident-claim authority denied and names
+  `resident_runtime_resident_claim_authority_boundary` as the current handoff,
   but no
   supervised
   resident host process, process-restart authority,

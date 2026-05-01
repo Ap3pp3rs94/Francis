@@ -180,6 +180,9 @@ apps/**/plugins/generated/**
 .idea/
 *.iml
 
+# Local Claude/Codex-adjacent agent state
+.claude/
+
 # Vim swap
 *.swp
 *.swo

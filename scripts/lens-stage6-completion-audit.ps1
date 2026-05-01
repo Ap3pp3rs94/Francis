@@ -1,6 +1,18 @@
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [ValidateRange(5, 60)]
+  [int]$StartupTimeoutSeconds = 30,
+
+  [ValidateRange(2, 30)]
+  [int]$HostLaunchRunSeconds = 3,
+
+  [ValidateRange(2, 30)]
+  [int]$ResidentSurfaceForegroundRunSeconds = 15,
+
+  [ValidateRange(3, 30)]
+  [int]$SupervisorRunSeconds = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,7 +101,11 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 
-$CheckpointJson = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $CheckpointScript -Mode Status
+$CheckpointJson = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $CheckpointScript -Mode Status `
+  -StartupTimeoutSeconds $StartupTimeoutSeconds `
+  -HostLaunchRunSeconds $HostLaunchRunSeconds `
+  -ResidentSurfaceForegroundRunSeconds $ResidentSurfaceForegroundRunSeconds `
+  -SupervisorRunSeconds $SupervisorRunSeconds
 if ($LASTEXITCODE -ne 0) {
   throw "Stage 6 checkpoint failed with exit code $LASTEXITCODE"
 }
@@ -97,10 +113,10 @@ if ($LASTEXITCODE -ne 0) {
 $Checkpoint = ($CheckpointJson | Out-String | ConvertFrom-Json)
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-StartupTimeoutSeconds', '30',
+  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', '3',
-  '-SupervisorRunSeconds', '20'
+  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
 )
 $ProcessSupervisionBoundary = $ProcessSupervisionBoundaryResult.payload
 $ProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value $ProcessSupervisionBoundary.blockers
@@ -331,9 +347,100 @@ $ResidentRuntimeTrayPresenceBoundaryObserved = (
   $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'notification_authority_not_granted' -and
   [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_hotkey_summon_authority_boundary'
 )
+$ResidentRuntimeHotkeySummonBoundaryProof = $Checkpoint.resident_runtime_hotkey_summon_boundary_proof
+$ResidentRuntimeHotkeySummonBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeHotkeySummonBoundaryProof.blockers
+$ResidentRuntimeHotkeySummonBoundaryObserved = (
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.ok -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.authority_family -eq 'hotkey_summon' -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.previous_authority_family -eq 'tray_presence' -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.next_authority_family -eq 'overlay_window' -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.hotkey_summon_boundary_observed -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.previous_tray_presence_family_observed -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.summon_preflight_observed -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.authority_blockers_proof_observed -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.side_effects_denied -and
+  [bool]$ResidentRuntimeHotkeySummonBoundaryProof.fourth_authority_family_consumed -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.local_process_launch_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.process_supervision_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.process_restart_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.service_install_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.service_control_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.tray_registration_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.tray_icon_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.notification_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.summon_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.hotkey_registration_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.overlay_control_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.resident_claim_authority -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_launch_process -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_supervise_process -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_restart_process -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_install_service -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_start_service -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_register_tray -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_register_hotkey -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_open_overlay -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_write_memory -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_claim_resident -and
+  $ResidentRuntimeHotkeySummonBoundaryBlockers -contains 'global_hotkey_binding_disabled' -and
+  $ResidentRuntimeHotkeySummonBoundaryBlockers -contains 'global_hotkey_registration_disabled' -and
+  $ResidentRuntimeHotkeySummonBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $ResidentRuntimeHotkeySummonBoundaryBlockers -contains 'summon_authority_not_granted' -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_overlay_window_authority_boundary'
+)
 
+$ResidentRuntimeOverlayWindowBoundaryProof = $Checkpoint.resident_runtime_overlay_window_boundary_proof
+$ResidentRuntimeOverlayWindowBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeOverlayWindowBoundaryProof.blockers
+$ResidentRuntimeOverlayWindowBoundaryObserved = (
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.ok -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.authority_family -eq 'overlay_window' -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.previous_authority_family -eq 'hotkey_summon' -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.next_authority_family -eq 'resident_claim' -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.overlay_window_boundary_observed -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.previous_hotkey_summon_family_observed -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.overlay_preflight_observed -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_blockers_proof_observed -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.side_effects_denied -and
+  [bool]$ResidentRuntimeOverlayWindowBoundaryProof.fifth_authority_family_consumed -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.local_process_launch_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.process_supervision_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.process_restart_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.service_install_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.service_control_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.tray_registration_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.tray_icon_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.notification_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.summon_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.hotkey_registration_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.overlay_control_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.window_management_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.capture_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.new_sensing_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.resident_claim_authority -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_launch_process -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_supervise_process -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_restart_process -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_install_service -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_start_service -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_register_tray -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_register_hotkey -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_open_overlay -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_write_memory -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_claim_resident -and
+  $ResidentRuntimeOverlayWindowBoundaryBlockers -contains 'overlay_window_disabled' -and
+  $ResidentRuntimeOverlayWindowBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+  $ResidentRuntimeOverlayWindowBoundaryBlockers -contains 'window_management_authority_not_granted' -and
+  $ResidentRuntimeOverlayWindowBoundaryBlockers -contains 'capture_authority_not_granted' -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.next_smallest_truthful_gap -eq 'resident_runtime_resident_claim_authority_boundary'
+)
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ResidentRuntimeOverlayWindowBoundaryObserved) {
+  'resident_runtime_resident_claim_authority_boundary'
+} elseif ($ResidentRuntimeHotkeySummonBoundaryObserved) {
+  'resident_runtime_overlay_window_authority_boundary'
 } elseif ($ResidentRuntimeTrayPresenceBoundaryObserved) {
   'resident_runtime_hotkey_summon_authority_boundary'
 } elseif ($ResidentRuntimeServiceControlBoundaryObserved) {
@@ -399,7 +506,11 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_hotkey_summon_authority_boundary') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_resident_claim_authority_boundary') {
+    'The audit consumes the resident-runtime overlay-window boundary proof: the fifth authority family is now read back as blocked and non-mutating, so the next bounded family proof is resident claim.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_overlay_window_authority_boundary') {
+    'The audit consumes the resident-runtime hotkey-summon boundary proof: the fourth authority family is now read back as blocked and non-mutating, so the next bounded family proof is overlay window.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_hotkey_summon_authority_boundary') {
     'The audit consumes the resident-runtime tray-presence boundary proof: the third authority family is now read back as blocked and non-mutating, so the next bounded family proof is hotkey summon.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_tray_presence_authority_boundary') {
     'The audit consumes the resident-runtime service-control boundary proof: the second authority family is now read back as blocked and non-mutating, so the next bounded family proof is tray presence.'
@@ -488,9 +599,11 @@ $Payload = [ordered]@{
     resident_runtime_hotkey_summon = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.hotkey_summon.blockers
     )
+    resident_runtime_hotkey_summon_boundary = [string[]]@($ResidentRuntimeHotkeySummonBoundaryBlockers)
     resident_runtime_overlay_window = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.overlay_window.blockers
     )
+    resident_runtime_overlay_window_boundary = [string[]]@($ResidentRuntimeOverlayWindowBoundaryBlockers)
     resident_runtime_resident_claim = [string[]]@(
       ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.resident_claim.blockers
     )
@@ -685,6 +798,94 @@ $Payload = [ordered]@{
     remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeTrayPresenceBoundaryProof.remaining_authority_families_after_this_boundary)
     next_smallest_truthful_gap = [string]$ResidentRuntimeTrayPresenceBoundaryProof.next_smallest_truthful_gap
   }
+  resident_runtime_hotkey_summon_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeHotkeySummonBoundaryObserved) { [string]$ResidentRuntimeHotkeySummonBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeHotkeySummonBoundaryObserved
+    exit_code = [int]$ResidentRuntimeHotkeySummonBoundaryProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeHotkeySummonBoundaryProof.evidence)
+    authority_family = [string]$ResidentRuntimeHotkeySummonBoundaryProof.authority_family
+    previous_authority_family = [string]$ResidentRuntimeHotkeySummonBoundaryProof.previous_authority_family
+    next_authority_family = [string]$ResidentRuntimeHotkeySummonBoundaryProof.next_authority_family
+    hotkey_summon_boundary_observed = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.hotkey_summon_boundary_observed
+    previous_tray_presence_family_observed = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.previous_tray_presence_family_observed
+    summon_preflight_observed = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.summon_preflight_observed
+    authority_blockers_proof_observed = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.authority_blockers_proof_observed
+    side_effects_denied = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.side_effects_denied
+    fourth_authority_family_consumed = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.fourth_authority_family_consumed
+    hotkey_summon = $ResidentRuntimeHotkeySummonBoundaryProof.hotkey_summon
+    summon_preflight = $ResidentRuntimeHotkeySummonBoundaryProof.summon_preflight
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.resident_runtime_execution_authority
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    tray_icon_authority = $false
+    notification_authority = $false
+    summon_authority = $false
+    hotkey_registration_authority = $false
+    overlay_control_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_launch_process
+    would_supervise_process = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_supervise_process
+    would_restart_process = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_restart_process
+    would_install_service = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_install_service
+    would_start_service = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_start_service
+    would_register_tray = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_register_tray
+    would_register_hotkey = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_register_hotkey
+    would_open_overlay = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_open_overlay
+    would_write_memory = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_write_memory
+    would_claim_resident = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.would_claim_resident
+    blockers = [string[]]@($ResidentRuntimeHotkeySummonBoundaryBlockers)
+    remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeHotkeySummonBoundaryProof.remaining_authority_families_after_this_boundary)
+    next_smallest_truthful_gap = [string]$ResidentRuntimeHotkeySummonBoundaryProof.next_smallest_truthful_gap
+  }
+  resident_runtime_overlay_window_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeOverlayWindowBoundaryObserved) { [string]$ResidentRuntimeOverlayWindowBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeOverlayWindowBoundaryObserved
+    exit_code = [int]$ResidentRuntimeOverlayWindowBoundaryProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeOverlayWindowBoundaryProof.evidence)
+    authority_family = [string]$ResidentRuntimeOverlayWindowBoundaryProof.authority_family
+    previous_authority_family = [string]$ResidentRuntimeOverlayWindowBoundaryProof.previous_authority_family
+    next_authority_family = [string]$ResidentRuntimeOverlayWindowBoundaryProof.next_authority_family
+    overlay_window_boundary_observed = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.overlay_window_boundary_observed
+    previous_hotkey_summon_family_observed = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.previous_hotkey_summon_family_observed
+    overlay_preflight_observed = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.overlay_preflight_observed
+    authority_blockers_proof_observed = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_blockers_proof_observed
+    side_effects_denied = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.side_effects_denied
+    fifth_authority_family_consumed = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.fifth_authority_family_consumed
+    overlay_window = $ResidentRuntimeOverlayWindowBoundaryProof.overlay_window
+    overlay_preflight = $ResidentRuntimeOverlayWindowBoundaryProof.overlay_preflight
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    tray_icon_authority = $false
+    notification_authority = $false
+    summon_authority = $false
+    hotkey_registration_authority = $false
+    overlay_control_authority = $false
+    window_management_authority = $false
+    capture_authority = $false
+    new_sensing_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_launch_process
+    would_supervise_process = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_supervise_process
+    would_restart_process = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_restart_process
+    would_install_service = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_install_service
+    would_start_service = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_start_service
+    would_register_tray = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_register_tray
+    would_register_hotkey = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_register_hotkey
+    would_open_overlay = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_open_overlay
+    would_write_memory = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_write_memory
+    would_claim_resident = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.would_claim_resident
+    blockers = [string[]]@($ResidentRuntimeOverlayWindowBoundaryBlockers)
+    remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeOverlayWindowBoundaryProof.remaining_authority_families_after_this_boundary)
+    next_smallest_truthful_gap = [string]$ResidentRuntimeOverlayWindowBoundaryProof.next_smallest_truthful_gap
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -819,6 +1020,8 @@ $Payload = [ordered]@{
     resident_runtime_process_supervision_boundary_proof_readback = $ResidentRuntimeProcessSupervisionBoundaryObserved
     resident_runtime_service_control_boundary_proof_readback = $ResidentRuntimeServiceControlBoundaryObserved
     resident_runtime_tray_presence_boundary_proof_readback = $ResidentRuntimeTrayPresenceBoundaryObserved
+    resident_runtime_hotkey_summon_boundary_proof_readback = $ResidentRuntimeHotkeySummonBoundaryObserved
+    resident_runtime_overlay_window_boundary_proof_readback = $ResidentRuntimeOverlayWindowBoundaryObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false
