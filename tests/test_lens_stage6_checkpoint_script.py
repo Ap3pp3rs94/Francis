@@ -873,6 +873,51 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_overlay_boundary["governance"]["window_management_authority"] is False
     assert runtime_overlay_boundary["governance"]["capture_authority"] is False
     assert runtime_overlay_boundary["governance"]["new_sensing_authority"] is False
+    runtime_resident_claim_boundary = payload["resident_runtime_resident_claim_boundary_proof"]
+    assert runtime_resident_claim_boundary["status"] == "proof_passed"
+    assert runtime_resident_claim_boundary["ok"] is True
+    assert runtime_resident_claim_boundary["exit_code"] == 0
+    assert runtime_resident_claim_boundary["authority_family"] == "resident_claim"
+    assert runtime_resident_claim_boundary["previous_authority_family"] == "overlay_window"
+    assert runtime_resident_claim_boundary["next_authority_family"] == ""
+    assert runtime_resident_claim_boundary["resident_claim_boundary_observed"] is True
+    assert runtime_resident_claim_boundary["previous_overlay_window_family_observed"] is True
+    assert runtime_resident_claim_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_resident_claim_boundary["side_effects_denied"] is True
+    assert runtime_resident_claim_boundary["sixth_authority_family_consumed"] is True
+    assert runtime_resident_claim_boundary["local_process_launch_authority"] is False
+    assert runtime_resident_claim_boundary["process_supervision_authority"] is False
+    assert runtime_resident_claim_boundary["process_restart_authority"] is False
+    assert runtime_resident_claim_boundary["service_install_authority"] is False
+    assert runtime_resident_claim_boundary["service_control_authority"] is False
+    assert runtime_resident_claim_boundary["tray_registration_authority"] is False
+    assert runtime_resident_claim_boundary["tray_icon_authority"] is False
+    assert runtime_resident_claim_boundary["notification_authority"] is False
+    assert runtime_resident_claim_boundary["summon_authority"] is False
+    assert runtime_resident_claim_boundary["hotkey_registration_authority"] is False
+    assert runtime_resident_claim_boundary["overlay_control_authority"] is False
+    assert runtime_resident_claim_boundary["window_management_authority"] is False
+    assert runtime_resident_claim_boundary["capture_authority"] is False
+    assert runtime_resident_claim_boundary["new_sensing_authority"] is False
+    assert runtime_resident_claim_boundary["resident_claim_authority"] is False
+    assert runtime_resident_claim_boundary["would_launch_process"] is False
+    assert runtime_resident_claim_boundary["would_supervise_process"] is False
+    assert runtime_resident_claim_boundary["would_restart_process"] is False
+    assert runtime_resident_claim_boundary["would_install_service"] is False
+    assert runtime_resident_claim_boundary["would_start_service"] is False
+    assert runtime_resident_claim_boundary["would_register_tray"] is False
+    assert runtime_resident_claim_boundary["would_register_hotkey"] is False
+    assert runtime_resident_claim_boundary["would_open_overlay"] is False
+    assert runtime_resident_claim_boundary["would_write_memory"] is False
+    assert runtime_resident_claim_boundary["would_claim_resident"] is False
+    assert runtime_resident_claim_boundary["resident_claim"]["status"] == "blocked"
+    assert "resident_claim_authority_not_granted" in runtime_resident_claim_boundary["blockers"]
+    assert "resident_surface_runtime_missing" in runtime_resident_claim_boundary["blockers"]
+    assert runtime_resident_claim_boundary["remaining_authority_families_after_this_boundary"] == []
+    assert runtime_resident_claim_boundary["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert runtime_resident_claim_boundary["governance"]["diagnostic_only"] is True
+    assert runtime_resident_claim_boundary["governance"]["overlay_window_boundary_readback"] is True
+    assert runtime_resident_claim_boundary["governance"]["resident_claim_authority"] is False
     assert payload["resident_surface_content_readback"]["status"] == "blocked"
     assert payload["resident_surface_content_readback"]["ok"] is True
     assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
@@ -1040,6 +1085,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_tray_presence_boundary_proof_observed": True,
         "resident_runtime_hotkey_summon_boundary_proof_observed": True,
         "resident_runtime_overlay_window_boundary_proof_observed": True,
+        "resident_runtime_resident_claim_boundary_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

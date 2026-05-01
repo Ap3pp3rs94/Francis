@@ -15589,6 +15589,49 @@ overlay-window boundary readback:
   Result: `passed after formatting`
 - `git diff --check`
   Result: `passed; PowerShell LF-to-CRLF warnings only`
+
+### 2026-05-01 - Stage 6/Lens resident runtime resident-claim boundary readback
+
+Stage 6/Lens now has a focused resident-runtime resident-claim boundary
+proof at
+`scripts/lens-resident-runtime-resident-claim-boundary-proof.ps1`. The proof
+composes the resident runtime authority blocker split and the previously
+consumed overlay-window boundary, then proves the sixth authority family is
+`resident_claim` while keeping resident-claim authority blocked by the missing
+supervised resident runtime.
+
+The Stage 6 checkpoint now emits
+`resident_runtime_resident_claim_boundary_proof`, and the completion audit
+consumes the same proof, exposes a dedicated
+`closure_blockers.resident_runtime_resident_claim_boundary` bucket, and advances
+its `next_smallest_truthful_gap` from
+`resident_runtime_resident_claim_authority_boundary` to
+`stage6_lens_completion_audit`. This means all six resident-runtime authority
+families are now individually read back as blocked and non-mutating; it does not
+mean Stage 6 is ready to close.
+
+Stage 6 remains active and blocked. This slice does not launch or supervise a
+resident host, install or control a service, register tray presence, bind a
+hotkey, open or control an overlay, capture screen content, write memory, decide
+approvals, claim resident status, or start Stage 7/Telemetry.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+resident-claim boundary readback:
+
+- `python -m pytest tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed after formatting the completion-audit test`
+- `python -m ruff check tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed; PowerShell LF-to-CRLF warnings only`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15742,9 +15785,10 @@ These remain true and should block any "finished" claim:
   approval-decision, and resident-claim authority denied, plus resident-runtime
   overlay-window boundary readback that keeps overlay open/control,
   window-management, capture, sensing, process, service, tray, hotkey, memory,
-  approval-decision, and resident-claim authority denied and names
-  `resident_runtime_resident_claim_authority_boundary` as the current handoff,
-  but no
+  approval-decision, and resident-claim authority denied, plus resident-runtime
+  resident-claim boundary readback that keeps resident-claim, process, service,
+  tray, hotkey, overlay, memory, and approval-decision authority denied and
+  names `stage6_lens_completion_audit` as the current handoff, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command
