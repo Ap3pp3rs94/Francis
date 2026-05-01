@@ -14850,6 +14850,52 @@ supervision enablement authority request readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision enablement authority grant boundary
+
+Stage 6/Lens now has an exact approved-request-bound grant boundary for future
+persistent supervision enablement authority. `POST
+/lens/host/persistent-supervision/enablement/authority` requires the exact
+approved `lens.host.persistent_supervision_enablement_authority` approval
+request, `system.write`, and an active host-supervision authority grant before
+writing a bounded grant receipt. `GET
+/lens/host/persistent-supervision/enablement/authority/grants` exposes filtered
+grant receipt readback, and the persistent supervision enablement readiness
+audit plus `/lens/status` now consume that grant/readback truth.
+
+This grants only a receipt-backed persistent-supervision enablement authority
+lease for a future service-configuration review boundary. It does not grant
+service-configuration write authority, persistent-supervision execution
+authority, approval-decision authority, process supervision, service control,
+service installation, resident-claim authority, memory writes, UI authority, or
+actual persistent supervision. The persistent supervision enablement denial
+boundary now removes `persistent_supervision_enablement_authority_not_granted`
+only when that active grant receipt exists; it still denies service config
+mutation with `service_config_write_authority_not_granted` and
+`persistent_supervision_execution_authority_not_granted`.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is the
+service-configuration write / persistent-supervision execution boundary for
+enablement, still without mutating service config or enabling persistent
+supervision until that separate boundary is proven and validated.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision enablement authority grant boundary:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_grant_requires_approved_request_and_host_grant -q`
+  Result: `failed before fix due Windows receipt path length; passed after shortening the internal receipt directory`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_request_creates_approval_only_readback tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

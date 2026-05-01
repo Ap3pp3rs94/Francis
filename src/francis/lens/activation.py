@@ -44,11 +44,15 @@ LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE = "/lens/host/persistent-super
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ACTION = (
     "lens.host.persistent_supervision_enablement_authority"
 )
+LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE = "/lens/host/persistent-supervision/enablement/authority"
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE = (
     "/lens/host/persistent-supervision/enablement/authority/request"
 )
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE = (
     "/lens/host/persistent-supervision/enablement/authority/requests"
+)
+LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE = (
+    "/lens/host/persistent-supervision/enablement/authority/grants"
 )
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE = (
     "/lens/host/persistent-supervision/enablement/authority/readiness"
@@ -172,6 +176,10 @@ def _host_supervision_authority_grant_receipt_root() -> Path:
     return data_dir() / "lens" / "host_supervision_authority_grants"
 
 
+def _persistent_supervision_enablement_authority_grant_receipt_root() -> Path:
+    return data_dir() / "lens" / "pse_authority_grants"
+
+
 def _activation_denial_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
     seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
     digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
@@ -214,6 +222,18 @@ def _host_supervision_authority_grant_receipt_id(*, approval_id: str, actor: str
     return f"lhsag_{ts}_{digest}"
 
 
+def _persistent_supervision_enablement_authority_grant_receipt_id(
+    *,
+    approval_id: str,
+    actor: str,
+    route: str,
+    ts: int,
+) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"lpseag_{ts}_{digest}"
+
+
 def _activation_denial_receipt_path(receipt_id: Any) -> Path | None:
     cleaned = _safe_str(receipt_id).strip()
     if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
@@ -247,6 +267,13 @@ def _host_supervision_authority_grant_receipt_path(receipt_id: Any) -> Path | No
     if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
         return None
     return _host_supervision_authority_grant_receipt_root() / f"{cleaned}.json"
+
+
+def _persistent_supervision_enablement_authority_grant_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = _safe_str(receipt_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _persistent_supervision_enablement_authority_grant_receipt_root() / f"{cleaned}.json"
 
 
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
@@ -357,6 +384,8 @@ def _persistent_supervision_enablement_authority_governance(
         "approval_request_write": approval_request_write,
         "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
         "readback_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
+        "grant_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
         "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
         "preflight_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
@@ -372,6 +401,7 @@ def _persistent_supervision_enablement_authority_governance(
         "process_restart_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
+        "persistent_supervision_enablement_authority": False,
         "service_config_write_authority": False,
         "persistent_supervision_execution_authority": False,
         "receipt_write_authority": False,
@@ -439,6 +469,8 @@ def lens_host_persistent_supervision_enablement_authority_request_contract() -> 
         "route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
         "readback_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
         "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
+        "grant_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
         "preflight_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
@@ -2452,6 +2484,20 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
         route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         method="POST",
     )
+    authority_grant = grant_lens_host_persistent_supervision_enablement_authority(
+        approval_id=safe_approval_id,
+        actor=actor,
+        reason="audit Lens persistent supervision enablement authority grant readiness",
+        route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        method="POST",
+        record_receipt=False,
+    )
+    grant_receipts = lens_host_persistent_supervision_enablement_authority_grant_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+    )
+    active_grant = _as_dict(grant_receipts.get("active_latest"))
+    enablement_authority_granted = bool(active_grant)
     requests = lens_host_persistent_supervision_enablement_authority_request_readback(limit=safe_limit)
     approval, approval_lookup_status = _persistent_supervision_enablement_authority_approval_by_id(safe_approval_id)
     approval = _as_dict(approval)
@@ -2469,15 +2515,36 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
         and not bool(denial.get("authority_granted"))
         and not bool(denial.get("service_config_updated"))
     )
+    grant_boundary_observed = enablement_authority_granted or (
+        bool(authority_grant.get("boundary_ready"))
+        and not bool(authority_grant.get("applied"))
+        and not bool(authority_grant.get("executed"))
+        and not bool(authority_grant.get("authority_granted"))
+    )
     request_readback_ready = _safe_str(requests.get("kind")).strip() == (
         "lens.host.persistent_supervision_enablement_authority.request_readback"
     )
+    grant_receipt_readback_ready = _safe_str(grant_receipts.get("status")).strip() in {
+        "empty",
+        "readback_ready",
+    }
     blockers = _dedupe_strs(
         [
             *_str_list(preflight.get("blockers")),
             *_str_list(denial.get("blockers")),
+            *_str_list(authority_grant.get("blockers")),
         ]
     )
+    if enablement_authority_granted:
+        blockers = [
+            item
+            for item in blockers
+            if item
+            not in {
+                "persistent_supervision_enablement_authority_not_granted",
+                "receipt_write_authority_not_granted",
+            }
+        ]
     if approval_lookup_status == "missing":
         blockers.append("approval_id_required")
     elif approval_lookup_status == "not_found":
@@ -2561,6 +2628,37 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
             status=requests.get("status"),
         ),
         _readiness_requirement(
+            "persistent_supervision_enablement_authority_grant_boundary",
+            label="Persistent supervision enablement authority grant boundary",
+            route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+            ready=grant_boundary_observed,
+            status=authority_grant.get("status"),
+            blockers=authority_grant.get("blockers"),
+            authority_required="persistent_supervision_enablement_authority",
+            authority_granted=enablement_authority_granted,
+        ),
+        _readiness_requirement(
+            "persistent_supervision_enablement_authority_grant_receipts",
+            label="Persistent supervision enablement authority grant receipt readback",
+            route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
+            ready=grant_receipt_readback_ready,
+            status=grant_receipts.get("status"),
+            authority_required="persistent_supervision_enablement_authority",
+            authority_granted=enablement_authority_granted,
+        ),
+        _readiness_requirement(
+            "persistent_supervision_enablement_authority",
+            label="Persistent supervision enablement authority",
+            route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+            ready=enablement_authority_granted,
+            status="ready" if enablement_authority_granted else "blocked",
+            blockers=(
+                ["persistent_supervision_enablement_authority_not_granted"] if not enablement_authority_granted else []
+            ),
+            authority_required="persistent_supervision_enablement_authority",
+            authority_granted=enablement_authority_granted,
+        ),
+        _readiness_requirement(
             "service_config_write_authority",
             label="Service config write authority",
             route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
@@ -2612,9 +2710,11 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
         "route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
         "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
         "requests_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
+        "authority_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
         "preflight_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
-        "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "host_supervision_authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
         "authority_grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
         "approval_id": safe_approval_id,
         "actor": _redact_free_text(actor),
@@ -2623,16 +2723,22 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
         "approval_ready": approval_ready,
         "request_readback_ready": request_readback_ready,
         "boundary_observed": boundary_observed,
+        "grant_boundary_observed": grant_boundary_observed,
+        "grant_receipt_readback_ready": grant_receipt_readback_ready,
         "authority_grant_active": bool(preflight.get("authority_grant_active")),
         "active_grant_receipt_id": _safe_str(preflight.get("active_grant_receipt_id")).strip(),
+        "enablement_authority_granted": enablement_authority_granted,
+        "active_enablement_authority_grant_receipt_id": _safe_str(active_grant.get("receipt_id")).strip(),
         "enablement_ready": False,
         "persistent_supervision_enablement_allowed": False,
         "persistent_supervision_ready": False,
         "service_config_updated": False,
         "resident_claim_allowed": False,
-        "authority_granted": False,
+        "authority_granted": enablement_authority_granted,
         "service_config_write_authority": False,
         "persistent_supervision_execution_authority": False,
+        "grant_receipt_count": int(grant_receipts.get("total") or 0),
+        "latest_grant_receipt_id": _safe_str(_as_dict(grant_receipts.get("latest")).get("receipt_id")).strip(),
         "requirements_total": len(requirements),
         "requirements_ready_total": len(ready_requirements),
         "requirements_blocked_total": len(blocked_requirements),
@@ -2642,7 +2748,9 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
         "source_readbacks": {
             "preflight_status": _safe_str(preflight.get("status")).strip(),
             "denial_status": _safe_str(denial.get("status")).strip(),
+            "authority_grant_status": _safe_str(authority_grant.get("status")).strip(),
             "request_readback_status": _safe_str(requests.get("status")).strip(),
+            "grant_receipts_status": _safe_str(grant_receipts.get("status")).strip(),
             "approval_lookup_status": approval_lookup_status,
             "approval_status": approval_status,
             "permission_status": _safe_str(permission.get("reason")).strip(),
@@ -2658,6 +2766,7 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
             "audit_only": True,
             "preflight_only": True,
             "authority_request_boundary": True,
+            "authority_grant_boundary": True,
             "persistent_supervision_boundary": True,
             "execution_authority": False,
             "approval_decision_authority": False,
@@ -2666,6 +2775,7 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
             "process_restart_authority": False,
             "service_install_authority": False,
             "service_control_authority": False,
+            "persistent_supervision_enablement_authority": enablement_authority_granted,
             "service_config_write_authority": False,
             "persistent_supervision_execution_authority": False,
             "tray_registration_authority": False,
@@ -2674,13 +2784,15 @@ def lens_host_persistent_supervision_enablement_authority_readiness_audit(
             "summon_authority": False,
             "capture_authority": False,
             "memory_write": False,
-            "receipt_write_authority": False,
+            "receipt_write_authority": enablement_authority_granted,
             "denial_receipt_write_authority": False,
             "resident_claim_authority": False,
             "mutation_authority_granted": False,
-            "authority_granted": False,
+            "authority_granted": enablement_authority_granted,
             "next_step": (
                 "resolve_persistent_supervision_enablement_authority_readiness_blockers_before_grant_boundary"
+                if not enablement_authority_granted
+                else "review_service_config_write_boundary_before_persistent_supervision_enablement"
             ),
         },
     }
@@ -3298,6 +3410,128 @@ def _host_supervision_authority_grant_receipt(grant: dict[str, Any]) -> dict[str
     )
 
 
+def _persistent_supervision_enablement_authority_grant_receipt(grant: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = _safe_str(grant.get("approval_id")).strip()
+    actor = _safe_str(grant.get("actor")).strip()
+    route = _safe_str(grant.get("route")).strip() or LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE
+    receipt_id = _persistent_supervision_enablement_authority_grant_receipt_id(
+        approval_id=approval_id,
+        actor=actor,
+        route=route,
+        ts=ts,
+    )
+    permission = _as_dict(grant.get("permission"))
+    preflight = _as_dict(grant.get("preflight"))
+    approval = _as_dict(grant.get("approval"))
+    host_authority = _as_dict(grant.get("host_supervision_authority"))
+    grant_body = _as_dict(grant.get("grant"))
+    lease_seconds = _safe_host_supervision_authority_lease_seconds(grant_body.get("lease_seconds"))
+    expires_ts = ts + lease_seconds
+    authorities = _as_dict(grant_body.get("authorities"))
+    return _filtered_record(
+        {
+            "kind": "lens.host.persistent_supervision_enablement_authority.grant.receipt",
+            "receipt_id": receipt_id,
+            "id": receipt_id,
+            "status": _safe_str(grant.get("status")).strip(),
+            "route": route,
+            "method": _safe_str(grant.get("method")).strip() or "POST",
+            "source_kind": _safe_str(grant.get("kind")).strip(),
+            "source_route": route,
+            "approval_id": approval_id,
+            "actor": actor,
+            "reason": _safe_str(grant.get("reason")).strip(),
+            "created_ts": ts,
+            "expires_ts": expires_ts,
+            "lease": {
+                "active": True,
+                "lease_seconds": lease_seconds,
+                "created_ts": ts,
+                "expires_ts": expires_ts,
+            },
+            "blockers": _str_list(grant.get("blockers")),
+            "approval": {
+                "required": bool(approval.get("required")),
+                "found": bool(approval.get("found")),
+                "status": _safe_str(approval.get("status")).strip(),
+                "approved": bool(approval.get("approved")),
+            },
+            "permission": {
+                "ready": bool(permission.get("ready")),
+                "allowed": bool(permission.get("allowed")),
+                "reason": _safe_str(permission.get("reason")).strip(),
+                "required_scope": _safe_str(permission.get("required_scope")).strip(),
+            },
+            "host_supervision_authority": {
+                "active": bool(host_authority.get("active")),
+                "receipt_id": _safe_str(host_authority.get("receipt_id")).strip(),
+                "route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            },
+            "preflight": {
+                "ready": bool(preflight.get("ready")),
+                "preflight_ready": bool(preflight.get("preflight_ready")),
+                "enablement_ready": bool(preflight.get("enablement_ready")),
+                "authority_grant_active": bool(preflight.get("authority_grant_active")),
+                "persistent_supervision_ready": bool(preflight.get("persistent_supervision_ready")),
+                "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")),
+                "requirements_total": int(preflight.get("requirements_total") or 0),
+                "requirements_blocked_total": int(preflight.get("requirements_blocked_total") or 0),
+                "blocked_requirements": _str_list(preflight.get("blocked_requirements")),
+            },
+            "authority_boundary": {
+                "applied": True,
+                "executed": False,
+                "authority_granted": True,
+                "boundary_ready": True,
+                "ready": True,
+                "enablement_ready": False,
+                "persistent_supervision_ready": False,
+                "service_config_updated": False,
+                "resident_claim_allowed": False,
+            },
+            "authorities": {
+                "persistent_supervision_enablement_authority": bool(
+                    authorities.get("persistent_supervision_enablement_authority")
+                ),
+                "service_config_write_authority": bool(authorities.get("service_config_write_authority")),
+                "persistent_supervision_execution_authority": bool(
+                    authorities.get("persistent_supervision_execution_authority")
+                ),
+                "receipt_write_authority": bool(authorities.get("receipt_write_authority")),
+                "resident_claim_authority": bool(authorities.get("resident_claim_authority")),
+            },
+            "grant": grant_body,
+            "governance": {
+                "gate": "lens_host_persistent_supervision_enablement_authority_grant_receipt",
+                "authority_grant_boundary": True,
+                "persistent_supervision_boundary": True,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "persistent_supervision_enablement_authority": True,
+                "service_config_write_authority": False,
+                "persistent_supervision_execution_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "capture_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": False,
+                "receipt_write_authority": True,
+                "mutation_authority_granted": False,
+                "authority_granted": True,
+            },
+        }
+    )
+
+
 def _record_host_supervision_authority_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
     receipt = _host_supervision_authority_denial_receipt(denial)
     path = _host_supervision_authority_denial_receipt_path(receipt.get("receipt_id"))
@@ -3320,12 +3554,28 @@ def _record_host_supervision_authority_grant_receipt(grant: dict[str, Any]) -> d
     return display
 
 
+def _record_persistent_supervision_enablement_authority_grant_receipt(grant: dict[str, Any]) -> dict[str, Any]:
+    receipt = _persistent_supervision_enablement_authority_grant_receipt(grant)
+    path = _persistent_supervision_enablement_authority_grant_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    receipt["path"] = str(path)
+    display = _display(receipt)
+    _atomic_write_json(path, display)
+    return display
+
+
 def _read_host_supervision_authority_denial_receipt(path: Path) -> dict[str, Any] | None:
     raw = _read_json(path)
     return _display(raw) if raw is not None else None
 
 
 def _read_host_supervision_authority_grant_receipt(path: Path) -> dict[str, Any] | None:
+    raw = _read_json(path)
+    return _display(raw) if raw is not None else None
+
+
+def _read_persistent_supervision_enablement_authority_grant_receipt(path: Path) -> dict[str, Any] | None:
     raw = _read_json(path)
     return _display(raw) if raw is not None else None
 
@@ -3392,6 +3642,53 @@ def _list_host_supervision_authority_grant_receipts(
         if status and _safe_str(item.get("status")).strip() != status:
             continue
         if active_only and not _host_supervision_authority_grant_active(item, now=now):
+            continue
+        items.append(item)
+    items.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), _safe_str(item.get("receipt_id"))),
+        reverse=True,
+    )
+    return items[:limit], len(items)
+
+
+def _persistent_supervision_enablement_authority_grant_active(item: dict[str, Any], *, now: int | None = None) -> bool:
+    lease = _as_dict(item.get("lease"))
+    expires_ts = _record_ts(lease.get("expires_ts") or item.get("expires_ts"))
+    if expires_ts <= 0:
+        return False
+    check_ts = _now_s() if now is None else now
+    authorities = _as_dict(item.get("authorities"))
+    return (
+        _safe_str(item.get("kind")).strip() == "lens.host.persistent_supervision_enablement_authority.grant.receipt"
+        and _safe_str(item.get("status")).strip() == "authority_granted"
+        and bool(_as_dict(item.get("authority_boundary")).get("authority_granted"))
+        and bool(authorities.get("persistent_supervision_enablement_authority"))
+        and bool(lease.get("active"))
+        and expires_ts > check_ts
+    )
+
+
+def _list_persistent_supervision_enablement_authority_grant_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    root = _persistent_supervision_enablement_authority_grant_receipt_root()
+    if not root.exists():
+        return [], 0
+    items: list[dict[str, Any]] = []
+    now = _now_s()
+    for path in root.glob("*.json"):
+        item = _read_persistent_supervision_enablement_authority_grant_receipt(path)
+        if not item:
+            continue
+        if approval_id and _safe_str(item.get("approval_id")).strip() != approval_id:
+            continue
+        if status and _safe_str(item.get("status")).strip() != status:
+            continue
+        if active_only and not _persistent_supervision_enablement_authority_grant_active(item, now=now):
             continue
         items.append(item)
     items.sort(
@@ -3511,6 +3808,77 @@ def lens_host_supervision_authority_grant_receipts(
             "receipt_write_authority": False,
             "mutation_authority_granted": False,
             "next_step": "review_host_supervision_authority_grants_before_enabling_persistent_supervision",
+        },
+    }
+
+
+def lens_host_persistent_supervision_enablement_authority_grant_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    safe_status = _safe_str(status).strip()
+    items, total = _list_persistent_supervision_enablement_authority_grant_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+        status=safe_status,
+        active_only=active_only,
+    )
+    latest = items[0] if items else None
+    active_latest = next(
+        (item for item in items if _persistent_supervision_enablement_authority_grant_active(item)),
+        None,
+    )
+    return {
+        "ok": True,
+        "kind": "lens.host.persistent_supervision_enablement_authority.grant_receipts",
+        "status": "readback_ready" if items else "empty",
+        "route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
+        "authority_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
+        "requests_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
+        "limit": safe_limit,
+        "approval_id": safe_approval_id,
+        "filter_status": safe_status,
+        "active_only": active_only,
+        "total": total,
+        "latest": latest,
+        "active_latest": active_latest,
+        "authority_granted": bool(active_latest),
+        "service_config_write_authority": False,
+        "persistent_supervision_execution_authority": False,
+        "persistent_supervision_enablement_allowed": False,
+        "items": items,
+        "governance": {
+            **_persistent_supervision_enablement_authority_governance(
+                route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_persistent_supervision_enablement_authority_grant_receipts_readback",
+            "read_only_contract": True,
+            "authority_grant_boundary": True,
+            "persistent_supervision_boundary": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "persistent_supervision_enablement_authority": bool(active_latest),
+            "service_config_write_authority": False,
+            "persistent_supervision_execution_authority": False,
+            "memory_write": False,
+            "resident_claim_authority": False,
+            "denial_receipt_write_authority": False,
+            "receipt_write_authority": False,
+            "mutation_authority_granted": False,
+            "next_step": "review_persistent_supervision_enablement_authority_grants_before_config_write_boundary",
         },
     }
 
@@ -3902,6 +4270,239 @@ def deny_lens_host_supervision_authority_grant(
     )
 
 
+def _persistent_supervision_enablement_authority_boundary_status(blockers: list[str]) -> tuple[str, str]:
+    if "approval_id_required" in blockers:
+        return "blocked", "select_exact_approved_persistent_supervision_enablement_authority_request"
+    if (
+        "persistent_supervision_enablement_authority_approval_not_found" in blockers
+        or "persistent_supervision_enablement_authority_approval_wrong_action" in blockers
+    ):
+        return "blocked", "select_matching_persistent_supervision_enablement_authority_request"
+    if "persistent_supervision_enablement_authority_approval_not_approved" in blockers:
+        return "blocked", "approve_exact_persistent_supervision_enablement_authority_request"
+    if "system_write_scope_not_ready" in blockers:
+        return "blocked", "configure_actor_scope_before_persistent_supervision_enablement_authority_boundary"
+    if "host_supervision_authority_grant_not_active" in blockers:
+        return "blocked", "grant_host_supervision_authority_before_persistent_supervision_enablement_authority"
+    return (
+        "authority_granted",
+        "review_service_config_write_boundary_before_persistent_supervision_enablement",
+    )
+
+
+def grant_lens_host_persistent_supervision_enablement_authority(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    reason: Any = "attempt Lens persistent supervision enablement authority grant",
+    route: str = LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+    method: str = "POST",
+    record_receipt: bool = False,
+    lease_seconds: Any = _HOST_SUPERVISION_AUTHORITY_DEFAULT_LEASE_SECONDS,
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE
+    safe_approval_id = _safe_str(approval_id).strip()
+    approval, approval_lookup_status = _persistent_supervision_enablement_authority_approval_by_id(safe_approval_id)
+    approval_status = _safe_str(_as_dict(approval).get("status")).strip() if approval else approval_lookup_status
+    approval_ready = bool(approval) and approval_status == "approved"
+    permission = _permission_readiness(actor, route=safe_route, method=method)
+    preflight = lens_host_persistent_supervision_enablement_preflight()
+    host_grants = lens_host_supervision_authority_grant_receipts(limit=1, active_only=True)
+    active_host_grant = _as_dict(host_grants.get("active_latest"))
+    host_authority_active = bool(active_host_grant)
+    blockers: list[str] = []
+    if not safe_approval_id:
+        blockers.append("approval_id_required")
+    elif approval_lookup_status == "not_found":
+        blockers.append("persistent_supervision_enablement_authority_approval_not_found")
+    elif approval_lookup_status == "wrong_action":
+        blockers.append("persistent_supervision_enablement_authority_approval_wrong_action")
+    elif not approval_ready:
+        blockers.append("persistent_supervision_enablement_authority_approval_not_approved")
+    if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
+        blockers.append("system_write_scope_not_ready")
+    if not host_authority_active:
+        blockers.append("host_supervision_authority_grant_not_active")
+    grant_ready = approval_ready and bool(permission.get("ready")) and host_authority_active
+    if not grant_ready:
+        blockers.extend(_str_list(preflight.get("blockers")))
+        blockers.extend(
+            [
+                "persistent_supervision_enablement_authority_not_granted",
+                "service_config_write_authority_not_granted",
+                "persistent_supervision_execution_authority_not_granted",
+                "receipt_write_authority_not_granted",
+                "resident_claim_authority_not_granted",
+            ]
+        )
+    deduped_blockers = _dedupe_strs(blockers)
+    status, next_step = _persistent_supervision_enablement_authority_boundary_status(deduped_blockers)
+    active_authorities = grant_ready and not deduped_blockers
+    safe_lease_seconds = _safe_host_supervision_authority_lease_seconds(lease_seconds)
+    grant = {
+        "reason": "approved_persistent_supervision_enablement_authority_lease",
+        "message": (
+            "Approved persistent supervision enablement authority is leased for future service-config "
+            "review; this does not update config, enable supervision, install, start, supervise, restart, "
+            "write memory, or claim a resident host."
+        ),
+        "lease_seconds": safe_lease_seconds,
+        "authorities": {
+            "persistent_supervision_enablement_authority": active_authorities,
+            "service_config_write_authority": False,
+            "persistent_supervision_execution_authority": False,
+            "receipt_write_authority": active_authorities,
+            "resident_claim_authority": False,
+        },
+        "would_grant_persistent_supervision_enablement_authority": active_authorities,
+        "would_grant_service_config_write_authority": False,
+        "would_grant_persistent_supervision_execution_authority": False,
+        "would_grant_receipt_write_authority": active_authorities,
+        "would_grant_resident_claim_authority": False,
+        "would_update_service_config": False,
+        "would_enable_process_supervision": False,
+        "would_enable_persistent_supervision": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+        "grant_receipt_written": False,
+    }
+    denial = {
+        "reason": "persistent_supervision_enablement_authority_not_ready",
+        "message": (
+            "Lens persistent supervision enablement authority is denied until an exact approved request, "
+            "system.write actor scope, and active host supervision authority grant are present."
+        ),
+        "would_grant_persistent_supervision_enablement_authority": False,
+        "would_grant_service_config_write_authority": False,
+        "would_grant_persistent_supervision_execution_authority": False,
+        "would_update_service_config": False,
+        "would_enable_process_supervision": False,
+        "would_enable_persistent_supervision": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_write_receipt": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+        "denial_receipt_written": False,
+    }
+    governance: dict[str, Any] = {
+        **_persistent_supervision_enablement_authority_governance(
+            route=safe_route,
+            approval_request_write=False,
+            read_only_contract=False,
+        ),
+        "gate": (
+            "lens_host_persistent_supervision_enablement_authority_grant_boundary"
+            if active_authorities
+            else "lens_host_persistent_supervision_enablement_authority_denial_boundary"
+        ),
+        "authority_grant_boundary": True,
+        "denial_boundary": not active_authorities,
+        "persistent_supervision_boundary": True,
+        "activation_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "persistent_supervision_enablement_authority": active_authorities,
+        "service_config_write_authority": False,
+        "persistent_supervision_execution_authority": False,
+        "tray_registration_authority": False,
+        "tray_icon_authority": False,
+        "notification_authority": False,
+        "hotkey_registration_authority": False,
+        "overlay_control_authority": False,
+        "window_management_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "memory_write": False,
+        "receipt_write_authority": active_authorities,
+        "denial_receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "runtime_mutation_authority_granted": False,
+        "mutation_authority_granted": False,
+        "authority_granted": active_authorities,
+        "next_step": next_step,
+    }
+    response: dict[str, Any] = {
+        "ok": True,
+        "kind": (
+            "lens.host.persistent_supervision_enablement_authority.grant"
+            if active_authorities
+            else "lens.host.persistent_supervision_enablement_authority.denial"
+        ),
+        "status": status,
+        "route": safe_route,
+        "method": method,
+        "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
+        "requests_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
+        "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
+        "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
+        "preflight_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
+        "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
+        "host_supervision_authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+        "host_supervision_authority_grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+        "approval_id": safe_approval_id,
+        "approval": {
+            "required": True,
+            "found": bool(approval),
+            "status": approval_status,
+            "approved": approval_ready,
+            "item": approval,
+        },
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "receipt_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
+        "receipt_written": False,
+        "receipt": {},
+        "applied": False,
+        "executed": False,
+        "authority_granted": active_authorities,
+        "grant_ready": active_authorities,
+        "boundary_ready": True,
+        "ready": active_authorities,
+        "enablement_ready": False,
+        "persistent_supervision_enablement_allowed": False,
+        "persistent_supervision_ready": False,
+        "service_config_updated": False,
+        "resident_claim_allowed": False,
+        "service_config_write_authority": False,
+        "persistent_supervision_execution_authority": False,
+        "permission": permission,
+        "host_supervision_authority": {
+            "active": host_authority_active,
+            "receipt_id": _safe_str(active_host_grant.get("receipt_id")).strip(),
+            "route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+        },
+        "preflight": preflight,
+        "blockers": deduped_blockers,
+        "grant": grant,
+        "denial": denial if not active_authorities else {},
+        "governance": governance,
+    }
+    if record_receipt and active_authorities and status == "authority_granted":
+        receipt = _record_persistent_supervision_enablement_authority_grant_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["applied"] = True
+            grant["grant_receipt_written"] = True
+    elif record_receipt:
+        governance["grant_receipt_write_blocker"] = "persistent_supervision_enablement_authority_not_ready"
+        governance["denial_receipt_write_blocker"] = "persistent_supervision_enablement_authority_not_ready"
+    return response
+
+
 def _persistent_supervision_enablement_boundary_status(blockers: list[str]) -> tuple[str, str]:
     if "system_write_scope_not_ready" in blockers:
         return "blocked", "configure_actor_scope_before_persistent_supervision_enablement"
@@ -3925,12 +4526,19 @@ def deny_lens_host_persistent_supervision_enablement(
     permission = _permission_readiness(actor, route=safe_route, method=safe_method)
     preflight = lens_host_persistent_supervision_enablement_preflight()
     preflight_plan = _as_dict(preflight.get("plan"))
+    enablement_authority_grants = lens_host_persistent_supervision_enablement_authority_grant_receipts(
+        limit=1,
+        active_only=True,
+    )
+    active_enablement_authority_grant = _as_dict(enablement_authority_grants.get("active_latest"))
+    enablement_authority_granted = bool(active_enablement_authority_grant)
     blockers = _str_list(preflight.get("blockers"))
     if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
         blockers.append("system_write_scope_not_ready")
+    if not enablement_authority_granted:
+        blockers.append("persistent_supervision_enablement_authority_not_granted")
     blockers.extend(
         [
-            "persistent_supervision_enablement_authority_not_granted",
             "service_config_write_authority_not_granted",
             "persistent_supervision_execution_authority_not_granted",
         ]
@@ -3981,6 +4589,10 @@ def deny_lens_host_persistent_supervision_enablement(
         "persistent_supervision_ready": False,
         "resident_claim_allowed": False,
         "authority_granted": False,
+        "persistent_supervision_enablement_authority_granted": enablement_authority_granted,
+        "active_enablement_authority_grant_receipt_id": _safe_str(
+            active_enablement_authority_grant.get("receipt_id")
+        ).strip(),
         "authority_grant_active": bool(preflight.get("authority_grant_active")),
         "active_grant_receipt_id": _safe_str(preflight.get("active_grant_receipt_id")).strip(),
         "process_supervision_enabled": bool(preflight.get("process_supervision_enabled")),
@@ -4018,13 +4630,15 @@ def deny_lens_host_persistent_supervision_enablement(
             "process_restart_authority": False,
             "service_install_authority": False,
             "service_control_authority": False,
+            "persistent_supervision_enablement_authority": enablement_authority_granted,
             "service_config_write_authority": False,
+            "persistent_supervision_execution_authority": False,
             "receipt_write_authority": False,
             "denial_receipt_write_authority": False,
             "memory_write": False,
             "resident_claim_authority": False,
             "mutation_authority_granted": False,
-            "authority_granted": False,
+            "authority_granted": enablement_authority_granted,
             "next_step": next_step,
         },
     }
@@ -4824,6 +5438,8 @@ def _persistent_supervision_enablement_authority_request_payload(*, actor: Any, 
         "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
         "readback_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUESTS_ROUTE,
         "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_READINESS_ROUTE,
+        "grant_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_GRANTS_ROUTE,
         "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
         "authority_grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
         "preflight": {
