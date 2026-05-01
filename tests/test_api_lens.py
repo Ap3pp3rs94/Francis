@@ -3386,6 +3386,290 @@ def test_lens_persistent_supervision_enablement_authority_grant_requires_approve
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
+def test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    no_scope = client.post(
+        "/lens/host/persistent-supervision/enablement/execution/request",
+        json={
+            "actor": "test.lens.no_scope",
+            "reason": "try to request persistent supervision execution authority without scope",
+        },
+    )
+    assert no_scope.status_code == 200
+    no_scope_body = no_scope.json()
+    assert no_scope_body["status"] == "denied"
+    assert no_scope_body["approval_requested"] is False
+    assert no_scope_body["governance"]["gate"] == "permission_gate"
+    assert no_scope_body["governance"]["service_config_write_authority"] is False
+    assert no_scope_body["governance"]["persistent_supervision_execution_authority"] is False
+    assert client.get("/approvals/list?status=pending").json()["items"] == []
+
+    missing_enablement_grant = client.post(
+        "/lens/host/persistent-supervision/enablement/execution/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "try to request persistent supervision execution before enablement authority grant",
+        },
+    )
+    assert missing_enablement_grant.status_code == 200
+    missing_body = missing_enablement_grant.json()
+    assert missing_body["status"] == "blocked"
+    assert missing_body["approval_requested"] is False
+    assert missing_body["authority_granted"] is False
+    assert missing_body["service_config_write_authority"] is False
+    assert missing_body["persistent_supervision_execution_authority"] is False
+    assert missing_body["persistent_supervision_enablement_authority_granted"] is False
+    assert "persistent_supervision_enablement_authority_not_granted" in missing_body["blockers"]
+    assert client.get("/approvals/list?status=pending").json()["items"] == []
+
+    host_request = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants host supervision authority reviewed first",
+        },
+    )
+    assert host_request.status_code == 200
+    host_approval_id = str(host_request.json()["approval_id"])
+    assert host_approval_id
+    host_decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": host_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as host supervision authority prerequisite",
+        },
+    )
+    assert host_decision.status_code == 200
+    assert host_decision.json()["status"] == "approved"
+    host_grant = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": host_approval_id,
+            "actor": "test.system.write",
+            "reason": "grant host supervision authority prerequisite",
+        },
+    )
+    assert host_grant.status_code == 200
+    assert host_grant.json()["status"] == "authority_granted"
+
+    enablement_request = client.post(
+        "/lens/host/persistent-supervision/enablement/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants persistent supervision enablement authority reviewed",
+        },
+    )
+    assert enablement_request.status_code == 200
+    enablement_approval_id = str(enablement_request.json()["approval_id"])
+    assert enablement_approval_id
+    enablement_decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": enablement_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as persistent supervision enablement authority prerequisite",
+        },
+    )
+    assert enablement_decision.status_code == 200
+    assert enablement_decision.json()["status"] == "approved"
+    enablement_grant = client.post(
+        "/lens/host/persistent-supervision/enablement/authority",
+        json={
+            "approval_id": enablement_approval_id,
+            "actor": "test.system.write",
+            "reason": "grant persistent supervision enablement authority prerequisite",
+        },
+    )
+    assert enablement_grant.status_code == 200
+    enablement_grant_body = enablement_grant.json()
+    assert enablement_grant_body["status"] == "authority_granted"
+    enablement_receipt_id = enablement_grant_body["receipt"]["receipt_id"]
+
+    requested = client.post(
+        "/lens/host/persistent-supervision/enablement/execution/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove governed persistent supervision execution authority request",
+        },
+    )
+    assert requested.status_code == 200
+    body = requested.json()
+    assert body["status"] == "approval_requested"
+    assert body["approval_requested"] is True
+    assert body["applied"] is False
+    assert body["executed"] is False
+    assert body["authority_granted"] is False
+    assert body["persistent_supervision_enablement_authority_granted"] is True
+    assert body["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert body["service_config_write_authority"] is False
+    assert body["persistent_supervision_execution_authority"] is False
+    assert body["action"] == "lens.host.persistent_supervision_enablement_execution_authority"
+    assert body["governance"]["approval_request_write"] is True
+    assert body["governance"]["persistent_supervision_enablement_authority"] is True
+    assert body["governance"]["service_config_write_authority"] is False
+    assert body["governance"]["persistent_supervision_execution_authority"] is False
+    approval_id = str(body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    pending_payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending_payload["action"] == "lens.host.persistent_supervision_enablement_execution_authority"
+    assert pending_payload["reason"] == "prove governed persistent supervision execution authority request"
+    payload = pending_payload["payload"]
+    assert payload["request_kind"] == "lens.host.persistent_supervision_enablement_execution_authority.request"
+    assert payload["route"] == "/lens/host/persistent-supervision/enablement/execution/request"
+    assert payload["readback_route"] == "/lens/host/persistent-supervision/enablement/execution/requests"
+    assert payload["readiness_route"] == "/lens/host/persistent-supervision/enablement/execution/readiness"
+    assert payload["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert payload["denial_boundary"]["boundary_ready"] is True
+    assert payload["denial_boundary"]["applied"] is False
+    assert payload["denial_boundary"]["executed"] is False
+    assert payload["denial_boundary"]["service_config_updated"] is False
+    assert payload["denial_boundary"]["persistent_supervision_enablement_authority_granted"] is True
+    assert payload["readiness"]["enablement_authority_granted"] is True
+    assert payload["readiness"]["service_config_write_authority"] is False
+    assert payload["readiness"]["persistent_supervision_execution_authority"] is False
+    assert "service_config_write_authority_not_granted" in payload["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in payload["blockers"]
+    assert payload["governance"]["approval_request_write"] is True
+    assert payload["governance"]["service_config_write_authority"] is False
+    assert payload["governance"]["persistent_supervision_execution_authority"] is False
+
+    readback = client.get("/lens/host/persistent-supervision/enablement/execution/requests?limit=10")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["kind"] == "lens.host.persistent_supervision_enablement_execution.request_readback"
+    assert readback_body["status"] == "pending_review"
+    assert readback_body["pending_count"] == 1
+    assert readback_body["approved_count"] == 0
+    assert readback_body["latest"]["id"] == approval_id
+    assert readback_body["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert readback_body["authority_granted"] is False
+    assert readback_body["service_config_write_authority"] is False
+    assert readback_body["persistent_supervision_execution_authority"] is False
+
+    pending_readiness = client.get(
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+        f"?limit=10&approval_id={approval_id}&actor=test.system.write"
+    )
+    assert pending_readiness.status_code == 200
+    pending_readiness_body = pending_readiness.json()
+    assert pending_readiness_body["kind"] == "lens.host.persistent_supervision_enablement_execution.readiness_audit"
+    assert pending_readiness_body["status"] == "blocked"
+    assert pending_readiness_body["approval_id"] == approval_id
+    assert pending_readiness_body["approval_ready"] is False
+    assert pending_readiness_body["request_readback_ready"] is True
+    assert pending_readiness_body["boundary_observed"] is True
+    assert pending_readiness_body["enablement_authority_granted"] is True
+    assert pending_readiness_body["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert "persistent_supervision_enablement_execution_approval_not_approved" in pending_readiness_body["blockers"]
+    assert pending_readiness_body["service_config_write_authority"] is False
+    assert pending_readiness_body["persistent_supervision_execution_authority"] is False
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only as a persistent supervision execution authority review decision",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    approved_readiness = client.get(
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+        f"?limit=10&approval_id={approval_id}&actor=test.system.write"
+    )
+    assert approved_readiness.status_code == 200
+    approved_readiness_body = approved_readiness.json()
+    assert approved_readiness_body["approval_ready"] is True
+    assert approved_readiness_body["ready"] is False
+    assert approved_readiness_body["authority_granted"] is False
+    assert approved_readiness_body["service_config_write_authority"] is False
+    assert approved_readiness_body["persistent_supervision_execution_authority"] is False
+    assert (
+        "persistent_supervision_enablement_execution_approval_not_approved" not in (approved_readiness_body["blockers"])
+    )
+    assert "service_config_write_authority_not_granted" in approved_readiness_body["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in approved_readiness_body["blockers"]
+    requirements = {item["id"]: item for item in approved_readiness_body["requirements"]}
+    assert requirements["exact_persistent_supervision_enablement_execution_approval"]["ready"] is True
+    assert requirements["active_persistent_supervision_enablement_authority_grant"]["ready"] is True
+    assert requirements["persistent_supervision_enablement_execution_request_readback"]["ready"] is True
+    assert requirements["service_config_write_authority"]["ready"] is False
+    assert requirements["persistent_supervision_execution_authority"]["ready"] is False
+
+    approved_readback = client.get("/lens/host/persistent-supervision/enablement/execution/requests?limit=10")
+    assert approved_readback.status_code == 200
+    approved_readback_body = approved_readback.json()
+    assert approved_readback_body["status"] == "approved_no_authority"
+    assert approved_readback_body["pending_count"] == 0
+    assert approved_readback_body["approved_count"] == 1
+    assert approved_readback_body["authority_granted"] is False
+
+    status = client.get("/lens/status?limit=10")
+    assert status.status_code == 200
+    status_body = status.json()
+    resident_host = status_body["resident_host"]
+    assert resident_host["persistent_supervision_enablement_execution_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution"
+    )
+    assert resident_host["persistent_supervision_enablement_execution_request_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/request"
+    )
+    assert resident_host["persistent_supervision_enablement_execution_requests"]["approved_count"] == 1
+    assert resident_host["persistent_supervision_enablement_execution_readiness"]["request_readback_ready"] is True
+    criterion = _criterion(status_body, "persistent_supervision_enablement_execution_readiness_audit")
+    assert criterion["status"] == "blocked"
+    assert criterion["request_readback_ready"] is True
+    assert criterion["boundary_observed"] is True
+    assert criterion["enablement_authority_granted"] is True
+    assert criterion["active_enablement_authority_grant_receipt_id"] == enablement_receipt_id
+    assert criterion["service_config_write_authority"] is False
+    assert criterion["persistent_supervision_execution_authority"] is False
+    command = next(
+        item
+        for item in status_body["command_palette"]["commands"]
+        if item["id"] == "lens.host.persistent_supervision_enablement_execution_authority.request"
+    )
+    assert command["route"] == "/lens/host/persistent-supervision/enablement/execution/request"
+    assert command["method"] == "POST"
+    assert command["mutates"] is True
+    assert command["write_guard"] == (
+        "system.write approval request; requires enablement authority; no service config mutation"
+    )
+    assert command["execution_authority"] is False
+    assert command["approval_decision_authority"] is False
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

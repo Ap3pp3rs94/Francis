@@ -18,6 +18,9 @@ from francis.lens.activation import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_activation_request_contract,
+    lens_host_persistent_supervision_enablement_execution_readiness_audit,
+    lens_host_persistent_supervision_enablement_execution_request_contract,
+    lens_host_persistent_supervision_enablement_execution_request_readback,
     lens_host_persistent_supervision_enablement_authority_readiness_audit,
     lens_host_persistent_supervision_enablement_authority_grant_receipts,
     lens_host_persistent_supervision_enablement_authority_request_contract,
@@ -282,6 +285,15 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     persistent_supervision_enablement_authority_readiness = (
         lens_host_persistent_supervision_enablement_authority_readiness_audit(limit=limit)
     )
+    persistent_supervision_enablement_execution_request = (
+        lens_host_persistent_supervision_enablement_execution_request_contract()
+    )
+    persistent_supervision_enablement_execution_requests = (
+        lens_host_persistent_supervision_enablement_execution_request_readback(limit=limit)
+    )
+    persistent_supervision_enablement_execution_readiness = (
+        lens_host_persistent_supervision_enablement_execution_readiness_audit(limit=limit)
+    )
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     supervision_authority_request = lens_host_supervision_authority_request_contract()
     supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
@@ -463,6 +475,21 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "persistent_supervision_enablement_authority_readiness": (
             persistent_supervision_enablement_authority_readiness
         ),
+        "persistent_supervision_enablement_execution_route": _safe_str(
+            persistent_supervision_enablement_execution_request.get("boundary_route")
+        ).strip(),
+        "persistent_supervision_enablement_execution_request_route": _safe_str(
+            persistent_supervision_enablement_execution_request.get("route")
+        ).strip(),
+        "persistent_supervision_enablement_execution_request": persistent_supervision_enablement_execution_request,
+        "persistent_supervision_enablement_execution_requests_route": _safe_str(
+            persistent_supervision_enablement_execution_requests.get("route")
+        ).strip(),
+        "persistent_supervision_enablement_execution_requests": persistent_supervision_enablement_execution_requests,
+        "persistent_supervision_enablement_execution_readiness_route": _safe_str(
+            persistent_supervision_enablement_execution_readiness.get("route")
+        ).strip(),
+        "persistent_supervision_enablement_execution_readiness": persistent_supervision_enablement_execution_readiness,
         "supervision_authority_request_route": _safe_str(supervision_authority_request.get("route")).strip(),
         "supervision_authority_request": supervision_authority_request,
         "supervision_authority_requests_route": _safe_str(supervision_authority_requests.get("route")).strip(),
@@ -819,6 +846,19 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
             write_guard="system.write approval request; no service config or execution authority",
             receipt_kind="lens.host.persistent_supervision_enablement_authority.request",
         ),
+        _palette_command(
+            "lens.host.persistent_supervision_enablement_execution_authority.request",
+            "Request Persistent Supervision Execution Review",
+            "Create an approval request for persistent supervision execution authority without changing service config.",
+            "Control",
+            route="/lens/host/persistent-supervision/enablement/execution/request",
+            method="POST",
+            action="request_lens_host_persistent_supervision_enablement_execution_authority",
+            keywords="lens host persistent supervision execution authority approval request service config",
+            mutates=True,
+            write_guard="system.write approval request; requires enablement authority; no service config mutation",
+            receipt_kind="lens.host.persistent_supervision_enablement_execution_authority.request",
+        ),
     ]
     group_counts: dict[str, int] = {}
     for command in commands:
@@ -883,6 +923,9 @@ def _stage6_readiness(
     )
     persistent_supervision_enablement_authority_grants = _as_dict(
         resident_host.get("persistent_supervision_enablement_authority_grants")
+    )
+    persistent_supervision_enablement_execution_readiness = _as_dict(
+        resident_host.get("persistent_supervision_enablement_execution_readiness")
     )
     supervision_authority_denial = _as_dict(resident_host.get("supervision_authority_denial"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
@@ -1485,6 +1528,79 @@ def _stage6_readiness(
                 "service_config_write_authority": False,
                 "persistent_supervision_execution_authority": False,
                 "receipt_write_authority": False,
+                "denial_receipt_write_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+            },
+            {
+                "id": "persistent_supervision_enablement_execution_readiness_audit",
+                "status": _safe_str(persistent_supervision_enablement_execution_readiness.get("status")).strip()
+                or "missing",
+                "audit_status": _safe_str(
+                    persistent_supervision_enablement_execution_readiness.get("audit_status")
+                ).strip(),
+                "evidence": [
+                    "/lens/host/persistent-supervision/enablement/execution/readiness",
+                    "/lens/host/persistent-supervision/enablement/execution/request",
+                    "/lens/host/persistent-supervision/enablement/execution/requests",
+                    "/lens/host/persistent-supervision/enablement",
+                    "/lens/status",
+                ],
+                "ready": bool(persistent_supervision_enablement_execution_readiness.get("ready")),
+                "approval_ready": bool(persistent_supervision_enablement_execution_readiness.get("approval_ready")),
+                "request_readback_ready": bool(
+                    persistent_supervision_enablement_execution_readiness.get("request_readback_ready")
+                ),
+                "boundary_observed": bool(
+                    persistent_supervision_enablement_execution_readiness.get("boundary_observed")
+                ),
+                "enablement_authority_granted": bool(
+                    persistent_supervision_enablement_execution_readiness.get("enablement_authority_granted")
+                ),
+                "active_enablement_authority_grant_receipt_id": _safe_str(
+                    persistent_supervision_enablement_execution_readiness.get(
+                        "active_enablement_authority_grant_receipt_id"
+                    )
+                ).strip(),
+                "persistent_supervision_enablement_allowed": bool(
+                    persistent_supervision_enablement_execution_readiness.get(
+                        "persistent_supervision_enablement_allowed"
+                    )
+                ),
+                "service_config_updated": bool(
+                    persistent_supervision_enablement_execution_readiness.get("service_config_updated")
+                ),
+                "service_config_write_authority": False,
+                "persistent_supervision_execution_authority": False,
+                "receipt_write_authority": False,
+                "resident_claim_allowed": bool(
+                    persistent_supervision_enablement_execution_readiness.get("resident_claim_allowed")
+                ),
+                "requirements_total": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("requirements_total")
+                ),
+                "requirements_ready_total": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("requirements_ready_total")
+                ),
+                "requirements_blocked_total": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("requirements_blocked_total")
+                ),
+                "blocked_requirements": _as_list(
+                    persistent_supervision_enablement_execution_readiness.get("blocked_requirements")
+                ),
+                "blockers": _as_list(persistent_supervision_enablement_execution_readiness.get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "persistent_supervision_enablement_authority": bool(
+                    _as_dict(persistent_supervision_enablement_execution_readiness.get("governance")).get(
+                        "persistent_supervision_enablement_authority"
+                    )
+                ),
                 "denial_receipt_write_authority": False,
                 "memory_write": False,
                 "resident_claim_authority": False,
@@ -2117,6 +2233,18 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             ),
             "lens_host_persistent_supervision_enablement_authority_readiness_route": (
                 "/lens/host/persistent-supervision/enablement/authority/readiness"
+            ),
+            "lens_host_persistent_supervision_enablement_execution_route": (
+                "/lens/host/persistent-supervision/enablement/execution"
+            ),
+            "lens_host_persistent_supervision_enablement_execution_request_route": (
+                "/lens/host/persistent-supervision/enablement/execution/request"
+            ),
+            "lens_host_persistent_supervision_enablement_execution_requests_route": (
+                "/lens/host/persistent-supervision/enablement/execution/requests"
+            ),
+            "lens_host_persistent_supervision_enablement_execution_readiness_route": (
+                "/lens/host/persistent-supervision/enablement/execution/readiness"
             ),
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (

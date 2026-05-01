@@ -14896,6 +14896,54 @@ supervision enablement authority grant boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-04-30 - Stage 6/Lens persistent supervision execution authority request readback
+
+Stage 6/Lens now has a governed approval-request seam for future persistent
+supervision service-configuration write and execution authority. `POST
+/lens/host/persistent-supervision/enablement/execution/request` requires
+`system.write` and an active persistent-supervision enablement-authority grant
+before it creates a pending
+`lens.host.persistent_supervision_enablement_execution_authority` approval
+request. `GET
+/lens/host/persistent-supervision/enablement/execution/requests` exposes
+filtered request readback, and `GET
+/lens/host/persistent-supervision/enablement/execution/readiness` composes the
+exact approval state, active enablement-authority grant, existing enablement
+denial boundary, and request readback into the remaining service-config-write,
+persistent-supervision execution, receipt-write, and resident-claim blockers.
+`/lens/status` now embeds the request contract, request readback, readiness
+audit, Stage 6 criterion, receipt routes, and command-palette readback for this
+request.
+
+This is a request/readback/readiness slice only. It does not grant service
+configuration write authority, persistent-supervision execution authority,
+receipt-write authority, process supervision, service control, service
+installation, approval-decision authority, memory writes, UI authority,
+resident-claim authority, or actual persistent supervision. Approval of the new
+request only changes the approval readback from pending to approved; it still
+does not mutate service config or enable supervision.
+
+Stage 6 remains active and blocked. The next smallest truthful gap is the
+explicit service-configuration write / persistent-supervision execution grant or
+denial boundary, still without enabling persistent supervision until that
+separate boundary is proven and validated.
+
+Latest targeted validation for the `2026-04-30` Stage 6/Lens persistent
+supervision execution authority request readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15000,6 +15048,14 @@ These remain true and should block any "finished" claim:
   and read back approval requests without granting service-config write,
   persistent-supervision execution, receipt-write, memory-write, approval-decision,
   or resident-claim authority,
+  plus an exact approved-request-bound persistent-supervision enablement
+  authority grant receipt and governed execution-authority request/readback/readiness
+  routes at `/lens/host/persistent-supervision/enablement/execution/request`,
+  `/lens/host/persistent-supervision/enablement/execution/requests`, and
+  `/lens/host/persistent-supervision/enablement/execution/readiness` that require
+  the active enablement-authority grant before creating the request while still
+  denying service-config write, persistent-supervision execution, receipt-write,
+  memory-write, approval-decision, and resident-claim authority,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6` and groups closure blockers without allowing
   Stage 6 transition,
