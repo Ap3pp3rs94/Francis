@@ -15203,6 +15203,55 @@ resident runtime gap priority:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens resident runtime granted-boundary proof
+
+Stage 6/Lens now has a focused standalone proof for the granted resident runtime
+execution boundary at `scripts/lens-resident-runtime-boundary-proof.ps1`. The
+proof uses a temporary data root, creates the exact Lens host activation approval
+and resident runtime execution authority approval/grant path, then calls
+`POST /lens/resident-runtime/execute`. The route reaches the granted-authority
+execution boundary and still returns
+`denied_no_resident_runtime_execution_boundary` with
+`resident_runtime_execution_authority: true`, `executed: false`, and no
+`resident_runtime_execution_authority_not_granted` blocker.
+
+The proof confirms that the boundary still blocks local process launch, process
+supervision/restart, service install/control, tray registration, hotkey
+registration, overlay control, memory write, and resident-claim authority. It
+also verifies the local denial receipt/readback path at
+`/lens/resident-runtime/denials` in the proof data root and confirms no Lens host
+runtime status or pid file is created.
+
+This is diagnostic/proof and test work only. It does not change the product
+runtime route, grant execution authority, grant process launch/supervision,
+grant service/tray/hotkey/overlay authority, write memory, decide approvals in
+product data, claim resident status, or add UI controls. The proof writes only
+temporary approval/grant/denial proof data under the provided proof data root.
+
+The standalone proof's next smallest truthful gap is
+`supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`.
+The Stage 6 completion audit still reports
+`supervised_resident_runtime_execution_boundary` until a later slice explicitly
+consumes this focused proof or advances the underlying process/service/tray/
+hotkey/overlay authority gates. Stage 6 remains active and blocked; Stage 7 is
+not started.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+granted-boundary proof:
+
+- `python -m pytest tests\test_lens_resident_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,resident_runtime_execution_authority,executed | ConvertTo-Json -Depth 5`
+  Result: `passed; reported proof_passed, resident_runtime_execution_authority: true, executed: false`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_resident_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15282,6 +15331,12 @@ These remain true and should block any "finished" claim:
   preflight, policy, grant boundary, grant receipt readback, denial receipt
   readback, runtime plan, and host/summon/tray/overlay gates into exact
   authority-grant blockers,
+  plus a focused `scripts/lens-resident-runtime-boundary-proof.ps1` diagnostic
+  that proves an exact approved resident runtime execution-authority grant
+  reaches `/lens/resident-runtime/execute` and still produces a
+  `denied_no_resident_runtime_execution_boundary` denial receipt without
+  launching, supervising, controlling service/tray/hotkey/overlay surfaces,
+  writing memory, or claiming resident status,
   plus a direct read-only `/lens/host/supervision/authority` preflight that
   separates resident host operational prerequisites from missing
   process-supervision, restart, service-install, service-control, and
