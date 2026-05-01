@@ -15075,6 +15075,46 @@ supervision execution authority grant boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens resident runtime execution authority request readback
+
+Stage 6/Lens now has a distinct governed approval-request/readback seam for
+future resident runtime execution authority. `POST
+/lens/resident-runtime/authority-grant/request` creates a pending approval
+request with action `lens.resident_runtime.execution_authority`, and `GET
+/lens/resident-runtime/authority-grant/requests` reads those requests back by
+status. `/lens/status` now exposes the request contract, request readback,
+Stage 6 criterion, receipt route map, and command-palette entry for the request.
+
+This is a backend/API and readback prerequisite. It does not implement the
+resident runtime authority grant, does not launch or supervise a process, does
+not install/start/control a service, does not register tray or hotkey behavior,
+does not open an overlay, does not write memory, does not decide approvals, and
+does not claim resident state. The existing
+`/lens/resident-runtime/authority-grant` boundary still returns a denial with
+`resident_runtime_authority_grant_not_implemented` until a separate grant slice
+is explicitly built and validated.
+
+Stage 6 remains active and blocked. This removes ambiguity before the final
+resident runtime authority boundary by separating the operator approval request
+from any future authority grant. The next smallest truthful gap remains the
+approval-bound resident runtime authority grant/readback model, still without
+service mutation or resident claims until the boundary proves every authority
+explicitly.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens resident runtime
+execution authority request readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_host_activation_readback_tracks_decision_without_execution -q`
+  Result: `failed before fixing one misplaced status expectation; passed after creating the request in that test path`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

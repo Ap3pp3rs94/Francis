@@ -39,6 +39,7 @@ from francis.lens import (
     lens_preflight,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
+    lens_resident_runtime_execution_authority_request_readback,
     lens_resident_runtime_activation_preflight,
     lens_resident_runtime_activation_plan,
     lens_resident_runtime_execution_policy_contract,
@@ -51,6 +52,7 @@ from francis.lens import (
     request_lens_host_persistent_supervision_enablement_execution_authority,
     request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
+    request_lens_resident_runtime_execution_authority,
 )
 
 router = APIRouter()
@@ -78,6 +80,11 @@ class LensResidentRuntimeAuthorityGrantIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime execution authority grant"
+
+
+class LensResidentRuntimeAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens resident runtime execution authority review"
 
 
 class LensHostSupervisionAuthorityGrantIn(BaseModel):
@@ -493,6 +500,26 @@ def resident_runtime_authority_grant_readiness(
         approval_id=approval_id,
         actor=actor,
         limit=limit,
+    )
+
+
+@router.get("/resident-runtime/authority-grant/requests")
+def resident_runtime_authority_grant_requests(
+    limit: int = Query(5, ge=1, le=50),
+) -> dict[str, Any]:
+    return lens_resident_runtime_execution_authority_request_readback(limit=limit)
+
+
+@router.post("/resident-runtime/authority-grant/request")
+def resident_runtime_authority_grant_request(
+    request: Request,
+    payload: LensResidentRuntimeAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_resident_runtime_execution_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
     )
 
 

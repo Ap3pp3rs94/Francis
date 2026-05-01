@@ -36,6 +36,8 @@ from francis.lens.activation import (
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
+    lens_resident_runtime_execution_authority_request_contract,
+    lens_resident_runtime_execution_authority_request_readback,
     lens_resident_runtime_execution_policy_contract,
     lens_resident_runtime_activation_preflight,
     lens_resident_runtime_activation_plan,
@@ -317,6 +319,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     activation_execution_plan = lens_host_activation_execution_plan()
     resident_runtime_preflight = lens_resident_runtime_activation_preflight()
     resident_runtime_policy = lens_resident_runtime_execution_policy_contract()
+    resident_runtime_authority_request = lens_resident_runtime_execution_authority_request_contract()
+    resident_runtime_authority_requests = lens_resident_runtime_execution_authority_request_readback(limit=limit)
     resident_runtime_authority_grant = deny_lens_resident_runtime_execution_authority_grant()
     resident_runtime_plan = lens_resident_runtime_activation_plan()
     resident_runtime_denial = deny_lens_resident_runtime_activation_execution()
@@ -431,6 +435,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "resident_runtime_preflight": resident_runtime_preflight,
         "resident_runtime_policy_route": _safe_str(resident_runtime_policy.get("route")).strip(),
         "resident_runtime_policy": resident_runtime_policy,
+        "resident_runtime_authority_request_route": _safe_str(resident_runtime_authority_request.get("route")).strip(),
+        "resident_runtime_authority_request": resident_runtime_authority_request,
+        "resident_runtime_authority_requests_route": _safe_str(
+            resident_runtime_authority_requests.get("route")
+        ).strip(),
+        "resident_runtime_authority_requests": resident_runtime_authority_requests,
         "resident_runtime_authority_grant_route": _safe_str(resident_runtime_authority_grant.get("route")).strip(),
         "resident_runtime_authority_grant": resident_runtime_authority_grant,
         "resident_runtime_authority_grant_denial_receipts_route": _safe_str(
@@ -860,6 +870,19 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
             receipt_kind="lens.host.supervision_authority.request",
         ),
         _palette_command(
+            "lens.resident_runtime.execution_authority.request",
+            "Request Resident Runtime Authority",
+            "Create an approval request for resident runtime execution authority without launching or claiming resident state.",
+            "Control",
+            route="/lens/resident-runtime/authority-grant/request",
+            method="POST",
+            action="request_lens_resident_runtime_execution_authority",
+            keywords="lens resident runtime execution authority approval request grant",
+            mutates=True,
+            write_guard="system.write approval request; no runtime execution, service control, memory write, or resident claim",
+            receipt_kind="lens.resident_runtime.execution_authority.request",
+        ),
+        _palette_command(
             "lens.host.persistent_supervision_enablement_authority.request",
             "Request Persistent Supervision Review",
             "Create an approval request for persistent supervision enablement authority without changing service config.",
@@ -952,6 +975,7 @@ def _stage6_readiness(
     overlay_preflight = _as_dict(preflight_surfaces.get("overlay"))
     resident_runtime_preflight = _as_dict(resident_host.get("resident_runtime_preflight"))
     resident_runtime_policy = _as_dict(resident_host.get("resident_runtime_policy"))
+    resident_runtime_authority_requests = _as_dict(resident_host.get("resident_runtime_authority_requests"))
     resident_runtime_authority_grant = _as_dict(resident_host.get("resident_runtime_authority_grant"))
     resident_runtime_authority_grant_denial_receipts = _as_dict(
         resident_host.get("resident_runtime_authority_grant_denial_receipts")
@@ -1171,6 +1195,36 @@ def _stage6_readiness(
                 "runtime_ready": bool(resident_runtime_policy.get("runtime_ready")),
                 "resident_claim_allowed": bool(resident_runtime_policy.get("resident_claim_allowed")),
                 "blockers": _as_list(resident_runtime_policy.get("blockers")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "receipt_write_authority": False,
+                "resident_claim_authority": False,
+            },
+            {
+                "id": "resident_runtime_execution_authority_request_readback",
+                "status": _safe_str(resident_runtime_authority_requests.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/resident-runtime/authority-grant/requests",
+                    "/lens/resident-runtime/authority-grant/request",
+                    "/lens/status",
+                ],
+                "pending_count": _safe_int(resident_runtime_authority_requests.get("pending_count")),
+                "approved_count": _safe_int(resident_runtime_authority_requests.get("approved_count")),
+                "receipt_count": _safe_int(resident_runtime_authority_requests.get("total_count")),
+                "latest_approval_id": _safe_str(
+                    _as_dict(resident_runtime_authority_requests.get("latest")).get("id")
+                ).strip(),
+                "authority_granted": bool(resident_runtime_authority_requests.get("authority_granted")),
+                "resident_claim_allowed": bool(resident_runtime_authority_requests.get("resident_claim_allowed")),
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
@@ -2356,6 +2410,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "overlay_enablement_gate": overlay_enablement_gate,
         "resident_runtime_preflight": resident_runtime_preflight,
         "resident_runtime_policy": resident_runtime_policy,
+        "resident_runtime_authority_requests": _as_dict(resident_host.get("resident_runtime_authority_requests")),
         "resident_runtime_authority_grant": resident_runtime_authority_grant,
         "resident_runtime_authority_grant_denial_receipts": resident_runtime_authority_grant_denial_receipts,
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
@@ -2423,6 +2478,8 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_host_persistent_supervision_enablement_execution_readiness_route": (
                 "/lens/host/persistent-supervision/enablement/execution/readiness"
             ),
+            "lens_resident_runtime_authority_grant_request_route": ("/lens/resident-runtime/authority-grant/request"),
+            "lens_resident_runtime_authority_grant_requests_route": ("/lens/resident-runtime/authority-grant/requests"),
             "lens_resident_runtime_authority_grant_denials_route": ("/lens/resident-runtime/authority-grant/denials"),
             "lens_resident_runtime_authority_grant_readiness_route": (
                 "/lens/resident-runtime/authority-grant/readiness"

@@ -78,7 +78,10 @@ LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_READINESS_ROUTE = (
 )
 LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE = "/lens/resident-runtime/preflight"
 LENS_RESIDENT_RUNTIME_POLICY_ROUTE = "/lens/resident-runtime/policy"
+LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION = "lens.resident_runtime.execution_authority"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE = "/lens/resident-runtime/authority-grant"
+LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE = "/lens/resident-runtime/authority-grant/request"
+LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE = "/lens/resident-runtime/authority-grant/requests"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE = "/lens/resident-runtime/authority-grant/readiness"
 LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE = "/lens/resident-runtime/authority-grant/denials"
 LENS_RESIDENT_RUNTIME_PLAN_ROUTE = "/lens/resident-runtime/plan"
@@ -510,6 +513,50 @@ def _persistent_supervision_enablement_execution_governance(
     }
 
 
+def _resident_runtime_execution_authority_request_governance(
+    *,
+    route: str,
+    approval_request_write: bool = True,
+    read_only_contract: bool = False,
+) -> dict[str, Any]:
+    return {
+        "gate": "lens_resident_runtime_execution_authority_request",
+        "route": route,
+        "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+        "approval_action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+        "approval_request_write": approval_request_write,
+        "request_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+        "readback_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+        "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+        "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+        "policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+        "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        "read_only_contract": read_only_contract,
+        "activation_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "tray_registration_authority": False,
+        "hotkey_registration_authority": False,
+        "overlay_control_authority": False,
+        "receipt_write_authority": False,
+        "denial_receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "runtime_mutation_authority_granted": False,
+        "mutation_authority_granted": False,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "next_step": "operator_decides_pending_resident_runtime_execution_authority_request",
+    }
+
+
 def lens_host_activation_request_contract() -> dict[str, Any]:
     return {
         "status": "approval_request_ready",
@@ -618,6 +665,38 @@ def lens_host_persistent_supervision_enablement_execution_request_contract() -> 
         "claims_resident": False,
         "governance": _persistent_supervision_enablement_execution_governance(
             route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE
+        ),
+    }
+
+
+def lens_resident_runtime_execution_authority_request_contract() -> dict[str, Any]:
+    return {
+        "status": "approval_request_ready",
+        "route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+        "readback_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+        "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+        "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+        "policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+        "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        "method": "POST",
+        "action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+        "creates_approval_request": True,
+        "grants_authority": False,
+        "launches_process": False,
+        "enables_process_supervision": False,
+        "restarts_process": False,
+        "installs_service": False,
+        "starts_service": False,
+        "registers_tray": False,
+        "registers_hotkey": False,
+        "controls_overlay": False,
+        "writes_receipt": False,
+        "writes_memory": False,
+        "claims_resident": False,
+        "governance": _resident_runtime_execution_authority_request_governance(
+            route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE
         ),
     }
 
@@ -901,6 +980,37 @@ def _persistent_supervision_enablement_execution_approval_items(
     return by_status, all_items[:limit], counts
 
 
+def _resident_runtime_execution_authority_approval_items(
+    *, limit: int
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], dict[str, int]]:
+    by_status: dict[str, list[dict[str, Any]]] = {}
+    counts: dict[str, int] = {}
+    all_items: list[dict[str, Any]] = []
+    for status in _APPROVAL_STATUSES:
+        try:
+            records = list_requests(status=status, limit=5000)
+        except Exception:
+            records = []
+        items = [
+            _approval_item(item)
+            for item in records
+            if isinstance(item, dict)
+            and _safe_str(item.get("action")).strip() == LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION
+        ]
+        items.sort(
+            key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+            reverse=True,
+        )
+        counts[status] = len(items)
+        by_status[status] = items[:limit]
+        all_items.extend(items)
+    all_items.sort(
+        key=lambda item: (_record_ts(item.get("decided_ts") or item.get("ts")), _safe_str(item.get("id"))),
+        reverse=True,
+    )
+    return by_status, all_items[:limit], counts
+
+
 def _supervision_authority_approval_by_id(approval_id: Any) -> tuple[dict[str, Any] | None, str]:
     requested_id = _safe_str(approval_id).strip()
     if not requested_id:
@@ -1094,6 +1204,20 @@ def _persistent_supervision_enablement_execution_readback_status(
     return "none", "request_persistent_supervision_execution_authority_after_enablement_authority_grant"
 
 
+def _resident_runtime_execution_authority_readback_status(
+    counts: dict[str, int],
+) -> tuple[str, str]:
+    if counts.get("pending", 0) > 0:
+        return "pending_review", "operator_decide_pending_resident_runtime_execution_authority_request"
+    if counts.get("emergency", 0) > 0:
+        return "emergency_reviewed_no_authority", "operator_review_emergency_resident_runtime_execution_decision"
+    if counts.get("approved", 0) > 0:
+        return "approved_no_authority", "approved_request_requires_separate_resident_runtime_authority_grant_slice"
+    if counts.get("rejected", 0) > 0:
+        return "rejected", "operator_may_request_resident_runtime_execution_authority_again"
+    return "none", "request_resident_runtime_execution_authority_before_grant"
+
+
 def lens_host_supervision_authority_request_readback(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_limit(limit)
     by_status, latest_items, counts = _supervision_authority_approval_items(limit=safe_limit)
@@ -1252,6 +1376,58 @@ def lens_host_persistent_supervision_enablement_execution_request_readback(
             "persistent_supervision_enablement_authority": bool(active_grant),
             "service_config_write_authority": execution_authority_granted,
             "persistent_supervision_execution_authority": execution_authority_granted,
+            "next_step": next_step,
+        },
+    }
+
+
+def lens_resident_runtime_execution_authority_request_readback(
+    *,
+    limit: int = 5,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    by_status, latest_items, counts = _resident_runtime_execution_authority_approval_items(limit=safe_limit)
+    total = sum(counts.values())
+    status, next_step = _resident_runtime_execution_authority_readback_status(counts)
+    latest = latest_items[0] if latest_items else None
+    return {
+        "ok": True,
+        "kind": "lens.resident_runtime.execution_authority.request_readback",
+        "status": status,
+        "route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+        "request_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+        "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+        "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+        "policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+        "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        "decision_route": "/approvals/decision",
+        "approval_action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+        "pending_count": counts.get("pending", 0),
+        "approved_count": counts.get("approved", 0),
+        "rejected_count": counts.get("rejected", 0),
+        "emergency_count": counts.get("emergency", 0),
+        "total_count": total,
+        "latest": latest,
+        "items": latest_items,
+        "by_status": by_status,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "execution_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "service_control_authority": False,
+        "receipt_write_authority": False,
+        "memory_write": False,
+        "governance": {
+            **_resident_runtime_execution_authority_request_governance(
+                route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_resident_runtime_execution_authority_request_readback",
+            "read_only_contract": True,
             "next_step": next_step,
         },
     }
@@ -6840,6 +7016,80 @@ def _persistent_supervision_enablement_execution_request_payload(*, actor: Any, 
     }
 
 
+def _resident_runtime_execution_authority_request_payload(*, actor: Any, route: str) -> dict[str, Any]:
+    preflight = lens_resident_runtime_activation_preflight(actor=actor)
+    policy = lens_resident_runtime_execution_policy_contract(actor=actor)
+    boundary = deny_lens_resident_runtime_execution_authority_grant(
+        actor=actor,
+        reason="snapshot Lens resident runtime execution authority request",
+        route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        method="POST",
+        record_receipt=False,
+    )
+    readiness = lens_resident_runtime_authority_grant_readiness_audit(actor=actor, limit=5)
+    governance = _resident_runtime_execution_authority_request_governance(route=route)
+    return {
+        "request_kind": "lens.resident_runtime.execution_authority.request",
+        "actor": _redact_free_text(actor),
+        "route": route,
+        "preflight_route": LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE,
+        "policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
+        "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+        "readback_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+        "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+        "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+        "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+        "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        "preflight": {
+            "status": _safe_str(preflight.get("status")).strip(),
+            "ready": bool(preflight.get("ready")),
+            "grant_ready": bool(preflight.get("grant_ready")),
+            "authority_grant_ready": bool(preflight.get("authority_grant_ready")),
+            "runtime_ready": bool(preflight.get("runtime_ready")),
+            "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")),
+            "blockers": _as_list(preflight.get("blockers")),
+        },
+        "policy": {
+            "status": _safe_str(policy.get("status")).strip(),
+            "policy_contract_ready": bool(policy.get("policy_contract_ready")),
+            "execution_policy_ready": bool(policy.get("execution_policy_ready")),
+            "grant_ready": bool(policy.get("grant_ready")),
+            "runtime_ready": bool(policy.get("runtime_ready")),
+            "resident_claim_allowed": bool(policy.get("resident_claim_allowed")),
+            "blockers": _as_list(policy.get("blockers")),
+        },
+        "grant_boundary": {
+            "status": _safe_str(boundary.get("status")).strip(),
+            "boundary_ready": bool(boundary.get("boundary_ready")),
+            "applied": bool(boundary.get("applied")),
+            "executed": bool(boundary.get("executed")),
+            "authority_granted": bool(boundary.get("authority_granted")),
+            "resident_claim_allowed": bool(boundary.get("resident_claim_allowed")),
+            "receipt_written": bool(boundary.get("receipt_written")),
+            "blockers": _as_list(boundary.get("blockers")),
+        },
+        "readiness": {
+            "status": _safe_str(readiness.get("status")).strip(),
+            "ready": bool(readiness.get("ready")),
+            "grant_ready": bool(readiness.get("grant_ready")),
+            "runtime_ready": bool(readiness.get("runtime_ready")),
+            "resident_claim_allowed": bool(readiness.get("resident_claim_allowed")),
+            "boundary_observed": bool(readiness.get("boundary_observed")),
+            "blocked_requirements": _as_list(readiness.get("blocked_requirements")),
+            "blockers": _as_list(readiness.get("blockers")),
+        },
+        "blockers": _dedupe_strs(
+            [
+                *_str_list(preflight.get("blockers")),
+                *_str_list(policy.get("blockers")),
+                *_str_list(boundary.get("blockers")),
+                *_str_list(readiness.get("blockers")),
+            ]
+        ),
+        "governance": governance,
+    }
+
+
 def request_lens_host_activation(
     *,
     actor: Any,
@@ -7024,6 +7274,70 @@ def request_lens_host_persistent_supervision_enablement_execution_authority(
         "governance": {
             **_persistent_supervision_enablement_execution_governance(route=safe_route),
             "persistent_supervision_enablement_authority": True,
+            "permission": permission.evidence,
+        },
+    }
+
+
+def request_lens_resident_runtime_execution_authority(
+    *,
+    actor: Any,
+    reason: Any = "request Lens resident runtime execution authority review",
+    route: str = LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE
+    permission = _permission(actor, route=safe_route, method=method)
+    if not permission.allowed:
+        return {
+            "ok": False,
+            "applied": False,
+            "executed": False,
+            "approval_requested": False,
+            "status": "denied",
+            "error": "api_permission_denied",
+            "action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+            "authority_granted": False,
+            "resident_claim_allowed": False,
+            "governance": {
+                **_resident_runtime_execution_authority_request_governance(route=safe_route),
+                "gate": "permission_gate",
+                "approval_request_write": False,
+                "reason": permission.reason,
+                "evidence": permission.evidence,
+                "permission": permission.evidence,
+                "next_step": "configure_actor_scope_before_requesting_resident_runtime_execution_authority",
+            },
+        }
+
+    request_reason = _redact_free_text(reason) or "request Lens resident runtime execution authority review"
+    payload = _resident_runtime_execution_authority_request_payload(actor=actor, route=safe_route)
+    approval = create_approval_request(
+        LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+        request_reason,
+        payload,
+    )
+    approval_item = _approval_item(approval)
+    return {
+        "ok": True,
+        "applied": False,
+        "executed": False,
+        "approval_requested": True,
+        "status": "approval_requested",
+        "action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+        "approval_id": _safe_str(approval_item.get("id")),
+        "approval": approval_item,
+        "resident_runtime_execution_authority": payload,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "execution_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "service_control_authority": False,
+        "receipt_write_authority": False,
+        "memory_write": False,
+        "governance": {
+            **_resident_runtime_execution_authority_request_governance(route=safe_route),
             "permission": permission.evidence,
         },
     }

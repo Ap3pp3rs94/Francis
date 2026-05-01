@@ -1526,6 +1526,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert activation_request_command["write_guard"] == "system.write approval request; no launch authority"
     assert activation_request_command["execution_authority"] is False
     assert activation_request_command["approval_decision_authority"] is False
+    resident_runtime_authority_request_command = next(
+        item
+        for item in body["command_palette"]["commands"]
+        if item["id"] == "lens.resident_runtime.execution_authority.request"
+    )
+    assert resident_runtime_authority_request_command["route"] == "/lens/resident-runtime/authority-grant/request"
+    assert resident_runtime_authority_request_command["method"] == "POST"
+    assert resident_runtime_authority_request_command["mutates"] is True
+    assert resident_runtime_authority_request_command["execution_authority"] is False
+    assert resident_runtime_authority_request_command["approval_decision_authority"] is False
     pilot_mode = next(item for item in body["command_palette"]["commands"] if item["id"] == "mode.pilot")
     assert pilot_mode["route"] == "/system/operator_mode"
     assert pilot_mode["target_mode"] == "pilot"
@@ -1651,6 +1661,25 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_criterion["memory_write"] is False
     assert runtime_policy_criterion["receipt_write_authority"] is False
     assert runtime_policy_criterion["resident_claim_authority"] is False
+    runtime_authority_request_criterion = _criterion(body, "resident_runtime_execution_authority_request_readback")
+    assert runtime_authority_request_criterion["status"] == "none"
+    assert runtime_authority_request_criterion["evidence"] == [
+        "/lens/resident-runtime/authority-grant/requests",
+        "/lens/resident-runtime/authority-grant/request",
+        "/lens/status",
+    ]
+    assert runtime_authority_request_criterion["pending_count"] == 0
+    assert runtime_authority_request_criterion["approved_count"] == 0
+    assert runtime_authority_request_criterion["receipt_count"] == 0
+    assert runtime_authority_request_criterion["latest_approval_id"] == ""
+    assert runtime_authority_request_criterion["authority_granted"] is False
+    assert runtime_authority_request_criterion["resident_claim_allowed"] is False
+    assert runtime_authority_request_criterion["execution_authority"] is False
+    assert runtime_authority_request_criterion["approval_decision_authority"] is False
+    assert runtime_authority_request_criterion["process_supervision_authority"] is False
+    assert runtime_authority_request_criterion["service_control_authority"] is False
+    assert runtime_authority_request_criterion["memory_write"] is False
+    assert runtime_authority_request_criterion["resident_claim_authority"] is False
     runtime_authority_grant_criterion = _criterion(body, "resident_runtime_execution_authority_grant_boundary")
     assert runtime_authority_grant_criterion["status"] == "blocked"
     assert runtime_authority_grant_criterion["boundary_ready"] is True
@@ -2462,6 +2491,64 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_policy_body["governance"]["service_control_authority"] is False
     assert runtime_policy_body["governance"]["resident_claim_authority"] is False
     assert runtime_policy_body["governance"]["memory_write"] is False
+    runtime_authority_requests_response = client.get("/lens/resident-runtime/authority-grant/requests")
+    assert runtime_authority_requests_response.status_code == 200
+    runtime_authority_requests_body = runtime_authority_requests_response.json()
+    assert runtime_authority_requests_body["kind"] == "lens.resident_runtime.execution_authority.request_readback"
+    assert runtime_authority_requests_body["status"] == "none"
+    assert runtime_authority_requests_body["route"] == "/lens/resident-runtime/authority-grant/requests"
+    assert runtime_authority_requests_body["request_route"] == "/lens/resident-runtime/authority-grant/request"
+    assert runtime_authority_requests_body["grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert runtime_authority_requests_body["total_count"] == 0
+    assert runtime_authority_requests_body["authority_granted"] is False
+    assert runtime_authority_requests_body["resident_claim_allowed"] is False
+    assert runtime_authority_requests_body["execution_authority"] is False
+    assert runtime_authority_requests_body["governance"]["read_only_contract"] is True
+    assert runtime_authority_requests_body["governance"]["approval_request_write"] is False
+    assert runtime_authority_requests_body["governance"]["execution_authority"] is False
+    assert runtime_authority_requests_body["governance"]["resident_claim_authority"] is False
+    runtime_authority_request_response = client.post(
+        "/lens/resident-runtime/authority-grant/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator asks to review resident runtime execution authority",
+        },
+    )
+    assert runtime_authority_request_response.status_code == 200
+    runtime_authority_request_body = runtime_authority_request_response.json()
+    assert runtime_authority_request_body["status"] == "approval_requested"
+    assert runtime_authority_request_body["approval_requested"] is True
+    assert runtime_authority_request_body["applied"] is False
+    assert runtime_authority_request_body["executed"] is False
+    assert runtime_authority_request_body["action"] == "lens.resident_runtime.execution_authority"
+    assert runtime_authority_request_body["authority_granted"] is False
+    assert runtime_authority_request_body["resident_claim_allowed"] is False
+    assert runtime_authority_request_body["execution_authority"] is False
+    assert runtime_authority_request_body["process_supervision_authority"] is False
+    assert runtime_authority_request_body["service_control_authority"] is False
+    assert runtime_authority_request_body["memory_write"] is False
+    assert runtime_authority_request_body["governance"]["approval_request_write"] is True
+    assert runtime_authority_request_body["governance"]["execution_authority"] is False
+    assert runtime_authority_request_body["governance"]["resident_claim_authority"] is False
+    runtime_authority_request_payload = runtime_authority_request_body["resident_runtime_execution_authority"]
+    assert runtime_authority_request_payload["request_kind"] == "lens.resident_runtime.execution_authority.request"
+    assert runtime_authority_request_payload["route"] == "/lens/resident-runtime/authority-grant/request"
+    assert runtime_authority_request_payload["grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert runtime_authority_request_payload["grant_boundary"]["boundary_ready"] is True
+    assert runtime_authority_request_payload["grant_boundary"]["authority_granted"] is False
+    assert runtime_authority_request_payload["grant_boundary"]["resident_claim_allowed"] is False
+    assert runtime_authority_request_payload["readiness"]["boundary_observed"] is True
+    assert "resident_runtime_authority_grant_not_implemented" in runtime_authority_request_payload["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in runtime_authority_request_payload["blockers"]
+    runtime_authority_requests_response = client.get("/lens/resident-runtime/authority-grant/requests")
+    assert runtime_authority_requests_response.status_code == 200
+    runtime_authority_requests_body = runtime_authority_requests_response.json()
+    assert runtime_authority_requests_body["status"] == "pending_review"
+    assert runtime_authority_requests_body["pending_count"] == 1
+    assert runtime_authority_requests_body["total_count"] == 1
+    assert runtime_authority_requests_body["latest"]["id"] == runtime_authority_request_body["approval_id"]
+    assert runtime_authority_requests_body["items"][0]["id"] == runtime_authority_request_body["approval_id"]
+    assert runtime_authority_requests_body["authority_granted"] is False
     runtime_authority_grant_response = client.post(
         "/lens/resident-runtime/authority-grant",
         json={
@@ -4936,6 +5023,37 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_runtime_policy_body["governance"]["resident_claim_authority"] is False
     assert resident_runtime_policy_body["governance"]["memory_write"] is False
 
+    runtime_authority_request = client.post(
+        "/lens/resident-runtime/authority-grant/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator asked to review resident runtime execution authority",
+        },
+    )
+    assert runtime_authority_request.status_code == 200
+    runtime_authority_request_body = runtime_authority_request.json()
+    assert runtime_authority_request_body["status"] == "approval_requested"
+    assert runtime_authority_request_body["approval_requested"] is True
+    assert runtime_authority_request_body["applied"] is False
+    assert runtime_authority_request_body["executed"] is False
+    assert runtime_authority_request_body["action"] == "lens.resident_runtime.execution_authority"
+    assert runtime_authority_request_body["authority_granted"] is False
+    assert runtime_authority_request_body["resident_claim_allowed"] is False
+    assert runtime_authority_request_body["execution_authority"] is False
+    assert runtime_authority_request_body["process_supervision_authority"] is False
+    assert runtime_authority_request_body["service_control_authority"] is False
+    assert runtime_authority_request_body["memory_write"] is False
+    assert runtime_authority_request_body["governance"]["approval_request_write"] is True
+    assert runtime_authority_request_body["governance"]["execution_authority"] is False
+    assert runtime_authority_request_body["governance"]["resident_claim_authority"] is False
+    runtime_authority_request_readback = client.get("/lens/resident-runtime/authority-grant/requests")
+    assert runtime_authority_request_readback.status_code == 200
+    runtime_authority_request_readback_body = runtime_authority_request_readback.json()
+    assert runtime_authority_request_readback_body["status"] == "pending_review"
+    assert runtime_authority_request_readback_body["pending_count"] == 1
+    assert runtime_authority_request_readback_body["total_count"] == 1
+    assert runtime_authority_request_readback_body["latest"]["id"] == runtime_authority_request_body["approval_id"]
+
     resident_runtime_authority_grant = client.post(
         "/lens/resident-runtime/authority-grant",
         json={
@@ -5446,6 +5564,26 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert status_denial_receipt_criterion["approval_decision_authority"] is False
     assert status_denial_receipt_criterion["local_process_launch_authority"] is False
     assert status_denial_receipt_criterion["memory_write"] is False
+    status_authority_requests = status_body["resident_host"]["resident_runtime_authority_requests"]
+    assert status_authority_requests["status"] == "pending_review"
+    assert status_authority_requests["pending_count"] == 1
+    assert status_authority_requests["total_count"] == 1
+    assert status_authority_requests["latest"]["id"] == runtime_authority_request_body["approval_id"]
+    status_authority_request_criterion = _criterion(
+        status_body, "resident_runtime_execution_authority_request_readback"
+    )
+    assert status_authority_request_criterion["status"] == "pending_review"
+    assert status_authority_request_criterion["pending_count"] == 1
+    assert status_authority_request_criterion["receipt_count"] == 1
+    assert status_authority_request_criterion["latest_approval_id"] == runtime_authority_request_body["approval_id"]
+    assert status_authority_request_criterion["authority_granted"] is False
+    assert status_authority_request_criterion["resident_claim_allowed"] is False
+    assert status_authority_request_criterion["execution_authority"] is False
+    assert status_authority_request_criterion["approval_decision_authority"] is False
+    assert status_authority_request_criterion["process_supervision_authority"] is False
+    assert status_authority_request_criterion["service_control_authority"] is False
+    assert status_authority_request_criterion["memory_write"] is False
+    assert status_authority_request_criterion["resident_claim_authority"] is False
     status_authority_grant_denials = status_body["resident_host"]["resident_runtime_authority_grant_denial_receipts"]
     assert status_authority_grant_denials["status"] == "readback_ready"
     assert status_authority_grant_denials["total"] == 1
