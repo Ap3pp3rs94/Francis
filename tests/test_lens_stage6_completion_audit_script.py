@@ -53,9 +53,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "resident_runtime_process_supervision_authority_boundary"
-    assert "authority blocker split proof" in payload["next_smallest_truthful_gap_basis"]
-    assert "process supervision as the first bounded boundary" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "resident_runtime_service_control_authority_boundary"
+    assert "process-supervision boundary proof" in payload["next_smallest_truthful_gap_basis"]
+    assert "next bounded family proof is service control" in payload["next_smallest_truthful_gap_basis"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -131,6 +131,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         "process_supervision_authority_not_granted"
         in payload["closure_blockers"]["resident_runtime_process_supervision"]
+    )
+    assert (
+        "process_supervision_authority_not_granted"
+        in payload["closure_blockers"]["resident_runtime_process_supervision_boundary"]
     )
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["resident_runtime_service_control"]
     assert "tray_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime_tray_presence"]
@@ -242,6 +246,37 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_authority_blockers["process_supervision_authority"] is False
     assert runtime_authority_blockers["service_control_authority"] is False
     assert runtime_authority_blockers["resident_claim_authority"] is False
+
+    runtime_process_boundary = payload["resident_runtime_process_supervision_boundary_proof"]
+    assert runtime_process_boundary["status"] == "proof_passed"
+    assert runtime_process_boundary["ok"] is True
+    assert runtime_process_boundary["exit_code"] == 0
+    assert runtime_process_boundary["authority_family"] == "process_supervision"
+    assert runtime_process_boundary["next_authority_family"] == "service_control"
+    assert runtime_process_boundary["process_supervision_boundary_observed"] is True
+    assert runtime_process_boundary["authority_blockers_proof_observed"] is True
+    assert runtime_process_boundary["side_effects_denied"] is True
+    assert runtime_process_boundary["first_authority_family_consumed"] is True
+    assert runtime_process_boundary["resident_runtime_execution_authority"] is True
+    assert runtime_process_boundary["local_process_launch_authority"] is False
+    assert runtime_process_boundary["process_supervision_authority"] is False
+    assert runtime_process_boundary["process_restart_authority"] is False
+    assert runtime_process_boundary["service_control_authority"] is False
+    assert runtime_process_boundary["resident_claim_authority"] is False
+    assert runtime_process_boundary["would_launch_process"] is False
+    assert runtime_process_boundary["would_supervise_process"] is False
+    assert runtime_process_boundary["would_restart_process"] is False
+    assert runtime_process_boundary["would_start_service"] is False
+    assert runtime_process_boundary["would_register_tray"] is False
+    assert runtime_process_boundary["would_register_hotkey"] is False
+    assert runtime_process_boundary["would_open_overlay"] is False
+    assert runtime_process_boundary["would_write_memory"] is False
+    assert runtime_process_boundary["would_claim_resident"] is False
+    assert runtime_process_boundary["process_supervision"]["status"] == "blocked"
+    assert "process_supervision_authority_not_granted" in runtime_process_boundary["blockers"]
+    assert runtime_process_boundary["next_smallest_truthful_gap"] == (
+        "resident_runtime_service_control_authority_boundary"
+    )
 
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
@@ -370,6 +405,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["persistent_supervision_enablement_execution_denial_boundary_readback"] is True
     assert governance["resident_runtime_granted_boundary_proof_readback"] is True
     assert governance["resident_runtime_authority_blockers_proof_readback"] is True
+    assert governance["resident_runtime_process_supervision_boundary_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

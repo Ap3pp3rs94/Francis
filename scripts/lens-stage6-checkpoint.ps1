@@ -859,6 +859,40 @@ $ResidentRuntimeAuthorityBlockersProofPassed = (
   [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_runtime_process_supervision_authority_boundary'
 )
 
+$ResidentRuntimeAuthorityBlockerGroups = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'authority_blocker_groups'
+$ResidentRuntimeProcessSupervisionBoundaryGroup = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockerGroups -Name 'process_supervision'
+$ResidentRuntimeProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'blockers' -Default @()
+)
+$ResidentRuntimeProcessSupervisionBoundaryRequiredBefore = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'required_before' -Default @()
+)
+$ResidentRuntimeAuthorityBlockersGovernance = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'governance'
+$ResidentRuntimeAuthorityBlockersBoundaryProof = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'boundary_proof'
+$ResidentRuntimeProcessSupervisionBoundaryExitCode = if ($ResidentRuntimeAuthorityBlockersProofPassed) { 0 } else { 1 }
+$ResidentRuntimeProcessSupervisionBoundaryProofPassed = (
+  $ResidentRuntimeAuthorityBlockersProofPassed -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'id' -Default '') -eq 'process_supervision' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'status' -Default '') -eq 'blocked' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_launch_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_tray' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_open_overlay' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_claim_resident' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'local_process_launch_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'process_supervision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'process_restart_authority' -Default $true) -and
+  $ResidentRuntimeProcessSupervisionBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
+  $ResidentRuntimeProcessSupervisionBoundaryBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentRuntimeProcessSupervisionBoundaryBlockers -contains 'process_restart_authority_not_granted'
+)
+
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $HostSupervisorOwnedSessionBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($ResidentSurfaceReadbackReady) {
   $SystemResidentBlockers = @(
@@ -1444,6 +1478,66 @@ $Payload = [ordered]@{
     summary = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'summary' -Default ([ordered]@{})
     governance = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'governance' -Default ([ordered]@{})
   }
+  resident_runtime_process_supervision_boundary_proof = [ordered]@{
+    status = if ($ResidentRuntimeProcessSupervisionBoundaryProofPassed) { 'proof_passed' } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
+    exit_code = $ResidentRuntimeProcessSupervisionBoundaryExitCode
+    evidence = @('scripts/lens-resident-runtime-authority-blockers-proof.ps1', '/lens/host/supervision/authority/readiness', '/lens/resident-runtime/execute')
+    authority_family = 'process_supervision'
+    next_authority_family = 'service_control'
+    process_supervision_boundary_observed = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
+    authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
+    side_effects_denied = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
+    first_authority_family_consumed = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
+    resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_control_authority = $false
+    resident_claim_authority = $false
+    would_launch_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_launch_process' -Default $false)
+    would_supervise_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_supervise_process' -Default $false)
+    would_restart_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_restart_process' -Default $false)
+    would_start_service = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_start_service' -Default $false)
+    would_register_tray = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_tray' -Default $false)
+    would_register_hotkey = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_register_hotkey' -Default $false)
+    would_open_overlay = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_open_overlay' -Default $false)
+    would_write_memory = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_write_memory' -Default $false)
+    would_claim_resident = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersBoundaryProof -Name 'would_claim_resident' -Default $false)
+    process_supervision = [ordered]@{
+      status = [string](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'status' -Default 'missing')
+      ready = [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'ready' -Default $false)
+      authority_granted = [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'authority_granted' -Default $false)
+      would_execute = [bool](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'would_execute' -Default $false)
+      route = [string](Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'route' -Default '')
+      evidence = [string[]]@(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentRuntimeProcessSupervisionBoundaryGroup -Name 'evidence' -Default @()))
+      required_before = [string[]]@($ResidentRuntimeProcessSupervisionBoundaryRequiredBefore)
+      blockers = [string[]]@($ResidentRuntimeProcessSupervisionBoundaryBlockers)
+    }
+    blockers = $ResidentRuntimeProcessSupervisionBoundaryBlockers
+    next_smallest_truthful_gap = 'resident_runtime_service_control_authority_boundary'
+    governance = [ordered]@{
+      diagnostic_only = $true
+      wraps_existing_authority_blockers_proof = $true
+      approval_request_write = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'approval_request_write' -Default $false)
+      resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      tray_registration_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   resident_surface_content_readback = [ordered]@{
     status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default 'missing')
     ok = $ResidentSurfaceReadbackReady
@@ -1651,6 +1745,7 @@ $Payload = [ordered]@{
     resident_runtime_execution_authority_grant_readiness_audit_observed = $RuntimeAuthorityGrantReadinessObserved
     resident_runtime_granted_boundary_proof_observed = $ResidentRuntimeGrantedBoundaryProofPassed
     resident_runtime_authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
+    resident_runtime_process_supervision_boundary_proof_observed = $ResidentRuntimeProcessSupervisionBoundaryProofPassed
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved
