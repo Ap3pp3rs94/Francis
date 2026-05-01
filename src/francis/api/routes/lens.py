@@ -11,6 +11,7 @@ from francis.lens import (
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_resident_runtime_activation_execution,
     deny_lens_resident_runtime_execution_authority_grant,
+    grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     grant_lens_host_supervision_authority,
     lens_host_activation_denial_receipts,
@@ -18,6 +19,7 @@ from francis.lens import (
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
     lens_host_launch_manifest,
+    lens_host_persistent_supervision_enablement_execution_authority_grant_receipts,
     lens_host_persistent_supervision_enablement_execution_readiness_audit,
     lens_host_persistent_supervision_enablement_execution_request_readback,
     lens_host_persistent_supervision_enablement_authority_readiness_audit,
@@ -116,6 +118,13 @@ class LensHostPersistentSupervisionEnablementExecutionIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens persistent supervision execution enablement"
+
+
+class LensHostPersistentSupervisionEnablementExecutionAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens persistent supervision execution authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
 @router.get("/status")
@@ -270,6 +279,37 @@ def host_persistent_supervision_enablement_execution_denial(
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+    )
+
+
+@router.get("/host/persistent-supervision/enablement/execution/authority/grants")
+def host_persistent_supervision_enablement_execution_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_enablement_execution_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.post("/host/persistent-supervision/enablement/execution/authority")
+def host_persistent_supervision_enablement_execution_authority_grant(
+    request: Request,
+    payload: LensHostPersistentSupervisionEnablementExecutionAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_host_persistent_supervision_enablement_execution_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
     )
 
 

@@ -15027,6 +15027,54 @@ slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens persistent supervision execution authority grant boundary
+
+Stage 6/Lens now has an exact approved-request-bound grant boundary for the
+future persistent-supervision execution path. `POST
+/lens/host/persistent-supervision/enablement/execution/authority` requires
+`system.write`, an exact approved persistent-supervision execution-authority
+approval id, and an active persistent-supervision enablement-authority grant.
+When those prerequisites are satisfied, the route writes a durable authority
+grant receipt at
+`/lens/host/persistent-supervision/enablement/execution/authority/grants`.
+The execution request readback, execution readiness audit, and `/lens/status`
+now promote the active execution-authority grant receipt so operators can see
+the receipt id, service-configuration write authority, persistent-supervision
+execution authority, and remaining resident-claim blocker.
+
+This is a backend route/readback/receipt slice. It leases
+service-configuration write authority, persistent-supervision execution
+authority, and receipt-write authority only for the bounded future persistent
+supervision execution boundary. It still does not update service configuration,
+enable persistent supervision, install/start/supervise/restart a process, write
+memory, decide approvals, grant generic local execution authority, expose new
+UI authority, or claim resident state. After the authority receipt exists, the
+execution route still returns `denied_no_resident_claim_authority` with
+`applied: false`, `executed: false`, and `service_config_updated: false`.
+
+Stage 6 remains active and blocked. The service-configuration
+write/persistent-supervision execution authority model now has a receipt-backed
+grant/readback surface, but actual persistent-supervision execution remains
+blocked until Francis defines the resident-claim/final execution boundary and
+proves service-configuration mutation remains explicit, governed, and
+receipt-backed.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens persistent
+supervision execution authority grant boundary:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
