@@ -549,6 +549,40 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_runtime_authority_boundary"]["memory_write"] is False
     assert payload["resident_runtime_authority_boundary"]["receipt_write_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["resident_claim_authority"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["status"] == "proof_passed"
+    assert payload["resident_runtime_granted_boundary_proof"]["ok"] is True
+    assert payload["resident_runtime_granted_boundary_proof"]["exit_code"] == 0
+    assert (
+        "scripts/lens-resident-runtime-boundary-proof.ps1"
+        in payload["resident_runtime_granted_boundary_proof"]["evidence"]
+    )
+    assert payload["resident_runtime_granted_boundary_proof"]["resident_runtime_execution_authority"] is True
+    assert payload["resident_runtime_granted_boundary_proof"]["runtime_ready"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["resident_claim_allowed"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["applied"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["executed"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_launch_process"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_supervise_process"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_start_service"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_register_tray"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_register_hotkey"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_open_overlay"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_write_memory"] is False
+    assert payload["resident_runtime_granted_boundary_proof"]["would_claim_resident"] is False
+    assert (
+        "resident_runtime_execution_authority_not_granted"
+        not in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    )
+    assert "process_supervision_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert "service_control_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert "tray_registration_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert "hotkey_registration_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert "overlay_control_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert "resident_claim_authority_not_granted" in payload["resident_runtime_granted_boundary_proof"]["blockers"]
+    assert (
+        payload["resident_runtime_granted_boundary_proof"]["next_smallest_truthful_gap"]
+        == "supervised_resident_runtime_process_service_tray_hotkey_overlay_authority"
+    )
     assert payload["resident_surface_content_readback"]["status"] == "blocked"
     assert payload["resident_surface_content_readback"]["ok"] is True
     assert payload["resident_surface_content_readback"]["route"] == "/lens/resident-surface"
@@ -709,6 +743,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_execution_authority_grant_receipt_readback_observed": True,
         "resident_runtime_execution_authority_grant_denial_receipt_readback_observed": True,
         "resident_runtime_execution_authority_grant_readiness_audit_observed": True,
+        "resident_runtime_granted_boundary_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

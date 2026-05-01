@@ -15252,6 +15252,42 @@ granted-boundary proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens completion audit consumes granted runtime proof
+
+Stage 6/Lens checkpoint and completion-audit readback now consume the focused
+resident runtime granted-boundary proof from
+`scripts/lens-resident-runtime-boundary-proof.ps1`. The checkpoint exposes a
+`resident_runtime_granted_boundary_proof` section and governance flag showing
+that an exact resident runtime execution-authority grant reaches
+`/lens/resident-runtime/execute`, still produces a denial receipt/readback, and
+does not launch a process, supervise/restart a process, install/control a
+service, register tray/hotkey surfaces, open overlay control, write memory, or
+claim resident status.
+
+The Stage 6 completion audit now reports the next smallest truthful gap as
+`supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`
+instead of the older `supervised_resident_runtime_execution_boundary`. That
+means the audit has consumed the grant-through-denial proof and is now blocked
+on the concrete process/service/tray/hotkey/overlay/receipt/resident-claim
+authority boundary set. Stage 6 remains active and blocked. Stage 7/Telemetry is
+not started.
+
+This is diagnostic/audit readback and test work only. It does not change Lens
+API route behavior, product execution authority, product approval authority,
+memory-write behavior, UI claims, telemetry authority, service control, tray or
+hotkey registration, overlay control, or resident-claim authority. The consumed
+proof continues to write only temporary proof data under its isolated data root.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens completion-audit
+granted runtime proof consumption:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap | ConvertTo-Json -Depth 5`
+  Result: `passed; reported stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,checkpoint_next_smallest_truthful_gap | ConvertTo-Json -Depth 5`
+  Result: `passed; reported supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

@@ -565,6 +565,7 @@ $HostSupervisorProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observa
 $HostSupervisorOwnedSessionPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
 $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
+$ResidentRuntimeGrantedBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-boundary-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -790,6 +791,44 @@ $ResidentOverlayActivationBoundaryBlockers = ConvertTo-StringArray -Value (Get-P
 if ($LiveOperatorProofPassed) {
   $ResidentOverlayActivationBoundaryBlockers = @($ResidentOverlayActivationBoundaryBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing' })
 }
+
+$ResidentRuntimeGrantedBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeGrantedBoundaryProofPath -ScriptArgs @('-Mode', 'Status') -ExpectedKind 'lens.resident_runtime.granted_boundary_proof'
+$ResidentRuntimeGrantedBoundaryExitCode = -1
+$ResidentRuntimeGrantedBoundaryPayload = $null
+if ($ResidentRuntimeGrantedBoundaryProof -is [System.Collections.IDictionary]) {
+  if ($ResidentRuntimeGrantedBoundaryProof.Contains('exit_code') -and $null -ne $ResidentRuntimeGrantedBoundaryProof['exit_code']) {
+    $ResidentRuntimeGrantedBoundaryExitCode = [int]$ResidentRuntimeGrantedBoundaryProof['exit_code']
+  }
+  if ($ResidentRuntimeGrantedBoundaryProof.Contains('payload') -and $null -ne $ResidentRuntimeGrantedBoundaryProof['payload']) {
+    $ResidentRuntimeGrantedBoundaryPayload = $ResidentRuntimeGrantedBoundaryProof['payload']
+  }
+}
+$ResidentRuntimeGrantedBoundaryBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'blockers' -Default @())
+$ResidentRuntimeGrantedBoundaryProofPassed = (
+  $ResidentRuntimeGrantedBoundaryExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.granted_boundary_proof' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_runtime_execution_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'runtime_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'applied' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'executed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_launch_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_register_tray' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_register_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_open_overlay' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_claim_resident' -Default $true) -and
+  -not ($ResidentRuntimeGrantedBoundaryBlockers -contains 'resident_runtime_execution_authority_not_granted') -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'service_control_authority_not_granted' -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+  $ResidentRuntimeGrantedBoundaryBlockers -contains 'resident_claim_authority_not_granted'
+)
 
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $HostSupervisorOwnedSessionBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
 if ($ResidentSurfaceReadbackReady) {
@@ -1329,6 +1368,42 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     blockers = $RuntimeBoundaryBlockers
   }
+  resident_runtime_granted_boundary_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'status' -Default 'missing')
+    ok = $ResidentRuntimeGrantedBoundaryProofPassed
+    exit_code = $ResidentRuntimeGrantedBoundaryExitCode
+    evidence = @('scripts/lens-resident-runtime-boundary-proof.ps1', '/lens/resident-runtime/execute', '/lens/resident-runtime/denials')
+    resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_runtime_execution_authority' -Default $false)
+    runtime_ready = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'runtime_ready' -Default $false)
+    resident_claim_allowed = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_claim_allowed' -Default $false)
+    applied = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'applied' -Default $false)
+    executed = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'executed' -Default $false)
+    would_launch_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_launch_process' -Default $false)
+    would_supervise_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_supervise_process' -Default $false)
+    would_restart_process = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_restart_process' -Default $false)
+    would_install_service = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_install_service' -Default $false)
+    would_start_service = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_start_service' -Default $false)
+    would_register_tray = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_register_tray' -Default $false)
+    would_register_hotkey = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_register_hotkey' -Default $false)
+    would_open_overlay = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_open_overlay' -Default $false)
+    would_write_memory = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_write_memory' -Default $false)
+    would_claim_resident = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'would_claim_resident' -Default $false)
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $ResidentRuntimeGrantedBoundaryBlockers
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
+  }
   resident_surface_content_readback = [ordered]@{
     status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default 'missing')
     ok = $ResidentSurfaceReadbackReady
@@ -1534,6 +1609,7 @@ $Payload = [ordered]@{
     resident_runtime_execution_authority_grant_receipt_readback_observed = $RuntimeAuthorityGrantReceiptsObserved
     resident_runtime_execution_authority_grant_denial_receipt_readback_observed = $RuntimeAuthorityGrantDenialReceiptsObserved
     resident_runtime_execution_authority_grant_readiness_audit_observed = $RuntimeAuthorityGrantReadinessObserved
+    resident_runtime_granted_boundary_proof_observed = $ResidentRuntimeGrantedBoundaryProofPassed
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved
