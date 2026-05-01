@@ -15336,6 +15336,47 @@ authority blocker split proof:
 - `python -m ruff format --check tests\test_lens_resident_runtime_authority_blockers_proof_script.py`
   Result: `passed`
 
+### 2026-05-01 - Stage 6/Lens audit consumes resident runtime authority blocker groups
+
+Stage 6/Lens checkpoint and completion-audit readback now consume
+`scripts/lens-resident-runtime-authority-blockers-proof.ps1`. The checkpoint
+emits `resident_runtime_authority_blockers_proof` with the six remaining
+authority families, and the completion audit now reports
+`resident_runtime_process_supervision_authority_boundary` as the next smallest
+truthful gap instead of the older combined
+`supervised_resident_runtime_process_service_tray_hotkey_overlay_authority`
+handoff.
+
+The audit keeps Stage 6 blocked and keeps `transition_allowed: false`. It does
+not grant local process launch, process supervision/restart, service install or
+control, tray registration, hotkey registration, overlay control, memory write,
+receipt-write, approval-decision, telemetry, UI, or resident-claim authority.
+The purpose of this slice is readback truth: the broad resident runtime blocker
+is now grouped in the same checkpoint/completion-audit contract that decides the
+Stage 6 handoff.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens audit consumption
+of resident runtime authority blocker groups:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,resident_runtime_authority_blockers_proof | ConvertTo-Json -Depth 8`
+  Result: `passed; checkpoint reported stage6_lens_completion_audit and proof_passed authority blocker groups`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_smallest_truthful_gap_basis,checkpoint_next_smallest_truthful_gap,resident_runtime_authority_blockers_proof | ConvertTo-Json -Depth 8`
+  Result: `passed; audit reported resident_runtime_process_supervision_authority_boundary`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest --collect-only tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py -q`
+  Result: `passed; collected one checkpoint test, one completion-audit test, and one authority-blocker proof test`
+- `python -m pytest tests\test_lens_resident_runtime_authority_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py`
+  Result: `failed before formatting tests\test_lens_stage6_completion_audit_script.py; passed after formatting`
+- `git diff --check`
+  Result: `passed; PowerShell LF-to-CRLF warnings only`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15472,8 +15513,10 @@ These remain true and should block any "finished" claim:
   blocker normalization so direct preflight/policy/authority-grant/plan/denial
   and resident-surface activation readbacks also distinguish foreground runtime
   observation from supervised resident runtime, plus completion-audit resident
-  runtime boundary readback that names the supervised resident runtime execution
-  boundary as the current handoff, but no
+  runtime authority blocker readback that splits the previous combined
+  process/service/tray/hotkey/overlay/resident-claim handoff into authority
+  families and names `resident_runtime_process_supervision_authority_boundary`
+  as the current handoff, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

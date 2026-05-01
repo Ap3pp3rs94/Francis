@@ -213,9 +213,28 @@ $ResidentRuntimeGrantedBoundaryProofObserved = (
   $ResidentRuntimeGrantedBoundaryProofBlockers -contains 'overlay_control_authority_not_granted' -and
   $ResidentRuntimeGrantedBoundaryProofBlockers -contains 'resident_claim_authority_not_granted'
 )
+$ResidentRuntimeAuthorityBlockersProof = $Checkpoint.resident_runtime_authority_blockers_proof
+$ResidentRuntimeAuthorityBlockerFamilies = ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockersProof.remaining_authority_families
+$ResidentRuntimeAuthorityBlockerGroups = $ResidentRuntimeAuthorityBlockersProof.authority_blocker_groups
+$ResidentRuntimeAuthorityBlockersSummary = $ResidentRuntimeAuthorityBlockersProof.summary
+$ResidentRuntimeAuthorityBlockersProofObserved = (
+  [bool]$ResidentRuntimeAuthorityBlockersProof.ok -and
+  [string]$ResidentRuntimeAuthorityBlockersProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeAuthorityBlockersProof.next_smallest_truthful_gap -eq 'resident_runtime_process_supervision_authority_boundary' -and
+  [bool]$ResidentRuntimeAuthorityBlockersSummary.combined_gap_split -and
+  [int]$ResidentRuntimeAuthorityBlockersSummary.blocked_authority_family_total -eq 6 -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'process_supervision' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'service_control' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'tray_presence' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'hotkey_summon' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'overlay_window' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'resident_claim'
+)
 
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
+} elseif ($ResidentRuntimeAuthorityBlockersProofObserved) {
+  'resident_runtime_process_supervision_authority_boundary'
 } elseif ($ResidentRuntimeGrantedBoundaryProofObserved) {
   'supervised_resident_runtime_process_service_tray_hotkey_overlay_authority'
 } elseif ($ResidentRuntimeBoundaryObserved) {
@@ -273,7 +292,9 @@ $Payload = [ordered]@{
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
-  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'supervised_resident_runtime_process_service_tray_hotkey_overlay_authority') {
+  next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'resident_runtime_process_supervision_authority_boundary') {
+    'The audit consumes the resident runtime authority blocker split proof: the previous combined process/service/tray/hotkey/overlay/resident-claim handoff is now grouped into explicit authority families, with process supervision as the first bounded boundary to resolve.'
+  } elseif ($NextSmallestTruthfulGap -eq 'supervised_resident_runtime_process_service_tray_hotkey_overlay_authority') {
     'The audit consumes the granted resident runtime boundary proof: an exact resident runtime execution-authority grant reaches execution and is still denied without launching, supervising, controlling service/tray/hotkey/overlay surfaces, writing memory, or claiming a resident runtime.'
   } elseif ($NextSmallestTruthfulGap -eq 'supervised_resident_runtime_execution_boundary') {
     'The audit observes the resident runtime grant/readback spine and the resident runtime execute boundary; it now blocks on supervised process, service, tray, hotkey, overlay, receipt, and resident-claim authorities without launching or claiming a resident runtime.'
@@ -338,6 +359,25 @@ $Payload = [ordered]@{
         }
       ) | Where-Object { $_ -match 'resident_runtime|process_supervision|process_restart|service_|tray|hotkey|overlay|resident_claim|receipt_write|local_process_launch' } | Sort-Object -Unique
     )
+    resident_runtime_authority_families = [string[]]@($ResidentRuntimeAuthorityBlockerFamilies)
+    resident_runtime_process_supervision = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.process_supervision.blockers
+    )
+    resident_runtime_service_control = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.service_control.blockers
+    )
+    resident_runtime_tray_presence = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.tray_presence.blockers
+    )
+    resident_runtime_hotkey_summon = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.hotkey_summon.blockers
+    )
+    resident_runtime_overlay_window = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.overlay_window.blockers
+    )
+    resident_runtime_resident_claim = [string[]]@(
+      ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockerGroups.resident_claim.blockers
+    )
     authority = [string[]]@(
       $Blockers | Where-Object { $_ -match 'authority|not_granted|not_authorized' } | Sort-Object -Unique
     )
@@ -399,6 +439,30 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     blockers = [string[]]@($ResidentRuntimeGrantedBoundaryProofBlockers)
     next_smallest_truthful_gap = [string]$ResidentRuntimeGrantedBoundaryProof.next_smallest_truthful_gap
+  }
+  resident_runtime_authority_blockers_proof = [ordered]@{
+    status = if ($ResidentRuntimeAuthorityBlockersProofObserved) { [string]$ResidentRuntimeAuthorityBlockersProof.status } else { 'missing_or_failed' }
+    ok = $ResidentRuntimeAuthorityBlockersProofObserved
+    exit_code = [int]$ResidentRuntimeAuthorityBlockersProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeAuthorityBlockersProof.evidence)
+    next_smallest_truthful_gap = [string]$ResidentRuntimeAuthorityBlockersProof.next_smallest_truthful_gap
+    remaining_authority_families = [string[]]@($ResidentRuntimeAuthorityBlockerFamilies)
+    authority_blocker_groups = $ResidentRuntimeAuthorityBlockerGroups
+    summary = $ResidentRuntimeAuthorityBlockersSummary
+    diagnostic_only = [bool]$ResidentRuntimeAuthorityBlockersProof.governance.diagnostic_only
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    hotkey_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
   }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
@@ -518,7 +582,8 @@ $Payload = [ordered]@{
     '/lens/status',
     '/lens/resident-surface',
     '/lens/resident-surface/activation',
-    '/lens/host/supervision/authority/readiness'
+    '/lens/host/supervision/authority/readiness',
+    'scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status'
   )
   governance = [ordered]@{
     read_only_contract = $true
@@ -529,6 +594,7 @@ $Payload = [ordered]@{
     persistent_supervision_enablement_denial_boundary_readback = $PersistentSupervisionEnablementDenialObserved
     persistent_supervision_enablement_execution_denial_boundary_readback = $PersistentSupervisionEnablementExecutionDenialObserved
     resident_runtime_granted_boundary_proof_readback = $ResidentRuntimeGrantedBoundaryProofObserved
+    resident_runtime_authority_blockers_proof_readback = $ResidentRuntimeAuthorityBlockersProofObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

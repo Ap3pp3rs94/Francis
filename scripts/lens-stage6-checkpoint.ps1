@@ -566,6 +566,7 @@ $HostSupervisorOwnedSessionPath = Join-Path $PSScriptRoot 'lens-host-supervisor.
 $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-runtime-proof.ps1'
 $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $ResidentRuntimeGrantedBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-boundary-proof.ps1'
+$ResidentRuntimeAuthorityBlockersProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-authority-blockers-proof.ps1'
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -828,6 +829,34 @@ $ResidentRuntimeGrantedBoundaryProofPassed = (
   $ResidentRuntimeGrantedBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $ResidentRuntimeGrantedBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
   $ResidentRuntimeGrantedBoundaryBlockers -contains 'resident_claim_authority_not_granted'
+)
+
+$ResidentRuntimeAuthorityBlockersProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeAuthorityBlockersProofPath -ScriptArgs @('-Mode', 'Status') -ExpectedKind 'lens.resident_runtime.authority_blockers_proof'
+$ResidentRuntimeAuthorityBlockersExitCode = -1
+$ResidentRuntimeAuthorityBlockersPayload = $null
+if ($ResidentRuntimeAuthorityBlockersProof -is [System.Collections.IDictionary]) {
+  if ($ResidentRuntimeAuthorityBlockersProof.Contains('exit_code') -and $null -ne $ResidentRuntimeAuthorityBlockersProof['exit_code']) {
+    $ResidentRuntimeAuthorityBlockersExitCode = [int]$ResidentRuntimeAuthorityBlockersProof['exit_code']
+  }
+  if ($ResidentRuntimeAuthorityBlockersProof.Contains('payload') -and $null -ne $ResidentRuntimeAuthorityBlockersProof['payload']) {
+    $ResidentRuntimeAuthorityBlockersPayload = $ResidentRuntimeAuthorityBlockersProof['payload']
+  }
+}
+$ResidentRuntimeAuthorityBlockerFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'remaining_authority_families' -Default @())
+$ResidentRuntimeAuthorityBlockersSummary = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'summary'
+$ResidentRuntimeAuthorityBlockersProofPassed = (
+  $ResidentRuntimeAuthorityBlockersExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.authority_blockers_proof' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersSummary -Name 'combined_gap_split' -Default $false) -and
+  [int](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersSummary -Name 'blocked_authority_family_total' -Default 0) -eq 6 -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'process_supervision' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'service_control' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'tray_presence' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'hotkey_summon' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'overlay_window' -and
+  $ResidentRuntimeAuthorityBlockerFamilies -contains 'resident_claim' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_runtime_process_supervision_authority_boundary'
 )
 
 $SystemResidentBlockers = @($HostBlockers + $HudBlockers + $HostSupervisionAuthorityBlockers + $HostSupervisionAuthorityReadinessBlockers + $RuntimePlanBlockers + $RuntimeGrantBlockers + $RuntimePolicyBlockers + $RuntimeAuthorityGrantBlockers + $RuntimeAuthorityGrantReadinessBlockers + $RuntimeBoundaryBlockers + $HostSupervisorProofBlockers + $HostSupervisorOwnedSessionBlockers + $ResidentOverlayRuntimeBlockers + $ResidentOverlayActivationBoundaryBlockers | Sort-Object -Unique)
@@ -1404,6 +1433,17 @@ $Payload = [ordered]@{
     blockers = $ResidentRuntimeGrantedBoundaryBlockers
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
   }
+  resident_runtime_authority_blockers_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'status' -Default 'missing')
+    ok = $ResidentRuntimeAuthorityBlockersProofPassed
+    exit_code = $ResidentRuntimeAuthorityBlockersExitCode
+    evidence = @('scripts/lens-resident-runtime-authority-blockers-proof.ps1', 'scripts/lens-resident-runtime-boundary-proof.ps1', '/lens/resident-runtime/execute')
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'next_smallest_truthful_gap' -Default '')
+    remaining_authority_families = $ResidentRuntimeAuthorityBlockerFamilies
+    authority_blocker_groups = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'authority_blocker_groups' -Default ([ordered]@{})
+    summary = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'summary' -Default ([ordered]@{})
+    governance = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'governance' -Default ([ordered]@{})
+  }
   resident_surface_content_readback = [ordered]@{
     status = [string](Get-PropertyValue -Payload $ResidentSurface -Name 'status' -Default 'missing')
     ok = $ResidentSurfaceReadbackReady
@@ -1610,6 +1650,7 @@ $Payload = [ordered]@{
     resident_runtime_execution_authority_grant_denial_receipt_readback_observed = $RuntimeAuthorityGrantDenialReceiptsObserved
     resident_runtime_execution_authority_grant_readiness_audit_observed = $RuntimeAuthorityGrantReadinessObserved
     resident_runtime_granted_boundary_proof_observed = $ResidentRuntimeGrantedBoundaryProofPassed
+    resident_runtime_authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved

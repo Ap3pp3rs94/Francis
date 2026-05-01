@@ -53,12 +53,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert (
-        payload["next_smallest_truthful_gap"]
-        == "supervised_resident_runtime_process_service_tray_hotkey_overlay_authority"
-    )
-    assert "granted resident runtime boundary proof" in payload["next_smallest_truthful_gap_basis"]
-    assert "without launching" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "resident_runtime_process_supervision_authority_boundary"
+    assert "authority blocker split proof" in payload["next_smallest_truthful_gap_basis"]
+    assert "process supervision as the first bounded boundary" in payload["next_smallest_truthful_gap_basis"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2
@@ -123,6 +120,23 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "hotkey_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime"]
     assert "overlay_control_authority_not_granted" in payload["closure_blockers"]["resident_runtime"]
     assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["resident_runtime"]
+    assert payload["closure_blockers"]["resident_runtime_authority_families"] == [
+        "process_supervision",
+        "service_control",
+        "tray_presence",
+        "hotkey_summon",
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert (
+        "process_supervision_authority_not_granted"
+        in payload["closure_blockers"]["resident_runtime_process_supervision"]
+    )
+    assert "service_control_authority_not_granted" in payload["closure_blockers"]["resident_runtime_service_control"]
+    assert "tray_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime_tray_presence"]
+    assert "hotkey_registration_authority_not_granted" in payload["closure_blockers"]["resident_runtime_hotkey_summon"]
+    assert "overlay_control_authority_not_granted" in payload["closure_blockers"]["resident_runtime_overlay_window"]
+    assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["resident_runtime_resident_claim"]
 
     resident_runtime_boundary = payload["resident_runtime_execution_boundary"]
     assert resident_runtime_boundary["status"] == "blocked"
@@ -188,6 +202,46 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         granted_boundary["next_smallest_truthful_gap"]
         == "supervised_resident_runtime_process_service_tray_hotkey_overlay_authority"
     )
+
+    runtime_authority_blockers = payload["resident_runtime_authority_blockers_proof"]
+    assert runtime_authority_blockers["status"] == "proof_passed"
+    assert runtime_authority_blockers["ok"] is True
+    assert runtime_authority_blockers["exit_code"] == 0
+    assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1" in runtime_authority_blockers["evidence"]
+    assert runtime_authority_blockers["next_smallest_truthful_gap"] == (
+        "resident_runtime_process_supervision_authority_boundary"
+    )
+    assert runtime_authority_blockers["remaining_authority_families"] == [
+        "process_supervision",
+        "service_control",
+        "tray_presence",
+        "hotkey_summon",
+        "overlay_window",
+        "resident_claim",
+    ]
+    assert runtime_authority_blockers["summary"]["authority_family_total"] == 6
+    assert runtime_authority_blockers["summary"]["blocked_authority_family_total"] == 6
+    assert runtime_authority_blockers["summary"]["combined_gap_split"] is True
+    authority_groups = runtime_authority_blockers["authority_blocker_groups"]
+    assert authority_groups["process_supervision"]["status"] == "blocked"
+    assert authority_groups["process_supervision"]["route"] == "/lens/host/supervision/authority/readiness"
+    assert "local_process_launch_authority_not_granted" in authority_groups["process_supervision"]["blockers"]
+    assert "process_supervision_authority_not_granted" in authority_groups["process_supervision"]["blockers"]
+    assert authority_groups["service_control"]["status"] == "blocked"
+    assert "service_control_authority_not_granted" in authority_groups["service_control"]["blockers"]
+    assert authority_groups["tray_presence"]["status"] == "blocked"
+    assert "tray_registration_authority_not_granted" in authority_groups["tray_presence"]["blockers"]
+    assert authority_groups["hotkey_summon"]["status"] == "blocked"
+    assert "hotkey_registration_authority_not_granted" in authority_groups["hotkey_summon"]["blockers"]
+    assert authority_groups["overlay_window"]["status"] == "blocked"
+    assert "overlay_control_authority_not_granted" in authority_groups["overlay_window"]["blockers"]
+    assert authority_groups["resident_claim"]["status"] == "blocked"
+    assert "resident_claim_authority_not_granted" in authority_groups["resident_claim"]["blockers"]
+    assert runtime_authority_blockers["diagnostic_only"] is True
+    assert runtime_authority_blockers["execution_authority"] is False
+    assert runtime_authority_blockers["process_supervision_authority"] is False
+    assert runtime_authority_blockers["service_control_authority"] is False
+    assert runtime_authority_blockers["resident_claim_authority"] is False
 
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
@@ -299,6 +353,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement" in payload["evidence"]
@@ -314,6 +369,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True
     assert governance["persistent_supervision_enablement_execution_denial_boundary_readback"] is True
     assert governance["resident_runtime_granted_boundary_proof_readback"] is True
+    assert governance["resident_runtime_authority_blockers_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False
