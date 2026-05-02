@@ -91,6 +91,18 @@ def _blockers(payload: dict[str, Any]) -> list[str]:
     return _string_list(value)
 
 
+def _select_blockers(blockers: list[str], *candidates: str) -> list[str]:
+    return [candidate for candidate in candidates if candidate in blockers]
+
+
+def _authority_blockers(blockers: list[str]) -> list[str]:
+    return [
+        blocker
+        for blocker in blockers
+        if blocker.endswith("_authority_not_granted") or blocker.endswith("_authority_false")
+    ]
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -214,6 +226,29 @@ def _summon_preflight() -> dict[str, Any]:
     if not local_process_launch_authority:
         blockers.append("local_process_launch_authority_not_granted")
     ready = not blockers
+    blocker_groups = {
+        "config": _select_blockers(blockers, "lens_summon_config_missing", "lens_summon_config_invalid"),
+        "global_hotkey_binding": _select_blockers(
+            blockers,
+            "global_hotkey_not_declared",
+            "global_hotkey_binding_disabled",
+            "global_hotkey_registration_disabled",
+            "hotkey_registration_authority_not_granted",
+        ),
+        "summon_binding": _select_blockers(
+            blockers,
+            "lens_summon_binding_not_implemented",
+            "summon_authority_not_granted",
+        ),
+        "host_dependency": _select_blockers(
+            blockers,
+            "lens_host_lifecycle_preflight_missing",
+            "lens_host_status_runner_missing",
+            "local_process_launch_authority_not_granted",
+        ),
+        "surface_dependencies": _select_blockers(blockers, "tray_host_missing", "overlay_window_missing"),
+        "authority": _authority_blockers(blockers),
+    }
     return {
         "ok": True,
         "kind": "lens.summon.api_preflight",
@@ -223,6 +258,8 @@ def _summon_preflight() -> dict[str, Any]:
         "summon_name": summon_name,
         "config_path": config_path,
         "config_exists": exists,
+        "acceptance_criterion": "summon_anywhere",
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "required_before_enable": required_before_enable,
         "global_hotkey": global_hotkey,
         "binding_scope": binding_scope,
@@ -270,6 +307,7 @@ def _summon_preflight() -> dict[str, Any]:
             ),
         ],
         "blockers": blockers,
+        "blocker_groups": blocker_groups,
         "binding": {
             "enabled": enabled,
             "binding_enabled": binding_enabled,
@@ -630,11 +668,54 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         *_blockers(tray),
         *_blockers(overlay),
     }
+    blockers = sorted(blocker_set)
     summon_ready = bool(summon.get("ready"))
     resident_host_ready = bool(host.get("ready"))
     tray_ready = bool(tray.get("ready"))
     overlay_ready = bool(overlay.get("ready"))
     ready = summon_ready and resident_host_ready and tray_ready and overlay_ready
+    blocker_groups = {
+        "resident_host": _select_blockers(
+            blockers,
+            "resident_host_process_missing",
+            "lens_host_runtime_not_implemented",
+            "lens_host_service_config_missing",
+            "lens_host_entrypoint_missing",
+            "lens_host_lifecycle_preflight_missing",
+            "lens_host_status_runner_missing",
+            "local_process_launch_authority_not_granted",
+        ),
+        "tray_presence": _select_blockers(
+            blockers,
+            "lens_tray_presence_not_implemented",
+            "tray_host_missing",
+            "tray_host_disabled",
+            "tray_icon_disabled",
+            "tray_registration_authority_not_granted",
+        ),
+        "overlay_window": _select_blockers(
+            blockers,
+            "lens_overlay_window_not_implemented",
+            "overlay_window_missing",
+            "overlay_window_disabled",
+            "overlay_control_authority_not_granted",
+        ),
+        "global_hotkey_binding": _select_blockers(
+            blockers,
+            "global_hotkey_not_declared",
+            "global_hotkey_binding_missing",
+            "global_hotkey_binding_disabled",
+            "global_hotkey_registration_disabled",
+            "hotkey_registration_authority_not_granted",
+        ),
+        "summon_binding": _select_blockers(
+            blockers,
+            "lens_summon_binding_not_implemented",
+            "summon_binding_missing",
+            "summon_authority_not_granted",
+        ),
+        "authority": _authority_blockers(blockers),
+    }
     return {
         "ok": True,
         "kind": "lens.summon.enablement_gate",
@@ -645,6 +726,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "host_route": "/lens/host",
         "ready": ready,
         "summon_anywhere": ready,
+        "acceptance_criterion": "summon_anywhere",
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "summon_binding_ready": summon_ready,
         "resident_host_ready": resident_host_ready,
         "tray_ready": tray_ready,
@@ -653,7 +736,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "binding_scope": _safe_str(summon.get("binding_scope"), "global"),
         "palette_route": _safe_str(summon.get("palette_route"), "/lens/status"),
         "required_before_enable": _string_list(summon.get("required_before_enable")),
-        "blockers": sorted(blocker_set),
+        "blockers": blockers,
+        "blocker_groups": blocker_groups,
         "summon_preflight": summon,
         "surface_dependencies": {
             "host": {

@@ -16067,6 +16067,42 @@ acceptance-blocker handoff:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens summon-anywhere blocker grouping
+
+Stage 6/Lens summon readback now exposes the current `summon_anywhere_blockers`
+handoff directly through the disabled summon preflight and `/lens/summon`
+enablement gate. The payloads now carry `acceptance_criterion:
+summon_anywhere`, `next_smallest_truthful_gap: summon_anywhere_blockers`, and
+structured blocker groups for config, resident host dependencies, tray/overlay
+surface dependencies, global hotkey binding, summon binding, and authority
+families. `stage6_readiness` also projects the same handoff fields for the
+summon preflight and summon enablement criteria.
+
+This is readback, test, and ledger work only. It does not grant execution
+authority, approval-decision authority, memory-write authority, process-launch
+authority, hotkey-registration authority, summon authority, overlay-control
+authority, resident-claim authority, UI control, Stage 6 closure, or Stage 7
+transition. Stage 6 remains active and blocked.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens summon-anywhere
+blocker grouping:
+
+- `python -m pytest tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,acceptance_criterion,ready,blocker_groups,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; returned blocked/read-only summon_anywhere_blockers with
+  authority gates false`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -16119,7 +16155,8 @@ These remain true and should block any "finished" claim:
   enablement gate that projects the blockers required before a resident claim,
   plus a direct `/lens/summon` read-only summon enablement gate that projects the
   blockers required before global hotkey binding and summon-anywhere can be
-  truthfully claimed,
+  truthfully claimed and now groups the summon-anywhere blockers by dependency
+  and authority family,
   plus a direct `/lens/tray` read-only tray/presence enablement gate that projects
   the blockers required before tray icon, notification, and user-session presence
   can be truthfully claimed,

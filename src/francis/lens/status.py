@@ -2301,8 +2301,15 @@ def _stage6_readiness(
                 "evidence": ["/lens/summon", "/lens/preflight", "/lens/status"],
                 "ready": bool(summon_enablement_gate.get("ready")),
                 "summon_anywhere": bool(summon_enablement_gate.get("summon_anywhere")),
+                "acceptance_criterion": _safe_str(summon_enablement_gate.get("acceptance_criterion")).strip()
+                or "summon_anywhere",
+                "next_smallest_truthful_gap": _safe_str(
+                    summon_enablement_gate.get("next_smallest_truthful_gap")
+                ).strip()
+                or "summon_anywhere_blockers",
                 "global_hotkey": _safe_str(summon_enablement_gate.get("global_hotkey")).strip(),
                 "blockers": _as_list(summon_enablement_gate.get("blockers")),
+                "blocker_groups": _as_dict(summon_enablement_gate.get("blocker_groups")),
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
@@ -2348,8 +2355,13 @@ def _stage6_readiness(
                 "id": "summon_preflight",
                 "status": _safe_str(summon_preflight.get("status")).strip() or "missing",
                 "evidence": ["/lens/preflight", "config/runtime/lens/summon.json"],
+                "acceptance_criterion": _safe_str(summon_preflight.get("acceptance_criterion")).strip()
+                or "summon_anywhere",
+                "next_smallest_truthful_gap": _safe_str(summon_preflight.get("next_smallest_truthful_gap")).strip()
+                or "summon_anywhere_blockers",
                 "global_hotkey": _safe_str(summon_preflight.get("global_hotkey")).strip(),
                 "blockers": _as_list(summon_preflight.get("blockers")),
+                "blocker_groups": _as_dict(summon_preflight.get("blocker_groups")),
             },
             {
                 "id": "tray_preflight",

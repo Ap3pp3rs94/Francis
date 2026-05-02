@@ -104,6 +104,36 @@ function Get-StringListProperty {
   return @($Items.ToArray())
 }
 
+function Select-Blockers {
+  param(
+    [object[]]$Blockers,
+    [string[]]$Candidates
+  )
+
+  $Selected = [System.Collections.ArrayList]::new()
+  foreach ($Candidate in $Candidates) {
+    if ($Blockers -contains $Candidate) {
+      [void]$Selected.Add($Candidate)
+    }
+  }
+  return @($Selected.ToArray())
+}
+
+function Select-AuthorityBlockers {
+  param(
+    [object[]]$Blockers
+  )
+
+  $Selected = [System.Collections.ArrayList]::new()
+  foreach ($Blocker in $Blockers) {
+    $Value = [string]$Blocker
+    if ($Value.EndsWith('_authority_not_granted') -or $Value.EndsWith('_authority_false')) {
+      [void]$Selected.Add($Value)
+    }
+  }
+  return @($Selected.ToArray())
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -172,6 +202,34 @@ if (-not $HotkeyRegistrationAuthority) { [void]$Blockers.Add('hotkey_registratio
 if (-not $OverlayControlAuthority) { [void]$Blockers.Add('overlay_control_authority_not_granted') }
 if (-not $LocalProcessLaunchAuthority) { [void]$Blockers.Add('local_process_launch_authority_not_granted') }
 
+$BlockerArray = [string[]]@($Blockers.ToArray())
+$BlockerGroups = [ordered]@{
+  config = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
+      'lens_summon_config_missing',
+      'lens_summon_config_invalid'
+    ))
+  global_hotkey_binding = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
+      'global_hotkey_not_declared',
+      'global_hotkey_binding_disabled',
+      'global_hotkey_registration_disabled',
+      'hotkey_registration_authority_not_granted'
+    ))
+  summon_binding = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
+      'lens_summon_binding_not_implemented',
+      'summon_authority_not_granted'
+    ))
+  host_dependency = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
+      'lens_host_lifecycle_preflight_missing',
+      'lens_host_status_runner_missing',
+      'local_process_launch_authority_not_granted'
+    ))
+  surface_dependencies = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
+      'tray_host_missing',
+      'overlay_window_missing'
+    ))
+  authority = [string[]]@(Select-AuthorityBlockers -Blockers $BlockerArray)
+}
+
 $Ready = $Blockers.Count -eq 0
 $Payload = [ordered]@{
   ok = $true
@@ -182,12 +240,15 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   summon_name = $SummonName
   config_path = 'config/runtime/lens/summon.json'
+  acceptance_criterion = 'summon_anywhere'
+  next_smallest_truthful_gap = 'summon_anywhere_blockers'
   required_before_enable = @($RequiredBeforeEnable)
   global_hotkey = $GlobalHotkey
   binding_scope = $BindingScope
   palette_route = $PaletteRoute
   checks = $Checks
   blockers = $Blockers
+  blocker_groups = $BlockerGroups
   binding = [ordered]@{
     enabled = $Enabled
     binding_enabled = $BindingEnabled

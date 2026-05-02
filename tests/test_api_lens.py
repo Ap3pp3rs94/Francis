@@ -1437,6 +1437,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert preflight_surfaces["summon"]["status"] == "blocked"
     assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+Space"
     assert preflight_surfaces["summon"]["config_exists"] is True
+    assert preflight_surfaces["summon"]["acceptance_criterion"] == "summon_anywhere"
+    assert preflight_surfaces["summon"]["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert preflight_surfaces["summon"]["required_before_enable"] == [
         "resident_host_process",
         "tray_presence",
@@ -1446,6 +1448,20 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     ]
     assert "global_hotkey_binding_disabled" in preflight_surfaces["summon"]["blockers"]
     assert "summon_authority_not_granted" in preflight_surfaces["summon"]["blockers"]
+    summon_preflight_groups = preflight_surfaces["summon"]["blocker_groups"]
+    assert summon_preflight_groups["global_hotkey_binding"] == [
+        "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
+        "hotkey_registration_authority_not_granted",
+    ]
+    assert summon_preflight_groups["summon_binding"] == [
+        "lens_summon_binding_not_implemented",
+        "summon_authority_not_granted",
+    ]
+    assert summon_preflight_groups["surface_dependencies"] == [
+        "tray_host_missing",
+        "overlay_window_missing",
+    ]
     assert preflight_surfaces["tray"]["kind"] == "lens.tray.api_preflight"
     assert preflight_surfaces["tray"]["status"] == "blocked"
     assert preflight_surfaces["tray"]["config_exists"] is True
@@ -1481,6 +1497,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_enablement_gate["host_route"] == "/lens/host"
     assert summon_enablement_gate["ready"] is False
     assert summon_enablement_gate["summon_anywhere"] is False
+    assert summon_enablement_gate["acceptance_criterion"] == "summon_anywhere"
+    assert summon_enablement_gate["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_enablement_gate["summon_binding_ready"] is False
     assert summon_enablement_gate["resident_host_ready"] is False
     assert summon_enablement_gate["tray_ready"] is False
@@ -1500,6 +1518,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "summon_authority_not_granted" in summon_enablement_gate["blockers"]
     assert "summon_binding_missing" in summon_enablement_gate["blockers"]
     assert "resident_host_process_missing" in summon_enablement_gate["blockers"]
+    summon_gate_groups = summon_enablement_gate["blocker_groups"]
+    assert "resident_host_process_missing" in summon_gate_groups["resident_host"]
+    assert "tray_host_missing" in summon_gate_groups["tray_presence"]
+    assert "overlay_window_missing" in summon_gate_groups["overlay_window"]
+    assert "global_hotkey_binding_missing" in summon_gate_groups["global_hotkey_binding"]
+    assert "summon_binding_missing" in summon_gate_groups["summon_binding"]
     assert summon_enablement_gate["summon_preflight"] == preflight_surfaces["summon"]
     assert summon_enablement_gate["surface_dependencies"]["host"]["ready"] is False
     assert summon_enablement_gate["surface_dependencies"]["tray"]["status"] == "blocked"
@@ -2282,6 +2306,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_gate_criterion["summon_anywhere"] is False
     assert summon_gate_criterion["evidence"] == ["/lens/summon", "/lens/preflight", "/lens/status"]
     assert summon_gate_criterion["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_gate_criterion["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert "summon_authority_not_granted" in summon_gate_criterion["blockers"]
     assert summon_gate_criterion["execution_authority"] is False
     assert summon_gate_criterion["approval_decision_authority"] is False

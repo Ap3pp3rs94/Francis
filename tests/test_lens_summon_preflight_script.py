@@ -46,6 +46,8 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
     assert payload["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["acceptance_criterion"] == "summon_anywhere"
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["required_before_enable"] == [
         "resident_host_process",
         "tray_presence",
@@ -56,6 +58,21 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["binding"]["binding_enabled"] is False
     assert "global_hotkey_binding_disabled" in payload["blockers"]
     assert "summon_authority_not_granted" in payload["blockers"]
+    blocker_groups = payload["blocker_groups"]
+    assert blocker_groups["global_hotkey_binding"] == [
+        "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
+        "hotkey_registration_authority_not_granted",
+    ]
+    assert blocker_groups["summon_binding"] == [
+        "lens_summon_binding_not_implemented",
+        "summon_authority_not_granted",
+    ]
+    assert blocker_groups["surface_dependencies"] == [
+        "tray_host_missing",
+        "overlay_window_missing",
+    ]
+    assert "local_process_launch_authority_not_granted" in blocker_groups["host_dependency"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_config"]["status"] == "present_disabled"
     assert checks["hotkey_declared"]["status"] == "declared"
