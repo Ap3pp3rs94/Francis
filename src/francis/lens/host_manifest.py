@@ -179,6 +179,10 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _select_blockers(blockers: list[str], *candidates: str) -> list[str]:
+    return [candidate for candidate in candidates if candidate in blockers]
+
+
 def _record_ts(value: Any) -> float:
     if isinstance(value, bool):
         return 0.0
@@ -1184,6 +1188,43 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     if not service_config_exists:
         insert_at = 1 if not entrypoint_exists else 0
         blockers.insert(insert_at, "lens_host_service_config_missing")
+    process_readback_blockers = _select_blockers(
+        [str(process_readback.get("blocked_reason") or "")],
+        "resident_host_process_missing",
+        "resident_host_not_supervised",
+    )
+    service_plan_blockers = _as_str_list(service_plan.get("blocked_by"))
+    supervision_blockers = _as_str_list(supervision_readiness.get("blocked_by"))
+    authority_candidates = sorted({*service_plan_blockers, *supervision_blockers})
+    blocker_groups = {
+        "runtime": _select_blockers(
+            blockers,
+            "lens_host_runtime_not_implemented",
+            "lens_host_entrypoint_missing",
+            "lens_host_service_config_missing",
+        ),
+        "process_readback": process_readback_blockers,
+        "service_plan": service_plan_blockers,
+        "supervision": supervision_blockers,
+        "surface_dependencies": _select_blockers(
+            blockers,
+            "tray_host_missing",
+            "global_hotkey_binding_missing",
+            "overlay_window_missing",
+            "summon_binding_missing",
+        ),
+        "authority": _select_blockers(
+            authority_candidates,
+            "install_authority_false",
+            "service_install_authority_false",
+            "service_control_authority_false",
+            "process_restart_authority",
+            "service_install_authority",
+            "service_control_authority",
+            "receipt_write_authority",
+            "resident_claim_authority",
+        ),
+    }
 
     return {
         "ok": True,
@@ -1322,6 +1363,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             },
         ],
         "blockers": blockers,
+        "blocker_groups": blocker_groups,
         "governance": {
             "read_only_contract": True,
             "execution_authority": False,

@@ -45,9 +45,16 @@ def test_lens_host_preflight_reports_blockers_without_authority() -> None:
     assert payload["kind"] == "lens.host.lifecycle_preflight"
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
+    assert payload["next_smallest_truthful_gap"] == "resident_host_lifecycle_blockers"
     assert payload["service_name"] == "Francis-LensHost"
     assert "lens_host_service_control_not_authorized" in payload["blockers"]
     assert "global_hotkey_binding_missing" in payload["blockers"]
+    blocker_groups = payload["blocker_groups"]
+    assert "lens_host_runtime_not_implemented" in blocker_groups["runtime"]
+    assert isinstance(blocker_groups["process_readback"], list)
+    assert "service_control_authority_false" in blocker_groups["service_plan"]
+    assert "service_control_authority_false" in blocker_groups["authority"]
+    assert "tray_host_missing" in blocker_groups["surface_dependencies"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["service_config"]["status"] == "present_disabled"
     assert checks["host_entrypoint"]["status"] == "present"

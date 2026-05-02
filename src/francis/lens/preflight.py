@@ -122,6 +122,7 @@ def _base_governance(**extra: bool) -> dict[str, bool]:
 
 def _host_preflight(host_manifest: dict[str, Any]) -> dict[str, Any]:
     blockers = [str(item) for item in host_manifest.get("blockers", []) if item]
+    blocker_groups = _dict_value(host_manifest, "blocker_groups")
     service_plan = _dict_value(host_manifest, "service_plan")
     process_readback = _dict_value(host_manifest, "process_readback")
     supervision = _dict_value(host_manifest, "supervision_readiness")
@@ -164,6 +165,7 @@ def _host_preflight(host_manifest: dict[str, Any]) -> dict[str, Any]:
             ),
         ],
         "blockers": blockers,
+        "blocker_groups": blocker_groups,
         "governance": _base_governance(
             service_install_authority=False,
             service_control_authority=False,

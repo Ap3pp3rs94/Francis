@@ -16181,6 +16181,37 @@ summon blocker-group handoff:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident-host lifecycle blocker grouping
+
+Stage 6/Lens host lifecycle readback now groups the resident-host blocker family
+behind the current `summon_anywhere_blockers` handoff. `/lens/host/manifest`,
+`/lens/preflight`, and `scripts/lens-host-preflight.ps1 -Mode Status` expose
+`blocker_groups` for runtime, process readback, service plan, supervision,
+surface dependencies, and authority blockers. The host preflight script also
+names `resident_host_lifecycle_blockers` as its next smallest truthful gap.
+
+This is host lifecycle readback, script, test, and ledger work only. It does not
+grant execution authority, approval-decision authority, memory-write authority,
+local process launch authority, process-supervision authority, service install
+or service-control authority, hotkey-registration authority, summon authority,
+overlay-control authority, resident-claim authority, UI control, Stage 6
+closure, or Stage 7 transition. Stage 6 remains active and blocked.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident-host
+lifecycle blocker-group handoff:
+
+- `python -m pytest tests\test_lens_host_preflight_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `failed before narrowing assertions to stable host-preflight groups;
+  passed after correction`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_host_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_host_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

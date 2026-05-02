@@ -1433,6 +1433,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert preflight_surfaces["host"]["kind"] == "lens.host.api_preflight"
     assert preflight_surfaces["host"]["status"] == "blocked"
     assert preflight_surfaces["host"]["service_plan_status"] == "blocked"
+    host_preflight_groups = preflight_surfaces["host"]["blocker_groups"]
+    assert "lens_host_runtime_not_implemented" in host_preflight_groups["runtime"]
+    assert "resident_host_process_missing" in host_preflight_groups["process_readback"]
+    assert "service_control_authority_false" in host_preflight_groups["service_plan"]
+    assert "service_control_authority_false" in host_preflight_groups["authority"]
+    assert "tray_host_missing" in host_preflight_groups["surface_dependencies"]
     assert preflight_surfaces["summon"]["kind"] == "lens.summon.api_preflight"
     assert preflight_surfaces["summon"]["status"] == "blocked"
     assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+Space"

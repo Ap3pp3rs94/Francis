@@ -231,6 +231,40 @@ if (-not $RuntimeStateExists -and -not $PidPresent) { [void]$Blockers.Add('resid
 [void]$Blockers.Add('summon_binding_missing')
 if ($BlockedReason) { [void]$Blockers.Insert(0, $BlockedReason) }
 
+$ProcessReadbackBlockers = [System.Collections.ArrayList]::new()
+if (-not $RuntimeStateExists -and -not $PidPresent) {
+  [void]$ProcessReadbackBlockers.Add('resident_host_process_missing')
+}
+
+$AuthorityBlockers = [System.Collections.ArrayList]::new()
+foreach ($Candidate in @(
+    'install_authority_false',
+    'service_install_authority_false',
+    'service_control_authority_false'
+  )) {
+  if ($PlanBlockers -contains $Candidate) {
+    [void]$AuthorityBlockers.Add($Candidate)
+  }
+}
+
+$RuntimeBlockers = [System.Collections.ArrayList]::new()
+if ($BlockedReason) { [void]$RuntimeBlockers.Add($BlockedReason) }
+if (-not $ServiceConfigExists) { [void]$RuntimeBlockers.Add('lens_host_service_config_missing') }
+if (-not $EntrypointExists) { [void]$RuntimeBlockers.Add('lens_host_entrypoint_missing') }
+
+$BlockerGroups = [ordered]@{
+  runtime = [string[]]@($RuntimeBlockers)
+  process_readback = [string[]]@($ProcessReadbackBlockers)
+  service_plan = [string[]]@($PlanBlockers)
+  surface_dependencies = [string[]]@(
+    'tray_host_missing',
+    'global_hotkey_binding_missing',
+    'overlay_window_missing',
+    'summon_binding_missing'
+  )
+  authority = [string[]]@($AuthorityBlockers)
+}
+
 $Ready = $Blockers.Count -eq 0
 $Payload = [ordered]@{
   ok = $true
@@ -238,12 +272,14 @@ $Payload = [ordered]@{
   status = if ($Ready) { 'ready' } else { 'blocked' }
   mode = $ModeName
   ready = $Ready
+  next_smallest_truthful_gap = 'resident_host_lifecycle_blockers'
   repo_root = $RepoRoot
   service_name = $ServiceName
   service_config_path = 'config/runtime/services/lens-host.json'
   entrypoint = $Entrypoint
   checks = $Checks
   blockers = $Blockers
+  blocker_groups = $BlockerGroups
   service = [ordered]@{
     status = $ServiceStatus
     installed = $ServiceInstalled
