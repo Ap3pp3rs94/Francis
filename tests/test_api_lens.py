@@ -4495,6 +4495,7 @@ def test_lens_host_runtime_loop_contract_stays_readback_only(
     assert body["runtime_boundary_route"] == "/lens/host/runtime-boundary"
     assert body["supervision_route"] == "/lens/host/supervision"
     assert body["resident_runtime_execute_route"] == "/lens/resident-runtime/execute"
+    assert body["execution_denial_route"] == "/lens/host/runtime-loop/execute"
     assert body["contract_available"] is True
     assert body["loop_readback_ready"] is True
     assert body["loop_ready"] is False
@@ -4595,6 +4596,153 @@ def test_lens_host_runtime_loop_contract_stays_readback_only(
     assert resident_host["runtime_loop_contract_route"] == "/lens/host/runtime-loop"
     assert resident_host["runtime_loop_contract"]["kind"] == "lens.host.runtime_loop_contract"
     assert resident_host["runtime_loop_contract"]["loop_ready"] is False
+    assert resident_host["runtime_loop_execution_denial_route"] == "/lens/host/runtime-loop/execute"
+    runtime_loop_denial = resident_host["runtime_loop_execution_denial"]
+    assert runtime_loop_denial["kind"] == "lens.host.runtime_loop.execution_denial"
+    assert runtime_loop_denial["status"] == "denied_no_approval"
+    assert runtime_loop_denial["applied"] is False
+    assert runtime_loop_denial["executed"] is False
+    assert runtime_loop_denial["loop_started"] is False
+    assert runtime_loop_denial["receipt_written"] is False
+    assert runtime_loop_denial["denial"]["would_start_loop"] is False
+    assert runtime_loop_denial["denial"]["would_write_receipt"] is False
+    assert runtime_loop_denial["governance"]["gate"] == "lens_host_runtime_loop_execution_denial_boundary"
+    assert runtime_loop_denial["governance"]["execution_authority"] is False
+    assert runtime_loop_denial["governance"]["receipt_write_authority"] is False
+    assert runtime_loop_denial["governance"]["denial_receipt_write_authority"] is False
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/host/runtime-loop/execute",
+        json={
+            "actor": "test.system.write",
+            "approval_id": "approval-runtime-loop",
+            "reason": "prove the runtime loop execution boundary",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.host.runtime_loop.execution_denial"
+    assert body["status"] == "denied_no_resident_runtime_authority"
+    assert body["route"] == "/lens/host/runtime-loop/execute"
+    assert body["method"] == "POST"
+    assert body["runtime_loop_route"] == "/lens/host/runtime-loop"
+    assert body["runtime_plan_route"] == "/lens/host/runtime-plan"
+    assert body["runtime_boundary_route"] == "/lens/host/runtime-boundary"
+    assert body["approval_id"] == "approval-runtime-loop"
+    assert body["actor"] == "test.system.write"
+    assert body["reason"] == "prove the runtime loop execution boundary"
+    assert body["applied"] is False
+    assert body["executed"] is False
+    assert body["loop_started"] is False
+    assert body["resident_runtime_loop"] is False
+    assert body["resident_runtime_ready"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["foreground_process_observed"] is False
+    assert body["resident_host_process_state"] == "missing"
+    assert body["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert "approval_id_required" not in body["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in body["blockers"]
+    assert "resident_runtime_loop_not_implemented" in body["blockers"]
+    assert "resident_runtime_loop_not_supervised" in body["blockers"]
+    assert "resident_runtime_loop_execution_not_authorized" in body["blockers"]
+    assert "resident_runtime_loop_execution_boundary_not_implemented" in body["blockers"]
+    assert "resident_host_process_missing" in body["blockers"]
+    assert "receipt_write_authority_not_granted" in body["blockers"]
+
+    denial = body["denial"]
+    assert denial["reason"] == "denied_no_resident_runtime_authority"
+    assert denial["next_step"] == "grant_resident_runtime_execution_authority_before_loop_start"
+    assert denial["would_start_loop"] is False
+    assert denial["would_launch_process"] is False
+    assert denial["would_supervise_process"] is False
+    assert denial["would_restart_process"] is False
+    assert denial["would_install_service"] is False
+    assert denial["would_start_service"] is False
+    assert denial["would_register_tray"] is False
+    assert denial["would_register_hotkey"] is False
+    assert denial["would_open_overlay"] is False
+    assert denial["would_claim_resident"] is False
+    assert denial["would_write_receipt"] is False
+    assert denial["would_write_memory"] is False
+    assert denial["would_decide_approval"] is False
+    assert denial["denial_receipt_written"] is False
+
+    proof = body["proof"]
+    assert proof["loop_readback_ready"] is True
+    assert proof["loop_ready"] is False
+    assert proof["execution_ready"] is False
+    assert proof["resident_runtime_loop"] is False
+    assert proof["resident_runtime_ready"] is False
+    assert proof["resident_claim_allowed"] is False
+    assert proof["requirements_total"] == 8
+    assert "resident_loop_process_supervision" in proof["blocked_requirements"]
+    assert body["runtime_loop_contract"]["kind"] == "lens.host.runtime_loop_contract"
+    assert body["runtime_loop_contract"]["loop_contract"]["would_start_loop"] is False
+    assert body["receipt_written"] is False
+    assert body["receipt_route"] == ""
+    assert body["receipt"] == {}
+
+    governance = body["governance"]
+    assert governance["gate"] == "lens_host_runtime_loop_execution_denial_boundary"
+    assert governance["execution_boundary"] is True
+    assert governance["denial_boundary"] is True
+    assert governance["read_only_contract"] is True
+    for key in [
+        "execution_authority",
+        "resident_runtime_execution_authority",
+        "approval_decision_authority",
+        "memory_write",
+        "local_process_launch_authority",
+        "diagnostic_launch_authority",
+        "process_supervision_authority",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "denial_receipt_write_authority",
+        "resident_claim_authority",
+        "overlay_control_authority",
+        "summon_authority",
+        "hotkey_registration_authority",
+        "tray_registration_authority",
+        "mutation_authority_granted",
+    ]:
+        assert governance[key] is False
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_denial_receipt_readback"
+
+    status_response = client.get("/lens/status?limit=1")
+    assert status_response.status_code == 200
+    resident_host = status_response.json()["resident_host"]
+    assert resident_host["runtime_loop_execution_denial_route"] == "/lens/host/runtime-loop/execute"
+    assert resident_host["runtime_loop_execution_denial"]["kind"] == "lens.host.runtime_loop.execution_denial"
+    assert resident_host["runtime_loop_execution_denial"]["loop_started"] is False
+    assert resident_host["runtime_loop_execution_denial"]["governance"]["receipt_write_authority"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -4792,6 +4940,36 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert runtime_loop["governance"]["process_supervision_authority"] is False
     assert runtime_loop["governance"]["receipt_write_authority"] is False
     assert runtime_loop["governance"]["resident_claim_authority"] is False
+
+    runtime_loop_execution_response = client.post(
+        "/lens/host/runtime-loop/execute",
+        json={
+            "actor": "test.system.write",
+            "approval_id": "approval-live-runtime-loop",
+            "reason": "prove foreground runtime is still non-resident",
+        },
+    )
+    assert runtime_loop_execution_response.status_code == 200
+    runtime_loop_execution = runtime_loop_execution_response.json()
+    assert runtime_loop_execution["kind"] == "lens.host.runtime_loop.execution_denial"
+    assert runtime_loop_execution["status"] == "denied_no_resident_runtime_authority"
+    assert runtime_loop_execution["foreground_process_observed"] is True
+    assert runtime_loop_execution["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert runtime_loop_execution["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert "resident_host_process_missing" not in runtime_loop_execution["blockers"]
+    assert "resident_host_process_not_supervised" in runtime_loop_execution["blockers"]
+    assert "resident_runtime_loop_not_supervised" in runtime_loop_execution["blockers"]
+    assert runtime_loop_execution["applied"] is False
+    assert runtime_loop_execution["executed"] is False
+    assert runtime_loop_execution["loop_started"] is False
+    assert runtime_loop_execution["denial"]["would_start_loop"] is False
+    assert runtime_loop_execution["denial"]["would_supervise_process"] is False
+    assert runtime_loop_execution["denial"]["would_write_receipt"] is False
+    assert runtime_loop_execution["receipt_written"] is False
+    assert runtime_loop_execution["governance"]["execution_authority"] is False
+    assert runtime_loop_execution["governance"]["process_supervision_authority"] is False
+    assert runtime_loop_execution["governance"]["receipt_write_authority"] is False
+    assert runtime_loop_execution["governance"]["resident_claim_authority"] is False
 
 
 def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:

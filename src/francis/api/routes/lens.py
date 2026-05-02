@@ -9,6 +9,7 @@ from francis.lens import (
     deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
+    deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
@@ -78,6 +79,12 @@ class LensResidentRuntimeExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime activation"
+
+
+class LensHostRuntimeLoopExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens host runtime loop execution"
 
 
 class LensResidentRuntimeAuthorityGrantIn(BaseModel):
@@ -188,6 +195,17 @@ def host_runtime_plan() -> dict[str, Any]:
 @router.get("/host/runtime-loop")
 def host_runtime_loop() -> dict[str, Any]:
     return lens_host_runtime_loop_contract()
+
+
+@router.post("/host/runtime-loop/execute")
+def host_runtime_loop_execute(request: Request, payload: LensHostRuntimeLoopExecuteIn) -> dict[str, Any]:
+    return deny_lens_host_runtime_loop_execution(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.get("/host/supervision")

@@ -53,7 +53,11 @@ from francis.lens.host_manifest import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
-from francis.lens.host_runtime_plan import lens_host_runtime_implementation_plan, lens_host_runtime_loop_contract
+from francis.lens.host_runtime_plan import (
+    deny_lens_host_runtime_loop_execution,
+    lens_host_runtime_implementation_plan,
+    lens_host_runtime_loop_contract,
+)
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -66,6 +70,7 @@ __all__ = [
     "deny_lens_host_activation_execution",
     "deny_lens_host_persistent_supervision_enablement",
     "deny_lens_host_persistent_supervision_enablement_execution",
+    "deny_lens_host_runtime_loop_execution",
     "deny_lens_host_supervision_authority_grant",
     "deny_lens_resident_runtime_activation_execution",
     "deny_lens_resident_runtime_execution_authority_grant",

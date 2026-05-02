@@ -421,6 +421,7 @@ def lens_host_runtime_loop_contract(
         "host_route": "/lens/host",
         "supervision_route": "/lens/host/supervision",
         "resident_runtime_execute_route": "/lens/resident-runtime/execute",
+        "execution_denial_route": "/lens/host/runtime-loop/execute",
         "contract_available": True,
         "loop_readback_ready": True,
         "loop_ready": False,
@@ -501,5 +502,140 @@ def lens_host_runtime_loop_contract(
             "Lens can now read back the resident host runtime loop contract, but the loop is not implemented "
             "and this route does not start, supervise, restart, install, register, claim residency, approve, "
             "write receipts, or write memory."
+        ),
+    }
+
+
+def _runtime_loop_execution_denial_status(blockers: list[str]) -> tuple[str, str]:
+    if "approval_id_required" in blockers:
+        return "denied_no_approval", "bind_runtime_loop_execution_to_exact_approval_before_any_loop_start"
+    if "resident_runtime_execution_authority_not_granted" in blockers:
+        return "denied_no_resident_runtime_authority", "grant_resident_runtime_execution_authority_before_loop_start"
+    return "denied_no_resident_runtime_loop_boundary", "implement_supervised_resident_runtime_loop_boundary"
+
+
+def deny_lens_host_runtime_loop_execution(
+    *,
+    actor: str | None = None,
+    approval_id: str = "",
+    reason: str = "attempt Lens host runtime loop execution",
+    route: str = "/lens/host/runtime-loop/execute",
+    method: str = "POST",
+    manifest: dict[str, Any] | None = None,
+    runtime_plan: dict[str, Any] | None = None,
+    runtime_loop: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    loop_contract = (
+        runtime_loop
+        if isinstance(runtime_loop, dict)
+        else lens_host_runtime_loop_contract(manifest=manifest, runtime_plan=runtime_plan)
+    )
+    approval_id_value = str(approval_id or "").strip()
+    actor_value = str(actor or "").strip()
+    blockers = _ordered_unique(
+        [
+            *([] if approval_id_value else ["approval_id_required"]),
+            *_as_str_list(loop_contract.get("blockers")),
+            "resident_runtime_loop_execution_not_authorized",
+            "resident_runtime_loop_execution_boundary_not_implemented",
+            "receipt_write_authority_not_granted",
+            "resident_claim_authority_not_granted",
+        ]
+    )
+    status, next_step = _runtime_loop_execution_denial_status(blockers)
+
+    return {
+        "ok": True,
+        "kind": "lens.host.runtime_loop.execution_denial",
+        "status": status,
+        "route": route,
+        "method": method.upper(),
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "runtime_plan_route": "/lens/host/runtime-plan",
+        "runtime_boundary_route": "/lens/host/runtime-boundary",
+        "supervision_route": "/lens/host/supervision",
+        "approval_id": approval_id_value,
+        "actor": actor_value,
+        "reason": str(reason or "").strip(),
+        "applied": False,
+        "executed": False,
+        "loop_started": False,
+        "resident_runtime_loop": False,
+        "resident_runtime_ready": False,
+        "resident_claim_allowed": False,
+        "foreground_process_observed": bool(loop_contract.get("foreground_process_observed")),
+        "resident_host_process_state": str(loop_contract.get("resident_host_process_state") or ""),
+        "resident_host_process_blocker": str(loop_contract.get("resident_host_process_blocker") or ""),
+        "blockers": blockers,
+        "denial": {
+            "reason": status,
+            "next_step": next_step,
+            "would_start_loop": False,
+            "would_launch_process": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_register_tray": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+            "would_claim_resident": False,
+            "would_write_receipt": False,
+            "would_write_memory": False,
+            "would_decide_approval": False,
+            "denial_receipt_written": False,
+        },
+        "proof": {
+            "contract_status": str(loop_contract.get("status") or ""),
+            "loop_readback_ready": bool(loop_contract.get("loop_readback_ready")),
+            "loop_ready": bool(loop_contract.get("loop_ready")),
+            "execution_ready": bool(loop_contract.get("execution_ready")),
+            "resident_runtime_loop": bool(loop_contract.get("resident_runtime_loop")),
+            "resident_runtime_ready": bool(loop_contract.get("resident_runtime_ready")),
+            "resident_claim_allowed": bool(loop_contract.get("resident_claim_allowed")),
+            "requirements_total": int(loop_contract.get("requirements_total") or 0),
+            "requirements_ready_total": int(loop_contract.get("requirements_ready_total") or 0),
+            "blocked_requirements": _as_str_list(loop_contract.get("blocked_requirements")),
+        },
+        "runtime_loop_contract": loop_contract,
+        "receipt_written": False,
+        "receipt_route": "",
+        "receipt": {},
+        "evidence": [
+            "/lens/host/runtime-loop/execute",
+            "/lens/host/runtime-loop",
+            "/lens/host/runtime-plan",
+            "/lens/host/runtime-boundary",
+            "/lens/host/supervision",
+        ],
+        "governance": {
+            "gate": "lens_host_runtime_loop_execution_denial_boundary",
+            "execution_boundary": True,
+            "denial_boundary": True,
+            "read_only_contract": True,
+            "execution_authority": False,
+            "resident_runtime_execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "diagnostic_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_denial_receipt_readback",
+        "message": (
+            "Lens can deny resident host runtime loop execution attempts, but this boundary does not start "
+            "a loop, launch or supervise a process, control services or surfaces, claim residency, decide "
+            "approvals, write receipts, or write memory."
         ),
     }

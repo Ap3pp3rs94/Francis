@@ -51,7 +51,11 @@ from francis.lens.host_manifest import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
-from francis.lens.host_runtime_plan import lens_host_runtime_implementation_plan, lens_host_runtime_loop_contract
+from francis.lens.host_runtime_plan import (
+    deny_lens_host_runtime_loop_execution,
+    lens_host_runtime_implementation_plan,
+    lens_host_runtime_loop_contract,
+)
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -280,6 +284,9 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         manifest=launch_manifest,
         runtime_plan=runtime_implementation_plan,
     )
+    runtime_loop_execution_denial = deny_lens_host_runtime_loop_execution(
+        runtime_loop=runtime_loop_contract,
+    )
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     persistent_supervision_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
     persistent_supervision_enablement = lens_host_persistent_supervision_enablement_preflight(manifest=launch_manifest)
@@ -489,6 +496,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "runtime_implementation_plan": runtime_implementation_plan,
         "runtime_loop_contract_route": _safe_str(runtime_loop_contract.get("route")).strip(),
         "runtime_loop_contract": runtime_loop_contract,
+        "runtime_loop_execution_denial_route": _safe_str(runtime_loop_execution_denial.get("route")).strip(),
+        "runtime_loop_execution_denial": runtime_loop_execution_denial,
         "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
         "supervision_gate": supervision_gate,
         "persistent_supervision_plan_route": _safe_str(persistent_supervision_plan.get("route")).strip(),
