@@ -699,8 +699,8 @@ $HostLaunchProofPassed = (
 )
 $HostLaunchProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
 
-$HostSupervisorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds, '-DataDir', $CheckpointProofDataRoot))
-$HostSupervisorProof = if ($HostSupervisorProofResult.Count -gt 0) { $HostSupervisorProofResult[-1] } else { $null }
+$HostSupervisorObservationRunSeconds = [Math]::Max(8, $SupervisorRunSeconds)
+$HostSupervisorProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostSupervisorObservationRunSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.host.supervisor_observation_proof'
 $HostSupervisorExitCode = -1
 $HostSupervisorPayload = $null
 if ($HostSupervisorProof -is [System.Collections.IDictionary]) {

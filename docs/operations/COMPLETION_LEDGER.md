@@ -15801,6 +15801,29 @@ Latest targeted validation for the `2026-05-02` Stage 6/Lens closure readback:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens checkpoint supervisor observation window stabilization
+
+GitHub CI run `25242409415` exposed a Windows 3.13 timing failure in the Stage 6
+checkpoint harness: the nested host-supervisor observation proof could be asked
+to observe both the running and stopped states of a bounded foreground host in a
+3-second window. The checkpoint now floors that nested observation window at 8
+seconds and routes the supervisor observation proof through the existing
+proof-retry helper. The direct proof contract remains unchanged: this is
+diagnostic timing stabilization for the checkpoint readback path only.
+
+This does not launch or supervise a resident process beyond the existing bounded
+diagnostic proof, install or control a service, bind a hotkey, register tray
+presence, open an overlay, write memory, decide approvals, grant process
+authority, claim resident status, close Stage 6, or start Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens checkpoint
+supervisor observation window stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
