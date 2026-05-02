@@ -16515,6 +16515,37 @@ runtime loop readiness audit:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens runtime loop readiness operator readback
+
+The chat UI Lens client now preserves the existing
+`runtime_loop_readiness` audit embedded in `/lens/status` and in
+`resident_host.runtime_loop_readiness`. The System/ORB Lens Readback card now
+renders that backend truth as read-only operator evidence: status, ready flag,
+requirements-ready count, resident-loop falsehood, receipt count, blocked
+requirements, first blocker, next gap, and the audit route.
+
+This is UI client/parser, UI render, test, and ledger work only. It does not add
+or change any backend route; does not start a runtime loop; does not launch,
+supervise, restart, install, start, or stop a process or service; does not
+register tray presence or hotkeys; does not summon Francis anywhere; does not
+open or control an overlay; does not decide approvals; does not write receipts
+or memory; does not claim resident status; and does not close Stage 6 or start
+Stage 7. Stage 6 remains active and blocked. The previous
+`resident_host_runtime_loop_operator_surface_readback` handoff is now satisfied
+for the existing readback contract, and the next smallest truthful gap returns
+to the Stage 6 acceptance blocker family: `summon_anywhere_blockers` and the
+actual resident host/runtime/summon authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens runtime loop
+readiness operator readback:
+
+- `node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `npm run test`
+  Result: `passed`
+- `npm run build`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

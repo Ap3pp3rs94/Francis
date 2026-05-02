@@ -4472,6 +4472,25 @@ function SystemPanel(props: {
     safeString(lensActivationDenialReceipts?.route).trim() ||
     safeString(lensResidentHost?.activation_denial_receipts_route).trim() ||
     safeString(lensStatus?.receipts.lens_host_activation_denials_route).trim();
+  const lensResidentRuntimeLoopReadiness = lensResidentHost?.runtime_loop_readiness;
+  const lensRuntimeLoopReadiness =
+    lensResidentRuntimeLoopReadiness?.kind || lensResidentRuntimeLoopReadiness?.route
+      ? lensResidentRuntimeLoopReadiness
+      : lensStatus?.runtime_loop_readiness;
+  const lensRuntimeLoopReadinessStatus = safeString(lensRuntimeLoopReadiness?.status).trim();
+  const lensRuntimeLoopReadinessRoute =
+    safeString(lensRuntimeLoopReadiness?.route).trim() ||
+    safeString(lensResidentHost?.runtime_loop_readiness_route).trim() ||
+    safeString(lensStatus?.receipts.lens_host_runtime_loop_readiness_route).trim();
+  const lensRuntimeLoopBlockedRequirements = lensRuntimeLoopReadiness?.blocked_requirements ?? [];
+  const lensRuntimeLoopBlockers = lensRuntimeLoopReadiness?.blockers ?? [];
+  const lensRuntimeLoopNextGap = safeString(lensRuntimeLoopReadiness?.next_smallest_truthful_gap).trim();
+  const lensRuntimeLoopReadinessLoaded = Boolean(
+    lensRuntimeLoopReadinessStatus ||
+      lensRuntimeLoopReadinessRoute ||
+      lensRuntimeLoopBlockedRequirements.length ||
+      lensRuntimeLoopBlockers.length,
+  );
   const lensClaim = safeString(lensStage6Readiness?.claim).trim();
   const lensSummonCriterion = lensStage6Criteria.find((criterion) => safeString(criterion.id).trim() === "summon_anywhere");
   const lensSummonStatus =
@@ -5557,6 +5576,58 @@ function SystemPanel(props: {
                 route <code>{lensActivationDenialReceiptRoute}</code>
               </div>
             ) : null}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Runtime loop readiness</div>
+            {lensRuntimeLoopReadinessLoaded ? (
+              <>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <span style={badgeStyle(lensRuntimeLoopReadinessStatus || "unknown")}>
+                    {lensRuntimeLoopReadinessStatus || "unknown"}
+                  </span>
+                  <span style={badgeStyle(lensRuntimeLoopReadiness?.ready ? "ready" : "blocked")}>
+                    ready {lensRuntimeLoopReadiness?.ready ? "true" : "false"}
+                  </span>
+                  <span style={badgeStyle("readback")}>
+                    {safeNumber(lensRuntimeLoopReadiness?.requirements_ready_total, 0)}/
+                    {safeNumber(lensRuntimeLoopReadiness?.requirements_total, 0)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  loop <code>{lensRuntimeLoopReadiness?.resident_runtime_loop ? "true" : "false"}</code>
+                  {" / "}receipts <code>{safeNumber(lensRuntimeLoopReadiness?.receipt_count, 0)}</code>
+                </div>
+                {lensRuntimeLoopBlockedRequirements.length ? (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+                    {lensRuntimeLoopBlockedRequirements.slice(0, 3).map((requirement) => (
+                      <span key={`lens-runtime-loop-blocked-${requirement}`} style={badgeStyle("blocked")}>
+                        {requirement}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {lensRuntimeLoopBlockers[0] ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                    blocker <code>{lensRuntimeLoopBlockers[0]}</code>
+                  </div>
+                ) : null}
+                {lensRuntimeLoopNextGap ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                    next gap <code>{lensRuntimeLoopNextGap}</code>
+                  </div>
+                ) : null}
+                {lensRuntimeLoopReadinessRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    route <code>{lensRuntimeLoopReadinessRoute}</code>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                Runtime-loop readiness audit has not loaded from Lens status.
+              </div>
+            )}
           </div>
 
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>

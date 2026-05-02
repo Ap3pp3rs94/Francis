@@ -156,6 +156,45 @@ export type LensActivationDenialReceipts = {
   governance: Record<string, unknown>;
 };
 
+export type LensRuntimeLoopReadiness = {
+  ok: boolean;
+  kind?: string;
+  status?: string;
+  audit_status?: string;
+  route?: string;
+  runtime_plan_route?: string;
+  runtime_loop_route?: string;
+  execute_route?: string;
+  denials_route?: string;
+  host_route?: string;
+  approval_id?: string;
+  actor?: string;
+  limit: number;
+  ready: boolean;
+  loop_ready: boolean;
+  execution_ready: boolean;
+  resident_runtime_loop: boolean;
+  resident_runtime_ready: boolean;
+  resident_claim_allowed: boolean;
+  runtime_plan_available: boolean;
+  loop_contract_readback_ready: boolean;
+  execution_denial_boundary_observed: boolean;
+  denial_receipt_readback_ready: boolean;
+  receipt_count: number;
+  latest_receipt_id?: string;
+  requirements_total: number;
+  requirements_ready_total: number;
+  requirements_blocked_total: number;
+  requirements: Array<Record<string, unknown>>;
+  blocked_requirements: string[];
+  blockers: string[];
+  source_readbacks: Record<string, string>;
+  evidence: string[];
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  message?: string;
+};
+
 export type LensResidentHost = {
   route?: string;
   status?: string;
@@ -163,6 +202,8 @@ export type LensResidentHost = {
   availability?: string;
   activation_denial_receipts_route?: string;
   activation_denial_receipts: LensActivationDenialReceipts;
+  runtime_loop_readiness_route?: string;
+  runtime_loop_readiness: LensRuntimeLoopReadiness;
 };
 
 export type LensStage6Criterion = {
@@ -263,6 +304,7 @@ export type LensStatus = {
   mission_feed: LensMissionFeed;
   pilot_indicator: LensPilotIndicator;
   receipts: Record<string, unknown>;
+  runtime_loop_readiness: LensRuntimeLoopReadiness;
   stage6_readiness: LensStage6Readiness;
   governance: LensGovernance;
   error?: string;
@@ -585,6 +627,49 @@ function parseActivationDenialReceipts(value: unknown): LensActivationDenialRece
   };
 }
 
+function parseRuntimeLoopReadiness(value: unknown): LensRuntimeLoopReadiness {
+  const raw = safeRecord(value);
+  const requirements = Array.isArray(raw.requirements) ? raw.requirements.filter(isRecord) : [];
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind).trim() || undefined,
+    status: safeString(raw.status).trim() || undefined,
+    audit_status: safeString(raw.audit_status).trim() || undefined,
+    route: safeString(raw.route).trim() || undefined,
+    runtime_plan_route: safeString(raw.runtime_plan_route).trim() || undefined,
+    runtime_loop_route: safeString(raw.runtime_loop_route).trim() || undefined,
+    execute_route: safeString(raw.execute_route).trim() || undefined,
+    denials_route: safeString(raw.denials_route).trim() || undefined,
+    host_route: safeString(raw.host_route).trim() || undefined,
+    approval_id: safeString(raw.approval_id).trim() || undefined,
+    actor: safeString(raw.actor).trim() || undefined,
+    limit: safeNumber(raw.limit, 0),
+    ready: safeBoolean(raw.ready, false),
+    loop_ready: safeBoolean(raw.loop_ready, false),
+    execution_ready: safeBoolean(raw.execution_ready, false),
+    resident_runtime_loop: safeBoolean(raw.resident_runtime_loop, false),
+    resident_runtime_ready: safeBoolean(raw.resident_runtime_ready, false),
+    resident_claim_allowed: safeBoolean(raw.resident_claim_allowed, false),
+    runtime_plan_available: safeBoolean(raw.runtime_plan_available, false),
+    loop_contract_readback_ready: safeBoolean(raw.loop_contract_readback_ready, false),
+    execution_denial_boundary_observed: safeBoolean(raw.execution_denial_boundary_observed, false),
+    denial_receipt_readback_ready: safeBoolean(raw.denial_receipt_readback_ready, false),
+    receipt_count: safeNumber(raw.receipt_count, 0),
+    latest_receipt_id: safeString(raw.latest_receipt_id).trim() || undefined,
+    requirements_total: safeNumber(raw.requirements_total, requirements.length),
+    requirements_ready_total: safeNumber(raw.requirements_ready_total, 0),
+    requirements_blocked_total: safeNumber(raw.requirements_blocked_total, 0),
+    requirements,
+    blocked_requirements: safeStringList(raw.blocked_requirements),
+    blockers: safeStringList(raw.blockers),
+    source_readbacks: parseStringMap(raw.source_readbacks),
+    evidence: safeStringList(raw.evidence),
+    governance: safeRecord(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap).trim() || undefined,
+    message: safeString(raw.message).trim() || undefined,
+  };
+}
+
 function parseResidentHost(value: unknown): LensResidentHost {
   const raw = safeRecord(value);
   return {
@@ -594,6 +679,8 @@ function parseResidentHost(value: unknown): LensResidentHost {
     availability: safeString(raw.availability).trim(),
     activation_denial_receipts_route: safeString(raw.activation_denial_receipts_route).trim(),
     activation_denial_receipts: parseActivationDenialReceipts(raw.activation_denial_receipts),
+    runtime_loop_readiness_route: safeString(raw.runtime_loop_readiness_route).trim(),
+    runtime_loop_readiness: parseRuntimeLoopReadiness(raw.runtime_loop_readiness),
   };
 }
 
@@ -753,6 +840,7 @@ export function parseLensStatus(value: unknown): LensStatus {
     mission_feed: parseMissionFeed(raw.mission_feed),
     pilot_indicator: parsePilotIndicator(raw.pilot_indicator),
     receipts: safeRecord(raw.receipts),
+    runtime_loop_readiness: parseRuntimeLoopReadiness(raw.runtime_loop_readiness),
     stage6_readiness: parseStage6Readiness(raw.stage6_readiness),
     governance: parseGovernance(raw.governance),
     error: safeString(raw.error).trim() || undefined,
