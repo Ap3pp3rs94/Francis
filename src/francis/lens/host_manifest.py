@@ -184,6 +184,69 @@ def _record_ts(value: Any) -> float:
         return 0.0
 
 
+def _lens_host_supervisor_readback() -> dict[str, Any]:
+    state_file = data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
+    state_exists = _path_exists(state_file)
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_status = str(state_payload.get("status") or "")
+    mode = str(state_payload.get("mode") or "")
+    observed_pid = _safe_pid(state_payload.get("observed_pid"))
+    observed_state = str(state_payload.get("observed_state") or "")
+    bounded_supervisor_observed = state_status in {
+        "observing",
+        "observation_completed",
+        "supervising",
+        "supervised_session_completed",
+    }
+    supervised_session_completed = state_status == "supervised_session_completed"
+    observation_completed = state_status == "observation_completed"
+    status = state_status if state_exists and state_status else "missing"
+    if supervised_session_completed:
+        blocked_reason = "resident_supervision_not_persistent"
+    elif bounded_supervisor_observed:
+        blocked_reason = "resident_supervision_bounded_not_resident"
+    elif state_exists:
+        blocked_reason = "resident_supervision_observation_failed"
+    else:
+        blocked_reason = "resident_host_supervisor_state_missing"
+    return {
+        "status": status,
+        "readback_ready": True,
+        "runtime_state_path": "data/runtime/lens-host-supervisor/status.json",
+        "state_exists": state_exists,
+        "state_status": state_status,
+        "mode": mode,
+        "observed_pid": observed_pid,
+        "observed_state": observed_state,
+        "updated_at": str(state_payload.get("updated_at") or ""),
+        "bounded_supervisor_observed": bounded_supervisor_observed,
+        "observation_completed": observation_completed,
+        "supervised_session_completed": supervised_session_completed,
+        "restarted_process": bool(state_payload.get("restarted_process")),
+        "managed_service": bool(state_payload.get("managed_service")),
+        "resident_supervised_runtime": False,
+        "resident_claim_allowed": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_control_authority": False,
+        "blocked_reason": blocked_reason,
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _latest_active_host_supervision_authority_grant() -> dict[str, Any]:
     root = data_dir() / "lens" / "host_supervision_authority_grants"
     try:
@@ -459,6 +522,8 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
     service_readback = service_readback if isinstance(service_readback, dict) else {}
     process_readback = launch_manifest.get("process_readback")
     process_readback = process_readback if isinstance(process_readback, dict) else {}
+    supervisor_readback = launch_manifest.get("supervisor_readback")
+    supervisor_readback = supervisor_readback if isinstance(supervisor_readback, dict) else {}
     required_bindings = launch_manifest.get("required_bindings")
     required_binding_items = (
         [item for item in required_bindings if isinstance(item, dict)] if isinstance(required_bindings, list) else []
@@ -509,6 +574,10 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "foreground_process_observed": process_alive,
         "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
         "resident_host_process_blocker": host_process_blocker,
+        "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
+        "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
+        "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_supervised_runtime": False,
         "resident_host_supervised": False,
         "service_installed": bool(service_readback.get("installed")),
         "service_managed": service_managed,
@@ -528,6 +597,7 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "prerequisites": prerequisite_items,
         "required_bindings": required_binding_items,
         "process_readback": process_readback,
+        "supervisor_readback": supervisor_readback,
         "service_readback": service_readback,
         "service_plan": service_plan,
         "supervision_readiness": supervision_readiness,
@@ -1036,6 +1106,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         service_config_payload=service_config_payload,
     )
     process_readback = _lens_host_process_readback()
+    supervisor_readback = _lens_host_supervisor_readback()
     supervision_readiness = _lens_host_supervision_readiness(
         entrypoint_exists=entrypoint_exists,
         service_manager=service_manager,
@@ -1135,6 +1206,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         },
         "service_readback": service_readback,
         "process_readback": process_readback,
+        "supervisor_readback": supervisor_readback,
         "supervision_readiness": supervision_readiness,
         "required_bindings": [
             {
@@ -1166,6 +1238,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_process_readback",
                 "path": process_readback["runtime_state_path"],
                 "status": "readback_ready",
+            },
+            {
+                "id": "host_supervisor_readback",
+                "path": supervisor_readback["runtime_state_path"],
+                "status": supervisor_readback["status"],
             },
             {
                 "id": "host_readiness",

@@ -277,6 +277,36 @@ def _write_lens_host_runtime_state(data_root: Path, *, pid: int, status: str = "
     )
 
 
+def _write_lens_host_supervisor_state(
+    data_root: Path,
+    *,
+    observed_pid: int,
+    status: str = "supervised_session_completed",
+) -> None:
+    runtime_root = data_root / "runtime" / "lens-host-supervisor"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": status,
+                "mode": "supervise_once",
+                "observed_pid": observed_pid,
+                "observed_state": "foreground_stopped",
+                "restarted_process": False,
+                "managed_service": False,
+                "updated_at": "2026-04-28T21:31:00Z",
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     readiness = body.get("stage6_readiness") if isinstance(body.get("stage6_readiness"), dict) else {}
     criteria = readiness.get("criteria") if isinstance(readiness.get("criteria"), list) else []
@@ -863,6 +893,47 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "supervision_authority": False,
         "blocked_reason": "resident_host_process_missing",
     }
+    expected_supervisor_readback = {
+        "status": "missing",
+        "readback_ready": True,
+        "runtime_state_path": "data/runtime/lens-host-supervisor/status.json",
+        "state_exists": False,
+        "state_status": "",
+        "mode": "",
+        "observed_pid": 0,
+        "observed_state": "",
+        "updated_at": "",
+        "bounded_supervisor_observed": False,
+        "observation_completed": False,
+        "supervised_session_completed": False,
+        "restarted_process": False,
+        "managed_service": False,
+        "resident_supervised_runtime": False,
+        "resident_claim_allowed": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_control_authority": False,
+        "blocked_reason": "resident_host_supervisor_state_missing",
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+    assert resident_host["supervisor_readback"] == expected_supervisor_readback
+    assert resident_host["supervisor_readback_ready"] is True
+    assert resident_host["bounded_supervisor_observed"] is False
+    assert resident_host["supervised_session_completed"] is False
+    assert resident_host["resident_supervised_runtime"] is False
     expected_supervision_readiness = {
         "status": "blocked",
         "ready": False,
@@ -988,6 +1059,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["foreground_process_observed"] is False
     assert supervision_gate["resident_host_process_state"] == "missing"
     assert supervision_gate["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert supervision_gate["supervisor_readback_ready"] is True
+    assert supervision_gate["bounded_supervisor_observed"] is False
+    assert supervision_gate["supervised_session_completed"] is False
+    assert supervision_gate["resident_supervised_runtime"] is False
     assert supervision_gate["resident_host_supervised"] is False
     assert supervision_gate["service_installed"] is False
     assert supervision_gate["service_managed"] is False
@@ -1017,6 +1092,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "lens_host_runtime_not_implemented" in supervision_gate["blockers"]
     assert supervision_gate["prerequisites"] == expected_supervision_readiness["prerequisites"]
     assert supervision_gate["process_readback"] == resident_host["process_readback"]
+    assert supervision_gate["supervisor_readback"] == expected_supervisor_readback
     assert supervision_gate["service_readback"] == resident_host["service_readback"]
     assert supervision_gate["service_plan"] == expected_service_plan
     assert supervision_gate["supervision_readiness"] == expected_supervision_readiness
@@ -1166,6 +1242,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_service_plan",
         "host_process_readback",
         "host_process",
+        "host_supervisor_readback",
         "tray_presence",
         "global_hotkey",
         "overlay_window",
@@ -1240,6 +1317,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert launch_manifest["service_plan"] == expected_service_plan
     assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
+    assert launch_manifest["supervisor_readback"] == expected_supervisor_readback
     assert launch_manifest["supervision_readiness"] == expected_supervision_readiness
     assert launch_manifest["foreground_session"] == resident_host["foreground_session"]
     assert [item["id"] for item in launch_manifest["required_bindings"]] == [
@@ -1249,6 +1327,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_service_readback",
         "host_service_plan",
         "host_process_readback",
+        "host_supervisor_readback",
         "host_readiness",
         "tray_presence",
         "global_hotkey",
@@ -4214,6 +4293,109 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert manifest_body["process_readback"] == process_readback
     assert manifest_body["service_plan"] == resident_host["service_plan"]
     assert manifest_body["governance"]["local_process_launch_authority"] is False
+
+
+def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    _write_lens_host_supervisor_state(data_root, observed_pid=9876)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    supervisor_readback = resident_host["supervisor_readback"]
+    assert supervisor_readback["status"] == "supervised_session_completed"
+    assert supervisor_readback["readback_ready"] is True
+    assert supervisor_readback["runtime_state_path"] == "data/runtime/lens-host-supervisor/status.json"
+    assert supervisor_readback["state_exists"] is True
+    assert supervisor_readback["state_status"] == "supervised_session_completed"
+    assert supervisor_readback["mode"] == "supervise_once"
+    assert supervisor_readback["observed_pid"] == 9876
+    assert supervisor_readback["observed_state"] == "foreground_stopped"
+    assert supervisor_readback["bounded_supervisor_observed"] is True
+    assert supervisor_readback["supervised_session_completed"] is True
+    assert supervisor_readback["resident_supervised_runtime"] is False
+    assert supervisor_readback["resident_claim_allowed"] is False
+    assert supervisor_readback["process_supervision_authority"] is False
+    assert supervisor_readback["service_control_authority"] is False
+    assert supervisor_readback["blocked_reason"] == "resident_supervision_not_persistent"
+    assert supervisor_readback["governance"] == {
+        "read_only_contract": True,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "mutation_authority_granted": False,
+    }
+    assert resident_host["supervisor_readback_ready"] is True
+    assert resident_host["bounded_supervisor_observed"] is True
+    assert resident_host["supervised_session_completed"] is True
+    assert resident_host["resident_supervised_runtime"] is False
+    components = {item["id"]: item for item in resident_host["components"]}
+    assert components["host_supervisor_readback"] == {
+        "id": "host_supervisor_readback",
+        "label": "Host supervisor readback",
+        "status": "supervised_session_completed",
+        "required_for": ["startup_supervision", "resident_presence"],
+    }
+
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["supervisor_readback_ready"] is True
+    assert supervision_gate["bounded_supervisor_observed"] is True
+    assert supervision_gate["supervised_session_completed"] is True
+    assert supervision_gate["resident_supervised_runtime"] is False
+    assert supervision_gate["resident_host_supervised"] is False
+    assert supervision_gate["resident_claim_allowed"] is False
+    assert supervision_gate["supervisor_readback"] == supervisor_readback
+    assert supervision_gate["governance"]["execution_authority"] is False
+    assert supervision_gate["governance"]["process_supervision_authority"] is False
+    assert supervision_gate["governance"]["resident_claim_authority"] is False
+
+    resident_surface_runtime = body["resident_surface"]["resident_surface_runtime"]
+    assert resident_surface_runtime["supervisor_readback_status"] == "supervised_session_completed"
+    assert resident_surface_runtime["bounded_supervisor_observed"] is True
+    assert resident_surface_runtime["supervised_session_completed"] is True
+    assert resident_surface_runtime["resident_supervised_runtime"] is False
+    assert resident_surface_runtime["runtime_ready"] is False
+    assert resident_surface_runtime["resident_claim_allowed"] is False
+    assert "resident_surface_runtime_missing" in resident_surface_runtime["blockers"]
+
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    manifest_body = manifest.json()
+    assert manifest_body["supervisor_readback"] == supervisor_readback
+    required_bindings = {item["id"]: item for item in manifest_body["required_bindings"]}
+    assert required_bindings["host_supervisor_readback"] == {
+        "id": "host_supervisor_readback",
+        "path": "data/runtime/lens-host-supervisor/status.json",
+        "status": "supervised_session_completed",
+    }
+    assert manifest_body["governance"]["execution_authority"] is False
+    assert manifest_body["governance"]["service_control_authority"] is False
+    assert manifest_body["governance"]["mutation_authority_granted"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:

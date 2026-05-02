@@ -339,6 +339,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_readback = _as_dict(launch_manifest.get("service_readback"))
     service_plan = _as_dict(launch_manifest.get("service_plan"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
     blockers = [
@@ -392,6 +393,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "label": "Resident host process",
             "status": "foreground_observed" if process_alive else "missing",
             "required_for": ["resident_presence", "startup_supervision"],
+        },
+        {
+            "id": "host_supervisor_readback",
+            "label": "Host supervisor readback",
+            "status": _safe_str(supervisor_readback.get("status")).strip() or "missing",
+            "required_for": ["startup_supervision", "resident_presence"],
         },
         {
             "id": "tray_presence",
@@ -563,6 +570,11 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "service_plan_ready": bool(service_plan.get("ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
+        "supervisor_readback": supervisor_readback,
+        "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
+        "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
+        "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_supervised_runtime": False,
         "supervision_readiness": supervision_readiness,
         "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
         "resident": False,
@@ -2349,9 +2361,11 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
 
 def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[str, Any]:
     process_readback = _as_dict(resident_host.get("process_readback"))
+    supervisor_readback = _as_dict(resident_host.get("supervisor_readback"))
     foreground_session = _as_dict(resident_host.get("foreground_session"))
     process_alive = bool(process_readback.get("process_alive"))
     state_status = _safe_str(process_readback.get("state_status")).strip()
+    supervisor_status = _safe_str(supervisor_readback.get("status")).strip()
     foreground_observed = process_alive and state_status == "foreground_running"
     blockers = (
         ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
@@ -2378,6 +2392,10 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
         "foreground_runtime_observed": foreground_observed,
         "foreground_session_supported": bool(foreground_session.get("supported")),
         "foreground_session_only": foreground_observed,
+        "supervisor_readback_status": supervisor_status,
+        "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
+        "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_supervised_runtime": False,
         "runtime_ready": False,
         "resident_surface_ready": False,
         "resident_claim_allowed": False,

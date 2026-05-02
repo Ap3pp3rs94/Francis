@@ -15632,6 +15632,41 @@ resident-claim boundary readback:
   Result: `failed before formatting; passed after formatting`
 - `git diff --check`
   Result: `passed; PowerShell LF-to-CRLF warnings only`
+
+### 2026-05-01 - Stage 6/Lens host supervisor state API readback
+
+Stage 6/Lens host supervisor state is now directly readable through the backend
+Lens status surfaces. `lens_host_launch_manifest()` reads
+`data/runtime/lens-host-supervisor/status.json` and exposes
+`supervisor_readback` through `/lens/host/manifest`; `/lens/host` and
+`/lens/status` now carry the same supervisor readback, bounded-supervisor
+observation flags, and resident-supervision denial truth into the resident-host,
+supervision-gate, and resident-surface runtime payloads.
+
+This is readback only. A completed bounded diagnostic supervisor session is
+reported as `supervised_session_completed`, but Francis still treats it as
+non-resident and non-persistent: `resident_supervised_runtime`,
+`resident_claim_allowed`, process supervision authority, restart authority,
+service control authority, memory write, and mutation authority all remain
+false. This slice does not launch or supervise a resident process, install or
+control a service, register tray presence, bind a hotkey, open or control an
+overlay, write memory, decide approvals, or close Stage 6.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens host supervisor
+state API readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_host_supervisor_readback_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `failed before updating the expanded Lens API contract assertions; passed after fix`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15651,8 +15686,12 @@ These remain true and should block any "finished" claim:
   `scripts/lens-host-supervisor.ps1` diagnostic runner that can observe an
   already-started bounded foreground host process and can now own one bounded
   diagnostic foreground host lifecycle through `SuperviseOnce` with Stage 6
-  checkpoint readback consumption, without persistent resident supervision,
-  restart, service-control, API launch, or resident-claim authority, a direct
+  checkpoint readback consumption, plus direct `/lens/host/manifest`,
+  `/lens/host`, and `/lens/status` API readback of
+  `data/runtime/lens-host-supervisor/status.json` that reports bounded
+  supervisor observation without treating it as resident or persistent
+  supervision, without persistent resident supervision, restart, service-control,
+  API launch, or resident-claim authority, a direct
   `/lens/resident-surface` backend content readback contract, resident surface
   readiness proof diagnostic that consumes direct route readback, disabled
   tracked service config baseline,
