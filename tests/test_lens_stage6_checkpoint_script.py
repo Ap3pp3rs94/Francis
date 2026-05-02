@@ -59,6 +59,11 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["stage_state"] == "active"
     assert payload["stage_claim"] == "backend_readback_contract_only"
     assert payload["ready_to_close"] is False
+    assert payload["observation_windows"] == {
+        "resident_surface_foreground_requested_seconds": 2,
+        "resident_surface_foreground_effective_seconds": 5,
+        "resident_surface_foreground_minimum_seconds": 5,
+    }
     assert payload["summary"] == {
         "criteria_total": 5,
         "ready_total": 2,

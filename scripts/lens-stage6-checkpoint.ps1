@@ -588,6 +588,11 @@ $ResidentRuntimeResidentClaimBoundaryProofPath = Join-Path $PSScriptRoot 'lens-r
 $CheckpointProofDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
   'francis-lens-stage6-checkpoint-{0}-{1}' -f $PID, [guid]::NewGuid().ToString('N')
 )
+$ResidentSurfaceForegroundMinimumSeconds = 5
+$ResidentSurfaceForegroundObservationSeconds = [Math]::Max(
+  $ResidentSurfaceForegroundRunSeconds,
+  $ResidentSurfaceForegroundMinimumSeconds
+)
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -624,7 +629,7 @@ if (-not $LiveOperatorProofPassed) {
   $LiveOperatorBlockers += 'operator_experience_proof_missing'
 }
 
-$ResidentSurfaceProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds))
+$ResidentSurfaceProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds))
 $ResidentSurfaceProof = if ($ResidentSurfaceProofResult.Count -gt 0) { $ResidentSurfaceProofResult[-1] } else { $null }
 $ResidentSurfaceProofExitCode = -1
 $ResidentSurfaceProofPayload = $null
@@ -1290,6 +1295,11 @@ $Payload = [ordered]@{
   stage_claim = $StageClaim
   repo_root = $RepoRoot
   ready_to_close = $ReadyToClose
+  observation_windows = [ordered]@{
+    resident_surface_foreground_requested_seconds = $ResidentSurfaceForegroundRunSeconds
+    resident_surface_foreground_effective_seconds = $ResidentSurfaceForegroundObservationSeconds
+    resident_surface_foreground_minimum_seconds = $ResidentSurfaceForegroundMinimumSeconds
+  }
   summary = [ordered]@{
     criteria_total = $Criteria.Count
     ready_total = $ReadyCriteria.Count
