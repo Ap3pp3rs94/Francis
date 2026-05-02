@@ -64,10 +64,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
-    assert "persistent-supervision execution authority proof" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert "persistent-supervision resident-claim boundary proof" in payload["next_smallest_truthful_gap_basis"]
     assert (
-        "bounded execution grant is readable and reaches the execution route"
+        "both final authority families are now read back as blocked and non-mutating"
         in (payload["next_smallest_truthful_gap_basis"])
     )
 
@@ -174,6 +174,17 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         "resident_claim_authority_not_granted"
         in payload["closure_blockers"]["persistent_supervision_execution_authority_proof"]
+    )
+    assert (
+        "persistent_supervision_disabled"
+        in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
+    )
+    assert (
+        "process_supervision_disabled" in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
+    )
+    assert (
+        "resident_claim_authority_not_granted"
+        in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
     )
     assert "resident_runtime_execution_authority_not_granted" not in payload["closure_blockers"]["resident_runtime"]
     assert "local_process_launch_authority_not_granted" in payload["closure_blockers"]["resident_runtime"]
@@ -333,6 +344,47 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         persistent_execution_authority["next_smallest_truthful_gap"]
         == "persistent_supervision_resident_claim_authority_boundary"
     )
+
+    persistent_resident_claim_boundary = payload["persistent_supervision_resident_claim_boundary_proof"]
+    assert persistent_resident_claim_boundary["status"] == "proof_passed"
+    assert persistent_resident_claim_boundary["ok"] is True
+    assert persistent_resident_claim_boundary["exit_code"] == 0
+    assert (
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+        in persistent_resident_claim_boundary["evidence"]
+    )
+    assert persistent_resident_claim_boundary["authority_family"] == "resident_claim"
+    assert persistent_resident_claim_boundary["previous_authority_family"] == "persistent_supervision_execution"
+    assert persistent_resident_claim_boundary["next_authority_family"] == ""
+    assert persistent_resident_claim_boundary["persistent_supervision_resident_claim_boundary_observed"] is True
+    assert persistent_resident_claim_boundary["persistent_supervision_execution_authority_proof_observed"] is True
+    assert persistent_resident_claim_boundary["persistent_supervision_plan_observed"] is True
+    assert persistent_resident_claim_boundary["side_effects_denied"] is True
+    assert persistent_resident_claim_boundary["final_persistent_supervision_authority_family_consumed"] is True
+    assert persistent_resident_claim_boundary["persistent_supervision_enablement_authority"] is True
+    assert persistent_resident_claim_boundary["service_config_write_authority"] is True
+    assert persistent_resident_claim_boundary["persistent_supervision_execution_authority"] is True
+    assert persistent_resident_claim_boundary["receipt_write_authority"] is True
+    assert persistent_resident_claim_boundary["resident_claim_authority"] is False
+    assert persistent_resident_claim_boundary["persistent_supervision_ready"] is False
+    assert persistent_resident_claim_boundary["resident_claim_allowed"] is False
+    assert persistent_resident_claim_boundary["applied"] is False
+    assert persistent_resident_claim_boundary["executed"] is False
+    assert persistent_resident_claim_boundary["service_config_updated"] is False
+    assert persistent_resident_claim_boundary["would_update_service_config"] is False
+    assert persistent_resident_claim_boundary["would_enable_persistent_supervision"] is False
+    assert persistent_resident_claim_boundary["would_start_service"] is False
+    assert persistent_resident_claim_boundary["would_supervise_process"] is False
+    assert persistent_resident_claim_boundary["would_restart_process"] is False
+    assert persistent_resident_claim_boundary["would_write_receipt"] is False
+    assert persistent_resident_claim_boundary["would_write_memory"] is False
+    assert persistent_resident_claim_boundary["would_claim_resident"] is False
+    assert persistent_resident_claim_boundary["resident_claim"]["status"] == "blocked"
+    assert "persistent_supervision_disabled" in persistent_resident_claim_boundary["blockers"]
+    assert "process_supervision_disabled" in persistent_resident_claim_boundary["blockers"]
+    assert "resident_claim_authority_not_granted" in persistent_resident_claim_boundary["blockers"]
+    assert persistent_resident_claim_boundary["remaining_authority_families_after_this_boundary"] == []
+    assert persistent_resident_claim_boundary["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
 
     granted_boundary = payload["resident_runtime_granted_boundary_proof"]
     assert granted_boundary["status"] == "proof_passed"
@@ -790,6 +842,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement/execution" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement/execution/readiness" in payload["evidence"]
@@ -801,6 +854,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["process_supervision_authority_boundary_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
+    assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True
     assert governance["persistent_supervision_enablement_execution_denial_boundary_readback"] is True
     assert governance["resident_runtime_granted_boundary_proof_readback"] is True

@@ -93,6 +93,7 @@ $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-superv
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
+$PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -209,6 +210,48 @@ $PersistentSupervisionExecutionAuthorityProofObserved = (
   -not ($PersistentSupervisionExecutionAuthorityProofBlockers -contains 'receipt_write_authority_not_granted') -and
   $PersistentSupervisionExecutionAuthorityProofBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionExecutionAuthorityProof.next_smallest_truthful_gap -eq 'persistent_supervision_resident_claim_authority_boundary'
+)
+$PersistentSupervisionResidentClaimBoundaryProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $PersistentSupervisionResidentClaimBoundaryProofScript `
+  -ScriptArgs @('-Mode', 'Status')
+$PersistentSupervisionResidentClaimBoundaryProof = $PersistentSupervisionResidentClaimBoundaryProofResult.payload
+$PersistentSupervisionResidentClaimBoundaryBlockers = ConvertTo-StringArray -Value $PersistentSupervisionResidentClaimBoundaryProof.blockers
+$PersistentSupervisionResidentClaimBoundaryObserved = (
+  [int]$PersistentSupervisionResidentClaimBoundaryProofResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.kind -eq 'lens.host.persistent_supervision_resident_claim_boundary.proof' -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.ok -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.status -eq 'proof_passed' -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.authority_family -eq 'resident_claim' -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.previous_authority_family -eq 'persistent_supervision_execution' -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.next_authority_family -eq '' -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_resident_claim_boundary_observed -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_execution_authority_proof_observed -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_plan_observed -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.side_effects_denied -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.final_persistent_supervision_authority_family_consumed -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_enablement_authority -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.service_config_write_authority -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_execution_authority -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.receipt_write_authority -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.resident_claim_authority -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_ready -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.resident_claim_allowed -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.applied -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.executed -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.service_config_updated -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_update_service_config -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_enable_persistent_supervision -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_start_service -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_supervise_process -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_restart_process -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_receipt -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_memory -and
+  -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_claim_resident -and
+  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'persistent_supervision_disabled' -and
+  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'process_supervision_disabled' -and
+  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
 $PersistentSupervisionEnablementDenial = $Checkpoint.persistent_supervision_enablement_denial_boundary
 $PersistentSupervisionEnablementDenialBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementDenial.blockers
@@ -589,6 +632,12 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved
+) {
+  'stage6_lens_completion_audit'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved
 ) {
   'persistent_supervision_resident_claim_authority_boundary'
@@ -643,7 +692,7 @@ $Payload = [ordered]@{
   next_stage = 'Stage 7 / Telemetry'
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
-    'The audit consumes the resident-runtime resident-claim boundary proof: the sixth authority family is now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
+    'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_resident_claim_authority_boundary') {
     'The audit consumes the resident-runtime overlay-window boundary proof: the fifth authority family is now read back as blocked and non-mutating, so the next bounded family proof is resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_overlay_window_authority_boundary') {
@@ -665,7 +714,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary') {
     'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
-    'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, while persistent supervision remains non-mutating and blocked at resident-claim/runtime readiness.'
+    'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
     'The checkpoint must observe the persistent-supervision execution denial boundary before the completion audit can make an authority-gap read.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted') {
@@ -724,6 +773,9 @@ $Payload = [ordered]@{
     )
     persistent_supervision_execution_authority_proof = [string[]]@(
       $PersistentSupervisionExecutionAuthorityProofBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|process_supervision|receipt_write' } | Sort-Object -Unique
+    )
+    persistent_supervision_resident_claim_boundary = [string[]]@(
+      $PersistentSupervisionResidentClaimBoundaryBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|process_supervision|receipt_write' } | Sort-Object -Unique
     )
     resident_runtime = [string[]]@(
       @(
@@ -1290,6 +1342,42 @@ $Payload = [ordered]@{
     blockers = [string[]]@($PersistentSupervisionExecutionAuthorityProofBlockers)
     next_smallest_truthful_gap = [string]$PersistentSupervisionExecutionAuthorityProof.next_smallest_truthful_gap
   }
+  persistent_supervision_resident_claim_boundary_proof = [ordered]@{
+    status = if ($PersistentSupervisionResidentClaimBoundaryObserved) { [string]$PersistentSupervisionResidentClaimBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionResidentClaimBoundaryObserved
+    exit_code = [int]$PersistentSupervisionResidentClaimBoundaryProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionResidentClaimBoundaryProof.evidence)
+    authority_family = [string]$PersistentSupervisionResidentClaimBoundaryProof.authority_family
+    previous_authority_family = [string]$PersistentSupervisionResidentClaimBoundaryProof.previous_authority_family
+    next_authority_family = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_authority_family
+    persistent_supervision_resident_claim_boundary_observed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_resident_claim_boundary_observed
+    persistent_supervision_execution_authority_proof_observed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_execution_authority_proof_observed
+    persistent_supervision_plan_observed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_plan_observed
+    side_effects_denied = [bool]$PersistentSupervisionResidentClaimBoundaryProof.side_effects_denied
+    final_persistent_supervision_authority_family_consumed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.final_persistent_supervision_authority_family_consumed
+    resident_claim = $PersistentSupervisionResidentClaimBoundaryProof.resident_claim
+    persistent_supervision_enablement_authority = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_enablement_authority
+    service_config_write_authority = [bool]$PersistentSupervisionResidentClaimBoundaryProof.service_config_write_authority
+    persistent_supervision_execution_authority = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_execution_authority
+    receipt_write_authority = [bool]$PersistentSupervisionResidentClaimBoundaryProof.receipt_write_authority
+    resident_claim_authority = [bool]$PersistentSupervisionResidentClaimBoundaryProof.resident_claim_authority
+    persistent_supervision_ready = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_ready
+    resident_claim_allowed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.resident_claim_allowed
+    applied = [bool]$PersistentSupervisionResidentClaimBoundaryProof.applied
+    executed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.executed
+    service_config_updated = [bool]$PersistentSupervisionResidentClaimBoundaryProof.service_config_updated
+    would_update_service_config = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_update_service_config
+    would_enable_persistent_supervision = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_enable_persistent_supervision
+    would_start_service = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_start_service
+    would_supervise_process = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_supervise_process
+    would_restart_process = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_restart_process
+    would_write_receipt = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_receipt
+    would_write_memory = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_memory
+    would_claim_resident = [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_claim_resident
+    blockers = [string[]]@($PersistentSupervisionResidentClaimBoundaryBlockers)
+    remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionResidentClaimBoundaryProof.remaining_authority_families_after_this_boundary)
+    next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
@@ -1299,6 +1387,7 @@ $Payload = [ordered]@{
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
     '/lens/host/persistent-supervision/enablement',
     '/lens/host/persistent-supervision/enablement/execution',
     '/lens/host/persistent-supervision/enablement/execution/readiness',
@@ -1317,6 +1406,7 @@ $Payload = [ordered]@{
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
+    persistent_supervision_resident_claim_boundary_proof_readback = $PersistentSupervisionResidentClaimBoundaryObserved
     persistent_supervision_enablement_denial_boundary_readback = $PersistentSupervisionEnablementDenialObserved
     persistent_supervision_enablement_execution_denial_boundary_readback = $PersistentSupervisionEnablementExecutionDenialObserved
     resident_runtime_granted_boundary_proof_readback = $ResidentRuntimeGrantedBoundaryProofObserved
