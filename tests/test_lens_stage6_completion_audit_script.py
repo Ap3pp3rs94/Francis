@@ -111,6 +111,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident_surface_runtime_not_supervised",
     ]
     assert "global_hotkey_binding_missing" in blocked["summon_anywhere"]["blockers"]
+    assert "os_level_command_palette_missing" in payload["closure_blockers"]["command_palette"]
+    assert "summon_anywhere_missing" in payload["closure_blockers"]["command_palette"]
+    assert "global_hotkey_binding_missing" in payload["closure_blockers"]["command_palette"]
     assert "resident_overlay_runtime_missing" in blocked["system_resident_presence"]["blockers"]
     assert "resident_surface_runtime_missing" not in payload["closure_blockers"]["resident_surface"]
     assert "resident_surface_not_resident" in payload["closure_blockers"]["resident_surface"]
@@ -760,6 +763,34 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "resident_surface_runtime_missing" in runtime_resident_claim_boundary["blockers"]
     assert runtime_resident_claim_boundary["remaining_authority_families_after_this_boundary"] == []
     assert runtime_resident_claim_boundary["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+
+    command_palette_shell_bridge = payload["command_palette_shell_bridge"]
+    assert command_palette_shell_bridge["status"] == "blocked"
+    assert command_palette_shell_bridge["ok"] is True
+    assert command_palette_shell_bridge["exit_code"] == 0
+    assert "scripts/lens-command-palette.ps1" in command_palette_shell_bridge["evidence"][0]
+    assert command_palette_shell_bridge["readback_ready"] is True
+    assert command_palette_shell_bridge["os_level_command_palette"] is False
+    assert command_palette_shell_bridge["summon_anywhere"] is False
+    assert command_palette_shell_bridge["availability"] == "chat_ui_only"
+    assert command_palette_shell_bridge["route"] == "/lens/status"
+    assert command_palette_shell_bridge["command_total"] > 0
+    assert "os_level_command_palette_missing" in command_palette_shell_bridge["blockers"]
+    assert "summon_anywhere_missing" in command_palette_shell_bridge["blockers"]
+    assert "global_hotkey_binding_missing" in command_palette_shell_bridge["blockers"]
+    assert command_palette_shell_bridge["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert command_palette_shell_bridge["governance"]["read_only_contract"] is True
+    assert command_palette_shell_bridge["governance"]["opens_palette"] is False
+    assert command_palette_shell_bridge["governance"]["execution_authority"] is False
+    assert command_palette_shell_bridge["governance"]["approval_decision_authority"] is False
+    assert command_palette_shell_bridge["governance"]["memory_write"] is False
+    assert command_palette_shell_bridge["governance"]["overlay_control_authority"] is False
+    assert command_palette_shell_bridge["governance"]["summon_authority"] is False
+    assert command_palette_shell_bridge["governance"]["hotkey_registration_authority"] is False
+    assert command_palette_shell_bridge["governance"]["tray_registration_authority"] is False
+    assert command_palette_shell_bridge["governance"]["local_process_launch_authority"] is False
+    assert command_palette_shell_bridge["governance"]["mutation_authority_granted"] is False
+
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
     assert process_boundary["ok"] is True
@@ -904,6 +935,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
 
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>" in payload["evidence"]
     assert "scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-runtime-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
@@ -936,6 +968,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["resident_runtime_hotkey_summon_boundary_proof_readback"] is True
     assert governance["resident_runtime_overlay_window_boundary_proof_readback"] is True
     assert governance["resident_runtime_resident_claim_boundary_proof_readback"] is True
+    assert governance["command_palette_shell_bridge_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

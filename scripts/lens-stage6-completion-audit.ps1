@@ -663,10 +663,37 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
   $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing' -and
   [string]$ResidentRuntimeResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$CommandPaletteShellBridge = $Checkpoint.command_palette_shell_bridge
+$CommandPaletteShellBridgeGovernance = $CommandPaletteShellBridge.governance
+$CommandPaletteShellBridgeBlockers = ConvertTo-StringArray -Value $CommandPaletteShellBridge.blockers
+$CommandPaletteShellBridgeObserved = (
+  [bool]$CommandPaletteShellBridge.ok -and
+  [string]$CommandPaletteShellBridge.status -eq 'blocked' -and
+  [bool]$CommandPaletteShellBridge.readback_ready -and
+  [string]$CommandPaletteShellBridge.availability -eq 'chat_ui_only' -and
+  -not [bool]$CommandPaletteShellBridge.os_level_command_palette -and
+  -not [bool]$CommandPaletteShellBridge.summon_anywhere -and
+  [int]$CommandPaletteShellBridge.command_total -gt 0 -and
+  [string]$CommandPaletteShellBridge.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.opens_palette -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.execution_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.approval_decision_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.memory_write -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.overlay_control_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.summon_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.hotkey_registration_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.tray_registration_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.local_process_launch_authority -and
+  -not [bool]$CommandPaletteShellBridgeGovernance.mutation_authority_granted -and
+  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing' -and
+  $CommandPaletteShellBridgeBlockers -contains 'summon_anywhere_missing' -and
+  $CommandPaletteShellBridgeBlockers -contains 'global_hotkey_binding_missing'
+)
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $CommandPaletteShellBridgeObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -706,6 +733,14 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ResidentHostProcessSupervisionBlockerProofObserved
 ) {
   'resident_host_process_supervision_handoff'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  -not $CommandPaletteShellBridgeObserved
+) {
+  'command_palette_shell_bridge_readback'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -798,6 +833,8 @@ $Payload = [ordered]@{
     'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_supervision_handoff') {
     'The audit must consume the resident-host process supervision handoff proof before treating resident-host process supervision as an acceptance blocker instead of a missing audit readback.'
+  } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
+    'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
     'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
@@ -833,6 +870,9 @@ $Payload = [ordered]@{
       $Blockers | Where-Object { $_ -match 'resident_surface|resident_overlay' } | Sort-Object -Unique
     )
     summon = [string[]]@($Blockers | Where-Object { $_ -match 'summon|hotkey|global_hotkey' } | Sort-Object -Unique)
+    command_palette = [string[]]@(
+      $CommandPaletteShellBridgeBlockers | Where-Object { $_ -match 'command_palette|summon|hotkey|global_hotkey' } | Sort-Object -Unique
+    )
     tray = [string[]]@($Blockers | Where-Object { $_ -match 'tray' } | Sort-Object -Unique)
     overlay = [string[]]@($Blockers | Where-Object { $_ -match 'overlay|window' } | Sort-Object -Unique)
     host_supervision = [string[]]@(
@@ -1259,6 +1299,33 @@ $Payload = [ordered]@{
     remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeResidentClaimBoundaryProof.remaining_authority_families_after_this_boundary)
     next_smallest_truthful_gap = [string]$ResidentRuntimeResidentClaimBoundaryProof.next_smallest_truthful_gap
   }
+  command_palette_shell_bridge = [ordered]@{
+    status = if ($CommandPaletteShellBridgeObserved) { [string]$CommandPaletteShellBridge.status } else { 'missing_or_failed' }
+    ok = $CommandPaletteShellBridgeObserved
+    exit_code = [int]$CommandPaletteShellBridge.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $CommandPaletteShellBridge.evidence)
+    readback_ready = [bool]$CommandPaletteShellBridge.readback_ready
+    os_level_command_palette = [bool]$CommandPaletteShellBridge.os_level_command_palette
+    summon_anywhere = [bool]$CommandPaletteShellBridge.summon_anywhere
+    availability = [string]$CommandPaletteShellBridge.availability
+    route = [string]$CommandPaletteShellBridge.route
+    command_total = [int]$CommandPaletteShellBridge.command_total
+    blockers = [string[]]@($CommandPaletteShellBridgeBlockers)
+    next_smallest_truthful_gap = [string]$CommandPaletteShellBridge.next_smallest_truthful_gap
+    governance = [ordered]@{
+      read_only_contract = [bool]$CommandPaletteShellBridgeGovernance.read_only_contract
+      opens_palette = [bool]$CommandPaletteShellBridgeGovernance.opens_palette
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      overlay_control_authority = $false
+      summon_authority = $false
+      hotkey_registration_authority = $false
+      tray_registration_authority = $false
+      local_process_launch_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -1509,6 +1576,7 @@ $Payload = [ordered]@{
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
+    'scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
     'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status',
@@ -1547,6 +1615,7 @@ $Payload = [ordered]@{
     resident_runtime_hotkey_summon_boundary_proof_readback = $ResidentRuntimeHotkeySummonBoundaryObserved
     resident_runtime_overlay_window_boundary_proof_readback = $ResidentRuntimeOverlayWindowBoundaryObserved
     resident_runtime_resident_claim_boundary_proof_readback = $ResidentRuntimeResidentClaimBoundaryObserved
+    command_palette_shell_bridge_readback = $CommandPaletteShellBridgeObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

@@ -581,6 +581,7 @@ $ResidentOverlayRuntimeProofPath = Join-Path $PSScriptRoot 'lens-resident-overla
 $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $ResidentRuntimeGrantedBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-boundary-proof.ps1'
 $ResidentRuntimeAuthorityBlockersProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-authority-blockers-proof.ps1'
+$CommandPaletteShellBridgePath = Join-Path $PSScriptRoot 'lens-command-palette.ps1'
 $TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
 $ResidentRuntimeOverlayWindowBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-overlay-window-boundary-proof.ps1'
@@ -597,6 +598,49 @@ $SupervisorObservationMinimumSeconds = 12
 $SupervisorObservationSeconds = [Math]::Max(
   $SupervisorRunSeconds,
   $SupervisorObservationMinimumSeconds
+)
+$CommandPaletteStatusPath = [System.IO.Path]::GetTempFileName()
+try {
+  $LensStatus | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $CommandPaletteStatusPath -Encoding UTF8
+  $CommandPaletteShellBridgeResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $CommandPaletteShellBridgePath -ScriptArgs @('-Mode', 'Status', '-StatusPath', $CommandPaletteStatusPath))
+} finally {
+  Remove-Item -LiteralPath $CommandPaletteStatusPath -Force -ErrorAction SilentlyContinue
+}
+$CommandPaletteShellBridgeProof = if ($CommandPaletteShellBridgeResult.Count -gt 0) { $CommandPaletteShellBridgeResult[-1] } else { $null }
+$CommandPaletteShellBridgeExitCode = -1
+$CommandPaletteShellBridgePayload = $null
+if ($CommandPaletteShellBridgeProof -is [System.Collections.IDictionary]) {
+  if ($CommandPaletteShellBridgeProof.Contains('exit_code') -and $null -ne $CommandPaletteShellBridgeProof['exit_code']) {
+    $CommandPaletteShellBridgeExitCode = [int]$CommandPaletteShellBridgeProof['exit_code']
+  }
+  if ($CommandPaletteShellBridgeProof.Contains('payload') -and $null -ne $CommandPaletteShellBridgeProof['payload']) {
+    $CommandPaletteShellBridgePayload = $CommandPaletteShellBridgeProof['payload']
+  }
+}
+$CommandPaletteShellBridgeBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'blockers' -Default @()
+)
+$CommandPaletteShellBridgeGovernance = Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'governance'
+$CommandPaletteShellBridgeObserved = (
+  $CommandPaletteShellBridgeExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'kind' -Default '') -eq 'lens.command_palette.shell_bridge' -and
+  [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'readback_ready' -Default $false) -and
+  [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'availability' -Default '') -eq 'chat_ui_only' -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'os_level_command_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'summon_anywhere' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'opens_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'overlay_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'summon_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'hotkey_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'tray_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'local_process_launch_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'mutation_authority_granted' -Default $true) -and
+  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing' -and
+  $CommandPaletteShellBridgeBlockers -contains 'summon_anywhere_missing' -and
+  $CommandPaletteShellBridgeBlockers -contains 'global_hotkey_binding_missing'
 )
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
@@ -2321,7 +2365,36 @@ $Payload = [ordered]@{
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
-  next_smallest_truthful_gap = if ($RuntimeGrantReadinessSpineObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved -and $PersistentSupervisionEnablementExecutionDenialObserved) {
+  command_palette_shell_bridge = [ordered]@{
+    status = if ($CommandPaletteShellBridgeObserved) { [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'status' -Default '') } else { 'missing_or_failed' }
+    ok = $CommandPaletteShellBridgeObserved
+    exit_code = $CommandPaletteShellBridgeExitCode
+    evidence = [string[]]@('scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>')
+    readback_ready = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'readback_ready' -Default $false)
+    os_level_command_palette = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'os_level_command_palette' -Default $false)
+    summon_anywhere = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'summon_anywhere' -Default $false)
+    availability = [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'availability' -Default '')
+    route = [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'route' -Default '')
+    command_total = [int](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'command_total' -Default 0)
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'next_smallest_truthful_gap' -Default '')
+    blockers = $CommandPaletteShellBridgeBlockers
+    governance = [ordered]@{
+      read_only_contract = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'read_only_contract' -Default $false)
+      opens_palette = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'opens_palette' -Default $true)
+      execution_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'execution_authority' -Default $true)
+      approval_decision_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'approval_decision_authority' -Default $true)
+      memory_write = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'memory_write' -Default $true)
+      overlay_control_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'overlay_control_authority' -Default $true)
+      summon_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'summon_authority' -Default $true)
+      hotkey_registration_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'hotkey_registration_authority' -Default $true)
+      tray_registration_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'tray_registration_authority' -Default $true)
+      local_process_launch_authority = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'local_process_launch_authority' -Default $true)
+      mutation_authority_granted = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'mutation_authority_granted' -Default $true)
+    }
+  }
+  next_smallest_truthful_gap = if (-not $CommandPaletteShellBridgeObserved) {
+    'command_palette_shell_bridge_readback'
+  } elseif ($RuntimeGrantReadinessSpineObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved -and $PersistentSupervisionEnablementExecutionDenialObserved) {
     'stage6_lens_completion_audit'
   } elseif ($RuntimeGrantReadinessSpineObserved -and $HostSupervisionAuthorityObserved -and $HostSupervisionAuthorityDenialObserved -and $HostSupervisionAuthorityDenialReceiptsObserved -and $HostSupervisionAuthorityGrantReceiptsObserved -and $HostSupervisionAuthorityReadinessObserved -and $PersistentSupervisionEnablementDenialObserved) {
     'persistent_supervision_enablement_execution_denial_boundary'
@@ -2390,6 +2463,7 @@ $Payload = [ordered]@{
     resident_runtime_hotkey_summon_boundary_proof_observed = $ResidentRuntimeHotkeySummonBoundaryProofPassed
     resident_runtime_overlay_window_boundary_proof_observed = $ResidentRuntimeOverlayWindowBoundaryProofPassed
     resident_runtime_resident_claim_boundary_proof_observed = $ResidentRuntimeResidentClaimBoundaryProofPassed
+    command_palette_shell_bridge_observed = $CommandPaletteShellBridgeObserved
     resident_host_supervision_authority_preflight_observed = $HostSupervisionAuthorityObserved
     resident_host_supervision_authority_denial_boundary_observed = $HostSupervisionAuthorityDenialObserved
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved

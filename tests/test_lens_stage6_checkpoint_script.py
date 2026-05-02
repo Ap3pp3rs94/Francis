@@ -1106,6 +1106,32 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-overlay-activation-boundary-proof.ps1"
         in payload["resident_overlay_activation_boundary_proof"]["evidence"]
     )
+    command_palette_shell_bridge = payload["command_palette_shell_bridge"]
+    assert command_palette_shell_bridge["status"] == "blocked"
+    assert command_palette_shell_bridge["ok"] is True
+    assert command_palette_shell_bridge["exit_code"] == 0
+    assert command_palette_shell_bridge["readback_ready"] is True
+    assert command_palette_shell_bridge["os_level_command_palette"] is False
+    assert command_palette_shell_bridge["summon_anywhere"] is False
+    assert command_palette_shell_bridge["availability"] == "chat_ui_only"
+    assert command_palette_shell_bridge["route"] == "/lens/status"
+    assert command_palette_shell_bridge["command_total"] > 0
+    assert "os_level_command_palette_missing" in command_palette_shell_bridge["blockers"]
+    assert "summon_anywhere_missing" in command_palette_shell_bridge["blockers"]
+    assert "global_hotkey_binding_missing" in command_palette_shell_bridge["blockers"]
+    assert command_palette_shell_bridge["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert "scripts/lens-command-palette.ps1" in command_palette_shell_bridge["evidence"][0]
+    assert command_palette_shell_bridge["governance"]["read_only_contract"] is True
+    assert command_palette_shell_bridge["governance"]["opens_palette"] is False
+    assert command_palette_shell_bridge["governance"]["execution_authority"] is False
+    assert command_palette_shell_bridge["governance"]["approval_decision_authority"] is False
+    assert command_palette_shell_bridge["governance"]["memory_write"] is False
+    assert command_palette_shell_bridge["governance"]["overlay_control_authority"] is False
+    assert command_palette_shell_bridge["governance"]["summon_authority"] is False
+    assert command_palette_shell_bridge["governance"]["hotkey_registration_authority"] is False
+    assert command_palette_shell_bridge["governance"]["tray_registration_authority"] is False
+    assert command_palette_shell_bridge["governance"]["local_process_launch_authority"] is False
+    assert command_palette_shell_bridge["governance"]["mutation_authority_granted"] is False
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["governance"] == {
         "read_only_contract": True,
@@ -1133,6 +1159,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_hotkey_summon_boundary_proof_observed": True,
         "resident_runtime_overlay_window_boundary_proof_observed": True,
         "resident_runtime_resident_claim_boundary_proof_observed": True,
+        "command_palette_shell_bridge_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

@@ -16781,6 +16781,46 @@ shell bridge:
 - `python -m ruff format --check tests\test_lens_command_palette_script.py`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens completion audit consumes command-palette shell bridge
+
+Stage 6/Lens checkpoint and completion-audit readback now consume the
+read-only `scripts/lens-command-palette.ps1` shell bridge. The checkpoint writes
+a temporary Lens status snapshot, invokes the bridge in `Status` mode with
+`-StatusPath`, and exposes `command_palette_shell_bridge` in the Stage 6
+checkpoint payload. The completion audit now requires that bridge readback before
+it treats the remaining command-palette/summon blockers as acceptance-criteria
+blockers rather than missing audit proof.
+
+The consumed bridge remains explicitly blocked: it reports
+`availability=chat_ui_only`, `os_level_command_palette=false`,
+`summon_anywhere=false`, and blockers including
+`os_level_command_palette_missing`, `summon_anywhere_missing`, and
+`global_hotkey_binding_missing`. This is readback and audit consumption only. It
+does not open an OS palette, register a hotkey, summon Francis, launch a process,
+control tray or overlay surfaces, decide approvals, execute actions, write
+memory, or grant execution, approval-decision, memory-write, local-process-launch,
+hotkey-registration, tray-registration, overlay-control, summon, or mutation
+authority. Stage 6 remains active and blocked on the real `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens completion-audit
+command-palette bridge consumption:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `failed before replacing New-TemporaryFile with a Windows PowerShell-compatible temporary path; failed once more before updating the checkpoint contract assertion; passed after fixes`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_command_palette_script.py`
+  Result: `failed before formatting the updated audit test; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
