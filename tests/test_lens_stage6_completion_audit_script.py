@@ -96,6 +96,27 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "tray_host_missing" in payload["closure_blockers"]["tray"]
     assert "overlay_window_missing" in payload["closure_blockers"]["overlay"]
     assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["host_supervision"]
+    host_supervisor_readback = payload["host_supervisor_readback"]
+    assert host_supervisor_readback["readback_ready"] is True
+    assert host_supervisor_readback["runtime_state_path"] == "data/runtime/lens-host-supervisor/status.json"
+    assert host_supervisor_readback["freshness_window_seconds"] == 900
+    assert host_supervisor_readback["freshness_status"] in {"missing", "fresh", "stale", "unknown"}
+    assert isinstance(host_supervisor_readback["state_stale"], bool)
+    assert isinstance(host_supervisor_readback["fresh_readback"], bool)
+    assert isinstance(host_supervisor_readback["fresh_bounded_supervisor_observed"], bool)
+    assert isinstance(host_supervisor_readback["fresh_supervised_session_completed"], bool)
+    assert host_supervisor_readback["resident_supervised_runtime"] is False
+    assert host_supervisor_readback["resident_claim_allowed"] is False
+    assert host_supervisor_readback["execution_authority"] is False
+    assert host_supervisor_readback["approval_decision_authority"] is False
+    assert host_supervisor_readback["memory_write"] is False
+    assert host_supervisor_readback["process_supervision_authority"] is False
+    assert host_supervisor_readback["process_restart_authority"] is False
+    assert host_supervisor_readback["service_control_authority"] is False
+    assert host_supervisor_readback["resident_claim_authority"] is False
+    if host_supervisor_readback["freshness_status"] == "stale":
+        assert "host_supervisor_readback_stale" in host_supervisor_readback["blockers"]
+        assert "host_supervisor_readback_stale" in payload["closure_blockers"]["host_supervisor_readback"]
     assert "resident_host_process_not_supervised" in payload["closure_blockers"]["process_supervision"]
     assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["process_supervision"]
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]

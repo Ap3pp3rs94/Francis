@@ -15699,6 +15699,39 @@ freshness readback:
   Result: `passed`
 - `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
+
+### 2026-05-01 - Stage 6/Lens audit consumes supervisor freshness readback
+
+Stage 6/Lens checkpoint and completion-audit readbacks now consume the host
+supervisor freshness contract added to `/lens/status`. The checkpoint emits a
+top-level `host_supervisor_readback` object with `state_age_seconds`,
+`freshness_window_seconds`, `freshness_status`, `state_stale`,
+`fresh_readback`, `fresh_bounded_supervisor_observed`, and
+`fresh_supervised_session_completed`, and projects the same readback into the
+resident-supervision enablement gate. The completion audit carries the same
+readback forward and exposes `host_supervisor_readback_stale` under
+`closure_blockers.host_supervisor_readback` when stale runtime state is present.
+
+This is diagnostic/audit readback only. It does not launch or supervise a
+resident process, install or control a service, bind hotkeys, register tray
+presence, open an overlay, write memory, decide approvals, grant process
+authority, or close Stage 6. It prevents the Stage 6 readiness artifacts from
+hiding stale bounded supervisor evidence when determining whether Lens can move
+toward closure.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens audit supervisor
+freshness consumption:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `failed before the checkpoint mapped supervisor freshness onto the enablement gate; passed after fix`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; Ruff reported an access-denied warning writing its cache, but the format check succeeded`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

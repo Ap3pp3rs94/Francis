@@ -179,6 +179,12 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
 $Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
+$HostSupervisorReadback = $Checkpoint.host_supervisor_readback
+$HostSupervisorReadbackBlockers = ConvertTo-StringArray -Value $HostSupervisorReadback.blockers
+$HostSupervisorReadbackObserved = (
+  [bool]$HostSupervisorReadback.readback_ready -and
+  -not [string]::IsNullOrWhiteSpace([string]$HostSupervisorReadback.freshness_status)
+)
 $HostSupervisorOwnedSession = $Checkpoint.host_supervisor_owned_session
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value $HostSupervisorOwnedSession.blockers
 $HostSupervisorOwnedSessionObserved = (
@@ -604,6 +610,9 @@ $Payload = [ordered]@{
     host_supervision = [string[]]@(
       $Blockers | Where-Object { $_ -match 'supervision|restart|service_' } | Sort-Object -Unique
     )
+    host_supervisor_readback = [string[]]@(
+      $HostSupervisorReadbackBlockers | Where-Object { $_ -match 'host_supervisor_readback' } | Sort-Object -Unique
+    )
     process_supervision = [string[]]@(
       $ProcessSupervisionBoundaryBlockers | Where-Object {
         $_ -match 'process_supervision|process_restart|resident_host_process|resident_supervision'
@@ -658,6 +667,37 @@ $Payload = [ordered]@{
     authority = [string[]]@(
       $Blockers | Where-Object { $_ -match 'authority|not_granted|not_authorized' } | Sort-Object -Unique
     )
+  }
+  host_supervisor_readback = [ordered]@{
+    status = if ($HostSupervisorReadbackObserved) { [string]$HostSupervisorReadback.status } else { 'missing_or_failed' }
+    ok = $HostSupervisorReadbackObserved
+    readback_ready = [bool]$HostSupervisorReadback.readback_ready
+    runtime_state_path = [string]$HostSupervisorReadback.runtime_state_path
+    state_exists = [bool]$HostSupervisorReadback.state_exists
+    state_status = [string]$HostSupervisorReadback.state_status
+    mode = [string]$HostSupervisorReadback.mode
+    observed_pid = $HostSupervisorReadback.observed_pid
+    observed_state = [string]$HostSupervisorReadback.observed_state
+    updated_at = [string]$HostSupervisorReadback.updated_at
+    state_age_seconds = $HostSupervisorReadback.state_age_seconds
+    freshness_window_seconds = [int]$HostSupervisorReadback.freshness_window_seconds
+    freshness_status = [string]$HostSupervisorReadback.freshness_status
+    state_stale = [bool]$HostSupervisorReadback.state_stale
+    fresh_readback = [bool]$HostSupervisorReadback.fresh_readback
+    bounded_supervisor_observed = [bool]$HostSupervisorReadback.bounded_supervisor_observed
+    supervised_session_completed = [bool]$HostSupervisorReadback.supervised_session_completed
+    fresh_bounded_supervisor_observed = [bool]$HostSupervisorReadback.fresh_bounded_supervisor_observed
+    fresh_supervised_session_completed = [bool]$HostSupervisorReadback.fresh_supervised_session_completed
+    resident_supervised_runtime = $false
+    resident_claim_allowed = $false
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_control_authority = $false
+    resident_claim_authority = $false
+    blockers = [string[]]@($HostSupervisorReadbackBlockers)
   }
   resident_runtime_execution_boundary = [ordered]@{
     status = if ($ResidentRuntimeBoundaryObserved) { [string]$ResidentRuntimeBoundary.status } else { 'missing_or_failed' }
