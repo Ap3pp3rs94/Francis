@@ -64,12 +64,16 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert "persistent-supervision resident-claim boundary proof" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["stage6_completion_reviewed"] is True
     assert (
-        "both final authority families are now read back as blocked and non-mutating"
-        in (payload["next_smallest_truthful_gap_basis"])
+        "Stage 6 still cannot close because summon-anywhere is blocked" in (payload["next_smallest_truthful_gap_basis"])
     )
+    assert payload["remaining_stage6_acceptance_blockers"] == [
+        "summon_anywhere",
+        "helpful_not_noisy",
+        "system_resident_presence",
+    ]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2

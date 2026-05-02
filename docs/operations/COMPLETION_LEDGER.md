@@ -16029,6 +16029,44 @@ supervision resident-claim boundary proof and audit consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens completion audit acceptance blocker handoff
+
+Stage 6/Lens completion audit was run after both final resident-runtime and
+persistent-supervision resident-claim boundary proofs were consumed. The audit
+still reports `do_not_close_stage6`: `2/5` closure criteria are ready and `3/5`
+remain blocked (`summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`). Stage 6 is not ready for Stage 7.
+
+`scripts/lens-stage6-completion-audit.ps1` now marks the closure review as
+performed with `stage6_completion_reviewed`, preserves the checkpoint handoff
+for traceability, and changes the audit-level `next_smallest_truthful_gap` from
+the self-referential `stage6_lens_completion_audit` to the first concrete
+remaining acceptance blocker, `summon_anywhere_blockers`. The audit also exposes
+`remaining_stage6_acceptance_blockers` so follow-on sessions can select a real
+Stage 6 blocker rather than repeating the same audit handoff.
+
+This is audit/readback, test, and ledger work only. It does not grant execution
+authority, approval-decision authority, memory-write authority, resident-claim
+authority, UI control, live process supervision, service control, hotkey
+registration, overlay control, Stage 6 closure, or Stage 7 transition.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens completion audit
+acceptance-blocker handoff:
+
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; returned blocked/do_not_close_stage6 with 2/5 ready, 3/5
+  blocked before this handoff correction`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -16164,7 +16202,9 @@ These remain true and should block any "finished" claim:
   readiness, plus a persistent-supervision resident-claim boundary proof and
   completion-audit consumption that consumes that final persistent-supervision
   authority family as blocked/non-mutating and moves the next handoff to
-  `stage6_lens_completion_audit` without closing Stage 6,
+  `stage6_lens_completion_audit` without closing Stage 6, plus a completion
+  audit acceptance-blocker handoff that confirms Stage 6 remains `2/5` ready and
+  `3/5` blocked and moves the audit-level handoff to `summon_anywhere_blockers`,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6` and groups closure blockers without allowing
   Stage 6 transition,
@@ -16200,7 +16240,9 @@ These remain true and should block any "finished" claim:
   approval-decision, and resident-claim authority denied, plus resident-runtime
   resident-claim boundary readback that keeps resident-claim, process, service,
   tray, hotkey, overlay, memory, and approval-decision authority denied and
-  names `stage6_lens_completion_audit` as the current handoff, but no
+  names `stage6_lens_completion_audit` as the boundary-family handoff, while the
+  Stage 6 completion audit now names `summon_anywhere_blockers` as the current
+  acceptance-criteria handoff, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

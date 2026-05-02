@@ -294,6 +294,16 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
 $Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
+$Stage6CompletionReviewed = $false
+$Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere') {
+  'summon_anywhere_blockers'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
+  'helpful_not_noisy_blockers'
+} elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
+  'system_resident_presence_blockers'
+} else {
+  ''
+}
 $HostSupervisorReadback = $Checkpoint.host_supervisor_readback
 $HostSupervisorReadbackBlockers = ConvertTo-StringArray -Value $HostSupervisorReadback.blockers
 $HostSupervisorReadbackObserved = (
@@ -599,6 +609,10 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
   $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing' -and
   [string]$ResidentRuntimeResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$Stage6CompletionReviewed = (
+  $ResidentRuntimeResidentClaimBoundaryObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved
+)
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
 } elseif (-not $ResidentRuntimeResidentClaimBoundaryObserved -and $ResidentRuntimeOverlayWindowBoundaryObserved) {
@@ -634,7 +648,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved
 ) {
-  'stage6_lens_completion_audit'
+  $Stage6AcceptanceNextGap
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -669,8 +683,8 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'summon_anywhere_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
   'system_resident_presence_blockers'
-} elseif ($ResidentRuntimeResidentClaimBoundaryObserved) {
-  'stage6_lens_completion_audit'
+} elseif ($Stage6CompletionReviewed -and -not [string]::IsNullOrWhiteSpace($Stage6AcceptanceNextGap)) {
+  $Stage6AcceptanceNextGap
 } else {
   'review_stage6_checkpoint_blockers'
 }
@@ -693,6 +707,12 @@ $Payload = [ordered]@{
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
+    'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs. Stage 6 still cannot close because summon-anywhere is blocked by missing resident host, global hotkey, and summon binding behavior.'
+  } elseif ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
+    'The completion audit has consumed the final authority-family proofs. Stage 6 still cannot close because helpful-not-noisy Lens behavior is limited to foreground/readback proof and lacks supervised resident runtime.'
+  } elseif ($NextSmallestTruthfulGap -eq 'system_resident_presence_blockers') {
+    'The completion audit has consumed the final authority-family proofs. Stage 6 still cannot close because system-resident presence is blocked by host, process, service, tray, hotkey, overlay, and resident-claim gaps.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_resident_claim_authority_boundary') {
     'The audit consumes the resident-runtime overlay-window boundary proof: the fifth authority family is now read back as blocked and non-mutating, so the next bounded family proof is resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_overlay_window_authority_boundary') {
@@ -727,6 +747,8 @@ $Payload = [ordered]@{
     'Derived from the current Stage 6 checkpoint blocker ordering.'
   }
   checkpoint_next_smallest_truthful_gap = [string]$Checkpoint.next_smallest_truthful_gap
+  stage6_completion_reviewed = $Stage6CompletionReviewed
+  remaining_stage6_acceptance_blockers = [string[]]@($BlockedCriterionIds)
   summary = [ordered]@{
     criteria_total = [int]$Checkpoint.summary.criteria_total
     ready_total = [int]$Checkpoint.summary.ready_total
