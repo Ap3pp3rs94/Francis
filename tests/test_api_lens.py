@@ -4833,6 +4833,162 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
+def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get(
+        "/lens/host/runtime-loop/readiness",
+        params={"limit": 10, "approval_id": "approval-runtime-loop", "actor": "test.system.write"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.host.runtime_loop.readiness_audit"
+    assert body["status"] == "blocked"
+    assert body["audit_status"] == "complete"
+    assert body["route"] == "/lens/host/runtime-loop/readiness"
+    assert body["runtime_plan_route"] == "/lens/host/runtime-plan"
+    assert body["runtime_loop_route"] == "/lens/host/runtime-loop"
+    assert body["execute_route"] == "/lens/host/runtime-loop/execute"
+    assert body["denials_route"] == "/lens/host/runtime-loop/denials"
+    assert body["approval_id"] == "approval-runtime-loop"
+    assert body["actor"] == "test.system.write"
+    assert body["limit"] == 10
+    assert body["ready"] is False
+    assert body["loop_ready"] is False
+    assert body["execution_ready"] is False
+    assert body["resident_runtime_loop"] is False
+    assert body["resident_runtime_ready"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["runtime_plan_available"] is True
+    assert body["loop_contract_readback_ready"] is True
+    assert body["execution_denial_boundary_observed"] is True
+    assert body["denial_receipt_readback_ready"] is True
+    assert body["receipt_count"] == 0
+    assert body["latest_receipt_id"] == ""
+    assert body["requirements_total"] == 12
+    assert body["requirements_ready_total"] == 7
+    assert body["requirements_blocked_total"] == 5
+    assert body["blocked_requirements"] == [
+        "resident_loop_process_supervision",
+        "resident_loop_service_lifecycle",
+        "resident_loop_surface_presence",
+        "resident_loop_receipt_emission",
+        "resident_loop_claim_checkpoint",
+    ]
+    requirements = {item["id"]: item for item in body["requirements"]}
+    assert requirements["runtime_implementation_plan"]["ready"] is True
+    assert requirements["runtime_loop_contract"]["ready"] is True
+    assert requirements["runtime_loop_execution_denial_boundary"]["ready"] is True
+    assert requirements["runtime_loop_execution_denial_boundary"]["status"] == "denied_no_resident_runtime_authority"
+    assert requirements["runtime_loop_denial_receipts"]["ready"] is True
+    assert requirements["diagnostic_status_tick"]["ready"] is True
+    assert requirements["bounded_foreground_tick"]["ready"] is True
+    assert requirements["runtime_state_heartbeat_readback"]["ready"] is True
+    assert requirements["resident_loop_process_supervision"]["ready"] is False
+    assert requirements["resident_loop_service_lifecycle"]["ready"] is False
+    assert requirements["resident_loop_surface_presence"]["ready"] is False
+    assert requirements["resident_loop_receipt_emission"]["ready"] is False
+    assert requirements["resident_loop_claim_checkpoint"]["ready"] is False
+    assert "resident_runtime_execution_authority_not_granted" in body["blockers"]
+    assert "resident_host_process_missing" in body["blockers"]
+    assert "resident_runtime_loop_not_implemented" in body["blockers"]
+    assert "resident_runtime_loop_not_supervised" in body["blockers"]
+    assert "receipt_write_authority_not_granted" in body["blockers"]
+    assert "resident_claim_authority_not_granted" in body["blockers"]
+    assert body["source_readbacks"] == {
+        "runtime_plan_status": "blocked",
+        "runtime_loop_status": "blocked",
+        "execution_denial_status": "denied_no_resident_runtime_authority",
+        "denial_receipts_status": "empty",
+    }
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_operator_surface_readback"
+
+    governance = body["governance"]
+    assert governance["gate"] == "lens_host_runtime_loop_readiness_audit"
+    assert governance["read_only_contract"] is True
+    assert governance["audit_only"] is True
+    assert governance["execution_boundary"] is True
+    assert governance["denial_boundary"] is True
+    for key in [
+        "execution_authority",
+        "resident_runtime_execution_authority",
+        "approval_decision_authority",
+        "memory_write",
+        "local_process_launch_authority",
+        "diagnostic_launch_authority",
+        "process_supervision_authority",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "denial_receipt_write_authority",
+        "resident_claim_authority",
+        "overlay_control_authority",
+        "summon_authority",
+        "hotkey_registration_authority",
+        "tray_registration_authority",
+        "mutation_authority_granted",
+    ]:
+        assert governance[key] is False
+
+    status_response = client.get("/lens/status?limit=1")
+    assert status_response.status_code == 200
+    status_body = status_response.json()
+    resident_host = status_body["resident_host"]
+    assert resident_host["runtime_loop_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert resident_host["runtime_loop_readiness"]["kind"] == "lens.host.runtime_loop.readiness_audit"
+    assert resident_host["runtime_loop_readiness"]["status"] == "blocked"
+    assert resident_host["runtime_loop_readiness"]["ready"] is False
+    assert status_body["runtime_loop_readiness"]["route"] == "/lens/host/runtime-loop/readiness"
+    assert status_body["receipts"]["lens_host_runtime_loop_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    criterion = _criterion(status_body, "resident_host_runtime_loop_readiness_audit")
+    assert criterion["status"] == "blocked"
+    assert criterion["audit_status"] == "complete"
+    assert criterion["ready"] is False
+    assert criterion["loop_contract_readback_ready"] is True
+    assert criterion["execution_denial_boundary_observed"] is True
+    assert criterion["denial_receipt_readback_ready"] is True
+    assert criterion["requirements_total"] == 12
+    assert criterion["requirements_ready_total"] == 7
+    assert criterion["requirements_blocked_total"] == 5
+    assert criterion["blocked_requirements"] == [
+        "resident_loop_process_supervision",
+        "resident_loop_service_lifecycle",
+        "resident_loop_surface_presence",
+        "resident_loop_receipt_emission",
+        "resident_loop_claim_checkpoint",
+    ]
+    assert criterion["execution_authority"] is False
+    assert criterion["resident_runtime_execution_authority"] is False
+    assert criterion["process_supervision_authority"] is False
+    assert criterion["service_control_authority"] is False
+    assert criterion["memory_write"] is False
+    assert criterion["receipt_write_authority"] is False
+    assert criterion["resident_claim_authority"] is False
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

@@ -56,6 +56,7 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_implementation_plan,
     lens_host_runtime_loop_contract,
     lens_host_runtime_loop_denial_receipts,
+    lens_host_runtime_loop_readiness_audit,
 )
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
@@ -289,6 +290,14 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         runtime_loop=runtime_loop_contract,
     )
     runtime_loop_denial_receipts = lens_host_runtime_loop_denial_receipts(limit=limit)
+    runtime_loop_readiness = lens_host_runtime_loop_readiness_audit(
+        limit=limit,
+        manifest=launch_manifest,
+        runtime_plan=runtime_implementation_plan,
+        runtime_loop=runtime_loop_contract,
+        execution_denial=runtime_loop_execution_denial,
+        denial_receipts=runtime_loop_denial_receipts,
+    )
     supervision_gate = lens_host_supervision_gate(manifest=launch_manifest)
     persistent_supervision_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
     persistent_supervision_enablement = lens_host_persistent_supervision_enablement_preflight(manifest=launch_manifest)
@@ -502,6 +511,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "runtime_loop_execution_denial": runtime_loop_execution_denial,
         "runtime_loop_denial_receipts_route": _safe_str(runtime_loop_denial_receipts.get("route")).strip(),
         "runtime_loop_denial_receipts": runtime_loop_denial_receipts,
+        "runtime_loop_readiness_route": _safe_str(runtime_loop_readiness.get("route")).strip(),
+        "runtime_loop_readiness": runtime_loop_readiness,
         "supervision_gate_route": _safe_str(supervision_gate.get("route")).strip(),
         "supervision_gate": supervision_gate,
         "persistent_supervision_plan_route": _safe_str(persistent_supervision_plan.get("route")).strip(),
@@ -1203,6 +1214,7 @@ def _stage6_readiness(
     )
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
     runtime_loop_denial_receipts = _as_dict(resident_host.get("runtime_loop_denial_receipts"))
+    runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
     persistent_supervision_enablement_authority_readiness = _as_dict(
         resident_host.get("persistent_supervision_enablement_authority_readiness")
     )
@@ -1721,6 +1733,52 @@ def _stage6_readiness(
                 "latest_receipt_id": _safe_str(
                     _as_dict(runtime_loop_denial_receipts.get("latest")).get("receipt_id")
                 ).strip(),
+                "execution_authority": False,
+                "resident_runtime_execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": False,
+                "receipt_write_authority": False,
+            },
+            {
+                "id": "resident_host_runtime_loop_readiness_audit",
+                "status": _safe_str(runtime_loop_readiness.get("status")).strip() or "missing",
+                "audit_status": _safe_str(runtime_loop_readiness.get("audit_status")).strip(),
+                "evidence": [
+                    "/lens/host/runtime-loop/readiness",
+                    "/lens/host/runtime-loop",
+                    "/lens/host/runtime-loop/execute",
+                    "/lens/host/runtime-loop/denials",
+                    "/lens/status",
+                ],
+                "ready": bool(runtime_loop_readiness.get("ready")),
+                "loop_ready": bool(runtime_loop_readiness.get("loop_ready")),
+                "execution_ready": bool(runtime_loop_readiness.get("execution_ready")),
+                "resident_runtime_loop": bool(runtime_loop_readiness.get("resident_runtime_loop")),
+                "resident_runtime_ready": bool(runtime_loop_readiness.get("resident_runtime_ready")),
+                "resident_claim_allowed": bool(runtime_loop_readiness.get("resident_claim_allowed")),
+                "runtime_plan_available": bool(runtime_loop_readiness.get("runtime_plan_available")),
+                "loop_contract_readback_ready": bool(runtime_loop_readiness.get("loop_contract_readback_ready")),
+                "execution_denial_boundary_observed": bool(
+                    runtime_loop_readiness.get("execution_denial_boundary_observed")
+                ),
+                "denial_receipt_readback_ready": bool(runtime_loop_readiness.get("denial_receipt_readback_ready")),
+                "requirements_total": _safe_int(runtime_loop_readiness.get("requirements_total")),
+                "requirements_ready_total": _safe_int(runtime_loop_readiness.get("requirements_ready_total")),
+                "requirements_blocked_total": _safe_int(runtime_loop_readiness.get("requirements_blocked_total")),
+                "blocked_requirements": _as_list(runtime_loop_readiness.get("blocked_requirements")),
+                "blockers": _as_list(runtime_loop_readiness.get("blockers")),
+                "receipt_count": _safe_int(runtime_loop_readiness.get("receipt_count")),
+                "latest_receipt_id": _safe_str(runtime_loop_readiness.get("latest_receipt_id")).strip(),
                 "execution_authority": False,
                 "resident_runtime_execution_authority": False,
                 "approval_decision_authority": False,
@@ -2725,6 +2783,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     )
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
     runtime_loop_denial_receipts = _as_dict(resident_host.get("runtime_loop_denial_receipts"))
+    runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
     supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
@@ -2758,6 +2817,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
         "resident_runtime_denial_receipts": resident_runtime_denial_receipts,
         "runtime_loop_denial_receipts": runtime_loop_denial_receipts,
+        "runtime_loop_readiness": runtime_loop_readiness,
         "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
         "supervision_authority_grant_receipts": supervision_authority_grant_receipts,
         "supervision_authority_readiness": supervision_authority_readiness,
@@ -2782,6 +2842,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "reactor_operator_visibility_route": "/reactor/operator_visibility/summary",
             "lens_host_activation_denials_route": "/lens/host/activation/denials",
             "lens_host_runtime_loop_denials_route": "/lens/host/runtime-loop/denials",
+            "lens_host_runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
             "lens_host_supervision_authority_request_route": "/lens/host/supervision/authority/request",
             "lens_host_supervision_authority_requests_route": "/lens/host/supervision/authority/requests",
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",

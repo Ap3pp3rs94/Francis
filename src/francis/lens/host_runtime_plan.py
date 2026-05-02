@@ -65,6 +65,29 @@ def _plan_step(
     }
 
 
+def _readiness_requirement(
+    requirement_id: str,
+    *,
+    label: str,
+    route: str,
+    ready: bool,
+    status: Any = "",
+    blockers: Any = None,
+    authority_required: str = "",
+    authority_granted: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": requirement_id,
+        "label": label,
+        "route": route,
+        "status": str(status or "").strip() or ("ready" if ready else "blocked"),
+        "ready": ready,
+        "blockers": _as_str_list(blockers),
+        "authority_required": authority_required,
+        "authority_granted": authority_granted,
+    }
+
+
 def lens_host_runtime_implementation_plan(
     *,
     manifest: dict[str, Any] | None = None,
@@ -289,6 +312,205 @@ def lens_host_runtime_implementation_plan(
         "message": (
             "Lens can describe the resident-host runtime implementation path, but this contract does not "
             "launch, supervise, install, register, claim residency, approve, or write memory."
+        ),
+    }
+
+
+def lens_host_runtime_loop_readiness_audit(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    limit: int = 5,
+    manifest: dict[str, Any] | None = None,
+    runtime_plan: dict[str, Any] | None = None,
+    runtime_loop: dict[str, Any] | None = None,
+    execution_denial: dict[str, Any] | None = None,
+    denial_receipts: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    approval_id_value = str(approval_id or "").strip()
+    actor_value = str(actor or "").strip()
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    implementation_plan = (
+        runtime_plan
+        if isinstance(runtime_plan, dict)
+        else lens_host_runtime_implementation_plan(manifest=launch_manifest)
+    )
+    loop_contract = (
+        runtime_loop
+        if isinstance(runtime_loop, dict)
+        else lens_host_runtime_loop_contract(manifest=launch_manifest, runtime_plan=implementation_plan)
+    )
+    loop_execution_denial = (
+        execution_denial
+        if isinstance(execution_denial, dict)
+        else deny_lens_host_runtime_loop_execution(
+            approval_id=approval_id_value,
+            actor=actor_value,
+            reason="audit Lens host runtime loop execution readiness",
+            runtime_loop=loop_contract,
+        )
+    )
+    loop_denial_receipts = (
+        denial_receipts
+        if isinstance(denial_receipts, dict)
+        else lens_host_runtime_loop_denial_receipts(
+            limit=safe_limit,
+            approval_id=approval_id_value,
+            status=loop_execution_denial.get("status"),
+        )
+    )
+
+    loop_readback_ready = bool(loop_contract.get("loop_readback_ready"))
+    execution_denial_boundary_observed = (
+        not bool(loop_execution_denial.get("applied"))
+        and not bool(loop_execution_denial.get("executed"))
+        and not bool(loop_execution_denial.get("loop_started"))
+        and str(loop_execution_denial.get("status") or "").startswith("denied")
+    )
+    denial_receipt_readback_ready = str(loop_denial_receipts.get("status") or "").strip() in {
+        "empty",
+        "readback_ready",
+    }
+
+    requirements = [
+        _readiness_requirement(
+            "runtime_implementation_plan",
+            label="Runtime implementation plan",
+            route="/lens/host/runtime-plan",
+            ready=bool(implementation_plan.get("plan_available")),
+            status=implementation_plan.get("status"),
+            blockers=[] if bool(implementation_plan.get("plan_available")) else implementation_plan.get("blockers"),
+        ),
+        _readiness_requirement(
+            "runtime_loop_contract",
+            label="Runtime loop contract",
+            route="/lens/host/runtime-loop",
+            ready=loop_readback_ready,
+            status=loop_contract.get("status"),
+            blockers=[] if loop_readback_ready else loop_contract.get("blockers"),
+        ),
+        _readiness_requirement(
+            "runtime_loop_execution_denial_boundary",
+            label="Runtime loop execution denial boundary",
+            route="/lens/host/runtime-loop/execute",
+            ready=execution_denial_boundary_observed,
+            status=loop_execution_denial.get("status"),
+            blockers=loop_execution_denial.get("blockers"),
+            authority_required="resident_runtime_execution_authority",
+            authority_granted=False,
+        ),
+        _readiness_requirement(
+            "runtime_loop_denial_receipts",
+            label="Runtime loop denial receipt readback",
+            route="/lens/host/runtime-loop/denials",
+            ready=denial_receipt_readback_ready,
+            status=loop_denial_receipts.get("status"),
+        ),
+    ]
+    for item in _as_dict(loop_contract.get("loop_contract")).get("requirements") or []:
+        requirement = _as_dict(item)
+        if not requirement:
+            continue
+        requirements.append(
+            _readiness_requirement(
+                str(requirement.get("id") or ""),
+                label=str(requirement.get("label") or ""),
+                route=str(requirement.get("route") or ""),
+                ready=bool(requirement.get("ready")),
+                status=requirement.get("status"),
+                blockers=requirement.get("blockers"),
+                authority_required=str(requirement.get("authority_required") or ""),
+                authority_granted=bool(requirement.get("authority_granted")),
+            )
+        )
+
+    blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
+    ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    blockers = _ordered_unique(
+        [
+            *_as_str_list(implementation_plan.get("blockers")),
+            *_as_str_list(loop_contract.get("blockers")),
+            *_as_str_list(loop_execution_denial.get("blockers")),
+        ]
+    )
+    ready = not blocked_requirements and not blockers
+
+    return {
+        "ok": True,
+        "kind": "lens.host.runtime_loop.readiness_audit",
+        "status": "ready" if ready else "blocked",
+        "audit_status": "complete",
+        "route": "/lens/host/runtime-loop/readiness",
+        "runtime_plan_route": "/lens/host/runtime-plan",
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "execute_route": "/lens/host/runtime-loop/execute",
+        "denials_route": "/lens/host/runtime-loop/denials",
+        "host_route": "/lens/host",
+        "approval_id": approval_id_value,
+        "actor": actor_value,
+        "limit": safe_limit,
+        "ready": ready,
+        "loop_ready": bool(loop_contract.get("loop_ready")) and ready,
+        "execution_ready": bool(loop_contract.get("execution_ready")) and ready,
+        "resident_runtime_loop": bool(loop_contract.get("resident_runtime_loop")) and ready,
+        "resident_runtime_ready": bool(loop_contract.get("resident_runtime_ready")) and ready,
+        "resident_claim_allowed": bool(loop_contract.get("resident_claim_allowed")) and ready,
+        "runtime_plan_available": bool(implementation_plan.get("plan_available")),
+        "loop_contract_readback_ready": loop_readback_ready,
+        "execution_denial_boundary_observed": execution_denial_boundary_observed,
+        "denial_receipt_readback_ready": denial_receipt_readback_ready,
+        "receipt_count": int(loop_denial_receipts.get("total") or 0),
+        "latest_receipt_id": str(_as_dict(loop_denial_receipts.get("latest")).get("receipt_id") or "").strip(),
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(ready_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "requirements": requirements,
+        "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "blockers": blockers,
+        "source_readbacks": {
+            "runtime_plan_status": str(implementation_plan.get("status") or "").strip(),
+            "runtime_loop_status": str(loop_contract.get("status") or "").strip(),
+            "execution_denial_status": str(loop_execution_denial.get("status") or "").strip(),
+            "denial_receipts_status": str(loop_denial_receipts.get("status") or "").strip(),
+        },
+        "evidence": [
+            "/lens/host/runtime-loop/readiness",
+            "/lens/host/runtime-plan",
+            "/lens/host/runtime-loop",
+            "/lens/host/runtime-loop/execute",
+            "/lens/host/runtime-loop/denials",
+        ],
+        "governance": {
+            "gate": "lens_host_runtime_loop_readiness_audit",
+            "read_only_contract": True,
+            "audit_only": True,
+            "execution_boundary": True,
+            "denial_boundary": True,
+            "execution_authority": False,
+            "resident_runtime_execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "diagnostic_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_operator_surface_readback",
+        "message": (
+            "Lens can audit resident host runtime loop readiness, but the loop remains blocked by the "
+            "missing resident runtime loop, process supervision, service/surface prerequisites, receipt "
+            "emission, and resident-claim authority."
         ),
     }
 
