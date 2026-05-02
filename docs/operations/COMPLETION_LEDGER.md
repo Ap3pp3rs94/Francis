@@ -16546,6 +16546,37 @@ readiness operator readback:
 - `npm run build`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens closure readback handoff alignment
+
+Direct `/lens/status` Stage 6 closure readback now reports the same current
+acceptance-blocker handoff as the Stage 6 completion audit and ledger:
+`summon_anywhere_blockers`. The closure readback already listed
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence` as the
+remaining blocked criteria; its `next_smallest_truthful_gap` now follows the
+existing summon enablement gate handoff instead of prioritizing older
+resident-presence boundary names.
+
+This is backend readback, route/API contract, test, and ledger work only. It
+does not add or change execution, approval, memory-write, receipt-write,
+process, service, tray, hotkey, overlay, summon, resident-claim, or UI control
+authority. It does not close Stage 6 or start Stage 7. Stage 6 remains active
+and blocked on the existing `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens closure readback
+handoff alignment:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `.venv\Scripts\python.exe -m mypy src\francis\lens\status.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

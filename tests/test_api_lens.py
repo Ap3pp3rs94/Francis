@@ -358,11 +358,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "helpful_not_noisy",
         "system_resident_presence",
     ]
-    assert closure["next_smallest_truthful_gap"] in {
-        "resident_host_supervision_boundary",
-        "supervised_resident_runtime_boundary",
-        "resident_presence_authority_boundary",
-    }
+    assert closure["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     closure_criteria = {item["id"]: item for item in closure["criteria"]}
     assert closure_criteria["summon_anywhere"]["ready"] is False
     assert "summon_anywhere_missing" in closure_criteria["summon_anywhere"]["blockers"]

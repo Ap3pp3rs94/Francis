@@ -1144,17 +1144,18 @@ def _stage6_closure_readback(
     blocked_criteria = [item for item in criteria if not bool(item.get("ready"))]
     next_gap = "stage6_lens_completion_audit"
     blocked_ids = {_safe_str(item.get("id")).strip() for item in blocked_criteria}
-    if "system_resident_presence" in blocked_ids:
+    if "summon_anywhere" in blocked_ids:
+        summon_next_gap = _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        next_gap = summon_next_gap or "summon_anywhere_blockers"
+    elif "helpful_not_noisy" in blocked_ids:
+        next_gap = "resident_surface_operator_experience_proof"
+    elif "system_resident_presence" in blocked_ids:
         if "resident_surface_runtime_not_supervised" in system_blockers:
             next_gap = "supervised_resident_runtime_boundary"
         elif "resident_host_process_missing" in system_blockers:
             next_gap = "resident_host_supervision_boundary"
         else:
             next_gap = "resident_presence_authority_boundary"
-    elif "summon_anywhere" in blocked_ids:
-        next_gap = "summon_anywhere_binding_boundary"
-    elif "helpful_not_noisy" in blocked_ids:
-        next_gap = "resident_surface_operator_experience_proof"
     return {
         "kind": "lens.stage6.closure_readback",
         "status": "ready_to_close" if not blocked_criteria else "blocked",
