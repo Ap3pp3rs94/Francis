@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -282,9 +283,11 @@ def _write_lens_host_supervisor_state(
     *,
     observed_pid: int,
     status: str = "supervised_session_completed",
+    updated_at: str | None = None,
 ) -> None:
     runtime_root = data_root / "runtime" / "lens-host-supervisor"
     runtime_root.mkdir(parents=True, exist_ok=True)
+    observed_at = updated_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     (runtime_root / "status.json").write_text(
         json.dumps(
             {
@@ -295,7 +298,7 @@ def _write_lens_host_supervisor_state(
                 "observed_state": "foreground_stopped",
                 "restarted_process": False,
                 "managed_service": False,
-                "updated_at": "2026-04-28T21:31:00Z",
+                "updated_at": observed_at,
                 "governance": {
                     "memory_write": False,
                     "service_control_authority": False,
@@ -903,9 +906,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "observed_pid": 0,
         "observed_state": "",
         "updated_at": "",
+        "state_age_seconds": None,
+        "freshness_window_seconds": 900,
+        "freshness_status": "missing",
+        "state_stale": False,
+        "fresh_readback": False,
         "bounded_supervisor_observed": False,
         "observation_completed": False,
         "supervised_session_completed": False,
+        "fresh_bounded_supervisor_observed": False,
+        "fresh_supervised_session_completed": False,
         "restarted_process": False,
         "managed_service": False,
         "resident_supervised_runtime": False,
@@ -931,8 +941,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     }
     assert resident_host["supervisor_readback"] == expected_supervisor_readback
     assert resident_host["supervisor_readback_ready"] is True
+    assert resident_host["supervisor_freshness_status"] == "missing"
+    assert resident_host["supervisor_state_age_seconds"] is None
+    assert resident_host["supervisor_state_stale"] is False
+    assert resident_host["fresh_supervisor_readback"] is False
     assert resident_host["bounded_supervisor_observed"] is False
     assert resident_host["supervised_session_completed"] is False
+    assert resident_host["fresh_bounded_supervisor_observed"] is False
+    assert resident_host["fresh_supervised_session_completed"] is False
     assert resident_host["resident_supervised_runtime"] is False
     expected_supervision_readiness = {
         "status": "blocked",
@@ -1060,8 +1076,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_gate["resident_host_process_state"] == "missing"
     assert supervision_gate["resident_host_process_blocker"] == "resident_host_process_missing"
     assert supervision_gate["supervisor_readback_ready"] is True
+    assert supervision_gate["supervisor_freshness_status"] == "missing"
+    assert supervision_gate["supervisor_state_age_seconds"] is None
+    assert supervision_gate["supervisor_state_stale"] is False
+    assert supervision_gate["fresh_supervisor_readback"] is False
     assert supervision_gate["bounded_supervisor_observed"] is False
     assert supervision_gate["supervised_session_completed"] is False
+    assert supervision_gate["fresh_bounded_supervisor_observed"] is False
+    assert supervision_gate["fresh_supervised_session_completed"] is False
     assert supervision_gate["resident_supervised_runtime"] is False
     assert supervision_gate["resident_host_supervised"] is False
     assert supervision_gate["service_installed"] is False
@@ -4304,7 +4326,7 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
     _write_lens_preflight_scripts(repo_root)
     _write_lens_runtime_configs(repo_root)
     _write_lens_host_service_config(repo_root)
-    _write_lens_host_supervisor_state(data_root, observed_pid=9876)
+    _write_lens_host_supervisor_state(data_root, observed_pid=9876, updated_at="2026-05-01T00:00:00Z")
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
@@ -4313,6 +4335,10 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
 
     client = TestClient(create_app())
     response = client.get("/lens/status?limit=1")
@@ -4329,8 +4355,16 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
     assert supervisor_readback["mode"] == "supervise_once"
     assert supervisor_readback["observed_pid"] == 9876
     assert supervisor_readback["observed_state"] == "foreground_stopped"
+    assert supervisor_readback["state_age_seconds"] is not None
+    assert 0 <= supervisor_readback["state_age_seconds"] <= supervisor_readback["freshness_window_seconds"]
+    assert supervisor_readback["freshness_window_seconds"] == 900
+    assert supervisor_readback["freshness_status"] == "fresh"
+    assert supervisor_readback["state_stale"] is False
+    assert supervisor_readback["fresh_readback"] is True
     assert supervisor_readback["bounded_supervisor_observed"] is True
     assert supervisor_readback["supervised_session_completed"] is True
+    assert supervisor_readback["fresh_bounded_supervisor_observed"] is True
+    assert supervisor_readback["fresh_supervised_session_completed"] is True
     assert supervisor_readback["resident_supervised_runtime"] is False
     assert supervisor_readback["resident_claim_allowed"] is False
     assert supervisor_readback["process_supervision_authority"] is False
@@ -4351,21 +4385,36 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
         "mutation_authority_granted": False,
     }
     assert resident_host["supervisor_readback_ready"] is True
+    assert resident_host["supervisor_freshness_status"] == "fresh"
+    assert resident_host["supervisor_state_age_seconds"] == supervisor_readback["state_age_seconds"]
+    assert resident_host["supervisor_state_stale"] is False
+    assert resident_host["fresh_supervisor_readback"] is True
     assert resident_host["bounded_supervisor_observed"] is True
     assert resident_host["supervised_session_completed"] is True
+    assert resident_host["fresh_bounded_supervisor_observed"] is True
+    assert resident_host["fresh_supervised_session_completed"] is True
     assert resident_host["resident_supervised_runtime"] is False
     components = {item["id"]: item for item in resident_host["components"]}
     assert components["host_supervisor_readback"] == {
         "id": "host_supervisor_readback",
         "label": "Host supervisor readback",
         "status": "supervised_session_completed",
+        "freshness_status": "fresh",
+        "state_age_seconds": supervisor_readback["state_age_seconds"],
+        "state_stale": False,
         "required_for": ["startup_supervision", "resident_presence"],
     }
 
     supervision_gate = resident_host["supervision_gate"]
     assert supervision_gate["supervisor_readback_ready"] is True
+    assert supervision_gate["supervisor_freshness_status"] == "fresh"
+    assert supervision_gate["supervisor_state_age_seconds"] == supervisor_readback["state_age_seconds"]
+    assert supervision_gate["supervisor_state_stale"] is False
+    assert supervision_gate["fresh_supervisor_readback"] is True
     assert supervision_gate["bounded_supervisor_observed"] is True
     assert supervision_gate["supervised_session_completed"] is True
+    assert supervision_gate["fresh_bounded_supervisor_observed"] is True
+    assert supervision_gate["fresh_supervised_session_completed"] is True
     assert supervision_gate["resident_supervised_runtime"] is False
     assert supervision_gate["resident_host_supervised"] is False
     assert supervision_gate["resident_claim_allowed"] is False
@@ -4376,8 +4425,14 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
 
     resident_surface_runtime = body["resident_surface"]["resident_surface_runtime"]
     assert resident_surface_runtime["supervisor_readback_status"] == "supervised_session_completed"
+    assert resident_surface_runtime["supervisor_freshness_status"] == "fresh"
+    assert resident_surface_runtime["supervisor_state_age_seconds"] == supervisor_readback["state_age_seconds"]
+    assert resident_surface_runtime["supervisor_state_stale"] is False
+    assert resident_surface_runtime["fresh_supervisor_readback"] is True
     assert resident_surface_runtime["bounded_supervisor_observed"] is True
     assert resident_surface_runtime["supervised_session_completed"] is True
+    assert resident_surface_runtime["fresh_bounded_supervisor_observed"] is True
+    assert resident_surface_runtime["fresh_supervised_session_completed"] is True
     assert resident_surface_runtime["resident_supervised_runtime"] is False
     assert resident_surface_runtime["runtime_ready"] is False
     assert resident_surface_runtime["resident_claim_allowed"] is False
@@ -4392,6 +4447,110 @@ def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatc
         "id": "host_supervisor_readback",
         "path": "data/runtime/lens-host-supervisor/status.json",
         "status": "supervised_session_completed",
+        "freshness_status": "fresh",
+        "state_age_seconds": supervisor_readback["state_age_seconds"],
+        "state_stale": False,
+    }
+    assert manifest_body["governance"]["execution_authority"] is False
+    assert manifest_body["governance"]["service_control_authority"] is False
+    assert manifest_body["governance"]["mutation_authority_granted"] is False
+
+
+def test_lens_api_marks_stale_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=2468,
+        updated_at="2026-04-28T21:31:00Z",
+    )
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    supervisor_readback = resident_host["supervisor_readback"]
+    assert supervisor_readback["status"] == "supervised_session_completed"
+    assert supervisor_readback["freshness_window_seconds"] == 900
+    assert supervisor_readback["state_age_seconds"] > supervisor_readback["freshness_window_seconds"]
+    assert supervisor_readback["freshness_status"] == "stale"
+    assert supervisor_readback["state_stale"] is True
+    assert supervisor_readback["fresh_readback"] is False
+    assert supervisor_readback["bounded_supervisor_observed"] is True
+    assert supervisor_readback["supervised_session_completed"] is True
+    assert supervisor_readback["fresh_bounded_supervisor_observed"] is False
+    assert supervisor_readback["fresh_supervised_session_completed"] is False
+    assert supervisor_readback["resident_supervised_runtime"] is False
+    assert supervisor_readback["governance"]["execution_authority"] is False
+    assert supervisor_readback["governance"]["resident_claim_authority"] is False
+
+    assert resident_host["supervisor_freshness_status"] == "stale"
+    assert resident_host["supervisor_state_age_seconds"] == supervisor_readback["state_age_seconds"]
+    assert resident_host["supervisor_state_stale"] is True
+    assert resident_host["fresh_supervisor_readback"] is False
+    assert resident_host["fresh_bounded_supervisor_observed"] is False
+    assert resident_host["fresh_supervised_session_completed"] is False
+    components = {item["id"]: item for item in resident_host["components"]}
+    assert components["host_supervisor_readback"] == {
+        "id": "host_supervisor_readback",
+        "label": "Host supervisor readback",
+        "status": "supervised_session_completed",
+        "freshness_status": "stale",
+        "state_age_seconds": supervisor_readback["state_age_seconds"],
+        "state_stale": True,
+        "required_for": ["startup_supervision", "resident_presence"],
+    }
+
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["supervisor_freshness_status"] == "stale"
+    assert supervision_gate["supervisor_state_stale"] is True
+    assert supervision_gate["fresh_supervisor_readback"] is False
+    assert supervision_gate["fresh_bounded_supervisor_observed"] is False
+    assert supervision_gate["fresh_supervised_session_completed"] is False
+    assert "host_supervisor_readback_stale" in supervision_gate["blockers"]
+    assert supervision_gate["governance"]["execution_authority"] is False
+    assert supervision_gate["governance"]["process_supervision_authority"] is False
+    assert supervision_gate["governance"]["resident_claim_authority"] is False
+
+    resident_surface_runtime = body["resident_surface"]["resident_surface_runtime"]
+    assert resident_surface_runtime["supervisor_freshness_status"] == "stale"
+    assert resident_surface_runtime["supervisor_state_stale"] is True
+    assert resident_surface_runtime["fresh_supervisor_readback"] is False
+    assert resident_surface_runtime["fresh_bounded_supervisor_observed"] is False
+    assert resident_surface_runtime["fresh_supervised_session_completed"] is False
+    assert resident_surface_runtime["resident_claim_allowed"] is False
+
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    manifest_body = manifest.json()
+    required_bindings = {item["id"]: item for item in manifest_body["required_bindings"]}
+    assert required_bindings["host_supervisor_readback"] == {
+        "id": "host_supervisor_readback",
+        "path": "data/runtime/lens-host-supervisor/status.json",
+        "status": "supervised_session_completed",
+        "freshness_status": "stale",
+        "state_age_seconds": supervisor_readback["state_age_seconds"],
+        "state_stale": True,
     }
     assert manifest_body["governance"]["execution_authority"] is False
     assert manifest_body["governance"]["service_control_authority"] is False

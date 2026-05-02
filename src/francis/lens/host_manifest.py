@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir, repo_root
+
+
+SUPERVISOR_READBACK_FRESH_SECONDS = 15 * 60
 
 
 def _runtime_file_exists(relative_path: str) -> bool:
@@ -184,6 +188,28 @@ def _record_ts(value: Any) -> float:
         return 0.0
 
 
+def _iso_epoch_seconds(value: Any) -> float:
+    raw = str(value or "").strip()
+    if not raw:
+        return 0.0
+    if raw.endswith("Z"):
+        raw = f"{raw[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
+
+def _age_seconds(value: Any) -> int | None:
+    epoch = _iso_epoch_seconds(value)
+    if epoch <= 0:
+        return None
+    return max(0, int(time.time() - epoch))
+
+
 def _lens_host_supervisor_readback() -> dict[str, Any]:
     state_file = data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
     state_exists = _path_exists(state_file)
@@ -201,6 +227,18 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
     supervised_session_completed = state_status == "supervised_session_completed"
     observation_completed = state_status == "observation_completed"
     status = state_status if state_exists and state_status else "missing"
+    updated_at = str(state_payload.get("updated_at") or "")
+    state_age_seconds = _age_seconds(updated_at)
+    if not state_exists:
+        freshness_status = "missing"
+    elif state_age_seconds is None:
+        freshness_status = "unknown"
+    elif state_age_seconds <= SUPERVISOR_READBACK_FRESH_SECONDS:
+        freshness_status = "fresh"
+    else:
+        freshness_status = "stale"
+    state_stale = freshness_status == "stale"
+    fresh_readback = freshness_status == "fresh"
     if supervised_session_completed:
         blocked_reason = "resident_supervision_not_persistent"
     elif bounded_supervisor_observed:
@@ -218,10 +256,17 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "mode": mode,
         "observed_pid": observed_pid,
         "observed_state": observed_state,
-        "updated_at": str(state_payload.get("updated_at") or ""),
+        "updated_at": updated_at,
+        "state_age_seconds": state_age_seconds,
+        "freshness_window_seconds": SUPERVISOR_READBACK_FRESH_SECONDS,
+        "freshness_status": freshness_status,
+        "state_stale": state_stale,
+        "fresh_readback": fresh_readback,
         "bounded_supervisor_observed": bounded_supervisor_observed,
         "observation_completed": observation_completed,
         "supervised_session_completed": supervised_session_completed,
+        "fresh_bounded_supervisor_observed": bounded_supervisor_observed and fresh_readback,
+        "fresh_supervised_session_completed": supervised_session_completed and fresh_readback,
         "restarted_process": bool(state_payload.get("restarted_process")),
         "managed_service": bool(state_payload.get("managed_service")),
         "resident_supervised_runtime": False,
@@ -546,6 +591,11 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
             *manifest_blockers,
         }
     )
+    supervisor_freshness_status = str(supervisor_readback.get("freshness_status") or "").strip()
+    if supervisor_freshness_status == "stale":
+        blocked_by = sorted({*blocked_by, "host_supervisor_readback_stale"})
+    elif supervisor_freshness_status == "unknown":
+        blocked_by = sorted({*blocked_by, "host_supervisor_readback_freshness_unknown"})
     supervision_ready = bool(supervision_readiness.get("ready"))
     process_alive = bool(process_readback.get("process_alive"))
     host_process_blocker = "resident_host_process_not_supervised" if process_alive else "resident_host_process_missing"
@@ -575,8 +625,14 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
         "resident_host_process_blocker": host_process_blocker,
         "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
+        "supervisor_freshness_status": supervisor_freshness_status,
+        "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
+        "supervisor_state_stale": bool(supervisor_readback.get("state_stale")),
+        "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
+        "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
         "resident_supervised_runtime": False,
         "resident_host_supervised": False,
         "service_installed": bool(service_readback.get("installed")),
@@ -1243,6 +1299,9 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_supervisor_readback",
                 "path": supervisor_readback["runtime_state_path"],
                 "status": supervisor_readback["status"],
+                "freshness_status": supervisor_readback["freshness_status"],
+                "state_age_seconds": supervisor_readback["state_age_seconds"],
+                "state_stale": supervisor_readback["state_stale"],
             },
             {
                 "id": "host_readiness",

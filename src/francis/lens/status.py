@@ -398,6 +398,9 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "id": "host_supervisor_readback",
             "label": "Host supervisor readback",
             "status": _safe_str(supervisor_readback.get("status")).strip() or "missing",
+            "freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
+            "state_age_seconds": supervisor_readback.get("state_age_seconds"),
+            "state_stale": bool(supervisor_readback.get("state_stale")),
             "required_for": ["startup_supervision", "resident_presence"],
         },
         {
@@ -572,8 +575,14 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "process_readback_ready": bool(process_readback.get("readback_ready")),
         "supervisor_readback": supervisor_readback,
         "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
+        "supervisor_freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
+        "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
+        "supervisor_state_stale": bool(supervisor_readback.get("state_stale")),
+        "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
+        "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
         "resident_supervised_runtime": False,
         "supervision_readiness": supervision_readiness,
         "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
@@ -2366,6 +2375,7 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
     process_alive = bool(process_readback.get("process_alive"))
     state_status = _safe_str(process_readback.get("state_status")).strip()
     supervisor_status = _safe_str(supervisor_readback.get("status")).strip()
+    supervisor_freshness_status = _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing"
     foreground_observed = process_alive and state_status == "foreground_running"
     blockers = (
         ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
@@ -2393,8 +2403,14 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
         "foreground_session_supported": bool(foreground_session.get("supported")),
         "foreground_session_only": foreground_observed,
         "supervisor_readback_status": supervisor_status,
+        "supervisor_freshness_status": supervisor_freshness_status,
+        "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
+        "supervisor_state_stale": bool(supervisor_readback.get("state_stale")),
+        "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
+        "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
         "resident_supervised_runtime": False,
         "runtime_ready": False,
         "resident_surface_ready": False,

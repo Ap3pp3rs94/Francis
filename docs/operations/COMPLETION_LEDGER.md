@@ -15667,6 +15667,38 @@ state API readback:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-01 - Stage 6/Lens host supervisor freshness readback
+
+Stage 6/Lens host supervisor state readback now carries bounded freshness truth.
+`supervisor_readback` includes `state_age_seconds`,
+`freshness_window_seconds`, `freshness_status`, `state_stale`,
+`fresh_readback`, `fresh_bounded_supervisor_observed`, and
+`fresh_supervised_session_completed`. `/lens/host/manifest`, `/lens/host`, and
+`/lens/status` project the same freshness fields into resident-host,
+supervision-gate, resident-surface runtime, component, and required-binding
+readbacks.
+
+This prevents an old bounded diagnostic supervisor state file from being treated
+as fresh resident-presence evidence. Stale supervisor files remain readable as
+historical readback, but the supervision gate adds
+`host_supervisor_readback_stale` and keeps fresh supervisor proof false. This is
+readback and guard metadata only; it does not launch or supervise a resident
+process, install or control a service, bind hotkeys, register tray presence,
+open an overlay, write memory, decide approvals, grant process authority, or
+close Stage 6.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens host supervisor
+freshness readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_host_supervisor_readback_without_authority tests\test_api_lens.py::test_lens_api_marks_stale_host_supervisor_readback_without_authority -q`
+  Result: `failed before deterministic test clock; passed after fix`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -15689,9 +15721,10 @@ These remain true and should block any "finished" claim:
   checkpoint readback consumption, plus direct `/lens/host/manifest`,
   `/lens/host`, and `/lens/status` API readback of
   `data/runtime/lens-host-supervisor/status.json` that reports bounded
-  supervisor observation without treating it as resident or persistent
-  supervision, without persistent resident supervision, restart, service-control,
-  API launch, or resident-claim authority, a direct
+  supervisor observation with freshness/age guard metadata and stale-readback
+  blocking without treating it as resident or persistent supervision, without
+  persistent resident supervision, restart, service-control, API launch, or
+  resident-claim authority, a direct
   `/lens/resident-surface` backend content readback contract, resident surface
   readiness proof diagnostic that consumes direct route readback, disabled
   tracked service config baseline,
