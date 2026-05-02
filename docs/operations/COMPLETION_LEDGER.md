@@ -16636,6 +16636,45 @@ blocker handoff proof:
 - `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py tests\test_lens_host_preflight_script.py -q`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident-host runtime boundary proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-resident-host-runtime-boundary-proof.ps1` diagnostic that consumes
+the previous `resident_host_runtime_blocker_boundary` handoff without reopening
+the hot Lens API surface. The proof composes the existing summon resident-host
+handoff proof with `scripts/lens-host-supervision-proof.ps1 -Mode Status`,
+confirms the resident-host runtime handoff is consumed, observes one bounded
+foreground host run as `foreground_observed_not_supervised`, keeps the resident
+runtime blocked by `lens_host_runtime_not_implemented`, and names the next
+concrete blocker as `resident_host_process_not_supervised`.
+
+This is diagnostic/readback and test work only. It can invoke the existing
+bounded diagnostic host run used by the host supervision proof and writes only
+temporary runtime state under the proof data root. It does not grant product/API
+launch authority, execution authority, approval-decision authority, memory-write
+authority, process-supervision or process-restart authority, service-install or
+service-control authority, tray or hotkey authority, overlay-control authority,
+summon authority, capture/sensing authority, resident-claim authority, UI
+control, Stage 6 closure, or Stage 7 transition. Stage 6 remains active and
+blocked on supervised resident-host process readiness plus the existing
+surface/authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident-host
+runtime boundary proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3`
+  Result: `failed before fix, passed after`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_host_supervision_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
