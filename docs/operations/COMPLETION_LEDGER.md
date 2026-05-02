@@ -16675,6 +16675,43 @@ runtime boundary proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident-host process supervision blocker proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-resident-host-process-supervision-blocker-proof.ps1` diagnostic
+that consumes the current `resident_host_process_not_supervised` handoff without
+reopening the hot Lens API or UI surfaces. The proof composes the existing
+resident-host runtime boundary proof with
+`scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status`,
+confirms the runtime boundary hands off to the unsupervised process blocker,
+confirms the process-supervision authority boundary preserves that blocker, and
+returns the handoff to `stage6_lens_completion_audit`.
+
+This is diagnostic/readback and test work only. It can invoke the existing
+bounded diagnostic host/process observation paths and temporary runtime state
+writes used by the underlying proofs. It does not grant product/API launch
+authority, execution authority, approval-decision authority, memory-write
+authority, process-supervision or process-restart authority, service-install or
+service-control authority, tray or hotkey authority, overlay-control authority,
+summon authority, capture/sensing authority, receipt-write authority,
+resident-claim authority, UI control, Stage 6 closure, or Stage 7 transition.
+Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy, and
+system-resident presence acceptance criteria.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident-host
+process supervision blocker proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,resident_host_process_handoff_observed,process_supervision_boundary_observed,handoff_consumed,authority_denied | ConvertTo-Json -Depth 4`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed` with a `.ruff_cache` access warning only
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
