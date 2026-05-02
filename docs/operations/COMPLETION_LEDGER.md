@@ -16212,6 +16212,44 @@ lifecycle blocker-group handoff:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident-host lifecycle blocker proof
+
+Stage 6/Lens resident-host lifecycle readback now has a focused proof for the
+current `resident_host_lifecycle_blockers` handoff. The host preflight script now
+includes the same supervision blocker family already exposed by
+`/lens/host/manifest`, and
+`scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status` consumes the
+host preflight output into ordered lifecycle blocker groups. The proof names
+`resident_host_runtime_blocker_boundary` as the next smallest truthful gap because
+the runtime blocker group remains first and blocked.
+
+This is readback, diagnostic proof, script, test, and ledger work only. It does
+not grant execution authority, approval-decision authority, memory-write
+authority, local process launch authority, process-supervision or process-restart
+authority, service-install or service-control authority, hotkey-registration
+authority, summon authority, overlay-control authority, receipt-write authority,
+resident-claim authority, UI control, Stage 6 closure, or Stage 7 transition.
+Stage 6 remains active and blocked on resident-host runtime implementation and
+surface/authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident-host
+lifecycle blocker proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_lifecycle_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_preflight_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_preflight_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_preflight_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

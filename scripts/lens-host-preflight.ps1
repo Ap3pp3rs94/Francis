@@ -159,6 +159,10 @@ $Installable = Get-BoolProperty -Payload $ServiceConfig -Name 'installable' -Def
 $InstallAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'install_authority' -Default $false
 $ServiceInstallAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'service_install_authority' -Default $false
 $ServiceControlAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'service_control_authority' -Default $false
+$PersistentSupervisionEnabled = Get-BoolProperty -Payload $ServiceConfig -Name 'persistent_supervision_enabled' -Default $false
+$ProcessRestartAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'process_restart_authority' -Default $false
+$ReceiptWriteAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'receipt_write_authority' -Default $false
+$ResidentClaimAuthority = Get-BoolProperty -Payload $ServiceConfig -Name 'resident_claim_authority' -Default $false
 $AutoStart = Get-BoolProperty -Payload $ServiceConfig -Name 'auto_start' -Default $false
 $StartAfterInstall = Get-BoolProperty -Payload $ServiceConfig -Name 'start_after_install' -Default $false
 $ProcessSupervisionEnabled = Get-BoolProperty -Payload $ServiceConfig -Name 'process_supervision_enabled' -Default $false
@@ -247,6 +251,27 @@ foreach ($Candidate in @(
   }
 }
 
+$SupervisionBlockers = [System.Collections.ArrayList]::new()
+if (-not $ProcessSupervisionEnabled) { [void]$SupervisionBlockers.Add('process_supervision_enabled') }
+if (-not $PersistentSupervisionEnabled) { [void]$SupervisionBlockers.Add('persistent_supervision_enabled') }
+if (-not $ProcessRestartAuthority) { [void]$SupervisionBlockers.Add('process_restart_authority') }
+if (-not ($InstallAuthority -or $ServiceInstallAuthority)) { [void]$SupervisionBlockers.Add('service_install_authority') }
+if (-not $ServiceControlAuthority) { [void]$SupervisionBlockers.Add('service_control_authority') }
+if (-not $ReceiptWriteAuthority) { [void]$SupervisionBlockers.Add('receipt_write_authority') }
+if (-not $ResidentClaimAuthority) { [void]$SupervisionBlockers.Add('resident_claim_authority') }
+
+foreach ($Candidate in @(
+    'process_restart_authority',
+    'service_install_authority',
+    'service_control_authority',
+    'receipt_write_authority',
+    'resident_claim_authority'
+  )) {
+  if ($SupervisionBlockers -contains $Candidate -and -not ($AuthorityBlockers -contains $Candidate)) {
+    [void]$AuthorityBlockers.Add($Candidate)
+  }
+}
+
 $RuntimeBlockers = [System.Collections.ArrayList]::new()
 if ($BlockedReason) { [void]$RuntimeBlockers.Add($BlockedReason) }
 if (-not $ServiceConfigExists) { [void]$RuntimeBlockers.Add('lens_host_service_config_missing') }
@@ -256,6 +281,7 @@ $BlockerGroups = [ordered]@{
   runtime = [string[]]@($RuntimeBlockers)
   process_readback = [string[]]@($ProcessReadbackBlockers)
   service_plan = [string[]]@($PlanBlockers)
+  supervision = [string[]]@($SupervisionBlockers)
   surface_dependencies = [string[]]@(
     'tray_host_missing',
     'global_hotkey_binding_missing',

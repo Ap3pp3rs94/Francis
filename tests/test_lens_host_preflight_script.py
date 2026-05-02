@@ -53,7 +53,15 @@ def test_lens_host_preflight_reports_blockers_without_authority() -> None:
     assert "lens_host_runtime_not_implemented" in blocker_groups["runtime"]
     assert isinstance(blocker_groups["process_readback"], list)
     assert "service_control_authority_false" in blocker_groups["service_plan"]
+    assert "process_supervision_enabled" in blocker_groups["supervision"]
+    assert "persistent_supervision_enabled" in blocker_groups["supervision"]
+    assert "process_restart_authority" in blocker_groups["supervision"]
+    assert "receipt_write_authority" in blocker_groups["supervision"]
+    assert "resident_claim_authority" in blocker_groups["supervision"]
     assert "service_control_authority_false" in blocker_groups["authority"]
+    assert "process_restart_authority" in blocker_groups["authority"]
+    assert "receipt_write_authority" in blocker_groups["authority"]
+    assert "resident_claim_authority" in blocker_groups["authority"]
     assert "tray_host_missing" in blocker_groups["surface_dependencies"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["service_config"]["status"] == "present_disabled"
