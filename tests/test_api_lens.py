@@ -4413,6 +4413,7 @@ def test_lens_host_runtime_implementation_plan_stays_readback_only(
     assert plan_steps["bounded_foreground_session_boundary"]["status"] == "ready"
     assert plan_steps["runtime_state_readback_contract"]["status"] == "ready"
     assert plan_steps["resident_runtime_loop_contract"]["status"] == "blocked"
+    assert plan_steps["resident_runtime_loop_contract"]["route"] == "/lens/host/runtime-loop"
     assert plan_steps["resident_runtime_loop_contract"]["authority_granted"] is False
     assert plan_steps["process_supervision_contract"]["status"] == "blocked"
     assert plan_steps["process_supervision_contract"]["authority_granted"] is False
@@ -4455,7 +4456,145 @@ def test_lens_host_runtime_implementation_plan_stays_readback_only(
         "mutation_authority_granted",
     ]:
         assert governance[key] is False
-    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_contract"
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_execution_denial_boundary"
+    assert "/lens/host/runtime-loop" in body["evidence"]
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_runtime_loop_contract_stays_readback_only(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/host/runtime-loop")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.host.runtime_loop_contract"
+    assert body["status"] == "blocked"
+    assert body["route"] == "/lens/host/runtime-loop"
+    assert body["runtime_plan_route"] == "/lens/host/runtime-plan"
+    assert body["runtime_boundary_route"] == "/lens/host/runtime-boundary"
+    assert body["supervision_route"] == "/lens/host/supervision"
+    assert body["resident_runtime_execute_route"] == "/lens/resident-runtime/execute"
+    assert body["contract_available"] is True
+    assert body["loop_readback_ready"] is True
+    assert body["loop_ready"] is False
+    assert body["execution_ready"] is False
+    assert body["resident_runtime_loop"] is False
+    assert body["resident_runtime_ready"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["foreground_process_observed"] is False
+    assert body["foreground_session_available"] is True
+    assert body["resident_host_process_state"] == "missing"
+    assert body["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert body["requirements_total"] == 8
+    assert body["requirements_ready_total"] == 3
+    assert body["blocked_requirements"] == [
+        "resident_loop_process_supervision",
+        "resident_loop_service_lifecycle",
+        "resident_loop_surface_presence",
+        "resident_loop_receipt_emission",
+        "resident_loop_claim_checkpoint",
+    ]
+    assert body["blocker_groups"]["runtime"] == ["lens_host_runtime_not_implemented"]
+    assert body["blocker_groups"]["process_readback"] == ["resident_host_process_missing"]
+    assert body["blocker_groups"]["surface_dependencies"] == [
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    assert "resident_runtime_loop_not_implemented" in body["blocker_groups"]["loop"]
+    assert "resident_runtime_execution_authority_not_granted" in body["blocker_groups"]["authority"]
+    assert "resident_host_process_missing" in body["blockers"]
+    assert "resident_runtime_loop_not_supervised" in body["blockers"]
+    assert "receipt_write_authority_not_granted" in body["blockers"]
+
+    loop_contract = body["loop_contract"]
+    assert loop_contract["readback_ready"] is True
+    assert loop_contract["would_start_loop"] is False
+    assert loop_contract["would_launch_process"] is False
+    assert loop_contract["would_supervise_process"] is False
+    assert loop_contract["would_restart_process"] is False
+    assert loop_contract["would_install_service"] is False
+    assert loop_contract["would_start_service"] is False
+    assert loop_contract["would_register_tray"] is False
+    assert loop_contract["would_register_hotkey"] is False
+    assert loop_contract["would_open_overlay"] is False
+    assert loop_contract["would_claim_resident"] is False
+    assert loop_contract["would_write_receipt"] is False
+    assert loop_contract["would_write_memory"] is False
+    assert loop_contract["would_decide_approval"] is False
+    requirements = {item["id"]: item for item in loop_contract["requirements"]}
+    assert requirements["diagnostic_status_tick"]["status"] == "ready"
+    assert requirements["bounded_foreground_tick"]["status"] == "ready"
+    assert requirements["runtime_state_heartbeat_readback"]["status"] == "ready"
+    assert requirements["resident_loop_process_supervision"]["status"] == "blocked"
+    assert requirements["resident_loop_process_supervision"]["authority_granted"] is False
+    assert "resident_host_process_missing" in requirements["resident_loop_process_supervision"]["blockers"]
+    assert requirements["resident_loop_service_lifecycle"]["status"] == "blocked"
+    assert requirements["resident_loop_surface_presence"]["status"] == "blocked"
+    assert requirements["resident_loop_receipt_emission"]["status"] == "blocked"
+    assert requirements["resident_loop_claim_checkpoint"]["status"] == "blocked"
+
+    runtime_plan = body["runtime_plan"]
+    assert runtime_plan["kind"] == "lens.host.runtime_implementation_plan"
+    assert runtime_plan["plan"]["would_launch_process"] is False
+    assert runtime_plan["plan"]["would_supervise_process"] is False
+    assert runtime_plan["governance"]["execution_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "lens_host_runtime_loop_contract"
+    assert governance["read_only_contract"] is True
+    assert governance["loop_contract_readback_only"] is True
+    for key in [
+        "execution_authority",
+        "resident_runtime_execution_authority",
+        "approval_decision_authority",
+        "memory_write",
+        "local_process_launch_authority",
+        "diagnostic_launch_authority",
+        "process_supervision_authority",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "resident_claim_authority",
+        "overlay_control_authority",
+        "summon_authority",
+        "hotkey_registration_authority",
+        "tray_registration_authority",
+        "mutation_authority_granted",
+    ]:
+        assert governance[key] is False
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_execution_denial_boundary"
+
+    status_response = client.get("/lens/status?limit=1")
+    assert status_response.status_code == 200
+    resident_host = status_response.json()["resident_host"]
+    assert resident_host["runtime_implementation_plan_route"] == "/lens/host/runtime-plan"
+    assert resident_host["runtime_loop_contract_route"] == "/lens/host/runtime-loop"
+    assert resident_host["runtime_loop_contract"]["kind"] == "lens.host.runtime_loop_contract"
+    assert resident_host["runtime_loop_contract"]["loop_ready"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -4615,6 +4754,7 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert "lens_host_runtime_not_implemented" in runtime_plan["blockers"]
     runtime_plan_steps = {step["id"]: step for step in runtime_plan["plan"]["steps"]}
     process_supervision_step = runtime_plan_steps["process_supervision_contract"]
+    assert runtime_plan_steps["resident_runtime_loop_contract"]["route"] == "/lens/host/runtime-loop"
     assert "resident_host_process_not_supervised" in process_supervision_step["blockers"]
     assert "resident_host_process_missing" not in process_supervision_step["blockers"]
     assert runtime_plan["plan"]["would_launch_process"] is False
@@ -4623,6 +4763,35 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert runtime_plan["governance"]["local_process_launch_authority"] is False
     assert runtime_plan["governance"]["process_supervision_authority"] is False
     assert runtime_plan["governance"]["resident_claim_authority"] is False
+
+    runtime_loop_response = client.get("/lens/host/runtime-loop")
+    assert runtime_loop_response.status_code == 200
+    runtime_loop = runtime_loop_response.json()
+    assert runtime_loop["kind"] == "lens.host.runtime_loop_contract"
+    assert runtime_loop["foreground_process_observed"] is True
+    assert runtime_loop["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert runtime_loop["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert runtime_loop["loop_ready"] is False
+    assert runtime_loop["resident_runtime_loop"] is False
+    assert "resident_host_process_missing" not in runtime_loop["blockers"]
+    assert "resident_host_process_not_supervised" in runtime_loop["blockers"]
+    assert "resident_runtime_loop_not_supervised" in runtime_loop["blockers"]
+    runtime_loop_requirements = {item["id"]: item for item in runtime_loop["loop_contract"]["requirements"]}
+    assert (
+        "resident_host_process_not_supervised"
+        in runtime_loop_requirements["resident_loop_process_supervision"]["blockers"]
+    )
+    assert (
+        "resident_host_process_missing"
+        not in runtime_loop_requirements["resident_loop_process_supervision"]["blockers"]
+    )
+    assert runtime_loop["loop_contract"]["would_start_loop"] is False
+    assert runtime_loop["loop_contract"]["would_supervise_process"] is False
+    assert runtime_loop["loop_contract"]["would_write_receipt"] is False
+    assert runtime_loop["governance"]["execution_authority"] is False
+    assert runtime_loop["governance"]["process_supervision_authority"] is False
+    assert runtime_loop["governance"]["receipt_write_authority"] is False
+    assert runtime_loop["governance"]["resident_claim_authority"] is False
 
 
 def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:

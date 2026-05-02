@@ -114,7 +114,7 @@ def lens_host_runtime_implementation_plan(
             "resident_runtime_loop_contract",
             label="Resident runtime loop contract",
             ready=False,
-            route="/lens/host/runtime-plan",
+            route="/lens/host/runtime-loop",
             authority_required="resident_runtime_execution_authority",
             blockers=runtime_blockers,
         ),
@@ -247,6 +247,7 @@ def lens_host_runtime_implementation_plan(
         "runtime_boundary": runtime_boundary,
         "evidence": [
             "/lens/host/runtime-plan",
+            "/lens/host/runtime-loop",
             "/lens/host/runtime-boundary",
             "/lens/host/manifest",
             "/lens/host/supervision",
@@ -273,9 +274,232 @@ def lens_host_runtime_implementation_plan(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_runtime_loop_contract",
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_execution_denial_boundary",
         "message": (
             "Lens can describe the resident-host runtime implementation path, but this contract does not "
             "launch, supervise, install, register, claim residency, approve, or write memory."
+        ),
+    }
+
+
+def lens_host_runtime_loop_contract(
+    *,
+    manifest: dict[str, Any] | None = None,
+    runtime_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    implementation_plan = (
+        runtime_plan
+        if isinstance(runtime_plan, dict)
+        else lens_host_runtime_implementation_plan(manifest=launch_manifest)
+    )
+    runtime_boundary = _as_dict(implementation_plan.get("runtime_boundary"))
+    process_readback = _as_dict(runtime_boundary.get("process_readback"))
+    foreground_session = _as_dict(runtime_boundary.get("foreground_session"))
+    blocker_groups = _as_dict(implementation_plan.get("blocker_groups"))
+
+    runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or ["lens_host_runtime_not_implemented"]
+    process_blockers = _as_str_list(blocker_groups.get("process_readback")) or [
+        str(runtime_boundary.get("resident_host_process_blocker") or "resident_host_process_missing")
+    ]
+    surface_blockers = _as_str_list(blocker_groups.get("surface_dependencies"))
+    authority_blockers = _as_str_list(blocker_groups.get("authority")) or [
+        "resident_runtime_execution_authority_not_granted",
+        "process_supervision_authority_not_granted",
+        "process_restart_authority_not_granted",
+        "service_install_authority_not_granted",
+        "service_control_authority_not_granted",
+        "tray_registration_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+        "summon_authority_not_granted",
+        "resident_claim_authority_not_granted",
+    ]
+
+    loop_requirements = [
+        _plan_step(
+            "diagnostic_status_tick",
+            label="Diagnostic status tick",
+            ready=bool(runtime_boundary.get("diagnostic_status_runner_ready")),
+            route="/lens/host/runtime-boundary",
+            source="scripts/lens-host.ps1 -Mode Status",
+            blockers=["diagnostic_status_runner_missing"],
+        ),
+        _plan_step(
+            "bounded_foreground_tick",
+            label="Bounded foreground tick",
+            ready=bool(runtime_boundary.get("bounded_foreground_session_available")),
+            route="/lens/host/runtime-boundary",
+            source="scripts/lens-host.ps1 -Mode Foreground",
+            blockers=["bounded_foreground_session_missing"],
+        ),
+        _plan_step(
+            "runtime_state_heartbeat_readback",
+            label="Runtime state heartbeat readback",
+            ready=bool(process_readback.get("readback_ready")),
+            route="/lens/host/runtime-boundary",
+            source=str(process_readback.get("runtime_state_path") or ""),
+            blockers=["resident_host_runtime_state_readback_missing"],
+        ),
+        _plan_step(
+            "resident_loop_process_supervision",
+            label="Resident loop process supervision",
+            ready=False,
+            route="/lens/host/supervision",
+            authority_required="process_supervision_authority",
+            blockers=[
+                *process_blockers,
+                "process_supervision_authority_not_granted",
+                "process_restart_authority_not_granted",
+            ],
+        ),
+        _plan_step(
+            "resident_loop_service_lifecycle",
+            label="Resident loop service lifecycle",
+            ready=False,
+            route="/lens/host/persistent-supervision",
+            authority_required="service_install_and_control_authority",
+            blockers=[
+                *runtime_blockers,
+                "service_install_authority_not_granted",
+                "service_control_authority_not_granted",
+            ],
+        ),
+        _plan_step(
+            "resident_loop_surface_presence",
+            label="Resident loop surface presence",
+            ready=False,
+            route="/lens/preflight",
+            authority_required="tray_hotkey_overlay_and_summon_authority",
+            blockers=[
+                *surface_blockers,
+                "tray_registration_authority_not_granted",
+                "hotkey_registration_authority_not_granted",
+                "overlay_control_authority_not_granted",
+                "summon_authority_not_granted",
+            ],
+        ),
+        _plan_step(
+            "resident_loop_receipt_emission",
+            label="Resident loop receipt emission",
+            ready=False,
+            route="/lens/resident-runtime/execute",
+            authority_required="receipt_write_authority",
+            blockers=["resident_runtime_not_ready", "receipt_write_authority_not_granted"],
+        ),
+        _plan_step(
+            "resident_loop_claim_checkpoint",
+            label="Resident loop claim checkpoint",
+            ready=False,
+            route="/lens/host/runtime-loop",
+            authority_required="resident_claim_authority",
+            blockers=["resident_runtime_not_ready", "resident_claim_authority_not_granted"],
+        ),
+    ]
+
+    ready_requirements = [item for item in loop_requirements if bool(item.get("ready"))]
+    blocked_requirements = [str(item["id"]) for item in loop_requirements if not bool(item.get("ready"))]
+    blockers = _ordered_unique(
+        [
+            *runtime_blockers,
+            *process_blockers,
+            *surface_blockers,
+            *authority_blockers,
+            "resident_runtime_loop_not_implemented",
+            "resident_runtime_loop_not_supervised",
+            "receipt_write_authority_not_granted",
+        ]
+    )
+
+    return {
+        "ok": True,
+        "kind": "lens.host.runtime_loop_contract",
+        "status": "blocked",
+        "route": "/lens/host/runtime-loop",
+        "runtime_plan_route": "/lens/host/runtime-plan",
+        "runtime_boundary_route": "/lens/host/runtime-boundary",
+        "host_route": "/lens/host",
+        "supervision_route": "/lens/host/supervision",
+        "resident_runtime_execute_route": "/lens/resident-runtime/execute",
+        "contract_available": True,
+        "loop_readback_ready": True,
+        "loop_ready": False,
+        "execution_ready": False,
+        "resident_runtime_loop": False,
+        "resident_runtime_ready": False,
+        "resident_claim_allowed": False,
+        "foreground_process_observed": bool(runtime_boundary.get("foreground_process_observed")),
+        "foreground_session_available": bool(runtime_boundary.get("bounded_foreground_session_available")),
+        "foreground_session_max_seconds": int(foreground_session.get("max_seconds") or 0),
+        "resident_host_process_state": str(runtime_boundary.get("resident_host_process_state") or ""),
+        "resident_host_process_blocker": str(runtime_boundary.get("resident_host_process_blocker") or ""),
+        "requirements_total": len(loop_requirements),
+        "requirements_ready_total": len(ready_requirements),
+        "blocked_requirements": blocked_requirements,
+        "blockers": blockers,
+        "blocker_groups": {
+            "runtime": runtime_blockers,
+            "process_readback": process_blockers,
+            "surface_dependencies": surface_blockers,
+            "authority": authority_blockers,
+            "loop": [
+                "resident_runtime_loop_not_implemented",
+                "resident_runtime_loop_not_supervised",
+                "receipt_write_authority_not_granted",
+            ],
+        },
+        "loop_contract": {
+            "status": "blocked",
+            "readback_ready": True,
+            "requirements": loop_requirements,
+            "would_start_loop": False,
+            "would_launch_process": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_register_tray": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+            "would_claim_resident": False,
+            "would_write_receipt": False,
+            "would_write_memory": False,
+            "would_decide_approval": False,
+        },
+        "runtime_plan": implementation_plan,
+        "evidence": [
+            "/lens/host/runtime-loop",
+            "/lens/host/runtime-plan",
+            "/lens/host/runtime-boundary",
+            "/lens/host/supervision",
+            "/lens/resident-runtime/execute",
+        ],
+        "governance": {
+            "gate": "lens_host_runtime_loop_contract",
+            "read_only_contract": True,
+            "loop_contract_readback_only": True,
+            "execution_authority": False,
+            "resident_runtime_execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "diagnostic_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_execution_denial_boundary",
+        "message": (
+            "Lens can now read back the resident host runtime loop contract, but the loop is not implemented "
+            "and this route does not start, supervise, restart, install, register, claim residency, approve, "
+            "write receipts, or write memory."
         ),
     }
