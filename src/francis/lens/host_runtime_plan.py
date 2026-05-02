@@ -30,6 +30,16 @@ def _ordered_unique(values: list[str]) -> list[str]:
     return result
 
 
+def _safe_limit(value: Any, *, default: int = 5) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(50, parsed))
+
+
 def _plan_step(
     step_id: str,
     *,
@@ -248,6 +258,7 @@ def lens_host_runtime_implementation_plan(
         "evidence": [
             "/lens/host/runtime-plan",
             "/lens/host/runtime-loop",
+            "/lens/host/runtime-loop/denials",
             "/lens/host/runtime-boundary",
             "/lens/host/manifest",
             "/lens/host/supervision",
@@ -274,7 +285,7 @@ def lens_host_runtime_implementation_plan(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_runtime_loop_execution_denial_boundary",
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_readiness_audit",
         "message": (
             "Lens can describe the resident-host runtime implementation path, but this contract does not "
             "launch, supervise, install, register, claim residency, approve, or write memory."
@@ -422,6 +433,7 @@ def lens_host_runtime_loop_contract(
         "supervision_route": "/lens/host/supervision",
         "resident_runtime_execute_route": "/lens/resident-runtime/execute",
         "execution_denial_route": "/lens/host/runtime-loop/execute",
+        "denial_receipts_route": "/lens/host/runtime-loop/denials",
         "contract_available": True,
         "loop_readback_ready": True,
         "loop_ready": False,
@@ -471,6 +483,7 @@ def lens_host_runtime_loop_contract(
         "evidence": [
             "/lens/host/runtime-loop",
             "/lens/host/runtime-plan",
+            "/lens/host/runtime-loop/denials",
             "/lens/host/runtime-boundary",
             "/lens/host/supervision",
             "/lens/resident-runtime/execute",
@@ -497,7 +510,7 @@ def lens_host_runtime_loop_contract(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_runtime_loop_execution_denial_boundary",
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_readiness_audit",
         "message": (
             "Lens can now read back the resident host runtime loop contract, but the loop is not implemented "
             "and this route does not start, supervise, restart, install, register, claim residency, approve, "
@@ -599,10 +612,11 @@ def deny_lens_host_runtime_loop_execution(
         },
         "runtime_loop_contract": loop_contract,
         "receipt_written": False,
-        "receipt_route": "",
+        "receipt_route": "/lens/host/runtime-loop/denials",
         "receipt": {},
         "evidence": [
             "/lens/host/runtime-loop/execute",
+            "/lens/host/runtime-loop/denials",
             "/lens/host/runtime-loop",
             "/lens/host/runtime-plan",
             "/lens/host/runtime-boundary",
@@ -632,10 +646,66 @@ def deny_lens_host_runtime_loop_execution(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_runtime_loop_denial_receipt_readback",
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_readiness_audit",
         "message": (
             "Lens can deny resident host runtime loop execution attempts, but this boundary does not start "
             "a loop, launch or supervise a process, control services or surfaces, claim residency, decide "
             "approvals, write receipts, or write memory."
+        ),
+    }
+
+
+def lens_host_runtime_loop_denial_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+) -> dict[str, Any]:
+    approval_id_value = str(approval_id or "").strip()
+    status_value = str(status or "").strip()
+
+    return {
+        "ok": True,
+        "kind": "lens.host.runtime_loop.denial_receipts",
+        "status": "empty",
+        "route": "/lens/host/runtime-loop/denials",
+        "execute_route": "/lens/host/runtime-loop/execute",
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "runtime_plan_route": "/lens/host/runtime-plan",
+        "runtime_boundary_route": "/lens/host/runtime-boundary",
+        "limit": _safe_limit(limit),
+        "approval_id": approval_id_value,
+        "filter_status": status_value,
+        "total": 0,
+        "latest": None,
+        "items": [],
+        "receipt_readback_ready": True,
+        "denial_receipt_readback_ready": True,
+        "governance": {
+            "gate": "lens_host_runtime_loop_denial_receipts_readback",
+            "read_only_contract": True,
+            "execution_authority": False,
+            "resident_runtime_execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "diagnostic_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_smallest_truthful_gap": "resident_host_runtime_loop_readiness_audit",
+        "message": (
+            "Lens can read back resident host runtime loop denial receipts, but this route does not write "
+            "receipts, start a loop, launch or supervise a process, decide approvals, or write memory."
         ),
     }

@@ -16438,6 +16438,44 @@ runtime loop execution denial boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident host runtime loop denial receipt readback
+
+Stage 6/Lens resident-host runtime readback now has a direct read-only denial
+receipt route for the previous `resident_host_runtime_loop_denial_receipt_readback`
+handoff. `GET /lens/host/runtime-loop/denials` returns
+`kind: lens.host.runtime_loop.denial_receipts`, preserves `limit`,
+`approval_id`, and `status` filters, reports `status: empty` with no items, and
+is embedded through `/lens/host` and `/lens/status`. The existing
+`POST /lens/host/runtime-loop/execute` denial boundary now points at that
+readback route through `receipt_route` while still reporting
+`receipt_written: false`.
+
+This is backend readback, route/API, test, and ledger work only. It does not
+write denial receipts; does not start a runtime loop; does not launch,
+supervise, restart, install, start, or stop a process or service; does not
+register tray presence or hotkeys; does not summon Francis anywhere; does not
+open or control an overlay; does not decide approvals; does not write memory;
+does not claim resident status; does not add UI controls; and does not close
+Stage 6 or start Stage 7. Stage 6 remains active and blocked on a real
+resident-host runtime loop readiness audit plus resident host/runtime/summon
+surface and authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident host
+runtime loop denial receipt readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_implementation_plan_stays_readback_only tests\test_api_lens.py::test_lens_host_runtime_loop_contract_stays_readback_only tests\test_api_lens.py::test_lens_host_runtime_loop_execution_denial_stays_non_mutating tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed after formatting tests\test_api_lens.py`
+- `.venv\Scripts\python.exe -m mypy src\francis\lens\host_runtime_plan.py src\francis\lens\status.py src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -16452,7 +16490,8 @@ These remain true and should block any "finished" claim:
   `/lens/host/runtime-boundary` resident-host runtime boundary readback plus a
   `/lens/host/runtime-plan` implementation-plan readback, a
   `/lens/host/runtime-loop` contract readback, and a non-mutating
-  `POST /lens/host/runtime-loop/execute` denial boundary, a bounded
+  `POST /lens/host/runtime-loop/execute` denial boundary plus a read-only
+  `GET /lens/host/runtime-loop/denials` denial-receipt readback, a bounded
   foreground `scripts/lens-host.ps1` status session and bounded diagnostic
   host-launch mode with live foreground process readback proof, bounded launch
   proof/checkpoint consumption, plus API live process readback, a supervision

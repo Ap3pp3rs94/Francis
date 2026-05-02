@@ -4456,8 +4456,9 @@ def test_lens_host_runtime_implementation_plan_stays_readback_only(
         "mutation_authority_granted",
     ]:
         assert governance[key] is False
-    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_execution_denial_boundary"
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_readiness_audit"
     assert "/lens/host/runtime-loop" in body["evidence"]
+    assert "/lens/host/runtime-loop/denials" in body["evidence"]
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -4496,6 +4497,7 @@ def test_lens_host_runtime_loop_contract_stays_readback_only(
     assert body["supervision_route"] == "/lens/host/supervision"
     assert body["resident_runtime_execute_route"] == "/lens/resident-runtime/execute"
     assert body["execution_denial_route"] == "/lens/host/runtime-loop/execute"
+    assert body["denial_receipts_route"] == "/lens/host/runtime-loop/denials"
     assert body["contract_available"] is True
     assert body["loop_readback_ready"] is True
     assert body["loop_ready"] is False
@@ -4587,7 +4589,8 @@ def test_lens_host_runtime_loop_contract_stays_readback_only(
         "mutation_authority_granted",
     ]:
         assert governance[key] is False
-    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_execution_denial_boundary"
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_readiness_audit"
+    assert "/lens/host/runtime-loop/denials" in body["evidence"]
 
     status_response = client.get("/lens/status?limit=1")
     assert status_response.status_code == 200
@@ -4606,10 +4609,26 @@ def test_lens_host_runtime_loop_contract_stays_readback_only(
     assert runtime_loop_denial["receipt_written"] is False
     assert runtime_loop_denial["denial"]["would_start_loop"] is False
     assert runtime_loop_denial["denial"]["would_write_receipt"] is False
+    assert runtime_loop_denial["receipt_route"] == "/lens/host/runtime-loop/denials"
     assert runtime_loop_denial["governance"]["gate"] == "lens_host_runtime_loop_execution_denial_boundary"
     assert runtime_loop_denial["governance"]["execution_authority"] is False
     assert runtime_loop_denial["governance"]["receipt_write_authority"] is False
     assert runtime_loop_denial["governance"]["denial_receipt_write_authority"] is False
+    assert resident_host["runtime_loop_denial_receipts_route"] == "/lens/host/runtime-loop/denials"
+    runtime_loop_denial_receipts = resident_host["runtime_loop_denial_receipts"]
+    assert runtime_loop_denial_receipts["kind"] == "lens.host.runtime_loop.denial_receipts"
+    assert runtime_loop_denial_receipts["status"] == "empty"
+    assert runtime_loop_denial_receipts["route"] == "/lens/host/runtime-loop/denials"
+    assert runtime_loop_denial_receipts["execute_route"] == "/lens/host/runtime-loop/execute"
+    assert runtime_loop_denial_receipts["runtime_loop_route"] == "/lens/host/runtime-loop"
+    assert runtime_loop_denial_receipts["total"] == 0
+    assert runtime_loop_denial_receipts["latest"] is None
+    assert runtime_loop_denial_receipts["items"] == []
+    assert runtime_loop_denial_receipts["governance"]["gate"] == ("lens_host_runtime_loop_denial_receipts_readback")
+    assert runtime_loop_denial_receipts["governance"]["read_only_contract"] is True
+    assert runtime_loop_denial_receipts["governance"]["execution_authority"] is False
+    assert runtime_loop_denial_receipts["governance"]["denial_receipt_write_authority"] is False
+    assert runtime_loop_denial_receipts["governance"]["receipt_write_authority"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -4705,7 +4724,7 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert body["runtime_loop_contract"]["kind"] == "lens.host.runtime_loop_contract"
     assert body["runtime_loop_contract"]["loop_contract"]["would_start_loop"] is False
     assert body["receipt_written"] is False
-    assert body["receipt_route"] == ""
+    assert body["receipt_route"] == "/lens/host/runtime-loop/denials"
     assert body["receipt"] == {}
 
     governance = body["governance"]
@@ -4734,15 +4753,82 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
         "mutation_authority_granted",
     ]:
         assert governance[key] is False
-    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_denial_receipt_readback"
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_readiness_audit"
+
+    denials_response = client.get(
+        "/lens/host/runtime-loop/denials",
+        params={"limit": 10, "approval_id": "approval-runtime-loop", "status": body["status"]},
+    )
+    assert denials_response.status_code == 200
+    denials = denials_response.json()
+    assert denials["kind"] == "lens.host.runtime_loop.denial_receipts"
+    assert denials["status"] == "empty"
+    assert denials["route"] == "/lens/host/runtime-loop/denials"
+    assert denials["execute_route"] == "/lens/host/runtime-loop/execute"
+    assert denials["runtime_loop_route"] == "/lens/host/runtime-loop"
+    assert denials["runtime_plan_route"] == "/lens/host/runtime-plan"
+    assert denials["runtime_boundary_route"] == "/lens/host/runtime-boundary"
+    assert denials["limit"] == 10
+    assert denials["approval_id"] == "approval-runtime-loop"
+    assert denials["filter_status"] == "denied_no_resident_runtime_authority"
+    assert denials["total"] == 0
+    assert denials["latest"] is None
+    assert denials["items"] == []
+    assert denials["receipt_readback_ready"] is True
+    assert denials["denial_receipt_readback_ready"] is True
+    assert denials["next_smallest_truthful_gap"] == "resident_host_runtime_loop_readiness_audit"
+    assert denials["governance"]["gate"] == "lens_host_runtime_loop_denial_receipts_readback"
+    assert denials["governance"]["read_only_contract"] is True
+    for key in [
+        "execution_authority",
+        "resident_runtime_execution_authority",
+        "approval_decision_authority",
+        "memory_write",
+        "local_process_launch_authority",
+        "diagnostic_launch_authority",
+        "process_supervision_authority",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "denial_receipt_write_authority",
+        "resident_claim_authority",
+        "overlay_control_authority",
+        "summon_authority",
+        "hotkey_registration_authority",
+        "tray_registration_authority",
+        "mutation_authority_granted",
+    ]:
+        assert denials["governance"][key] is False
 
     status_response = client.get("/lens/status?limit=1")
     assert status_response.status_code == 200
-    resident_host = status_response.json()["resident_host"]
+    status_body = status_response.json()
+    resident_host = status_body["resident_host"]
     assert resident_host["runtime_loop_execution_denial_route"] == "/lens/host/runtime-loop/execute"
     assert resident_host["runtime_loop_execution_denial"]["kind"] == "lens.host.runtime_loop.execution_denial"
     assert resident_host["runtime_loop_execution_denial"]["loop_started"] is False
     assert resident_host["runtime_loop_execution_denial"]["governance"]["receipt_write_authority"] is False
+    assert resident_host["runtime_loop_denial_receipts_route"] == "/lens/host/runtime-loop/denials"
+    assert resident_host["runtime_loop_denial_receipts"]["kind"] == "lens.host.runtime_loop.denial_receipts"
+    assert resident_host["runtime_loop_denial_receipts"]["total"] == 0
+    assert status_body["runtime_loop_denial_receipts"]["route"] == "/lens/host/runtime-loop/denials"
+    assert status_body["receipts"]["lens_host_runtime_loop_denials_route"] == "/lens/host/runtime-loop/denials"
+    criterion = _criterion(status_body, "resident_host_runtime_loop_denial_receipt_readback")
+    assert criterion["status"] == "empty"
+    assert criterion["receipt_count"] == 0
+    assert criterion["latest_receipt_id"] == ""
+    assert criterion["evidence"] == [
+        "/lens/host/runtime-loop/denials",
+        "/lens/host/runtime-loop/execute",
+        "/lens/status",
+    ]
+    assert criterion["execution_authority"] is False
+    assert criterion["resident_runtime_execution_authority"] is False
+    assert criterion["approval_decision_authority"] is False
+    assert criterion["memory_write"] is False
+    assert criterion["receipt_write_authority"] is False
+    assert criterion["denial_receipt_write_authority"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 

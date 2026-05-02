@@ -31,6 +31,7 @@ from francis.lens import (
     lens_host_runtime_boundary,
     lens_host_runtime_implementation_plan,
     lens_host_runtime_loop_contract,
+    lens_host_runtime_loop_denial_receipts,
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_grant_receipts,
@@ -206,6 +207,15 @@ def host_runtime_loop_execute(request: Request, payload: LensHostRuntimeLoopExec
         route=request.url.path,
         method=request.method,
     )
+
+
+@router.get("/host/runtime-loop/denials")
+def host_runtime_loop_denials(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_host_runtime_loop_denial_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
 @router.get("/host/supervision")

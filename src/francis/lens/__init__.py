@@ -57,6 +57,7 @@ from francis.lens.host_runtime_plan import (
     deny_lens_host_runtime_loop_execution,
     lens_host_runtime_implementation_plan,
     lens_host_runtime_loop_contract,
+    lens_host_runtime_loop_denial_receipts,
 )
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
@@ -102,6 +103,7 @@ __all__ = [
     "lens_host_runtime_boundary",
     "lens_host_runtime_implementation_plan",
     "lens_host_runtime_loop_contract",
+    "lens_host_runtime_loop_denial_receipts",
     "lens_host_supervision_authority_preflight",
     "lens_host_supervision_gate",
     "lens_host_status",
