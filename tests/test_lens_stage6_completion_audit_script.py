@@ -143,6 +143,18 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         assert "host_supervisor_readback_stale" in payload["closure_blockers"]["host_supervisor_readback"]
     assert "resident_host_process_not_supervised" in payload["closure_blockers"]["process_supervision"]
     assert "process_supervision_authority_not_granted" in payload["closure_blockers"]["process_supervision"]
+    assert (
+        "resident_host_process_not_supervised"
+        in payload["closure_blockers"]["resident_host_process_supervision_handoff"]
+    )
+    assert (
+        "process_supervision_authority_not_granted"
+        in payload["closure_blockers"]["resident_host_process_supervision_handoff"]
+    )
+    assert (
+        "process_restart_authority_not_granted"
+        in payload["closure_blockers"]["resident_host_process_supervision_handoff"]
+    )
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
     assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
@@ -774,6 +786,41 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in process_boundary["evidence"]
 
+    process_handoff = payload["resident_host_process_supervision_blocker_proof"]
+    assert process_handoff["status"] == "proof_passed"
+    assert process_handoff["ok"] is True
+    assert process_handoff["exit_code"] == 0
+    assert process_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert process_handoff["resident_host_process_handoff_observed"] is True
+    assert process_handoff["process_supervision_boundary_observed"] is True
+    assert process_handoff["handoff_consumed"] is True
+    assert process_handoff["authority_denied"] is True
+    assert process_handoff["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert process_handoff["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert process_handoff["supervision_ready"] is False
+    assert process_handoff["ready_for_resident_claim"] is False
+    assert process_handoff["resident_claim_allowed"] is False
+    assert process_handoff["resident_host_supervised"] is False
+    assert process_handoff["service_installed"] is False
+    assert process_handoff["service_managed"] is False
+    assert process_handoff["process_supervision_ready"] is False
+    assert process_handoff["service_activation_ready"] is False
+    assert process_handoff["would_supervise_process"] is False
+    assert process_handoff["would_restart_process"] is False
+    assert process_handoff["would_install_service"] is False
+    assert process_handoff["would_start_service"] is False
+    assert process_handoff["would_write_memory"] is False
+    assert process_handoff["would_decide_approval"] is False
+    assert "resident_host_process_not_supervised" in process_handoff["blockers"]
+    assert "process_supervision_authority_not_granted" in process_handoff["blockers"]
+    assert "process_restart_authority_not_granted" in process_handoff["blockers"]
+    assert "service_install_authority_not_granted" in process_handoff["blockers"]
+    assert "service_control_authority_not_granted" in process_handoff["blockers"]
+    assert (
+        "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in process_handoff["evidence"]
+    )
+
     persistent_plan = payload["persistent_supervision_plan"]
     assert persistent_plan["status"] == "blocked"
     assert persistent_plan["ok"] is True
@@ -861,6 +908,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-runtime-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
@@ -873,6 +921,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is True
     assert governance["process_supervision_authority_boundary_readback"] is True
+    assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
+    assert governance["resident_host_process_handoff_consumed"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True

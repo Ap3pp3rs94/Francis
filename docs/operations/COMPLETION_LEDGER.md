@@ -16712,6 +16712,40 @@ process supervision blocker proof:
 - `python -m ruff format --check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
   Result: `passed` with a `.ruff_cache` access warning only
 
+### 2026-05-02 - Stage 6/Lens completion audit consumes process supervision handoff
+
+Stage 6/Lens completion audit now consumes the
+`scripts/lens-resident-host-process-supervision-blocker-proof.ps1` handoff proof
+directly. The audit readback includes the proof status, preserved
+`resident_host_process_not_supervised` handoff, `handoff_consumed` state,
+authority-denial evidence, closure-blocker grouping, top-level evidence, and
+governance readback. The completion audit still reports Stage 6 as active,
+`ready_to_close=false`, and `summon_anywhere_blockers` as the next smallest
+truthful gap.
+
+This is diagnostic/readback and test work only. It does not grant execution
+authority, approval-decision authority, memory-write authority,
+process-supervision or process-restart authority, service-install or
+service-control authority, tray or hotkey authority, overlay-control authority,
+summon authority, capture/sensing authority, telemetry authority, UI control,
+Stage 6 closure, or Stage 7 transition.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens completion audit
+process-supervision handoff consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,resident_host_process_handoff_observed,process_supervision_boundary_observed,handoff_consumed,authority_denied,resident_host_process_state,resident_host_process_blocker,blockers | ConvertTo-Json -Depth 5`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,@{Name='handoff_status';Expression={$_.resident_host_process_supervision_blocker_proof.status}},@{Name='handoff_consumed';Expression={$_.resident_host_process_supervision_blocker_proof.handoff_consumed}},@{Name='handoff_readback';Expression={$_.governance.resident_host_process_supervision_blocker_proof_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

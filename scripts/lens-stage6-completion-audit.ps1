@@ -90,6 +90,7 @@ function New-CriterionSummary {
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
 $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
+$ResidentHostProcessSupervisionBlockerProofScript = Join-Path $PSScriptRoot 'lens-resident-host-process-supervision-blocker-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
@@ -129,6 +130,32 @@ $ProcessSupervisionBoundaryObserved = (
   [bool]$ProcessSupervisionBoundary.ok -and
   [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed -and
   [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
+)
+$ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs @(
+  '-Mode', 'Status',
+  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+  '-ForegroundRunSeconds', '2',
+  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
+)
+$ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
+$ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers
+$ResidentHostProcessSupervisionBlockerProofObserved = (
+  [int]$ResidentHostProcessSupervisionBlockerProofResult.exit_code -eq 0 -and
+  [string]$ResidentHostProcessSupervisionBlockerProof.kind -eq 'lens.resident_host.process_supervision_blocker.proof' -and
+  [bool]$ResidentHostProcessSupervisionBlockerProof.ok -and
+  [string]$ResidentHostProcessSupervisionBlockerProof.status -eq 'proof_passed' -and
+  [string]$ResidentHostProcessSupervisionBlockerProof.previous_next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
+  [string]$ResidentHostProcessSupervisionBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_handoff_observed -and
+  [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_boundary_observed -and
+  [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed -and
+  [bool]$ResidentHostProcessSupervisionBlockerProof.authority_denied -and
+  $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'resident_host_process_not_supervised' -and
+  $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_restart_authority_not_granted' -and
+  $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_install_authority_not_granted' -and
+  $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_control_authority_not_granted'
 )
 $PersistentSupervisionPlanResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $PersistentSupervisionPlanScript -ScriptArgs @('-Mode', 'Status')
 $PersistentSupervisionPlan = $PersistentSupervisionPlanResult.payload
@@ -638,7 +665,8 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
 )
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
-  $PersistentSupervisionResidentClaimBoundaryObserved
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -670,6 +698,14 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $PersistentSupervisionEnablementAuthorityProofObserved
 ) {
   'persistent_supervision_enablement_authority_not_granted'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ProcessSupervisionBoundaryObserved -and
+  -not $ResidentHostProcessSupervisionBlockerProofObserved
+) {
+  'resident_host_process_supervision_handoff'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -760,6 +796,8 @@ $Payload = [ordered]@{
     'The audit now consumes the persistent-supervision enablement denial boundary and execution denial boundary; it shows enablement is blocked by explicit enablement, service-config write, execution, and resident-claim authority, not by missing proof readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary') {
     'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_supervision_handoff') {
+    'The audit must consume the resident-host process supervision handoff proof before treating resident-host process supervision as an acceptance blocker instead of a missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
     'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
@@ -806,6 +844,11 @@ $Payload = [ordered]@{
     process_supervision = [string[]]@(
       $ProcessSupervisionBoundaryBlockers | Where-Object {
         $_ -match 'process_supervision|process_restart|resident_host_process|resident_supervision'
+      } | Sort-Object -Unique
+    )
+    resident_host_process_supervision_handoff = [string[]]@(
+      $ResidentHostProcessSupervisionBlockerProofBlockers | Where-Object {
+        $_ -match 'process_supervision|process_restart|resident_host_process|service_'
       } | Sort-Object -Unique
     )
     service_activation = [string[]]@(
@@ -1245,6 +1288,38 @@ $Payload = [ordered]@{
     would_decide_approval = [bool]$ProcessSupervisionBoundary.would_decide_approval
     blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
   }
+  resident_host_process_supervision_blocker_proof = [ordered]@{
+    status = if ($ResidentHostProcessSupervisionBlockerProofObserved) { [string]$ResidentHostProcessSupervisionBlockerProof.status } else { 'missing_or_failed' }
+    ok = $ResidentHostProcessSupervisionBlockerProofObserved
+    exit_code = [int]$ResidentHostProcessSupervisionBlockerProofResult.exit_code
+    evidence = [string[]]@(
+      'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status'
+      (ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.evidence)
+    )
+    previous_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.previous_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.next_smallest_truthful_gap
+    resident_host_process_handoff_observed = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_handoff_observed
+    process_supervision_boundary_observed = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_boundary_observed
+    handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
+    authority_denied = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_denied
+    resident_host_process_state = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_state
+    resident_host_process_blocker = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_blocker
+    supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.supervision_ready
+    ready_for_resident_claim = [bool]$ResidentHostProcessSupervisionBlockerProof.ready_for_resident_claim
+    resident_claim_allowed = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_claim_allowed
+    resident_host_supervised = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_supervised
+    service_installed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_installed
+    service_managed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_managed
+    process_supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_ready
+    service_activation_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.service_activation_ready
+    would_supervise_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_supervise_process
+    would_restart_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_restart_process
+    would_install_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_install_service
+    would_start_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_start_service
+    would_write_memory = [bool]$ResidentHostProcessSupervisionBlockerProof.would_write_memory
+    would_decide_approval = [bool]$ResidentHostProcessSupervisionBlockerProof.would_decide_approval
+    blockers = [string[]]@($ResidentHostProcessSupervisionBlockerProofBlockers)
+  }
   persistent_supervision_plan = [ordered]@{
     status = if ($PersistentSupervisionPlanObserved) { [string]$PersistentSupervisionPlan.status } else { 'missing_or_failed' }
     ok = $PersistentSupervisionPlanObserved
@@ -1436,6 +1511,7 @@ $Payload = [ordered]@{
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
+    'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
@@ -1455,6 +1531,8 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     checkpoint_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
+    resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
+    resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
