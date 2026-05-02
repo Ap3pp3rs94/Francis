@@ -16577,6 +16577,35 @@ handoff alignment:
 - `.venv\Scripts\python.exe -m mypy src\francis\lens\status.py`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens summon-anywhere blocker proof
+
+Stage 6/Lens now has a focused `scripts/lens-summon-anywhere-blockers-proof.ps1`
+diagnostic that gives the current `summon_anywhere_blockers` handoff a fast,
+stable proof path without rerunning the full timing-heavy completion audit. The
+proof wraps the existing read-only `scripts/lens-summon-preflight.ps1 -Mode
+Status` contract and projects its blockers into the Stage 6 acceptance-family
+names used by the completion audit: `resident_host`, `tray_presence`,
+`overlay_window`, `global_hotkey_binding`, `summon_binding`, and `authority`.
+It reports the first blocker family as `resident_host`, preserves
+`next_smallest_truthful_gap: summon_anywhere_blockers`, and makes clear that
+the global hotkey intent remains declared but disabled.
+
+This is diagnostic/readback and test work only. It does not register a hotkey,
+bind summon-anywhere, launch or supervise a process, install or control a
+service, create tray presence, open or control an overlay, write memory, decide
+approvals, execute operator actions, write receipts, or grant overlay-control,
+summon, capture, sensing, telemetry, policy, hotkey-registration,
+local-process-launch, resident-claim, or mutation authority. It does not close
+Stage 6 or start Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens summon-anywhere
+blocker proof:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
