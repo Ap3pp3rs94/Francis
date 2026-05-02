@@ -16928,7 +16928,14 @@ These remain true and should block any "finished" claim:
   tray, hotkey, overlay, memory, and approval-decision authority denied and
   names `stage6_lens_completion_audit` as the boundary-family handoff, while the
   Stage 6 completion audit now names `summon_anywhere_blockers` as the current
-  acceptance-criteria handoff, but no
+  acceptance-criteria handoff, plus an opt-in
+  `scripts/lens-summon-resident-host-blocker-proof.ps1
+  -ConsumeProcessSupervisionHandoff` diagnostic mode that consumes the newer
+  resident-host process-supervision handoff and returns to
+  `stage6_lens_completion_audit` without changing the checkpoint-safe default
+  runtime-blocker handoff or granting product launch, supervision, restart,
+  service, summon, overlay, approval-decision, memory-write, or resident-claim
+  authority, but no
   supervised
   resident host process, process-restart authority,
   installed/started service, resident overlay/HUD runtime, OS-level command

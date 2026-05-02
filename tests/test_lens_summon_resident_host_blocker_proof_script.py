@@ -38,7 +38,19 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
-    proc = _run_proof("-Mode", "Status")
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-ConsumeProcessSupervisionHandoff",
+        "-StartupTimeoutSeconds",
+        "5",
+        "-ForegroundRunSeconds",
+        "2",
+        "-HostLaunchRunSeconds",
+        "2",
+        "-SupervisorRunSeconds",
+        "3",
+    )
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
@@ -50,16 +62,33 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["first_summon_blocker_family"] == "resident_host"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
-    assert payload["resident_host_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["resident_host_lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["resident_host_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["summon_first_family_observed"] is True
     assert payload["resident_host_lifecycle_observed"] is True
+    assert payload["consume_process_supervision_handoff"] is True
+    assert payload["resident_host_process_supervision_handoff_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
 
     assert payload["summon_resident_host_blockers"] == ["local_process_launch_authority_not_granted"]
     assert payload["resident_host_runtime_blockers"] == ["lens_host_runtime_not_implemented"]
     assert isinstance(payload["resident_host_process_readback_blockers"], list)
+    assert "resident_host_process_not_supervised" in payload["resident_host_process_supervision_blockers"]
+    assert "process_supervision_authority_not_granted" in payload["resident_host_process_supervision_blockers"]
+    assert "process_restart_authority_not_granted" in payload["resident_host_process_supervision_blockers"]
+    process_handoff = payload["resident_host_process_supervision_handoff"]
+    assert process_handoff["status"] == "proof_passed"
+    assert process_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert process_handoff["resident_host_process_handoff_observed"] is True
+    assert process_handoff["process_supervision_boundary_observed"] is True
+    assert process_handoff["handoff_consumed"] is True
+    assert process_handoff["authority_denied"] is True
+    assert process_handoff["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert process_handoff["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert payload["resident_host_surface_blockers"] == [
         "tray_host_missing",
         "global_hotkey_binding_missing",
@@ -70,15 +99,24 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_first_family"]["status"] == "resident_host_first"
     assert checks["resident_host_lifecycle_proof"]["status"] == "runtime_blocked"
+    assert checks["resident_host_process_supervision_handoff"]["status"] == "process_handoff_consumed"
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"
     assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
     assert all(item["passed"] for item in payload["checks"])
+
+    assert "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in payload["evidence"]
 
     assert payload["governance"] == {
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
         "wraps_resident_host_lifecycle_blockers_proof": True,
+        "wraps_resident_host_process_supervision_blocker_proof": True,
         "read_only_contract": True,
+        "bounded_local_process_launch": True,
+        "temporary_runtime_state_write": True,
+        "api_local_process_launch_authority": False,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -97,3 +135,25 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff() -> None:
+    proc = _run_proof("-Mode", "Status")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["consume_process_supervision_handoff"] is False
+    assert payload["resident_host_process_supervision_handoff_observed"] is False
+    assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == ""
+    assert payload["resident_host_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["handoff_aligned"] is True
+    assert payload["side_effects_denied"] is True
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert "resident_host_process_supervision_handoff" not in checks
+    assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" not in payload["evidence"]
+    assert payload["governance"]["wraps_resident_host_process_supervision_blocker_proof"] is False
+    assert payload["governance"]["bounded_local_process_launch"] is False
+    assert payload["governance"]["temporary_runtime_state_write"] is False
