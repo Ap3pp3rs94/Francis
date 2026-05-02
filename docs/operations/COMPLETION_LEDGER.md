@@ -15853,6 +15853,46 @@ actionable handoff:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens persistent supervision enablement authority proof
+
+Stage 6/Lens now has a standalone persistent-supervision enablement authority
+proof diagnostic at `scripts/lens-persistent-supervision-enablement-authority-proof.ps1`.
+The proof uses a temporary data root, creates the prerequisite host supervision
+authority request/approval/grant, creates the persistent-supervision enablement
+authority request, proves a pending approval cannot grant authority, approves the
+exact request, grants the bounded enablement authority receipt, reads the grant
+receipt/readiness/Lens status surfaces, and then calls the enablement denial
+route to prove service-config mutation, persistent-supervision execution, memory
+writes, runtime launch, and resident claim remain denied.
+
+This is diagnostic/proof and test work only. It exercises existing API routes and
+does not change Lens route behavior. The proof writes only temporary diagnostic
+approval and authority-grant receipts through the existing route contracts; it
+does not decide approvals in product operation, launch or supervise a process,
+install or control a service, update service config, enable persistent
+supervision, write memory, claim resident status, close Stage 6, or start Stage
+7.
+
+Stage 6 remains active and blocked. The completion audit has not yet consumed
+this standalone proof, so the next smallest truthful gap is either consuming this
+proof in the Stage 6 audit handoff or advancing the next authority boundary only
+after the audit no longer points at the already-proven enablement authority gap.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens persistent
+supervision enablement authority proof:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py -q`
+  Result: `failed before the proof aligned its `/lens/status` criterion check to
+  the actual status readback contract; passed after the correction`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_grant_requires_approved_request_and_host_grant -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
