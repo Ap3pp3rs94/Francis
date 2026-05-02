@@ -15732,6 +15732,41 @@ freshness consumption:
   Result: `passed; Ruff reported an access-denied warning writing its cache, but the format check succeeded`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-01 - Stage 6/Lens proof subprocess timing bounds
+
+Stage 6/Lens proof scripts now bound their nested PowerShell subprocesses instead
+of allowing checkpoint, completion-audit, supervisor-observation, or resident
+overlay runtime proofs to wait indefinitely when a child proof stalls. The host
+launch proof, host supervision proof, host supervisor observation proof, and
+resident overlay runtime proof now run nested proof commands through explicit
+timeouts and return typed timeout/error payloads instead of freezing the caller.
+The focused supervisor observation and resident overlay runtime tests also carry
+pytest subprocess timeouts so local timing failures fail as test failures rather
+than hanging the run.
+
+This is diagnostic/test stability only. It does not launch or supervise a
+resident process beyond the existing bounded diagnostic proof windows, install or
+control a service, bind hotkeys, register tray presence, open an overlay, write
+memory, decide approvals, grant process authority, or close Stage 6. The Stage 6
+completion audit still reports `do_not_close_stage6`; it now returns that result
+instead of hanging on the proof graph.
+
+Latest targeted validation for the `2026-05-01` Stage 6/Lens proof subprocess
+timing bounds:
+
+- `python -m pytest tests\test_lens_host_launch_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; returned blocked/do_not_close_stage6 with next_smallest_truthful_gap stage6_lens_completion_audit`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

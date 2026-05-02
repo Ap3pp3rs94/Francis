@@ -86,11 +86,37 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-JsonScript {
   param(
     [string]$PowerShellPath,
     [string]$ScriptPath,
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+    [int]$TimeoutSeconds = 60
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -98,12 +124,72 @@ function Invoke-JsonScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $ArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $ScriptPath)
+  )
+  foreach ($Arg in $ScriptArgs) {
+    $ArgumentParts += (Quote-ProcessArgument -Value $Arg)
+  }
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = $ArgumentParts -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Started = $false
+  try {
+    $Started = $Process.Start()
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+    }
+  }
+  if (-not $Started) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
+    }
+  }
+
+  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StderrTask = $Process.StandardError.ReadToEndAsync()
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+    }
+  }
+
+  $Text = $StdoutTask.GetAwaiter().GetResult()
+  $ErrorText = $StderrTask.GetAwaiter().GetResult()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -112,9 +198,11 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
   }
 }
 
@@ -155,9 +243,9 @@ $HostPreflightPath = Join-Path $PSScriptRoot 'lens-host-preflight.ps1'
 $ForegroundProofPath = Join-Path $PSScriptRoot 'lens-host-foreground-proof.ps1'
 $HostLaunchProofPath = Join-Path $PSScriptRoot 'lens-host-launch-proof.ps1'
 $ObservedForegroundRunSeconds = [Math]::Max($ForegroundRunSeconds, 5)
-$HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
-$ForegroundProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ForegroundProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$ObservedForegroundRunSeconds)
-$HostLaunchProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds)
+$HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status') -TimeoutSeconds 30
+$ForegroundProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ForegroundProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$ObservedForegroundRunSeconds) -TimeoutSeconds ([Math]::Max(60, ($ObservedForegroundRunSeconds * 2) + 45))
+$HostLaunchProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds) -TimeoutSeconds ([Math]::Max(60, ($HostLaunchRunSeconds * 2) + 45))
 
 $PreflightPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
 $ForegroundPayload = Get-PropertyValue -Payload $ForegroundProof -Name 'payload'

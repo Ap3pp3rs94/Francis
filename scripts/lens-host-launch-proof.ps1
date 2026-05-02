@@ -116,6 +116,31 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Wait-ForRuntimeState {
   param(
     [string]$StatePath,
@@ -139,7 +164,8 @@ function Invoke-HostScript {
     [string]$PowerShellPath,
     [string]$HostScriptPath,
     [string]$ProofDataRoot,
-    [string[]]$ScriptArgs
+    [string[]]$ScriptArgs,
+    [int]$TimeoutSeconds = 60
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $HostScriptPath -PathType Leaf)) {
@@ -147,23 +173,73 @@ function Invoke-HostScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
     }
   }
 
-  $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
+  $ArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $HostScriptPath)
+  )
+  foreach ($Arg in $ScriptArgs) {
+    $ArgumentParts += (Quote-ProcessArgument -Value $Arg)
+  }
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = $ArgumentParts -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+  $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $ProofDataRoot
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Started = $false
   try {
-    $env:FRANCIS_DATA_DIR = $ProofDataRoot
-    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $HostScriptPath @ScriptArgs 2>&1
-    $ExitCode = $LASTEXITCODE
-  } finally {
-    if ([string]::IsNullOrWhiteSpace($PreviousDataDir)) {
-      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
-    } else {
-      $env:FRANCIS_DATA_DIR = $PreviousDataDir
+    $Started = $Process.Start()
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+    }
+  }
+  if (-not $Started) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
     }
   }
 
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StderrTask = $Process.StandardError.ReadToEndAsync()
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+    }
+  }
+
+  $Text = $StdoutTask.GetAwaiter().GetResult()
+  $ErrorText = $StderrTask.GetAwaiter().GetResult()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -172,9 +248,11 @@ function Invoke-HostScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
   }
 }
 
@@ -208,7 +286,7 @@ $LaunchCompleted = $false
 
 if ($PowerShellPath -and $HostScriptExists) {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-  $LaunchResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds)
+  $LaunchResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds) -TimeoutSeconds ([Math]::Max(45, ($RunSeconds * 2) + 30))
   $LaunchPayload = Get-PropertyValue -Payload $LaunchResult -Name 'payload'
   $LaunchProcess = Get-PropertyValue -Payload $LaunchPayload -Name 'process_readback'
   $LaunchGovernance = Get-PropertyValue -Payload $LaunchPayload -Name 'governance'

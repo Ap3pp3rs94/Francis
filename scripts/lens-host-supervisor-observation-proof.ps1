@@ -148,12 +148,29 @@ function Test-ProcessAlive {
   }
 }
 
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-HostScript {
   param(
     [string]$PowerShellPath,
     [string]$HostScriptPath,
     [string]$ProofDataRoot,
-    [string[]]$ScriptArgs
+    [string[]]$ScriptArgs,
+    [int]$TimeoutSeconds = 60
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $HostScriptPath -PathType Leaf)) {
@@ -161,23 +178,73 @@ function Invoke-HostScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
     }
   }
 
-  $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
+  $ArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $HostScriptPath)
+  )
+  foreach ($Arg in $ScriptArgs) {
+    $ArgumentParts += (Quote-ProcessArgument -Value $Arg)
+  }
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = $ArgumentParts -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+  $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $ProofDataRoot
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Started = $false
   try {
-    $env:FRANCIS_DATA_DIR = $ProofDataRoot
-    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $HostScriptPath @ScriptArgs 2>&1
-    $ExitCode = $LASTEXITCODE
-  } finally {
-    if ([string]::IsNullOrWhiteSpace($PreviousDataDir)) {
-      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
-    } else {
-      $env:FRANCIS_DATA_DIR = $PreviousDataDir
+    $Started = $Process.Start()
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+    }
+  }
+  if (-not $Started) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
     }
   }
 
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StderrTask = $Process.StandardError.ReadToEndAsync()
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+    }
+  }
+
+  $Text = $StdoutTask.GetAwaiter().GetResult()
+  $ErrorText = $StderrTask.GetAwaiter().GetResult()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -186,9 +253,11 @@ function Invoke-HostScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
   }
 }
 
@@ -294,10 +363,8 @@ function Complete-JsonScript {
 
   $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
   if (-not $Exited) {
-    try {
-      $Process.Kill()
-    } catch {
-    }
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
     return [ordered]@{
       exit_code = 124
       payload = $null
@@ -373,7 +440,7 @@ $AuthorityBounded = $false
 if ($PowerShellPath -and $HostScriptExists -and $SupervisorScriptExists) {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
   $LaunchStartedProcess = Start-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds)
-  $SupervisorResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $SupervisorScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Observe', '-RunSeconds', [string]$RunSeconds, '-DataDir', $ProofDataRoot)
+  $SupervisorResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $SupervisorScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Observe', '-RunSeconds', [string]$RunSeconds, '-DataDir', $ProofDataRoot) -TimeoutSeconds ([Math]::Max(90, ($RunSeconds * 2) + 60))
   $LaunchResult = Complete-JsonScript -StartedProcess $LaunchStartedProcess -TimeoutSeconds ([Math]::Max(30, $RunSeconds + 30))
   $LaunchPayload = Get-PropertyValue -Payload $LaunchResult -Name 'payload'
   $LaunchProcess = Get-PropertyValue -Payload $LaunchPayload -Name 'process_readback'
@@ -436,7 +503,7 @@ if ($PowerShellPath -and $HostScriptExists -and $SupervisorScriptExists) {
     -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'memory_write' -Default $true)
   )
 
-  $FinalStatusResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Status')
+  $FinalStatusResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Status') -TimeoutSeconds 30
   $FinalStatusPayload = Get-PropertyValue -Payload $FinalStatusResult -Name 'payload'
   $FinalProcessReadback = Get-PropertyValue -Payload $FinalStatusPayload -Name 'process_readback'
   $FinalStatusObserved = (
