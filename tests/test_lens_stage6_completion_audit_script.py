@@ -64,9 +64,12 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert "resident-claim boundary proof" in payload["next_smallest_truthful_gap_basis"]
-    assert "Stage 6 closure audit/readiness review" in payload["next_smallest_truthful_gap_basis"]
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_authority_not_granted"
+    assert "persistent-supervision enablement denial boundary" in payload["next_smallest_truthful_gap_basis"]
+    assert (
+        "explicit enablement, service-config write, execution, and resident-claim authority"
+        in (payload["next_smallest_truthful_gap_basis"])
+    )
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2

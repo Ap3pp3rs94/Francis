@@ -486,23 +486,21 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
-} elseif ($ResidentRuntimeResidentClaimBoundaryObserved) {
-  'stage6_lens_completion_audit'
-} elseif ($ResidentRuntimeOverlayWindowBoundaryObserved) {
+} elseif (-not $ResidentRuntimeResidentClaimBoundaryObserved -and $ResidentRuntimeOverlayWindowBoundaryObserved) {
   'resident_runtime_resident_claim_authority_boundary'
-} elseif ($ResidentRuntimeHotkeySummonBoundaryObserved) {
+} elseif (-not $ResidentRuntimeOverlayWindowBoundaryObserved -and $ResidentRuntimeHotkeySummonBoundaryObserved) {
   'resident_runtime_overlay_window_authority_boundary'
-} elseif ($ResidentRuntimeTrayPresenceBoundaryObserved) {
+} elseif (-not $ResidentRuntimeHotkeySummonBoundaryObserved -and $ResidentRuntimeTrayPresenceBoundaryObserved) {
   'resident_runtime_hotkey_summon_authority_boundary'
-} elseif ($ResidentRuntimeServiceControlBoundaryObserved) {
+} elseif (-not $ResidentRuntimeTrayPresenceBoundaryObserved -and $ResidentRuntimeServiceControlBoundaryObserved) {
   'resident_runtime_tray_presence_authority_boundary'
-} elseif ($ResidentRuntimeProcessSupervisionBoundaryObserved) {
+} elseif (-not $ResidentRuntimeServiceControlBoundaryObserved -and $ResidentRuntimeProcessSupervisionBoundaryObserved) {
   'resident_runtime_service_control_authority_boundary'
-} elseif ($ResidentRuntimeAuthorityBlockersProofObserved) {
+} elseif (-not $ResidentRuntimeProcessSupervisionBoundaryObserved -and $ResidentRuntimeAuthorityBlockersProofObserved) {
   'resident_runtime_process_supervision_authority_boundary'
-} elseif ($ResidentRuntimeGrantedBoundaryProofObserved) {
+} elseif (-not $ResidentRuntimeAuthorityBlockersProofObserved -and $ResidentRuntimeGrantedBoundaryProofObserved) {
   'supervised_resident_runtime_process_service_tray_hotkey_overlay_authority'
-} elseif ($ResidentRuntimeBoundaryObserved) {
+} elseif (-not $ResidentRuntimeGrantedBoundaryProofObserved -and $ResidentRuntimeBoundaryObserved) {
   'supervised_resident_runtime_execution_boundary'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
@@ -537,6 +535,8 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'summon_anywhere_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
   'system_resident_presence_blockers'
+} elseif ($ResidentRuntimeResidentClaimBoundaryObserved) {
+  'stage6_lens_completion_audit'
 } else {
   'review_stage6_checkpoint_blockers'
 }

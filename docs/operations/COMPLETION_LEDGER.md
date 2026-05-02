@@ -15824,6 +15824,35 @@ supervisor observation window stabilization:
   Result: `passed`
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens completion audit actionable handoff
+
+Stage 6/Lens completion audit now keeps the boundary-proof sequence intact while
+making the post-boundary handoff actionable. After the audit has consumed the
+resident-runtime resident-claim boundary proof and Stage 6 is still blocked, it
+now reports `persistent_supervision_enablement_authority_not_granted` as the
+next smallest truthful gap instead of pointing back at
+`stage6_lens_completion_audit`. The checkpoint can still report
+`stage6_lens_completion_audit` as its handoff into the completion audit; the
+completion audit now resolves that handoff into the first concrete remaining
+resident/persistent-supervision blocker.
+
+This is audit/readback routing only. It does not launch or supervise a resident
+process, install or control a service, bind a hotkey, register tray presence,
+open an overlay, write memory, decide approvals, grant new authority, claim
+resident status, close Stage 6, or start Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens completion audit
+actionable handoff:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
