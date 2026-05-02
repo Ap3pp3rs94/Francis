@@ -16746,6 +16746,41 @@ process-supervision handoff consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens command-palette shell bridge
+
+Stage 6/Lens now has a read-only shell bridge at
+`scripts/lens-command-palette.ps1`. The bridge consumes existing Lens status
+truth from either a running `/lens/status` API (`-ApiBaseUrl`) or a supplied
+status JSON (`-StatusPath`), projects the backend `command_palette` commands,
+and explicitly reports the OS-level command-palette binding as blocked when the
+backend still says `availability=chat_ui_only` and `summon_anywhere=false`.
+`-Mode Open` is refused with `lens_command_palette_open_not_authorized`, so this
+does not open an OS palette, register a hotkey, summon Francis, launch a process,
+control tray or overlay surfaces, decide approvals, execute actions, write
+memory, or grant local-process-launch, hotkey-registration, tray-registration,
+overlay-control, summon, or mutation authority. With no local API running, the
+bridge truthfully reports `lens_status_api_unavailable` rather than inventing
+palette state. Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria; the next smallest truthful gap remains turning the
+readback-only shell bridge and summon gates into a real OS-level binding only
+after resident host/tray/hotkey/overlay authority is safe and proven.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens command-palette
+shell bridge:
+
+- `python -m pytest tests\test_lens_command_palette_script.py -q`
+  Result: `failed before fixing ordered-hashtable property readback; passed
+  after fix`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,readback_ready,os_level_command_palette,next_smallest_truthful_gap,blockers | ConvertTo-Json -Depth 6`
+  Result: `passed; returned unavailable/read-only with lens_status_api_unavailable because no local API was running`
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
