@@ -63,6 +63,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_surface_foreground_requested_seconds": 2,
         "resident_surface_foreground_effective_seconds": 5,
         "resident_surface_foreground_minimum_seconds": 5,
+        "supervisor_requested_seconds": 3,
+        "supervisor_effective_seconds": 12,
+        "supervisor_minimum_seconds": 12,
     }
     assert payload["summary"] == {
         "criteria_total": 5,

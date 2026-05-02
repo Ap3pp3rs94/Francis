@@ -16103,7 +16103,7 @@ blocker grouping:
 - `git diff --check`
   Result: `passed`
 
-### 2026-05-02 - Stage 6/Lens checkpoint resident-surface observation minimum
+### 2026-05-02 - Stage 6/Lens checkpoint observation window minimums
 
 GitHub CI run `25248070307` passed three matrix jobs but failed
 Windows/Python 3.13 in
@@ -16113,11 +16113,22 @@ The checkpoint expected the `helpful_not_noisy` criterion to report
 was too narrow for the resident-surface foreground runtime readback on that
 runner and fell back to `resident_surface_content_readback_ready`.
 
+After the resident-surface minimum was added, GitHub CI run `25248600542`
+confirmed Windows/Python 3.13 was fixed but failed Windows/Python 3.12 in the
+same checkpoint test when the host supervisor observation proof reported
+`proof_failed` under the 3-second supervisor request. That kept the failure in
+the same timing-sensitive checkpoint proof family rather than exposing a new
+authority or product behavior gap.
+
 `scripts/lens-stage6-checkpoint.ps1` now preserves the requested
 `ResidentSurfaceForegroundRunSeconds` value while enforcing a 5-second minimum
 effective observation window for the nested resident-surface foreground proof.
-The checkpoint payload exposes `observation_windows` with requested, effective,
-and minimum seconds so the stabilization is visible instead of silent.
+It also preserves the requested `SupervisorRunSeconds` value while enforcing a
+12-second minimum effective observation window for host-supervisor,
+resident-overlay runtime, and resident-overlay activation-boundary proof calls
+inside the checkpoint. The checkpoint payload exposes `observation_windows`
+with requested, effective, and minimum seconds so the stabilization is visible
+instead of silent.
 
 This is diagnostic/test/ledger work only. It does not grant execution authority,
 approval-decision authority, memory-write authority, process supervision,
@@ -16125,7 +16136,7 @@ process restart, service control, hotkey registration, overlay control,
 resident-claim authority, Stage 6 closure, or Stage 7 transition.
 
 Latest targeted validation for the `2026-05-02` Stage 6/Lens checkpoint
-resident-surface observation minimum:
+observation window minimums:
 
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
   Result: `passed`

@@ -593,6 +593,11 @@ $ResidentSurfaceForegroundObservationSeconds = [Math]::Max(
   $ResidentSurfaceForegroundRunSeconds,
   $ResidentSurfaceForegroundMinimumSeconds
 )
+$SupervisorObservationMinimumSeconds = 12
+$SupervisorObservationSeconds = [Math]::Max(
+  $SupervisorRunSeconds,
+  $SupervisorObservationMinimumSeconds
+)
 $LiveOperatorProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status'))
 $LiveOperatorProof = if ($LiveOperatorProofResult.Count -gt 0) { $LiveOperatorProofResult[-1] } else { $null }
 $LiveOperatorExitCode = -1
@@ -704,8 +709,7 @@ $HostLaunchProofPassed = (
 )
 $HostLaunchProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostLaunchPayload -Name 'blockers' -Default @())
 
-$HostSupervisorObservationRunSeconds = [Math]::Max(8, $SupervisorRunSeconds)
-$HostSupervisorProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostSupervisorObservationRunSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.host.supervisor_observation_proof'
+$HostSupervisorProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.host.supervisor_observation_proof'
 $HostSupervisorExitCode = -1
 $HostSupervisorPayload = $null
 if ($HostSupervisorProof -is [System.Collections.IDictionary]) {
@@ -757,7 +761,7 @@ $HostSupervisorOwnedSessionPassed = (
 )
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'blockers' -Default @())
 
-$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_runtime.proof'
+$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_runtime.proof'
 $ResidentOverlayRuntimeExitCode = -1
 $ResidentOverlayRuntimePayload = $null
 if ($ResidentOverlayRuntimeProof -is [System.Collections.IDictionary]) {
@@ -783,7 +787,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
 
-$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorRunSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
+$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $ResidentOverlayActivationBoundaryExitCode = -1
 $ResidentOverlayActivationBoundaryPayload = $null
 if ($ResidentOverlayActivationBoundaryProof -is [System.Collections.IDictionary]) {
@@ -1299,6 +1303,9 @@ $Payload = [ordered]@{
     resident_surface_foreground_requested_seconds = $ResidentSurfaceForegroundRunSeconds
     resident_surface_foreground_effective_seconds = $ResidentSurfaceForegroundObservationSeconds
     resident_surface_foreground_minimum_seconds = $ResidentSurfaceForegroundMinimumSeconds
+    supervisor_requested_seconds = $SupervisorRunSeconds
+    supervisor_effective_seconds = $SupervisorObservationSeconds
+    supervisor_minimum_seconds = $SupervisorObservationMinimumSeconds
   }
   summary = [ordered]@{
     criteria_total = $Criteria.Count
