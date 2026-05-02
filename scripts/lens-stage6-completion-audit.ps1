@@ -91,6 +91,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
 $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
+$PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -137,6 +138,40 @@ $PersistentSupervisionPlanObserved = (
   [bool]$PersistentSupervisionPlan.plan_available -and
   -not [bool]$PersistentSupervisionPlan.persistent_supervision_ready -and
   -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
+)
+$PersistentSupervisionEnablementAuthorityProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $PersistentSupervisionEnablementAuthorityProofScript `
+  -ScriptArgs @('-Mode', 'Status')
+$PersistentSupervisionEnablementAuthorityProof = $PersistentSupervisionEnablementAuthorityProofResult.payload
+$PersistentSupervisionEnablementAuthorityProofBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementAuthorityProof.blockers
+$PersistentSupervisionEnablementAuthorityProofObserved = (
+  [int]$PersistentSupervisionEnablementAuthorityProofResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionEnablementAuthorityProof.kind -eq 'lens.host.persistent_supervision_enablement_authority.proof' -and
+  [bool]$PersistentSupervisionEnablementAuthorityProof.ok -and
+  [string]$PersistentSupervisionEnablementAuthorityProof.status -eq 'proof_passed' -and
+  [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_enablement_authority -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.service_config_write_authority -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_execution_authority -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_enablement_allowed -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.resident_claim_allowed -and
+  [bool]$PersistentSupervisionEnablementAuthorityProof.grant_applied -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.enablement_applied -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.executed -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.service_config_updated -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_update_service_config -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_enable_process_supervision -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_enable_persistent_supervision -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_install_service -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_start_service -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_supervise_process -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_restart_process -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_write_memory -and
+  -not [bool]$PersistentSupervisionEnablementAuthorityProof.would_claim_resident -and
+  -not ($PersistentSupervisionEnablementAuthorityProofBlockers -contains 'persistent_supervision_enablement_authority_not_granted') -and
+  $PersistentSupervisionEnablementAuthorityProofBlockers -contains 'service_config_write_authority_not_granted' -and
+  $PersistentSupervisionEnablementAuthorityProofBlockers -contains 'persistent_supervision_execution_authority_not_granted' -and
+  [string]$PersistentSupervisionEnablementAuthorityProof.next_smallest_truthful_gap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary'
 )
 $PersistentSupervisionEnablementDenial = $Checkpoint.persistent_supervision_enablement_denial_boundary
 $PersistentSupervisionEnablementDenialBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementDenial.blockers
@@ -510,9 +545,16 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
-  $PersistentSupervisionEnablementDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted'
+  $PersistentSupervisionEnablementDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
+  -not $PersistentSupervisionEnablementAuthorityProofObserved
 ) {
   'persistent_supervision_enablement_authority_not_granted'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionEnablementAuthorityProofObserved
+) {
+  'persistent_supervision_execution_authority_or_resident_claim_boundary'
 } elseif (
   $PersistentSupervisionPlanObserved -and
   $PersistentSupervisionPlanBlockers -contains 'persistent_supervision_disabled'
@@ -577,6 +619,8 @@ $Payload = [ordered]@{
     'The audit observes the resident runtime grant/readback spine and the resident runtime execute boundary; it now blocks on supervised process, service, tray, hotkey, overlay, receipt, and resident-claim authorities without launching or claiming a resident runtime.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_authority_not_granted') {
     'The audit now consumes the persistent-supervision enablement denial boundary and execution denial boundary; it shows enablement is blocked by explicit enablement, service-config write, execution, and resident-claim authority, not by missing proof readback.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary') {
+    'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
     'The checkpoint must observe the persistent-supervision execution denial boundary before the completion audit can make an authority-gap read.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted') {
@@ -629,6 +673,9 @@ $Payload = [ordered]@{
     )
     persistent_supervision_enablement_execution = [string[]]@(
       $PersistentSupervisionEnablementExecutionDenialBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|approval_id' } | Sort-Object -Unique
+    )
+    persistent_supervision_enablement_authority_proof = [string[]]@(
+      $PersistentSupervisionEnablementAuthorityProofBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|process_supervision' } | Sort-Object -Unique
     )
     resident_runtime = [string[]]@(
       @(
@@ -1122,6 +1169,41 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     blockers = [string[]]@($PersistentSupervisionEnablementExecutionDenialBlockers)
   }
+  persistent_supervision_enablement_authority_proof = [ordered]@{
+    status = if ($PersistentSupervisionEnablementAuthorityProofObserved) { [string]$PersistentSupervisionEnablementAuthorityProof.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionEnablementAuthorityProofObserved
+    exit_code = [int]$PersistentSupervisionEnablementAuthorityProofResult.exit_code
+    evidence = @(
+      'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
+      '/lens/host/persistent-supervision/enablement/authority',
+      '/lens/host/persistent-supervision/enablement/authority/grants',
+      '/lens/host/persistent-supervision/enablement/authority/readiness',
+      '/lens/host/persistent-supervision/enablement',
+      '/lens/status'
+    )
+    host_supervision_authority_grant_receipt_id = [string]$PersistentSupervisionEnablementAuthorityProof.host_supervision_authority_grant_receipt_id
+    persistent_supervision_enablement_authority_grant_receipt_id = [string]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_enablement_authority_grant_receipt_id
+    persistent_supervision_enablement_authority = [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_enablement_authority
+    service_config_write_authority = [bool]$PersistentSupervisionEnablementAuthorityProof.service_config_write_authority
+    persistent_supervision_execution_authority = [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_execution_authority
+    persistent_supervision_enablement_allowed = [bool]$PersistentSupervisionEnablementAuthorityProof.persistent_supervision_enablement_allowed
+    resident_claim_allowed = [bool]$PersistentSupervisionEnablementAuthorityProof.resident_claim_allowed
+    grant_applied = [bool]$PersistentSupervisionEnablementAuthorityProof.grant_applied
+    enablement_applied = [bool]$PersistentSupervisionEnablementAuthorityProof.enablement_applied
+    executed = [bool]$PersistentSupervisionEnablementAuthorityProof.executed
+    service_config_updated = [bool]$PersistentSupervisionEnablementAuthorityProof.service_config_updated
+    would_update_service_config = [bool]$PersistentSupervisionEnablementAuthorityProof.would_update_service_config
+    would_enable_process_supervision = [bool]$PersistentSupervisionEnablementAuthorityProof.would_enable_process_supervision
+    would_enable_persistent_supervision = [bool]$PersistentSupervisionEnablementAuthorityProof.would_enable_persistent_supervision
+    would_install_service = [bool]$PersistentSupervisionEnablementAuthorityProof.would_install_service
+    would_start_service = [bool]$PersistentSupervisionEnablementAuthorityProof.would_start_service
+    would_supervise_process = [bool]$PersistentSupervisionEnablementAuthorityProof.would_supervise_process
+    would_restart_process = [bool]$PersistentSupervisionEnablementAuthorityProof.would_restart_process
+    would_write_memory = [bool]$PersistentSupervisionEnablementAuthorityProof.would_write_memory
+    would_claim_resident = [bool]$PersistentSupervisionEnablementAuthorityProof.would_claim_resident
+    blockers = [string[]]@($PersistentSupervisionEnablementAuthorityProofBlockers)
+    next_smallest_truthful_gap = [string]$PersistentSupervisionEnablementAuthorityProof.next_smallest_truthful_gap
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
@@ -1129,6 +1211,7 @@ $Payload = [ordered]@{
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     '/lens/host/persistent-supervision/enablement',
     '/lens/host/persistent-supervision/enablement/execution',
     '/lens/host/persistent-supervision/enablement/execution/readiness',
@@ -1145,6 +1228,7 @@ $Payload = [ordered]@{
     checkpoint_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
+    persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_enablement_denial_boundary_readback = $PersistentSupervisionEnablementDenialObserved
     persistent_supervision_enablement_execution_denial_boundary_readback = $PersistentSupervisionEnablementExecutionDenialObserved
     resident_runtime_granted_boundary_proof_readback = $ResidentRuntimeGrantedBoundaryProofObserved

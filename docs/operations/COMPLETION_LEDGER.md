@@ -15893,6 +15893,40 @@ supervision enablement authority proof:
   Result: `failed before formatting; passed after formatting`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens audit consumes persistent supervision enablement authority proof
+
+Stage 6/Lens completion-audit readback now consumes the standalone
+`scripts/lens-persistent-supervision-enablement-authority-proof.ps1` diagnostic.
+The audit now exposes
+`persistent_supervision_enablement_authority_proof`, records the bounded
+enablement authority grant receipt/readback, verifies service-config write,
+persistent execution, memory, runtime launch, and resident-claim authority remain
+denied, and no longer reports
+`persistent_supervision_enablement_authority_not_granted` as the active next
+smallest truthful gap once that proof passes.
+
+This is audit/readback and test work only. It does not grant product execution
+authority, service-config write authority, persistent-supervision execution
+authority, approval decision authority, memory-write authority, resident-claim
+authority, UI control, or Stage 6 closure. Stage 6 remains active and blocked;
+the completion audit now points at
+`persistent_supervision_execution_authority_or_resident_claim_boundary` as the
+next smallest truthful gap after the bounded enablement authority proof.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens audit consumption
+of the persistent supervision enablement authority proof:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_enablement_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `failed before formatting the audit test; passed after formatting`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
