@@ -4329,6 +4329,137 @@ def test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_residen
     assert manifest.json()["runtime_boundary_route"] == "/lens/host/runtime-boundary"
 
 
+def test_lens_host_runtime_implementation_plan_stays_readback_only(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/host/runtime-plan")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.host.runtime_implementation_plan"
+    assert body["status"] == "blocked"
+    assert body["route"] == "/lens/host/runtime-plan"
+    assert body["manifest_route"] == "/lens/host/manifest"
+    assert body["runtime_boundary_route"] == "/lens/host/runtime-boundary"
+    assert body["plan_available"] is True
+    assert body["implementation_ready"] is False
+    assert body["execution_ready"] is False
+    assert body["resident_runtime_ready"] is False
+    assert body["resident_claim_allowed"] is False
+    assert body["foreground_process_observed"] is False
+    assert body["resident_host_process_state"] == "missing"
+    assert body["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert body["requirements_total"] == 11
+    assert body["requirements_ready_total"] == 4
+    assert body["blocked_requirements"] == [
+        "resident_runtime_loop_contract",
+        "process_supervision_contract",
+        "service_management_contract",
+        "tray_presence_contract",
+        "hotkey_summon_contract",
+        "overlay_window_contract",
+        "resident_claim_contract",
+    ]
+    assert body["blocker_groups"]["runtime"] == ["lens_host_runtime_not_implemented"]
+    assert body["blocker_groups"]["process_readback"] == ["resident_host_process_missing"]
+    assert body["blocker_groups"]["surface_dependencies"] == [
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    assert "resident_runtime_execution_authority_not_granted" in body["blocker_groups"]["authority"]
+    assert "resident_host_process_missing" in body["blockers"]
+    assert "process_supervision_authority_not_granted" in body["blockers"]
+    assert "service_control_authority_not_granted" in body["blockers"]
+    assert "hotkey_registration_authority_not_granted" in body["blockers"]
+    assert "resident_claim_authority_not_granted" in body["blockers"]
+
+    plan = body["plan"]
+    assert plan["would_launch_process"] is False
+    assert plan["would_supervise_process"] is False
+    assert plan["would_restart_process"] is False
+    assert plan["would_install_service"] is False
+    assert plan["would_start_service"] is False
+    assert plan["would_register_tray"] is False
+    assert plan["would_register_hotkey"] is False
+    assert plan["would_open_overlay"] is False
+    assert plan["would_claim_resident"] is False
+    assert plan["would_write_memory"] is False
+    assert plan["would_write_receipt"] is False
+    assert plan["would_decide_approval"] is False
+    plan_steps = {step["id"]: step for step in plan["steps"]}
+    assert plan_steps["host_entrypoint_contract"]["status"] == "ready"
+    assert plan_steps["diagnostic_status_boundary"]["status"] == "ready"
+    assert plan_steps["bounded_foreground_session_boundary"]["status"] == "ready"
+    assert plan_steps["runtime_state_readback_contract"]["status"] == "ready"
+    assert plan_steps["resident_runtime_loop_contract"]["status"] == "blocked"
+    assert plan_steps["resident_runtime_loop_contract"]["authority_granted"] is False
+    assert plan_steps["process_supervision_contract"]["status"] == "blocked"
+    assert plan_steps["process_supervision_contract"]["authority_granted"] is False
+    assert "resident_host_process_missing" in plan_steps["process_supervision_contract"]["blockers"]
+    assert plan_steps["service_management_contract"]["status"] == "blocked"
+    assert plan_steps["service_management_contract"]["authority_granted"] is False
+    assert plan_steps["tray_presence_contract"]["status"] == "blocked"
+    assert plan_steps["hotkey_summon_contract"]["status"] == "blocked"
+    assert plan_steps["overlay_window_contract"]["status"] == "blocked"
+    assert plan_steps["resident_claim_contract"]["status"] == "blocked"
+
+    runtime_boundary = body["runtime_boundary"]
+    assert runtime_boundary["kind"] == "lens.host.runtime_boundary"
+    assert runtime_boundary["resident_runtime"] is False
+    assert runtime_boundary["process_supervision"] is False
+    assert runtime_boundary["governance"]["execution_authority"] is False
+    assert runtime_boundary["governance"]["resident_claim_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "lens_host_runtime_implementation_plan"
+    assert governance["read_only_contract"] is True
+    assert governance["plan_readback_only"] is True
+    for key in [
+        "execution_authority",
+        "resident_runtime_execution_authority",
+        "approval_decision_authority",
+        "memory_write",
+        "local_process_launch_authority",
+        "diagnostic_launch_authority",
+        "process_supervision_authority",
+        "process_restart_authority",
+        "service_install_authority",
+        "service_control_authority",
+        "receipt_write_authority",
+        "resident_claim_authority",
+        "overlay_control_authority",
+        "summon_authority",
+        "hotkey_registration_authority",
+        "tray_registration_authority",
+        "mutation_authority_granted",
+    ]:
+        assert governance[key] is False
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_contract"
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
@@ -4468,6 +4599,30 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert runtime_boundary["governance"]["execution_authority"] is False
     assert runtime_boundary["governance"]["local_process_launch_authority"] is False
     assert runtime_boundary["governance"]["resident_claim_authority"] is False
+
+    runtime_plan_response = client.get("/lens/host/runtime-plan")
+    assert runtime_plan_response.status_code == 200
+    runtime_plan = runtime_plan_response.json()
+    assert runtime_plan["kind"] == "lens.host.runtime_implementation_plan"
+    assert runtime_plan["foreground_process_observed"] is True
+    assert runtime_plan["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert runtime_plan["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert runtime_plan["implementation_ready"] is False
+    assert runtime_plan["execution_ready"] is False
+    assert runtime_plan["resident_runtime_ready"] is False
+    assert "resident_host_process_missing" not in runtime_plan["blockers"]
+    assert "resident_host_process_not_supervised" in runtime_plan["blockers"]
+    assert "lens_host_runtime_not_implemented" in runtime_plan["blockers"]
+    runtime_plan_steps = {step["id"]: step for step in runtime_plan["plan"]["steps"]}
+    process_supervision_step = runtime_plan_steps["process_supervision_contract"]
+    assert "resident_host_process_not_supervised" in process_supervision_step["blockers"]
+    assert "resident_host_process_missing" not in process_supervision_step["blockers"]
+    assert runtime_plan["plan"]["would_launch_process"] is False
+    assert runtime_plan["plan"]["would_supervise_process"] is False
+    assert runtime_plan["governance"]["execution_authority"] is False
+    assert runtime_plan["governance"]["local_process_launch_authority"] is False
+    assert runtime_plan["governance"]["process_supervision_authority"] is False
+    assert runtime_plan["governance"]["resident_claim_authority"] is False
 
 
 def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from francis.lens import (
     lens_host_persistent_supervision_enablement_preflight,
     lens_host_persistent_supervision_plan,
     lens_host_runtime_boundary,
+    lens_host_runtime_implementation_plan,
     lens_host_status,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_grant_receipts,
@@ -176,6 +177,11 @@ def host_manifest() -> dict[str, Any]:
 @router.get("/host/runtime-boundary")
 def host_runtime_boundary() -> dict[str, Any]:
     return lens_host_runtime_boundary()
+
+
+@router.get("/host/runtime-plan")
+def host_runtime_plan() -> dict[str, Any]:
+    return lens_host_runtime_implementation_plan()
 
 
 @router.get("/host/supervision")
