@@ -48,18 +48,18 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
         "-StartupTimeoutSeconds",
         "20",
         "-SupervisorRunSeconds",
-        "20",
+        "25",
         "-DataDir",
         str(data_dir),
     )
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.resident_overlay_activation_boundary.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["startup_timeout_seconds"] == 20
-    assert payload["supervisor_run_seconds"] == 20
+    assert payload["supervisor_run_seconds"] == 25
     assert payload["live_operator_experience_proof"] is True
     assert payload["resident_overlay_boundary_observed"] is True
     assert payload["activation_boundary_observed"] is True

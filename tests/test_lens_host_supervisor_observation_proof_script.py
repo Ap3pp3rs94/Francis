@@ -42,14 +42,14 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
-    proc = _run_proof("-Mode", "Status", "-RunSeconds", "20", "-DataDir", str(data_dir))
+    proc = _run_proof("-Mode", "Status", "-RunSeconds", "25", "-DataDir", str(data_dir))
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.host.supervisor_observation_proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["run_seconds"] == 20
+    assert payload["run_seconds"] == 25
     assert payload["bounded_supervisor_observed"] is True
     assert payload["supervision_observation_ready"] is True
     assert payload["supervisor_observed_running_state"] is True

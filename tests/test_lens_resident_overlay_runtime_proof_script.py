@@ -46,17 +46,17 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
         "-Mode",
         "Status",
         "-SupervisorRunSeconds",
-        "20",
+        "25",
         "-DataDir",
         str(data_dir),
     )
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.resident_overlay_runtime.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["supervisor_run_seconds"] == 20
+    assert payload["supervisor_run_seconds"] == 25
     assert payload["resident_overlay_runtime_ready"] is False
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False

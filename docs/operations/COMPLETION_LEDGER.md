@@ -16326,6 +16326,38 @@ runtime implementation plan readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident overlay proof window stabilization
+
+GitHub CI run `25252077306` passed three matrix jobs but failed
+Windows/Python 3.13 in
+`tests/test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority`.
+The failure returned a JSON proof receipt on stdout with empty stderr, so the
+test assertion now reports stdout when stderr is empty. The direct host
+supervisor observation proof, resident overlay runtime proof, and nested
+activation-boundary proof now use a `25` second bounded observation window
+instead of the previous `20` second window so slower Windows CI runners have a
+stable interval to observe both the foreground-running and foreground-stopped
+states.
+
+This is test and ledger work only. It does not change Lens product behavior,
+does not add process launch, supervision, restart, service control, tray,
+hotkey, overlay, memory-write, approval-decision, receipt-write, resident-claim,
+or UI authority, and does not close Stage 6 or start Stage 7. Stage 6 remains
+active and blocked on the actual resident host/runtime/summon surface and
+authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident overlay
+proof window stabilization:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
