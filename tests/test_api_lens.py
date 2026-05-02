@@ -345,6 +345,32 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["ok"] is True
     assert body["kind"] == "lens.status"
     assert body["read_only"] is True
+    closure = body["stage6_readiness"]["closure_readback"]
+    assert closure["kind"] == "lens.stage6.closure_readback"
+    assert closure["status"] == "blocked"
+    assert closure["ready_to_close"] is False
+    assert closure["criteria_total"] == 5
+    assert closure["ready_total"] == 2
+    assert closure["blocked_total"] == 3
+    assert closure["ready_criteria"] == ["mode_visibility", "pilot_visibility_groundwork"]
+    assert closure["blocked_criteria"] == [
+        "summon_anywhere",
+        "helpful_not_noisy",
+        "system_resident_presence",
+    ]
+    assert closure["next_smallest_truthful_gap"] in {
+        "resident_host_supervision_boundary",
+        "supervised_resident_runtime_boundary",
+        "resident_presence_authority_boundary",
+    }
+    closure_criteria = {item["id"]: item for item in closure["criteria"]}
+    assert closure_criteria["summon_anywhere"]["ready"] is False
+    assert "summon_anywhere_missing" in closure_criteria["summon_anywhere"]["blockers"]
+    assert closure_criteria["mode_visibility"]["ready"] is True
+    assert closure_criteria["pilot_visibility_groundwork"]["ready"] is True
+    assert closure_criteria["system_resident_presence"]["ready"] is False
+    assert closure["governance"]["execution_authority"] is False
+    assert closure["governance"]["resident_claim_authority"] is False
     assert body["governance"] == {
         "gate": "lens_readback_only",
         "execution_authority": False,

@@ -15767,14 +15767,50 @@ timing bounds:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens closure readback in operator surface
+
+Stage 6/Lens now carries a canonical closure readback directly through
+`/lens/status`. The new `stage6_readiness.closure_readback` projects the
+roadmap's five Stage 6 done criteria into a compact status object with
+`ready_to_close`, ready/blocked counts, ready and blocked criterion ids,
+per-criterion blockers/evidence, and `next_smallest_truthful_gap`. The current
+repo posture remains `blocked`: mode visibility and Pilot visibility groundwork
+are ready through readback, while summon-anywhere, helpful-not-noisy, and
+system-resident presence remain blocked.
+
+The chat UI Lens client now parses this closure readback, and the System/ORB
+Lens Readback panel renders the closure status, ready count, next gap, and the
+five closure criteria without adding any new controls or authority. This is a
+backend readback, UI parser, and UI readback slice only. It does not launch or
+supervise a resident process, install/control a service, bind a hotkey, register
+tray presence, open an overlay, write memory, decide approvals, grant authority,
+claim resident status, close Stage 6, or start Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens closure readback:
+
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
 
 - the operator experience is not yet a complete ORB console in `P1_INTERFACE`
 - Stage 6/Lens has a backend readback contract and chat UI System/ORB readback
-  binding for Lens primitives, now explicitly marks the HUD runtime as chat-UI
-  readback only, has a `/lens/host` resident-host readiness contract, and has a
+  binding for Lens primitives, now exposes a canonical Stage 6 closure readback
+  through `/lens/status` and chat UI as `2/5` ready and `3/5` blocked, explicitly
+  marks the HUD runtime as chat-UI readback only, has a `/lens/host`
+  resident-host readiness contract, and has a
   disabled `/lens/host/manifest` API launch-manifest contract plus a bounded
   foreground `scripts/lens-host.ps1` status session and bounded diagnostic
   host-launch mode with live foreground process readback proof, bounded launch

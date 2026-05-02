@@ -979,6 +979,172 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _stage6_blockers(*values: Any, limit: int = 8) -> list[str]:
+    blockers: list[str] = []
+    for value in values:
+        for item in _as_list(value):
+            blocker = _safe_str(item).strip()
+            if blocker and blocker not in blockers:
+                blockers.append(blocker)
+            if len(blockers) >= limit:
+                return blockers
+    return blockers
+
+
+def _stage6_closure_criterion(
+    criterion_id: str,
+    *,
+    label: str,
+    ready: bool,
+    status: str,
+    evidence: list[str],
+    blockers: list[str] | None = None,
+    basis: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": criterion_id,
+        "label": label,
+        "ready": ready,
+        "status": status,
+        "evidence": evidence,
+        "blockers": blockers or [],
+        "basis": basis,
+    }
+
+
+def _stage6_closure_readback(
+    *,
+    mode: dict[str, Any],
+    hud: dict[str, Any],
+    resident_host: dict[str, Any],
+    command_palette: dict[str, Any],
+    pilot_indicator: dict[str, Any],
+    summon_enablement_gate: dict[str, Any],
+    tray_enablement_gate: dict[str, Any],
+    overlay_enablement_gate: dict[str, Any],
+    resident_surface_activation: dict[str, Any],
+) -> dict[str, Any]:
+    hud_runtime = _as_dict(hud.get("runtime"))
+    mode_ready = bool(_safe_str(mode.get("id")).strip() or _safe_str(mode.get("label")).strip())
+    pilot_ready = bool(
+        _safe_str(pilot_indicator.get("status")).strip() or _safe_str(pilot_indicator.get("route")).strip()
+    )
+    summon_ready = bool(command_palette.get("summon_anywhere")) and bool(summon_enablement_gate.get("ready"))
+    helpful_ready = bool(resident_surface_activation.get("resident_surface_ready")) and bool(
+        resident_surface_activation.get("operator_experience_proof")
+    )
+    system_resident_ready = (
+        bool(resident_host.get("resident"))
+        and bool(hud_runtime.get("resident_overlay"))
+        and bool(summon_enablement_gate.get("summon_anywhere"))
+        and bool(tray_enablement_gate.get("tray_presence"))
+        and bool(overlay_enablement_gate.get("overlay_window"))
+        and bool(resident_surface_activation.get("resident_claim_allowed"))
+    )
+    summon_blockers = _stage6_blockers(
+        ["summon_anywhere_missing"] if not summon_ready else [],
+        resident_host.get("blockers"),
+        summon_enablement_gate.get("blockers"),
+    )
+    helpful_blockers = _stage6_blockers(
+        resident_surface_activation.get("blockers"),
+        hud_runtime.get("blockers"),
+        ["operator_experience_proof_missing"]
+        if not bool(resident_surface_activation.get("operator_experience_proof"))
+        else [],
+    )
+    system_blockers = _stage6_blockers(
+        resident_host.get("blockers"),
+        hud_runtime.get("blockers"),
+        summon_enablement_gate.get("blockers"),
+        tray_enablement_gate.get("blockers"),
+        overlay_enablement_gate.get("blockers"),
+        resident_surface_activation.get("blockers"),
+    )
+    criteria = [
+        _stage6_closure_criterion(
+            "summon_anywhere",
+            label="Summon anywhere",
+            ready=summon_ready,
+            status="ready" if summon_ready else "blocked",
+            evidence=["/lens/summon", "/lens/status"],
+            blockers=summon_blockers,
+            basis="OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
+        ),
+        _stage6_closure_criterion(
+            "helpful_not_noisy",
+            label="Helpful, not noisy",
+            ready=helpful_ready,
+            status="ready" if helpful_ready else "blocked",
+            evidence=["/lens/resident-surface", "/lens/resident-surface/activation", "/lens/status"],
+            blockers=helpful_blockers,
+            basis="A calm Lens needs a supervised resident surface and live operator proof before the claim is real.",
+        ),
+        _stage6_closure_criterion(
+            "mode_visibility",
+            label="Mode visibility",
+            ready=mode_ready,
+            status="ready" if mode_ready else "missing",
+            evidence=["/system/operator_mode", "/lens/status"],
+            basis="Lens status exposes the current operator mode and write posture.",
+        ),
+        _stage6_closure_criterion(
+            "pilot_visibility_groundwork",
+            label="Pilot visibility groundwork",
+            ready=pilot_ready,
+            status="ready" if pilot_ready else "missing",
+            evidence=["/system/operator_mode", "/lens/status"],
+            basis="Pilot posture is visible as a read-only indicator before takeover execution exists.",
+        ),
+        _stage6_closure_criterion(
+            "system_resident_presence",
+            label="System resident presence",
+            ready=system_resident_ready,
+            status="ready" if system_resident_ready else "blocked",
+            evidence=["/lens/host", "/lens/tray", "/lens/overlay", "/lens/resident-runtime/plan", "/lens/status"],
+            blockers=system_blockers,
+            basis="Resident presence requires supervised host, tray, hotkey, overlay, and resident-claim authority.",
+        ),
+    ]
+    ready_criteria = [item for item in criteria if bool(item.get("ready"))]
+    blocked_criteria = [item for item in criteria if not bool(item.get("ready"))]
+    next_gap = "stage6_lens_completion_audit"
+    blocked_ids = {_safe_str(item.get("id")).strip() for item in blocked_criteria}
+    if "system_resident_presence" in blocked_ids:
+        if "resident_surface_runtime_not_supervised" in system_blockers:
+            next_gap = "supervised_resident_runtime_boundary"
+        elif "resident_host_process_missing" in system_blockers:
+            next_gap = "resident_host_supervision_boundary"
+        else:
+            next_gap = "resident_presence_authority_boundary"
+    elif "summon_anywhere" in blocked_ids:
+        next_gap = "summon_anywhere_binding_boundary"
+    elif "helpful_not_noisy" in blocked_ids:
+        next_gap = "resident_surface_operator_experience_proof"
+    return {
+        "kind": "lens.stage6.closure_readback",
+        "status": "ready_to_close" if not blocked_criteria else "blocked",
+        "ready_to_close": not blocked_criteria,
+        "criteria_total": len(criteria),
+        "ready_total": len(ready_criteria),
+        "blocked_total": len(blocked_criteria),
+        "ready_criteria": [_safe_str(item.get("id")).strip() for item in ready_criteria],
+        "blocked_criteria": [_safe_str(item.get("id")).strip() for item in blocked_criteria],
+        "next_smallest_truthful_gap": next_gap,
+        "criteria": criteria,
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _stage6_readiness(
     *,
     mode: dict[str, Any],
@@ -994,6 +1160,7 @@ def _stage6_readiness(
     tray_enablement_gate: dict[str, Any],
     overlay_enablement_gate: dict[str, Any],
     resident_surface_activation: dict[str, Any],
+    pilot_indicator: dict[str, Any],
 ) -> dict[str, Any]:
     hud_runtime = _as_dict(hud.get("runtime"))
     preflight_surfaces = _as_dict(preflight.get("surfaces"))
@@ -1035,6 +1202,17 @@ def _stage6_readiness(
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
+        "closure_readback": _stage6_closure_readback(
+            mode=mode,
+            hud=hud,
+            resident_host=resident_host,
+            command_palette=command_palette,
+            pilot_indicator=pilot_indicator,
+            summon_enablement_gate=summon_enablement_gate,
+            tray_enablement_gate=tray_enablement_gate,
+            overlay_enablement_gate=overlay_enablement_gate,
+            resident_surface_activation=resident_surface_activation,
+        ),
         "criteria": [
             {
                 "id": "resident_host_runtime",
@@ -2471,6 +2649,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
+    pilot_indicator = _pilot_indicator(mode)
     resident_runtime_preflight = _as_dict(resident_host.get("resident_runtime_preflight"))
     resident_runtime_policy = _as_dict(resident_host.get("resident_runtime_policy"))
     resident_runtime_authority_grant = _as_dict(resident_host.get("resident_runtime_authority_grant"))
@@ -2530,7 +2709,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "approvals_view": approvals,
         "incident_view": incidents,
         "mission_feed": missions,
-        "pilot_indicator": _pilot_indicator(mode),
+        "pilot_indicator": pilot_indicator,
         "receipts": {
             "status": "readback_ready",
             "continuity_ledger_route": "/continuity/ledger",
@@ -2603,6 +2782,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             tray_enablement_gate=tray_enablement_gate,
             overlay_enablement_gate=overlay_enablement_gate,
             resident_surface_activation=resident_surface_activation,
+            pilot_indicator=pilot_indicator,
         ),
         "governance": {
             "gate": "lens_readback_only",

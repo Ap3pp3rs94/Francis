@@ -306,6 +306,41 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       stage6_readiness: {
         stage: "Stage 6 / Lens MVP",
         claim: "backend_readback_contract_only",
+        closure_readback: {
+          kind: "lens.stage6.closure_readback",
+          status: "blocked",
+          ready_to_close: false,
+          criteria_total: "5",
+          ready_total: "2",
+          blocked_total: "3",
+          ready_criteria: ["mode_visibility", "pilot_visibility_groundwork"],
+          blocked_criteria: ["summon_anywhere", "helpful_not_noisy", "system_resident_presence"],
+          next_smallest_truthful_gap: "resident_host_supervision_boundary",
+          criteria: [
+            {
+              id: "summon_anywhere",
+              label: "Summon anywhere",
+              ready: false,
+              status: "blocked",
+              evidence: ["/lens/summon", "/lens/status"],
+              blockers: ["summon_anywhere_missing"],
+              basis: "OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
+            },
+            {
+              id: "mode_visibility",
+              label: "Mode visibility",
+              ready: true,
+              status: "ready",
+              evidence: ["/system/operator_mode", "/lens/status"],
+              blockers: [],
+            },
+          ],
+          governance: {
+            read_only_contract: true,
+            execution_authority: false,
+            resident_claim_authority: false,
+          },
+        },
         criteria: [
           {
             id: "hud_layer_runtime",
@@ -467,6 +502,22 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.governance.approval_decision_authority, false);
     assert.equal(snapshot.governance.overlay_control_authority, false);
     assert.equal(snapshot.stage6_readiness.claim, "backend_readback_contract_only");
+    assert.equal(snapshot.stage6_readiness.closure_readback.status, "blocked");
+    assert.equal(snapshot.stage6_readiness.closure_readback.ready_to_close, false);
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria_total, 5);
+    assert.equal(snapshot.stage6_readiness.closure_readback.ready_total, 2);
+    assert.equal(snapshot.stage6_readiness.closure_readback.blocked_total, 3);
+    assert.equal(snapshot.stage6_readiness.closure_readback.ready_criteria[0], "mode_visibility");
+    assert.equal(snapshot.stage6_readiness.closure_readback.blocked_criteria[2], "system_resident_presence");
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.next_smallest_truthful_gap,
+      "resident_host_supervision_boundary",
+    );
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.id, "summon_anywhere");
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.ready, false);
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.blockers[0], "summon_anywhere_missing");
+    assert.equal(snapshot.stage6_readiness.closure_readback.governance.execution_authority, false);
+    assert.equal(snapshot.stage6_readiness.closure_readback.governance.resident_claim_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_only");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.resident_overlay, false);
@@ -557,6 +608,8 @@ test("parseLensStatus drops malformed nested items and preserves governance defa
   assert.equal(snapshot.incident_view.observer_counts.warning, 3);
   assert.equal(snapshot.mission_feed.counts.active, 1);
   assert.equal(snapshot.stage6_readiness.criteria.length, 2);
+  assert.equal(snapshot.stage6_readiness.closure_readback.ready_to_close, false);
+  assert.equal(snapshot.stage6_readiness.closure_readback.criteria.length, 0);
   assert.equal(snapshot.stage6_readiness.criteria[1]?.resident_overlay, false);
   assert.equal(snapshot.stage6_readiness.criteria[1]?.blockers[0], "tray_host_missing");
   assert.equal(snapshot.governance.execution_authority, false);

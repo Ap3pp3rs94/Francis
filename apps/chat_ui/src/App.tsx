@@ -4441,6 +4441,9 @@ function SystemPanel(props: {
   const lensPilot = lensStatus?.pilot_indicator;
   const lensGovernance = lensStatus?.governance;
   const lensStage6Readiness = lensStatus?.stage6_readiness;
+  const lensStage6Closure = lensStage6Readiness?.closure_readback;
+  const lensStage6ClosureCriteria = lensStage6Closure?.criteria ?? [];
+  const lensStage6ClosureNextGap = safeString(lensStage6Closure?.next_smallest_truthful_gap).trim();
   const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
   const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
   const lensHudBadges = lensHud?.badges ?? [];
@@ -5565,6 +5568,53 @@ function SystemPanel(props: {
             {lensCommandPalette?.message ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{lensCommandPalette.message}</div>
             ) : null}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Stage 6 closure</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle(lensStage6Closure?.status || "unknown")}>
+                {lensStage6Closure?.status || "unknown"}
+              </span>
+              <span style={badgeStyle(lensStage6Closure?.ready_to_close ? "ready" : "blocked")}>
+                ready {lensStage6Closure?.ready_to_close ? "true" : "false"}
+              </span>
+              <span style={badgeStyle("readback")}>
+                {safeNumber(lensStage6Closure?.ready_total, 0)}/{safeNumber(lensStage6Closure?.criteria_total, 0)}
+              </span>
+            </div>
+            {lensStage6ClosureNextGap ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                next gap <code>{lensStage6ClosureNextGap}</code>
+              </div>
+            ) : null}
+            {lensStage6ClosureCriteria.length ? (
+              <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+                {lensStage6ClosureCriteria.slice(0, 5).map((criterion) => {
+                  const criterionId = safeString(criterion.id).trim() || "criterion";
+                  const criterionStatus = safeString(criterion.status).trim() || "unknown";
+                  const criterionLabel = safeString(criterion.label).trim() || criterionId;
+                  const firstBlocker = criterion.blockers[0] || "";
+                  return (
+                    <div key={`lens-stage6-closure-${criterionId}`} style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={badgeStyle(criterionStatus)}>{criterionLabel}</span>
+                        <span style={badgeStyle(criterion.ready ? "ready" : "blocked")}>
+                          {criterion.ready ? "ready" : "blocked"}
+                        </span>
+                      </div>
+                      {firstBlocker ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                          blocker <code>{firstBlocker}</code>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>No closure readback loaded.</div>
+            )}
           </div>
 
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>

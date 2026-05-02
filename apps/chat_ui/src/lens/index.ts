@@ -202,9 +202,34 @@ export type LensStage6Criterion = {
   blockers: string[];
 };
 
+export type LensStage6ClosureCriterion = {
+  id?: string;
+  label?: string;
+  ready?: boolean;
+  status?: string;
+  evidence: string[];
+  blockers: string[];
+  basis?: string;
+};
+
+export type LensStage6ClosureReadback = {
+  kind?: string;
+  status?: string;
+  ready_to_close: boolean;
+  criteria_total: number;
+  ready_total: number;
+  blocked_total: number;
+  ready_criteria: string[];
+  blocked_criteria: string[];
+  next_smallest_truthful_gap?: string;
+  criteria: LensStage6ClosureCriterion[];
+  governance: Record<string, unknown>;
+};
+
 export type LensStage6Readiness = {
   stage?: string;
   claim?: string;
+  closure_readback: LensStage6ClosureReadback;
   criteria: LensStage6Criterion[];
 };
 
@@ -645,6 +670,41 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
   };
 }
 
+function parseStage6ClosureCriterion(value: unknown): LensStage6ClosureCriterion | null {
+  if (!isRecord(value)) return null;
+  const id = safeString(value.id).trim();
+  if (!id) return null;
+  return {
+    id,
+    label: safeString(value.label).trim() || undefined,
+    ready: typeof value.ready === "boolean" ? safeBoolean(value.ready, false) : undefined,
+    status: safeString(value.status).trim() || undefined,
+    evidence: safeStringList(value.evidence),
+    blockers: safeStringList(value.blockers),
+    basis: safeString(value.basis).trim() || undefined,
+  };
+}
+
+function parseStage6ClosureReadback(value: unknown): LensStage6ClosureReadback {
+  const raw = safeRecord(value);
+  const criteria = Array.isArray(raw.criteria)
+    ? raw.criteria.map(parseStage6ClosureCriterion).filter((item): item is LensStage6ClosureCriterion => item !== null)
+    : [];
+  return {
+    kind: safeString(raw.kind).trim(),
+    status: safeString(raw.status).trim(),
+    ready_to_close: safeBoolean(raw.ready_to_close, false),
+    criteria_total: safeNumber(raw.criteria_total, criteria.length),
+    ready_total: safeNumber(raw.ready_total, 0),
+    blocked_total: safeNumber(raw.blocked_total, criteria.filter((item) => item.ready === false).length),
+    ready_criteria: safeStringList(raw.ready_criteria),
+    blocked_criteria: safeStringList(raw.blocked_criteria),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap).trim() || undefined,
+    criteria,
+    governance: safeRecord(raw.governance),
+  };
+}
+
 function parseStage6Readiness(value: unknown): LensStage6Readiness {
   const raw = safeRecord(value);
   const criteria = Array.isArray(raw.criteria)
@@ -653,6 +713,7 @@ function parseStage6Readiness(value: unknown): LensStage6Readiness {
   return {
     stage: safeString(raw.stage).trim(),
     claim: safeString(raw.claim).trim(),
+    closure_readback: parseStage6ClosureReadback(raw.closure_readback),
     criteria,
   };
 }
