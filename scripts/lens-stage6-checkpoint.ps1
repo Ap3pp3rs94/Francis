@@ -1259,6 +1259,7 @@ $EnablementGates = @($EnablementGateIds | ForEach-Object {
       tray_presence = [bool](Get-PropertyValue -Payload $Gate -Name 'tray_presence' -Default $false)
       overlay_window = [bool](Get-PropertyValue -Payload $Gate -Name 'overlay_window' -Default $false)
       global_hotkey = [string](Get-PropertyValue -Payload $Gate -Name 'global_hotkey' -Default '')
+      blocker_groups = Get-PropertyValue -Payload $Gate -Name 'blocker_groups' -Default ([ordered]@{})
       presence_name = [string](Get-PropertyValue -Payload $Gate -Name 'presence_name' -Default '')
       overlay_name = [string](Get-PropertyValue -Payload $Gate -Name 'overlay_name' -Default '')
       supervisor_readback_ready = $(if ($GateId -eq 'resident_supervision_enablement_gate') { $HostSupervisorReadbackReady } else { [bool](Get-PropertyValue -Payload $Gate -Name 'supervisor_readback_ready' -Default $false) })

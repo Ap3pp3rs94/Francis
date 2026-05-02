@@ -74,6 +74,23 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "helpful_not_noisy",
         "system_resident_presence",
     ]
+    assert payload["summon_anywhere_blocked_families"] == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    assert payload["summon_anywhere_first_blocker_family"] == "resident_host"
+    summon_blocker_groups = payload["summon_anywhere_blocker_groups"]
+    assert "lens_host_runtime_not_implemented" in summon_blocker_groups["resident_host"]
+    assert "local_process_launch_authority_not_granted" in summon_blocker_groups["resident_host"]
+    assert "tray_host_missing" in summon_blocker_groups["tray_presence"]
+    assert "overlay_window_missing" in summon_blocker_groups["overlay_window"]
+    assert "global_hotkey_binding_missing" in summon_blocker_groups["global_hotkey_binding"]
+    assert "summon_binding_missing" in summon_blocker_groups["summon_binding"]
+    assert "summon_authority_not_granted" in summon_blocker_groups["authority"]
 
     assert payload["summary"]["criteria_total"] == 5
     assert payload["summary"]["ready_total"] == 2

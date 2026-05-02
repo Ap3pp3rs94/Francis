@@ -16151,6 +16151,36 @@ observation window minimums:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens completion audit summon blocker groups
+
+Stage 6/Lens checkpoint readback now preserves the summon enablement gate's
+`blocker_groups`, and the Stage 6 completion audit now exposes those grouped
+summon-anywhere blockers as `summon_anywhere_blocker_groups`,
+`summon_anywhere_blocked_families`, and
+`summon_anywhere_first_blocker_family`. The audit still reports
+`do_not_close_stage6`: `2/5` closure criteria are ready and `3/5` remain blocked
+(`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`).
+
+This is checkpoint/audit readback, test, and ledger work only. It does not grant
+execution authority, approval-decision authority, memory-write authority,
+process-launch authority, process-supervision authority, hotkey-registration
+authority, summon authority, overlay-control authority, resident-claim authority,
+UI control, Stage 6 closure, or Stage 7 transition. Stage 6 remains active and
+blocked.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens completion audit
+summon blocker-group handoff:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `failed before correcting blocker-group assertions to the current
+  resident-host contract; passed after correction`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

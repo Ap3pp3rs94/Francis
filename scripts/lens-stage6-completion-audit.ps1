@@ -304,6 +304,33 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere')
 } else {
   ''
 }
+$SummonEnablementGate = @(
+  $Checkpoint.enablement_gates | Where-Object { [string]$_.id -eq 'summon_enablement_gate' } | Select-Object -First 1
+)
+$SummonAnywhereBlockerGroups = [ordered]@{
+  resident_host = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.resident_host)
+  tray_presence = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.tray_presence)
+  overlay_window = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.overlay_window)
+  global_hotkey_binding = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.global_hotkey_binding)
+  summon_binding = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.summon_binding)
+  authority = [string[]]@(ConvertTo-StringArray -Value $SummonEnablementGate.blocker_groups.authority)
+}
+$SummonAnywhereBlockerFamilyOrder = @(
+  'resident_host',
+  'tray_presence',
+  'overlay_window',
+  'global_hotkey_binding',
+  'summon_binding',
+  'authority'
+)
+$SummonAnywhereBlockedFamilies = @(
+  $SummonAnywhereBlockerFamilyOrder | Where-Object { @($SummonAnywhereBlockerGroups[$_]).Count -gt 0 }
+)
+$SummonAnywhereFirstBlockerFamily = if ($SummonAnywhereBlockedFamilies.Count -gt 0) {
+  [string]$SummonAnywhereBlockedFamilies[0]
+} else {
+  ''
+}
 $HostSupervisorReadback = $Checkpoint.host_supervisor_readback
 $HostSupervisorReadbackBlockers = ConvertTo-StringArray -Value $HostSupervisorReadback.blockers
 $HostSupervisorReadbackObserved = (
@@ -708,7 +735,7 @@ $Payload = [ordered]@{
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
-    'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs. Stage 6 still cannot close because summon-anywhere is blocked by missing resident host, global hotkey, and summon binding behavior.'
+    'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs. Stage 6 still cannot close because summon-anywhere is blocked by grouped resident host, global hotkey, and summon binding behavior.'
   } elseif ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
     'The completion audit has consumed the final authority-family proofs. Stage 6 still cannot close because helpful-not-noisy Lens behavior is limited to foreground/readback proof and lacks supervised resident runtime.'
   } elseif ($NextSmallestTruthfulGap -eq 'system_resident_presence_blockers') {
@@ -749,6 +776,9 @@ $Payload = [ordered]@{
   checkpoint_next_smallest_truthful_gap = [string]$Checkpoint.next_smallest_truthful_gap
   stage6_completion_reviewed = $Stage6CompletionReviewed
   remaining_stage6_acceptance_blockers = [string[]]@($BlockedCriterionIds)
+  summon_anywhere_blocker_groups = $SummonAnywhereBlockerGroups
+  summon_anywhere_blocked_families = [string[]]@($SummonAnywhereBlockedFamilies)
+  summon_anywhere_first_blocker_family = $SummonAnywhereFirstBlockerFamily
   summary = [ordered]@{
     criteria_total = [int]$Checkpoint.summary.criteria_total
     ready_total = [int]$Checkpoint.summary.ready_total
