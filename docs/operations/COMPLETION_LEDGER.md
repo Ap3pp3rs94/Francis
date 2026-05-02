@@ -16250,6 +16250,44 @@ lifecycle blocker proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens resident-host runtime boundary readback
+
+Stage 6/Lens resident-host runtime readback now has a direct API boundary for
+the previous `resident_host_runtime_blocker_boundary` handoff. The new
+`/lens/host/runtime-boundary` route derives from `/lens/host/manifest` and
+separates diagnostic host readiness from resident runtime truth: the status
+runner and bounded foreground session can be available, but `runtime_ready`,
+`resident_runtime`, `resident`, process supervision, tray presence, global
+hotkey, overlay window, and summon-anywhere all remain false. The boundary also
+normalizes live foreground process readback into
+`resident_host_process_not_supervised` instead of treating the observed bounded
+session as a resident host. `/lens/host/manifest` now points to the runtime
+boundary route.
+
+This is backend readback, route/API, test, and ledger work only. It does not
+grant execution authority, approval-decision authority, memory-write authority,
+local process launch authority, diagnostic launch authority, process-supervision
+or process-restart authority, service-install or service-control authority,
+hotkey-registration authority, tray-registration authority, summon authority,
+overlay-control authority, receipt-write authority, resident-claim authority, UI
+control, Stage 6 closure, or Stage 7 transition. Stage 6 remains active and
+blocked on the real resident-host runtime implementation plan plus the existing
+surface and authority prerequisites.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens resident-host
+runtime boundary readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_resident_runtime tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

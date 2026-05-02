@@ -1315,6 +1315,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert launch_manifest["default_action"] == "status_readback_only"
     assert launch_manifest["route"] == "/lens/host/manifest"
     assert launch_manifest["host_route"] == "/lens/host"
+    assert launch_manifest["runtime_boundary_route"] == "/lens/host/runtime-boundary"
     assert launch_manifest["declared_entrypoint"] == {
         "path": "scripts/lens-host.ps1",
         "exists": True,
@@ -4248,6 +4249,86 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
+def test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_resident_runtime(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/host/runtime-boundary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.host.runtime_boundary"
+    assert body["status"] == "blocked"
+    assert body["route"] == "/lens/host/runtime-boundary"
+    assert body["host_route"] == "/lens/host"
+    assert body["manifest_route"] == "/lens/host/manifest"
+    assert body["ready"] is False
+    assert body["runtime_ready"] is False
+    assert body["resident_runtime"] is False
+    assert body["diagnostic_status_runner_ready"] is True
+    assert body["bounded_foreground_session_available"] is True
+    assert body["bounded_launch_available"] is True
+    assert body["runtime_state_write_configured"] is True
+    assert body["foreground_process_observed"] is False
+    assert body["resident_host_process_state"] == "missing"
+    assert body["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert body["runtime_blockers"] == ["lens_host_runtime_not_implemented"]
+    assert body["surface_dependency_blockers"] == [
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+    assert body["blockers"] == [
+        "lens_host_runtime_not_implemented",
+        "resident_host_process_missing",
+    ]
+    assert body["blocker_groups"]["runtime"] == ["lens_host_runtime_not_implemented"]
+    assert body["blocker_groups"]["process_readback"] == ["resident_host_process_missing"]
+    assert body["boundaries"]["diagnostic_status_runner"]["ready"] is True
+    assert body["boundaries"]["diagnostic_status_runner"]["resident_runtime"] is False
+    assert body["boundaries"]["bounded_foreground_session"]["ready"] is True
+    assert body["boundaries"]["bounded_foreground_session"]["resident_runtime"] is False
+    assert body["boundaries"]["resident_runtime"] == {
+        "status": "blocked",
+        "ready": False,
+        "resident": False,
+        "service_managed": False,
+        "process_supervision": False,
+        "blockers": ["lens_host_runtime_not_implemented"],
+    }
+    assert body["governance"]["read_only_contract"] is True
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["local_process_launch_authority"] is False
+    assert body["governance"]["diagnostic_launch_authority"] is False
+    assert body["governance"]["process_supervision_authority"] is False
+    assert body["governance"]["service_control_authority"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_implementation_plan"
+
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    assert manifest.json()["runtime_boundary_route"] == "/lens/host/runtime-boundary"
+
+
 def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
@@ -4372,6 +4453,21 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert manifest_body["process_readback"] == process_readback
     assert manifest_body["service_plan"] == resident_host["service_plan"]
     assert manifest_body["governance"]["local_process_launch_authority"] is False
+
+    runtime_boundary_response = client.get("/lens/host/runtime-boundary")
+    assert runtime_boundary_response.status_code == 200
+    runtime_boundary = runtime_boundary_response.json()
+    assert runtime_boundary["foreground_process_observed"] is True
+    assert runtime_boundary["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert runtime_boundary["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert "resident_host_process_missing" not in runtime_boundary["blockers"]
+    assert "resident_host_process_not_supervised" in runtime_boundary["blockers"]
+    assert "lens_host_runtime_not_implemented" in runtime_boundary["runtime_blockers"]
+    assert runtime_boundary["resident_runtime"] is False
+    assert runtime_boundary["process_supervision"] is False
+    assert runtime_boundary["governance"]["execution_authority"] is False
+    assert runtime_boundary["governance"]["local_process_launch_authority"] is False
+    assert runtime_boundary["governance"]["resident_claim_authority"] is False
 
 
 def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:

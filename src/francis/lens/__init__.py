@@ -49,6 +49,7 @@ from francis.lens.host_manifest import (
     lens_host_launch_manifest,
     lens_host_persistent_supervision_enablement_preflight,
     lens_host_persistent_supervision_plan,
+    lens_host_runtime_boundary,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
@@ -92,6 +93,7 @@ __all__ = [
     "lens_host_launch_manifest",
     "lens_host_persistent_supervision_enablement_preflight",
     "lens_host_persistent_supervision_plan",
+    "lens_host_runtime_boundary",
     "lens_host_supervision_authority_preflight",
     "lens_host_supervision_gate",
     "lens_host_status",

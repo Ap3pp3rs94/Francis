@@ -183,6 +183,17 @@ def _select_blockers(blockers: list[str], *candidates: str) -> list[str]:
     return [candidate for candidate in candidates if candidate in blockers]
 
 
+def _ordered_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = str(value or "").strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 def _record_ts(value: Any) -> float:
     if isinstance(value, bool):
         return 0.0
@@ -1237,6 +1248,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "default_action": "status_readback_only",
         "route": "/lens/host/manifest",
         "host_route": "/lens/host",
+        "runtime_boundary_route": "/lens/host/runtime-boundary",
         "declared_entrypoint": {
             "path": entrypoint,
             "exists": entrypoint_exists,
@@ -1378,4 +1390,118 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "service_control_authority": False,
             "mutation_authority_granted": False,
         },
+    }
+
+
+def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    declared_entrypoint = _as_dict(launch_manifest.get("declared_entrypoint"))
+    status_command = _as_dict(launch_manifest.get("status_command"))
+    candidate_command = _as_dict(launch_manifest.get("candidate_command"))
+    foreground_session = _as_dict(launch_manifest.get("foreground_session"))
+    process_readback = _as_dict(launch_manifest.get("process_readback"))
+    blocker_groups = _as_dict(launch_manifest.get("blocker_groups"))
+
+    runtime_blockers = _as_str_list(blocker_groups.get("runtime"))
+    surface_dependency_blockers = _as_str_list(blocker_groups.get("surface_dependencies"))
+    process_alive = bool(process_readback.get("process_alive"))
+    process_blocker = "resident_host_process_not_supervised" if process_alive else "resident_host_process_missing"
+    blockers = _ordered_unique([*runtime_blockers, process_blocker])
+    diagnostic_status_runner_ready = bool(declared_entrypoint.get("exists")) and bool(status_command.get("executable"))
+    bounded_foreground_session_available = bool(foreground_session.get("supported")) and bool(
+        candidate_command.get("executable")
+    )
+    runtime_state_write_configured = bool(foreground_session.get("runtime_state_write"))
+
+    return {
+        "ok": True,
+        "kind": "lens.host.runtime_boundary",
+        "status": "blocked",
+        "route": "/lens/host/runtime-boundary",
+        "host_route": "/lens/host",
+        "manifest_route": "/lens/host/manifest",
+        "ready": False,
+        "runtime_ready": False,
+        "resident_runtime": False,
+        "resident": False,
+        "diagnostic_status_runner_ready": diagnostic_status_runner_ready,
+        "bounded_foreground_session_available": bounded_foreground_session_available,
+        "bounded_launch_available": bounded_foreground_session_available,
+        "runtime_state_write_configured": runtime_state_write_configured,
+        "foreground_process_observed": process_alive,
+        "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
+        "resident_host_process_blocker": process_blocker,
+        "service_managed": False,
+        "process_supervision": False,
+        "tray_presence": False,
+        "global_hotkey": False,
+        "overlay_window": False,
+        "summon_anywhere": False,
+        "runtime_blockers": runtime_blockers,
+        "surface_dependency_blockers": surface_dependency_blockers,
+        "blockers": blockers,
+        "blocker_groups": {
+            "runtime": runtime_blockers,
+            "process_readback": [process_blocker],
+            "surface_dependencies": surface_dependency_blockers,
+        },
+        "process_readback": process_readback,
+        "foreground_session": foreground_session,
+        "boundaries": {
+            "diagnostic_status_runner": {
+                "status": "ready" if diagnostic_status_runner_ready else "missing",
+                "ready": diagnostic_status_runner_ready,
+                "scope": "status_readback_only",
+                "resident_runtime": False,
+                "would_launch": False,
+                "authority_granted": False,
+            },
+            "bounded_foreground_session": {
+                "status": "available" if bounded_foreground_session_available else "blocked",
+                "ready": bounded_foreground_session_available,
+                "resident_runtime": False,
+                "service_managed": False,
+                "max_seconds": int(foreground_session.get("max_seconds") or 0),
+                "would_launch": False,
+                "authority_granted": False,
+            },
+            "resident_runtime": {
+                "status": "blocked",
+                "ready": False,
+                "resident": False,
+                "service_managed": False,
+                "process_supervision": False,
+                "blockers": runtime_blockers or ["lens_host_runtime_not_implemented"],
+            },
+        },
+        "evidence": [
+            "/lens/host/runtime-boundary",
+            "/lens/host/manifest",
+            "/lens/host",
+            "scripts/lens-host.ps1 -Mode Status",
+        ],
+        "governance": {
+            "read_only_contract": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "local_process_launch_authority": False,
+            "diagnostic_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "mutation_authority_granted": False,
+        },
+        "next_smallest_truthful_gap": "resident_host_runtime_implementation_plan",
+        "message": (
+            "Lens has a diagnostic host runner and bounded foreground session readback, but no resident host "
+            "runtime, supervision, tray, hotkey, overlay, summon, or resident-claim authority."
+        ),
     }
