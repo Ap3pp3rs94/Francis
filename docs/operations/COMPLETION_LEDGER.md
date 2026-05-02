@@ -16606,6 +16606,36 @@ blocker proof:
 - `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py -q`
   Result: `passed`
 
+### 2026-05-02 - Stage 6/Lens summon resident-host blocker handoff proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-summon-resident-host-blocker-proof.ps1` diagnostic that proves the
+first `summon_anywhere_blockers` family, `resident_host`, hands off to the
+existing resident-host lifecycle blocker proof. The proof composes
+`scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status` with
+`scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status`,
+confirms `resident_host` is the first summon-anywhere blocker family, confirms
+the resident-host lifecycle proof is already blocked at
+`resident_host_runtime_blocker_boundary`, and preserves the existing
+surface-dependency blockers for tray, global hotkey binding, overlay window,
+and summon binding.
+
+This is diagnostic/readback and test work only. It does not register a hotkey,
+bind summon-anywhere, launch or supervise a process, install or control a
+service, create tray presence, open or control an overlay, write memory, decide
+approvals, execute operator actions, write receipts, or grant overlay-control,
+summon, capture, sensing, telemetry, policy, hotkey-registration,
+local-process-launch, process-supervision, service-control, resident-claim, or
+mutation authority. It does not close Stage 6 or start Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens summon resident-host
+blocker handoff proof:
+
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `failed before fix, passed after`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

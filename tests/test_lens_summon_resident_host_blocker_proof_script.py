@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+def _powershell() -> str:
+    exe = shutil.which("powershell") or shutil.which("pwsh")
+    if not exe:
+        pytest.skip("PowerShell is not available")
+    return exe
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "lens-summon-resident-host-blocker-proof.ps1"),
+            *args,
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+
+def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
+    proc = _run_proof("-Mode", "Status")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.summon_resident_host_blocker.proof"
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["stage"] == "Stage 6 / Lens MVP"
+    assert payload["stage_state"] == "active"
+    assert payload["acceptance_criterion"] == "summon_anywhere"
+    assert payload["first_summon_blocker_family"] == "resident_host"
+    assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["resident_host_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["summon_first_family_observed"] is True
+    assert payload["resident_host_lifecycle_observed"] is True
+    assert payload["handoff_aligned"] is True
+    assert payload["side_effects_denied"] is True
+
+    assert payload["summon_resident_host_blockers"] == ["local_process_launch_authority_not_granted"]
+    assert payload["resident_host_runtime_blockers"] == ["lens_host_runtime_not_implemented"]
+    assert isinstance(payload["resident_host_process_readback_blockers"], list)
+    assert payload["resident_host_surface_blockers"] == [
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["summon_first_family"]["status"] == "resident_host_first"
+    assert checks["resident_host_lifecycle_proof"]["status"] == "runtime_blocked"
+    assert checks["handoff_alignment"]["status"] == "handoff_aligned"
+    assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
+    assert all(item["passed"] for item in payload["checks"])
+
+    assert payload["governance"] == {
+        "diagnostic_only": True,
+        "wraps_summon_anywhere_blockers_proof": True,
+        "wraps_resident_host_lifecycle_blockers_proof": True,
+        "read_only_contract": True,
+        "product_execution_authority": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "process_restart_authority": False,
+        "service_install_authority": False,
+        "service_control_authority": False,
+        "hotkey_registration_authority": False,
+        "overlay_control_authority": False,
+        "summon_authority": False,
+        "capture_authority": False,
+        "new_sensing_authority": False,
+        "receipt_write_authority": False,
+        "resident_claim_authority": False,
+        "mutation_authority_granted": False,
+    }
