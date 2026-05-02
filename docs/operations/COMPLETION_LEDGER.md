@@ -15927,6 +15927,58 @@ of the persistent supervision enablement authority proof:
   Result: `failed before formatting the audit test; passed after formatting`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-02 - Stage 6/Lens persistent supervision execution authority proof
+
+Stage 6/Lens now has a standalone persistent-supervision execution authority
+proof diagnostic at
+`scripts/lens-persistent-supervision-execution-authority-proof.ps1`, and the
+Stage 6 completion audit consumes that proof directly. The proof uses a
+temporary data root, creates the prerequisite host supervision authority grant,
+creates the bounded persistent-supervision enablement authority grant, creates
+and approves the exact persistent-supervision execution authority request, writes
+the bounded execution authority grant receipt, reads the request/grant/readiness
+and Lens status surfaces, and then calls the execution route to prove the grant
+reaches the route but still stops at the resident-claim/runtime-readiness
+boundary.
+
+This is diagnostic/proof, audit/readback, and test work only. It exercises
+existing governed API routes and writes only temporary diagnostic approvals and
+authority receipts through existing route contracts. It does not grant product
+execution authority, approval-decision authority, memory-write authority,
+resident-claim authority, UI control, live process supervision, service control,
+persistent runtime start, Stage 6 closure, or Stage 7 transition. The proof does
+show that the route-level service-config write, persistent-supervision execution,
+and receipt-write authority grant receipt is readable after the exact approved
+request, while the attempted execution remains non-mutating and blocked by
+`persistent_supervision_disabled`, `process_supervision_disabled`, and
+`resident_claim_authority_not_granted`.
+
+Stage 6 remains active and blocked. The completion audit now reports
+`persistent_supervision_resident_claim_authority_boundary` as the next smallest
+truthful gap after consuming both the enablement-authority proof and the
+execution-authority proof. This narrows the handoff from "grant execution
+authority or prove resident-claim boundary" to a direct resident-claim/runtime
+readiness boundary without starting Stage 7.
+
+Latest targeted validation for the `2026-05-02` Stage 6/Lens persistent
+supervision execution authority proof and audit consumption:
+
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_execution_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting the audit test; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
@@ -16054,7 +16106,12 @@ These remain true and should block any "finished" claim:
   `/lens/host/persistent-supervision/enablement/execution/readiness` that require
   the active enablement-authority grant before creating the request while still
   denying service-config write, persistent-supervision execution, receipt-write,
-  memory-write, approval-decision, and resident-claim authority,
+  memory-write, approval-decision, and resident-claim authority, plus a
+  standalone persistent-supervision execution authority proof and completion-audit
+  consumption that prove an exact approved execution-authority grant receipt is
+  readable and reaches the execution route while execution remains non-mutating
+  and blocked by persistent-supervision, process-supervision, and resident-claim
+  readiness,
   plus a status-only `scripts/lens-stage6-completion-audit.ps1` diagnostic that
   reports `do_not_close_stage6` and groups closure blockers without allowing
   Stage 6 transition,
