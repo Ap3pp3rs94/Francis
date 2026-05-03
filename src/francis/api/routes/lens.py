@@ -40,6 +40,7 @@ from francis.lens import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
+    lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
     lens_resident_runtime_activation_denial_receipts,
@@ -163,6 +164,11 @@ def preflight() -> dict[str, Any]:
 @router.get("/os-binding/readiness")
 def os_binding_readiness() -> dict[str, Any]:
     return lens_os_binding_readiness()
+
+
+@router.get("/os-binding/plan")
+def os_binding_plan() -> dict[str, Any]:
+    return lens_os_binding_implementation_plan()
 
 
 @router.get("/summon")

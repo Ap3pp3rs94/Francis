@@ -349,6 +349,7 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert body["status"] == "blocked"
     assert body["audit_status"] == "complete"
     assert body["route"] == "/lens/os-binding/readiness"
+    assert body["plan_route"] == "/lens/os-binding/plan"
     assert body["status_route"] == "/lens/status"
     assert body["preflight_route"] == "/lens/preflight"
     assert body["summon_route"] == "/lens/summon"
@@ -379,7 +380,7 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
         "authority_boundary",
     ]
     requirements = {item["id"]: item for item in body["requirements"]}
-    assert requirements["os_level_command_palette"]["route"] == "/lens/status"
+    assert requirements["os_level_command_palette"]["route"] == "/lens/os-binding/plan"
     assert requirements["os_level_command_palette"]["ready"] is False
     assert requirements["global_hotkey_binding"]["route"] == "/lens/summon"
     assert requirements["summon_binding"]["route"] == "/lens/summon"
@@ -403,6 +404,25 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
         "summon_anywhere": False,
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
     }
+    implementation_plan = body["implementation_plan"]
+    assert implementation_plan["kind"] == "lens.os_binding.implementation_plan"
+    assert implementation_plan["route"] == "/lens/os-binding/plan"
+    assert implementation_plan["status"] == "blocked"
+    assert implementation_plan["plan_available"] is True
+    assert implementation_plan["implementation_ready"] is False
+    assert implementation_plan["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert implementation_plan["blocked_requirements"] == [
+        "os_level_command_palette_contract",
+        "global_hotkey_binding_contract",
+        "summon_binding_contract",
+        "resident_host_dependency",
+        "tray_presence_dependency",
+        "overlay_window_dependency",
+        "authority_boundary",
+    ]
+    assert implementation_plan["governance"]["read_only_contract"] is True
+    assert implementation_plan["governance"]["execution_authority"] is False
+    assert implementation_plan["governance"]["hotkey_registration_authority"] is False
     governance = body["governance"]
     assert governance["read_only_contract"] is True
     assert governance["execution_authority"] is False
@@ -413,6 +433,89 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert governance["tray_registration_authority"] is False
     assert governance["overlay_control_authority"] is False
     assert governance["process_supervision_authority"] is False
+    assert governance["resident_claim_authority"] is False
+
+
+def test_lens_os_binding_plan_blocks_os_palette_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/os-binding/plan")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.implementation_plan"
+    assert body["status"] == "blocked"
+    assert body["route"] == "/lens/os-binding/plan"
+    assert body["readiness_route"] == "/lens/os-binding/readiness"
+    assert body["plan_available"] is True
+    assert body["implementation_ready"] is False
+    assert body["execution_ready"] is False
+    assert body["os_binding_ready"] is False
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["acceptance_criterion"] == "summon_anywhere"
+    assert body["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert body["requirements_total"] == 7
+    assert body["requirements_ready_total"] == 0
+    assert body["requirements_blocked_total"] == 7
+    assert body["blocked_requirements"] == [
+        "os_level_command_palette_contract",
+        "global_hotkey_binding_contract",
+        "summon_binding_contract",
+        "resident_host_dependency",
+        "tray_presence_dependency",
+        "overlay_window_dependency",
+        "authority_boundary",
+    ]
+    assert "os_level_command_palette_missing" in body["blocker_groups"]["palette_binding"]
+    assert "global_hotkey_binding_disabled" in body["blocker_groups"]["global_hotkey_binding"]
+    assert "lens_summon_binding_not_implemented" in body["blocker_groups"]["summon_binding"]
+    assert "resident_host_process_missing" in body["blocker_groups"]["resident_host"]
+    steps = {item["id"]: item for item in body["plan"]["steps"]}
+    assert steps["os_level_command_palette_contract"]["route"] == "/lens/status"
+    assert steps["os_level_command_palette_contract"]["authority_required"] == (
+        "os_level_command_palette_binding_authority"
+    )
+    assert steps["global_hotkey_binding_contract"]["route"] == "/lens/summon"
+    assert steps["global_hotkey_binding_contract"]["authority_required"] == "hotkey_registration_authority"
+    assert steps["summon_binding_contract"]["authority_required"] == "summon_authority"
+    assert body["plan"]["would_open_palette"] is False
+    assert body["plan"]["would_register_hotkey"] is False
+    assert body["plan"]["would_summon"] is False
+    assert body["plan"]["would_launch_process"] is False
+    assert body["plan"]["would_register_tray"] is False
+    assert body["plan"]["would_open_overlay"] is False
+    assert body["plan"]["would_write_memory"] is False
+    assert body["plan"]["would_decide_approval"] is False
+    governance = body["governance"]
+    assert governance["read_only_contract"] is True
+    assert governance["execution_authority"] is False
+    assert governance["approval_decision_authority"] is False
+    assert governance["memory_write"] is False
+    assert governance["summon_authority"] is False
+    assert governance["hotkey_registration_authority"] is False
+    assert governance["tray_registration_authority"] is False
+    assert governance["overlay_control_authority"] is False
+    assert governance["local_process_launch_authority"] is False
     assert governance["resident_claim_authority"] is False
 
 
@@ -502,6 +605,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["kind"] == "lens.os_binding.readiness"
     assert os_binding["status"] == "blocked"
     assert os_binding["route"] == "/lens/os-binding/readiness"
+    assert os_binding["plan_route"] == "/lens/os-binding/plan"
     assert os_binding["ready"] is False
     assert os_binding["os_binding_ready"] is False
     assert os_binding["os_level_command_palette"] is False
@@ -529,6 +633,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["governance"]["hotkey_registration_authority"] is False
     assert os_binding["governance"]["tray_registration_authority"] is False
     assert os_binding["governance"]["overlay_control_authority"] is False
+    assert os_binding["implementation_plan"]["route"] == "/lens/os-binding/plan"
+    assert os_binding["implementation_plan"]["plan_available"] is True
+    assert os_binding["implementation_plan"]["implementation_ready"] is False
     assert body["receipts"]["lens_os_binding_readiness_route"] == "/lens/os-binding/readiness"
     assert body["hud"]["readback_ready"] is True
     assert body["hud"]["runtime_status"] == "readback_only"
