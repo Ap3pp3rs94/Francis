@@ -16821,6 +16821,42 @@ command-palette bridge consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens command-palette OS-binding blocker proof
+
+Stage 6/Lens now has a read-only OS-binding blocker proof at
+`scripts/lens-command-palette-os-binding-proof.ps1`. The proof composes the
+existing command-palette shell bridge with the existing summon, tray, and overlay
+preflights, then emits a single bounded receipt showing why the current
+command-palette surface is still not an OS-level binding. It requires blocked
+readback from the chat-UI-only command palette, blocked summon preflight,
+blocked tray preflight, blocked overlay preflight, and explicit denial of
+side-effect authority before it reports `proof_passed`.
+
+The proof reports blocker families for `palette_binding`,
+`global_hotkey_binding`, `summon_binding`, `tray_presence`, `overlay_window`,
+and `authority`, with `palette_binding` as the first blocker family. This is
+diagnostic/readback work only. It does not open a palette, register a hotkey,
+summon Francis, launch a process, control tray or overlay surfaces, decide
+approvals, execute actions, write memory, capture screen state, create new
+sensing, or grant local-process-launch, service-control, hotkey-registration,
+tray-registration, overlay-control, summon, approval, execution, memory-write,
+or mutation authority. Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens command-palette
+OS-binding blocker proof:
+
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `failed before fixing strict-mode filtered-check counting; passed
+  after fix`
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
