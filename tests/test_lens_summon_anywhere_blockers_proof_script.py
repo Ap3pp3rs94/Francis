@@ -37,8 +37,72 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_summon_anywhere_blockers_proof_is_readback_only() -> None:
-    proc = _run_proof("-Mode", "Status")
+def _write_lens_status(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "lens.status",
+                "os_binding_authority_requests": {
+                    "ok": True,
+                    "kind": "lens.os_binding.command_palette_binding_authority.request_readback",
+                    "status": "none",
+                    "route": "/lens/os-binding/authority/requests",
+                    "authority_route": "/lens/os-binding/authority",
+                    "request_route": "/lens/os-binding/authority/request",
+                    "readiness_route": "/lens/os-binding/readiness",
+                    "plan_route": "/lens/os-binding/plan",
+                    "pending_count": 0,
+                    "approved_count": 0,
+                    "rejected_count": 0,
+                    "emergency_count": 0,
+                    "total_count": 0,
+                    "authority_granted": False,
+                    "os_level_command_palette_binding_authority": False,
+                    "os_level_command_palette": False,
+                    "summon_anywhere": False,
+                    "opens_palette": False,
+                    "registers_hotkey": False,
+                    "launches_process": False,
+                    "controls_overlay": False,
+                    "governance": {
+                        "read_only_contract": True,
+                        "approval_request_write": False,
+                        "execution_authority": False,
+                        "approval_decision_authority": False,
+                        "memory_write": False,
+                        "resident_claim_authority": False,
+                    },
+                },
+                "stage6_readiness": {
+                    "criteria": [
+                        {
+                            "id": "os_binding_readiness",
+                            "authority_request_readback_status": "none",
+                            "authority_request_readback_ready": True,
+                            "authority_route": "/lens/os-binding/authority",
+                            "authority_request_route": "/lens/os-binding/authority/request",
+                            "authority_requests_route": "/lens/os-binding/authority/requests",
+                            "evidence": [
+                                "/lens/os-binding/readiness",
+                                "/lens/os-binding/authority/requests",
+                                "/lens/os-binding/authority/request",
+                                "/lens/status",
+                            ],
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
@@ -52,6 +116,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only() -> None:
     assert payload["summon_preflight_observed"] is True
     assert payload["stage6_family_projection_observed"] is True
     assert payload["side_effects_denied"] is True
+    assert payload["os_binding_authority_request_readback_observed"] is True
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["blocked_families"] == [
         "resident_host",
@@ -98,16 +163,55 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only() -> None:
         "summon_binding",
     ]
 
+    lens_status_readback = payload["lens_status_readback"]
+    assert lens_status_readback["ok"] is True
+    assert lens_status_readback["source"] == "status_path"
+    assert lens_status_readback["evidence"] == str(status_path)
+    assert lens_status_readback["error"] == ""
+
+    authority_request_readback = payload["os_binding_authority_request_readback"]
+    assert authority_request_readback["status"] == "none"
+    assert authority_request_readback["ok"] is True
+    assert authority_request_readback["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert authority_request_readback["route"] == "/lens/os-binding/authority/requests"
+    assert authority_request_readback["authority_route"] == "/lens/os-binding/authority"
+    assert authority_request_readback["request_route"] == "/lens/os-binding/authority/request"
+    assert authority_request_readback["readiness_route"] == "/lens/os-binding/readiness"
+    assert authority_request_readback["plan_route"] == "/lens/os-binding/plan"
+    assert authority_request_readback["stage6_criterion_status"] == "none"
+    assert authority_request_readback["stage6_criterion_readback_ready"] is True
+    assert authority_request_readback["pending_count"] == 0
+    assert authority_request_readback["approved_count"] == 0
+    assert authority_request_readback["total_count"] == 0
+    assert authority_request_readback["authority_granted"] is False
+    assert authority_request_readback["os_level_command_palette_binding_authority"] is False
+    assert authority_request_readback["os_level_command_palette"] is False
+    assert authority_request_readback["summon_anywhere"] is False
+    assert authority_request_readback["opens_palette"] is False
+    assert authority_request_readback["registers_hotkey"] is False
+    assert authority_request_readback["launches_process"] is False
+    assert authority_request_readback["controls_overlay"] is False
+    assert authority_request_readback["governance"]["read_only_contract"] is True
+    assert authority_request_readback["governance"]["approval_request_write"] is False
+    assert authority_request_readback["governance"]["execution_authority"] is False
+    assert authority_request_readback["governance"]["approval_decision_authority"] is False
+    assert authority_request_readback["governance"]["memory_write"] is False
+    assert authority_request_readback["governance"]["resident_claim_authority"] is False
+
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_preflight_readback"]["status"] == "blocked_readback_ready"
     assert checks["stage6_family_projection"]["status"] == "blocked_families_projected"
     assert checks["summon_side_effects_denied"]["status"] == "diagnostic_bounded"
+    assert checks["os_binding_authority_request_readback"]["status"] == "readback_ready"
     assert all(item["passed"] for item in payload["checks"])
 
     assert payload["governance"] == {
         "diagnostic_only": True,
         "wraps_summon_preflight": True,
+        "wraps_lens_status": True,
         "read_only_contract": True,
+        "os_binding_authority_request_readback": True,
+        "approval_request_write": False,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -118,5 +222,6 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only() -> None:
         "new_sensing_authority": False,
         "local_process_launch_authority": False,
         "hotkey_registration_authority": False,
+        "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }

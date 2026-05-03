@@ -1,6 +1,7 @@
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+  [string]$StatusPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,6 +117,98 @@ function New-Check {
   }
 }
 
+function Get-LensStatus {
+  param(
+    [string]$StatusPath
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($StatusPath)) {
+    try {
+      $ResolvedStatusPath = (Resolve-Path -LiteralPath $StatusPath -ErrorAction Stop).Path
+      $Payload = Get-Content -LiteralPath $ResolvedStatusPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+      return [ordered]@{
+        ok = $true
+        source = 'status_path'
+        evidence = $ResolvedStatusPath
+        payload = $Payload
+        error = ''
+      }
+    } catch {
+      return [ordered]@{
+        ok = $false
+        source = 'status_path'
+        evidence = $StatusPath
+        payload = $null
+        error = [string]$_.Exception.Message
+      }
+    }
+  }
+
+  $Python = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -eq $Python) {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = 'python_unavailable'
+    }
+  }
+
+  $Source = @'
+import json
+from francis.lens.status import lens_status
+print(json.dumps(lens_status(limit=5)))
+'@
+  $Output = & $Python.Source -c $Source
+  if ($LASTEXITCODE -ne 0) {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = 'lens_status_failed'
+      exit_code = $LASTEXITCODE
+      output = ($Output -join "`n")
+    }
+  }
+
+  try {
+    return [ordered]@{
+      ok = $true
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = (($Output -join "`n") | ConvertFrom-Json -ErrorAction Stop)
+      error = ''
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = [string]$_.Exception.Message
+    }
+  }
+}
+
+function Get-ReadinessCriterion {
+  param(
+    [AllowNull()]
+    [object]$LensStatus,
+    [string]$CriterionId
+  )
+
+  $Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
+  $Criteria = Get-PropertyValue -Payload $Readiness -Name 'criteria' -Default @()
+  foreach ($Criterion in @($Criteria)) {
+    if ((Get-PropertyValue -Payload $Criterion -Name 'id' -Default '') -eq $CriterionId) {
+      return $Criterion
+    }
+  }
+  return $null
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
@@ -138,6 +231,18 @@ $SummonPreflightRequiredBeforeEnable = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonPreflightPayload -Name 'required_before_enable' -Default @()
 )
 $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'governance'
+$LensStatusRead = Get-LensStatus -StatusPath $StatusPath
+$LensStatus = Get-PropertyValue -Payload $LensStatusRead -Name 'payload'
+$OsBindingAuthorityRequests = Get-PropertyValue -Payload $LensStatus -Name 'os_binding_authority_requests'
+$OsBindingAuthorityRequestsGovernance = Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'governance'
+$OsBindingReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'os_binding_readiness'
+$OsBindingReadinessAuthorityRequestReady = [bool](Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'authority_request_readback_ready' -Default $false)
+$OsBindingReadinessAuthorityRequestsRoute = [string](Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'authority_requests_route' -Default '')
+$OsBindingReadinessAuthorityRequestRoute = [string](Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'authority_request_route' -Default '')
+$OsBindingReadinessAuthorityRequestStatus = [string](Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'authority_request_readback_status' -Default 'missing')
+$OsBindingReadinessEvidence = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'evidence' -Default @()
+)
 
 $Stage6BlockerGroups = [ordered]@{
   resident_host = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
@@ -218,11 +323,41 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'hotkey_registration_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'mutation_authority_granted' -Default $true)
 )
+$OsBindingAuthorityRequestReadbackObserved = (
+  [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $LensStatus -Name 'kind' -Default '') -eq 'lens.status' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'kind' -Default '') -eq 'lens.os_binding.command_palette_binding_authority.request_readback' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'route' -Default '') -eq '/lens/os-binding/authority/requests' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_route' -Default '') -eq '/lens/os-binding/authority' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'request_route' -Default '') -eq '/lens/os-binding/authority/request' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'readiness_route' -Default '') -eq '/lens/os-binding/readiness' -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'plan_route' -Default '') -eq '/lens/os-binding/plan' -and
+  $OsBindingReadinessAuthorityRequestReady -and
+  $OsBindingReadinessAuthorityRequestsRoute -eq '/lens/os-binding/authority/requests' -and
+  $OsBindingReadinessAuthorityRequestRoute -eq '/lens/os-binding/authority/request' -and
+  $OsBindingReadinessEvidence -contains '/lens/os-binding/authority/requests' -and
+  $OsBindingReadinessEvidence -contains '/lens/os-binding/authority/request' -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette_binding_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'summon_anywhere' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'opens_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'registers_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'launches_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'controls_overlay' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'read_only_contract' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'approval_request_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'resident_claim_authority' -Default $true)
+)
 
 $Checks = @(
   (New-Check -Id 'summon_preflight_readback' -Status $(if ($SummonPreflightObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must name summon-anywhere as blocked and point to summon_anywhere_blockers.'),
   (New-Check -Id 'stage6_family_projection' -Status $(if ($Stage6FamilyProjectionObserved) { 'blocked_families_projected' } else { 'missing_or_unexpected' }) -Passed $Stage6FamilyProjectionObserved -Evidence 'summon preflight blockers projected into Stage 6 acceptance families' -Reason 'The handoff proof must expose the same blocker-family shape used by the Stage 6 completion audit.'),
-  (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.')
+  (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
+  (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
@@ -240,10 +375,51 @@ $Payload = [ordered]@{
   summon_preflight_observed = $SummonPreflightObserved
   stage6_family_projection_observed = $Stage6FamilyProjectionObserved
   side_effects_denied = $SideEffectsDenied
+  os_binding_authority_request_readback_observed = $OsBindingAuthorityRequestReadbackObserved
   first_blocker_family = if (@($Stage6BlockedFamilies).Count -gt 0) { [string]$Stage6BlockedFamilies[0] } else { '' }
   blocked_families = [string[]]@($Stage6BlockedFamilies)
   blocker_groups = $Stage6BlockerGroups
   blockers = [string[]]@($SummonPreflightBlockers)
+  lens_status_readback = [ordered]@{
+    ok = [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false)
+    source = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'source' -Default '')
+    evidence = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'evidence' -Default '')
+    error = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'error' -Default '')
+  }
+  os_binding_authority_request_readback = [ordered]@{
+    status = if ($OsBindingAuthorityRequestReadbackObserved) { [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'status' -Default '') } else { 'missing_or_failed' }
+    ok = $OsBindingAuthorityRequestReadbackObserved
+    evidence = [string[]]@('/lens/status', '/lens/os-binding/readiness', '/lens/os-binding/authority/requests')
+    kind = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'kind' -Default '')
+    route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'route' -Default '')
+    authority_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_route' -Default '')
+    request_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'request_route' -Default '')
+    readiness_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'readiness_route' -Default '')
+    plan_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'plan_route' -Default '')
+    stage6_criterion_status = $OsBindingReadinessAuthorityRequestStatus
+    stage6_criterion_readback_ready = $OsBindingReadinessAuthorityRequestReady
+    pending_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'pending_count' -Default 0)
+    approved_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'approved_count' -Default 0)
+    rejected_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'rejected_count' -Default 0)
+    emergency_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'emergency_count' -Default 0)
+    total_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'total_count' -Default 0)
+    authority_granted = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_granted' -Default $false)
+    os_level_command_palette_binding_authority = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette_binding_authority' -Default $false)
+    os_level_command_palette = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette' -Default $false)
+    summon_anywhere = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'summon_anywhere' -Default $false)
+    opens_palette = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'opens_palette' -Default $false)
+    registers_hotkey = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'registers_hotkey' -Default $false)
+    launches_process = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'launches_process' -Default $false)
+    controls_overlay = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'controls_overlay' -Default $false)
+    governance = [ordered]@{
+      read_only_contract = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'read_only_contract' -Default $false)
+      approval_request_write = [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'approval_request_write' -Default $true)
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      resident_claim_authority = $false
+    }
+  }
   summon_preflight = [ordered]@{
     status = [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'status' -Default 'missing')
     ready = [bool](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'ready' -Default $false)
@@ -264,7 +440,10 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     diagnostic_only = $true
     wraps_summon_preflight = $true
+    wraps_lens_status = $true
     read_only_contract = [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false)
+    os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
+    approval_request_write = $false
     product_execution_authority = $false
     execution_authority = $false
     approval_decision_authority = $false
@@ -275,6 +454,7 @@ $Payload = [ordered]@{
     new_sensing_authority = $false
     local_process_launch_authority = $false
     hotkey_registration_authority = $false
+    resident_claim_authority = $false
     mutation_authority_granted = $false
   }
   message = 'Stage 6 summon-anywhere remains blocked by resident host, tray, overlay, global hotkey binding, summon binding, and authority gaps; this proof is read-only and grants no summon or runtime authority.'

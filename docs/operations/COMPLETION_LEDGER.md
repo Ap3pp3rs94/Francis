@@ -17178,6 +17178,44 @@ of OS-binding authority request readback:
 - `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens summon blocker proof consumes OS-binding authority readback
+
+Stage 6/Lens summon-anywhere blocker proof now consumes the Lens status
+OS-binding authority request readback directly. The proof accepts an optional
+status snapshot for deterministic validation, otherwise reads
+`francis.lens.status.lens_status`, verifies the
+`os_binding_authority_requests` readback routes and Stage 6
+`os_binding_readiness` criterion projection, and exposes
+`os_binding_authority_request_readback` with authority and governance denial
+flags. The proof still reports `summon_anywhere_blockers` as the current
+handoff and keeps the resident host, tray, overlay, hotkey, summon-binding, and
+authority blocker families intact.
+
+This is diagnostic/readback-only consumption of existing Lens status truth. It
+does not grant OS-binding authority; does not create approval requests, decide
+approvals, open a palette, register a global hotkey, summon Francis, launch or
+supervise a process, control tray or overlay surfaces, write memory, claim
+resident state, capture screen state, create new sensing, or grant execution,
+hotkey-registration, tray-registration, overlay-control, process-supervision,
+service-control, summon, resident-claim, approval-decision, memory-write, or
+mutation authority. Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon blocker
+proof consumption of OS-binding authority request readback:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ok,os_binding_authority_request_readback_observed,next_smallest_truthful_gap,@{Name='authority_status';Expression={$_.os_binding_authority_request_readback.status}},@{Name='lens_source';Expression={$_.lens_status_readback.source}} | ConvertTo-Json -Depth 4`
+  Result: `passed; returned proof_passed, ok=true, os_binding_authority_request_readback_observed=true, next_smallest_truthful_gap=summon_anywhere_blockers, authority_status=none, lens_source=python`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed` with a local `.ruff_cache` access warning
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
