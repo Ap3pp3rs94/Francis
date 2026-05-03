@@ -1181,6 +1181,34 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert command_palette_os_binding["governance"]["capture_authority"] is False
     assert command_palette_os_binding["governance"]["new_sensing_authority"] is False
     assert command_palette_os_binding["governance"]["mutation_authority_granted"] is False
+    authority_request_readback = payload["os_binding_authority_request_readback"]
+    assert authority_request_readback["status"] == "none"
+    assert authority_request_readback["ok"] is True
+    assert authority_request_readback["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert authority_request_readback["route"] == "/lens/os-binding/authority/requests"
+    assert authority_request_readback["authority_route"] == "/lens/os-binding/authority"
+    assert authority_request_readback["request_route"] == "/lens/os-binding/authority/request"
+    assert authority_request_readback["readiness_route"] == "/lens/os-binding/readiness"
+    assert authority_request_readback["plan_route"] == "/lens/os-binding/plan"
+    assert authority_request_readback["stage6_criterion_status"] == "none"
+    assert authority_request_readback["stage6_criterion_readback_ready"] is True
+    assert authority_request_readback["pending_count"] == 0
+    assert authority_request_readback["approved_count"] == 0
+    assert authority_request_readback["total_count"] == 0
+    assert authority_request_readback["authority_granted"] is False
+    assert authority_request_readback["os_level_command_palette_binding_authority"] is False
+    assert authority_request_readback["os_level_command_palette"] is False
+    assert authority_request_readback["summon_anywhere"] is False
+    assert authority_request_readback["opens_palette"] is False
+    assert authority_request_readback["registers_hotkey"] is False
+    assert authority_request_readback["launches_process"] is False
+    assert authority_request_readback["controls_overlay"] is False
+    assert authority_request_readback["governance"]["read_only_contract"] is True
+    assert authority_request_readback["governance"]["approval_request_write"] is False
+    assert authority_request_readback["governance"]["execution_authority"] is False
+    assert authority_request_readback["governance"]["approval_decision_authority"] is False
+    assert authority_request_readback["governance"]["memory_write"] is False
+    assert authority_request_readback["governance"]["resident_claim_authority"] is False
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["governance"] == {
         "read_only_contract": True,
@@ -1210,6 +1238,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_resident_claim_boundary_proof_observed": True,
         "command_palette_shell_bridge_observed": True,
         "command_palette_os_binding_blockers_proof_observed": True,
+        "os_binding_authority_request_readback_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

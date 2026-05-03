@@ -748,12 +748,39 @@ $CommandPaletteOsBindingObserved = (
   -not [bool]$CommandPaletteOsBindingGovernance.new_sensing_authority -and
   -not [bool]$CommandPaletteOsBindingGovernance.mutation_authority_granted
 )
+$OsBindingAuthorityRequestReadback = $Checkpoint.os_binding_authority_request_readback
+$OsBindingAuthorityRequestReadbackGovernance = $OsBindingAuthorityRequestReadback.governance
+$OsBindingAuthorityRequestReadbackObserved = (
+  [bool]$OsBindingAuthorityRequestReadback.ok -and
+  [string]$OsBindingAuthorityRequestReadback.kind -eq 'lens.os_binding.command_palette_binding_authority.request_readback' -and
+  [string]$OsBindingAuthorityRequestReadback.route -eq '/lens/os-binding/authority/requests' -and
+  [string]$OsBindingAuthorityRequestReadback.authority_route -eq '/lens/os-binding/authority' -and
+  [string]$OsBindingAuthorityRequestReadback.request_route -eq '/lens/os-binding/authority/request' -and
+  [string]$OsBindingAuthorityRequestReadback.readiness_route -eq '/lens/os-binding/readiness' -and
+  [string]$OsBindingAuthorityRequestReadback.plan_route -eq '/lens/os-binding/plan' -and
+  [bool]$OsBindingAuthorityRequestReadback.stage6_criterion_readback_ready -and
+  -not [bool]$OsBindingAuthorityRequestReadback.authority_granted -and
+  -not [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette_binding_authority -and
+  -not [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette -and
+  -not [bool]$OsBindingAuthorityRequestReadback.summon_anywhere -and
+  -not [bool]$OsBindingAuthorityRequestReadback.opens_palette -and
+  -not [bool]$OsBindingAuthorityRequestReadback.registers_hotkey -and
+  -not [bool]$OsBindingAuthorityRequestReadback.launches_process -and
+  -not [bool]$OsBindingAuthorityRequestReadback.controls_overlay -and
+  [bool]$OsBindingAuthorityRequestReadbackGovernance.read_only_contract -and
+  -not [bool]$OsBindingAuthorityRequestReadbackGovernance.approval_request_write -and
+  -not [bool]$OsBindingAuthorityRequestReadbackGovernance.execution_authority -and
+  -not [bool]$OsBindingAuthorityRequestReadbackGovernance.approval_decision_authority -and
+  -not [bool]$OsBindingAuthorityRequestReadbackGovernance.memory_write -and
+  -not [bool]$OsBindingAuthorityRequestReadbackGovernance.resident_claim_authority
+)
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
   $CommandPaletteShellBridgeObserved -and
-  $CommandPaletteOsBindingObserved
+  $CommandPaletteOsBindingObserved -and
+  $OsBindingAuthorityRequestReadbackObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -810,6 +837,16 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $CommandPaletteOsBindingObserved
 ) {
   'command_palette_os_binding_blocker_proof'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $CommandPaletteShellBridgeObserved -and
+  $CommandPaletteOsBindingObserved -and
+  -not $OsBindingAuthorityRequestReadbackObserved
+) {
+  'os_binding_authority_request_readback'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -906,6 +943,8 @@ $Payload = [ordered]@{
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
     'The audit must consume the command-palette OS-binding blocker proof before treating palette binding, global hotkey binding, summon binding, tray presence, overlay window, and authority as grouped summon-anywhere blockers.'
+  } elseif ($NextSmallestTruthfulGap -eq 'os_binding_authority_request_readback') {
+    'The audit must consume the OS-binding authority request readback before treating authority review visibility as part of the Stage 6 summon-anywhere blocker evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
     'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
@@ -1456,6 +1495,40 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  os_binding_authority_request_readback = [ordered]@{
+    status = if ($OsBindingAuthorityRequestReadbackObserved) { [string]$OsBindingAuthorityRequestReadback.status } else { 'missing_or_failed' }
+    ok = $OsBindingAuthorityRequestReadbackObserved
+    evidence = [string[]]@(ConvertTo-StringArray -Value $OsBindingAuthorityRequestReadback.evidence)
+    kind = [string]$OsBindingAuthorityRequestReadback.kind
+    route = [string]$OsBindingAuthorityRequestReadback.route
+    authority_route = [string]$OsBindingAuthorityRequestReadback.authority_route
+    request_route = [string]$OsBindingAuthorityRequestReadback.request_route
+    readiness_route = [string]$OsBindingAuthorityRequestReadback.readiness_route
+    plan_route = [string]$OsBindingAuthorityRequestReadback.plan_route
+    stage6_criterion_status = [string]$OsBindingAuthorityRequestReadback.stage6_criterion_status
+    stage6_criterion_readback_ready = [bool]$OsBindingAuthorityRequestReadback.stage6_criterion_readback_ready
+    pending_count = [int]$OsBindingAuthorityRequestReadback.pending_count
+    approved_count = [int]$OsBindingAuthorityRequestReadback.approved_count
+    rejected_count = [int]$OsBindingAuthorityRequestReadback.rejected_count
+    emergency_count = [int]$OsBindingAuthorityRequestReadback.emergency_count
+    total_count = [int]$OsBindingAuthorityRequestReadback.total_count
+    authority_granted = [bool]$OsBindingAuthorityRequestReadback.authority_granted
+    os_level_command_palette_binding_authority = [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette_binding_authority
+    os_level_command_palette = [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette
+    summon_anywhere = [bool]$OsBindingAuthorityRequestReadback.summon_anywhere
+    opens_palette = [bool]$OsBindingAuthorityRequestReadback.opens_palette
+    registers_hotkey = [bool]$OsBindingAuthorityRequestReadback.registers_hotkey
+    launches_process = [bool]$OsBindingAuthorityRequestReadback.launches_process
+    controls_overlay = [bool]$OsBindingAuthorityRequestReadback.controls_overlay
+    governance = [ordered]@{
+      read_only_contract = [bool]$OsBindingAuthorityRequestReadbackGovernance.read_only_contract
+      approval_request_write = [bool]$OsBindingAuthorityRequestReadbackGovernance.approval_request_write
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      resident_claim_authority = $false
+    }
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -1719,6 +1792,8 @@ $Payload = [ordered]@{
     '/lens/host/persistent-supervision/enablement/execution',
     '/lens/host/persistent-supervision/enablement/execution/readiness',
     '/lens/status',
+    '/lens/os-binding/authority/requests',
+    '/lens/os-binding/authority/request',
     '/lens/resident-surface',
     '/lens/resident-surface/activation',
     '/lens/host/supervision/authority/readiness',
@@ -1748,6 +1823,7 @@ $Payload = [ordered]@{
     resident_runtime_resident_claim_boundary_proof_readback = $ResidentRuntimeResidentClaimBoundaryObserved
     command_palette_shell_bridge_readback = $CommandPaletteShellBridgeObserved
     command_palette_os_binding_blockers_proof_readback = $CommandPaletteOsBindingObserved
+    os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

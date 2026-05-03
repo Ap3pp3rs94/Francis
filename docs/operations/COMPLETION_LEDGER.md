@@ -17141,6 +17141,43 @@ authority request readiness/status consumption:
 - `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens audit consumes OS-binding authority request readback
+
+Stage 6/Lens checkpoint and completion-audit readback now consume the
+OS-binding command-palette authority request readback that is already exposed
+through `/lens/status`. The checkpoint now publishes an
+`os_binding_authority_request_readback` proof block with the authority request
+routes, status counts, Stage 6 criterion readiness projection, explicit
+authority flags, and read-only governance flags. The completion audit now
+requires that checkpoint proof before treating the Stage 6 completion review as
+fully consumed, and includes the OS-binding authority request readback routes in
+its evidence set.
+
+This is diagnostic/readback-only consumption of an existing backend approval
+request surface. It does not grant OS-binding authority; does not create
+approval requests, decide approvals, open a palette, register a global hotkey,
+summon Francis, launch or supervise a process, control tray or overlay surfaces,
+write memory, claim resident state, capture screen state, create new sensing, or
+grant execution, hotkey-registration, tray-registration, overlay-control,
+process-supervision, service-control, summon, resident-claim,
+approval-decision, memory-write, or mutation authority. Stage 6 remains active
+and blocked on the real `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens audit consumption
+of OS-binding authority request readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
