@@ -17720,6 +17720,41 @@ blocker handoff proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens summon authority blocker handoff proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-summon-authority-blocker-proof.ps1` diagnostic for the sixth
+summon-anywhere blocker family. The proof consumes the existing summon-anywhere
+blocker proof, the previous summon-binding handoff proof, and the direct summon
+preflight. It confirms that `authority` is the next blocked summon-anywhere
+family after `summon_binding`, preserves the explicit authority-denial readback
+for summon, hotkey registration, overlay control, and local process launch, and
+returns `next_smallest_truthful_gap: stage6_lens_completion_audit`.
+
+This is readback-only / diagnostic-only. It does not implement or bind
+summon-anywhere, grant summon authority, register a global hotkey, open or
+control an overlay, register tray presence, launch or supervise a process,
+install or control a service, write memory, decide approvals, grant
+resident-runtime authority, or claim resident status. Stage 6 remains active and
+blocked on summon-anywhere, helpful/not-noisy, and system-resident presence
+closure until the completion audit proves otherwise.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon authority
+blocker handoff proof:
+
+- `python -m pytest tests\test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_summon_blocker_family,summon_authority_family_observed,previous_summon_binding_bridge_observed,summon_preflight_authority_observed,all_summon_blocker_families_consumed,handoff_aligned,side_effects_denied,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; returned proof_passed with next_smallest_truthful_gap=stage6_lens_completion_audit and all authority-denial flags intact`
+- `python -m pytest tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
