@@ -5511,6 +5511,31 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "resident_loop_receipt_emission",
         "resident_loop_claim_checkpoint",
     ]
+    assert body["operator_surface_readback_ready"] is True
+    assert body["first_blocked_requirement"] == "resident_loop_process_supervision"
+    assert [item["id"] for item in body["blocked_requirement_handoffs"]] == body["blocked_requirements"]
+    assert body["first_blocked_requirement_handoff"] == {
+        "id": "resident_loop_process_supervision",
+        "label": "Resident loop process supervision",
+        "status": "blocked",
+        "route": "/lens/host/supervision",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+        "authority_required": "process_supervision_authority",
+        "authority_granted": False,
+        "blockers": [
+            "resident_host_process_missing",
+            "process_supervision_authority_not_granted",
+            "process_restart_authority_not_granted",
+        ],
+        "would_execute": False,
+        "would_mutate": False,
+    }
     requirements = {item["id"]: item for item in body["requirements"]}
     assert requirements["runtime_implementation_plan"]["ready"] is True
     assert requirements["runtime_loop_contract"]["ready"] is True
@@ -5537,7 +5562,7 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "execution_denial_status": "denied_no_resident_runtime_authority",
         "denial_receipts_status": "empty",
     }
-    assert body["next_smallest_truthful_gap"] == "resident_host_runtime_loop_operator_surface_readback"
+    assert body["next_smallest_truthful_gap"] == "resident_host_supervision_authority_readiness_blockers"
 
     governance = body["governance"]
     assert governance["gate"] == "lens_host_runtime_loop_readiness_audit"
@@ -5594,7 +5619,7 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "resident_loop_receipt_emission",
         "resident_loop_claim_checkpoint",
     ]
-    assert criterion["next_smallest_truthful_gap"] == "resident_host_runtime_loop_operator_surface_readback"
+    assert criterion["next_smallest_truthful_gap"] == "resident_host_supervision_authority_readiness_blockers"
     assert criterion["first_blocked_requirement"] == "resident_loop_process_supervision"
     assert len(criterion["requirement_readback"]) == 12
     blocked_requirement_readback = criterion["blocked_requirement_readback"]

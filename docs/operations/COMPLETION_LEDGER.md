@@ -17857,6 +17857,40 @@ blocker operator readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens runtime-loop supervision handoff readback
+
+Stage 6/Lens resident-host runtime-loop readiness now exposes direct operator
+handoffs for blocked runtime-loop requirements. `/lens/host/runtime-loop/readiness`
+returns `operator_surface_readback_ready`, `first_blocked_requirement`,
+`first_blocked_requirement_handoff`, and `blocked_requirement_handoffs`. The
+current first blocked requirement, `resident_loop_process_supervision`, now
+points to the existing supervision gate, supervision authority readiness,
+request, request readback, grant, grant readback, and denial readback routes.
+The next smallest truthful gap is now
+`resident_host_supervision_authority_readiness_blockers`.
+
+This is backend/API readback-only. It does not implement the resident runtime
+loop, launch or supervise a process, install or control a service, register tray
+presence, bind a hotkey, open or control an overlay, implement summon-anywhere,
+write memory, decide approvals, write receipts, grant resident-runtime
+execution authority, grant supervision authority, or claim resident status.
+Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens runtime-loop
+supervision handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py tests\test_api_lens.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

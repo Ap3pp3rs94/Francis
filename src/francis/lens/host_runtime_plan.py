@@ -88,6 +88,69 @@ def _readiness_requirement(
     }
 
 
+def _runtime_loop_operator_handoff(requirement: dict[str, Any]) -> dict[str, Any]:
+    requirement_id = str(requirement.get("id") or "").strip()
+    routes_by_requirement = {
+        "resident_loop_process_supervision": {
+            "readiness_route": "/lens/host/supervision/authority/readiness",
+            "request_route": "/lens/host/supervision/authority/request",
+            "requests_route": "/lens/host/supervision/authority/requests",
+            "grant_route": "/lens/host/supervision/authority",
+            "grants_route": "/lens/host/supervision/authority/grants",
+            "denials_route": "/lens/host/supervision/authority/denials",
+            "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+        },
+        "resident_loop_service_lifecycle": {
+            "readiness_route": "/lens/host/persistent-supervision/enablement/authority/readiness",
+            "request_route": "/lens/host/persistent-supervision/enablement/authority/request",
+            "requests_route": "/lens/host/persistent-supervision/enablement/authority/requests",
+            "grant_route": "/lens/host/persistent-supervision/enablement/authority",
+            "grants_route": "/lens/host/persistent-supervision/enablement/authority/grants",
+            "execution_readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+            "execution_request_route": "/lens/host/persistent-supervision/enablement/execution/request",
+            "execution_requests_route": "/lens/host/persistent-supervision/enablement/execution/requests",
+            "execution_grant_route": "/lens/host/persistent-supervision/enablement/execution/authority",
+            "execution_grants_route": "/lens/host/persistent-supervision/enablement/execution/authority/grants",
+            "next_step": "resolve_persistent_supervision_enablement_readiness_before_service_lifecycle",
+        },
+        "resident_loop_surface_presence": {
+            "readiness_route": "/lens/preflight",
+            "summon_route": "/lens/summon",
+            "tray_route": "/lens/tray",
+            "overlay_route": "/lens/overlay",
+            "next_step": "resolve_tray_hotkey_overlay_and_summon_blockers_before_resident_surface_presence",
+        },
+        "resident_loop_receipt_emission": {
+            "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+            "request_route": "/lens/resident-runtime/authority-grant/request",
+            "requests_route": "/lens/resident-runtime/authority-grant/requests",
+            "grant_route": "/lens/resident-runtime/authority-grant",
+            "grants_route": "/lens/resident-runtime/authority-grant/grants",
+            "denials_route": "/lens/resident-runtime/authority-grant/denials",
+            "execute_route": "/lens/resident-runtime/execute",
+            "next_step": "resolve_resident_runtime_authority_and_receipt_blockers_before_loop_receipts",
+        },
+        "resident_loop_claim_checkpoint": {
+            "readiness_route": "/lens/host/runtime-loop/readiness",
+            "loop_route": "/lens/host/runtime-loop",
+            "next_step": "keep_resident_claim_blocked_until_runtime_loop_is_supervised_and_receipted",
+        },
+    }
+    routes = routes_by_requirement.get(requirement_id, {})
+    return {
+        "id": requirement_id,
+        "label": str(requirement.get("label") or "").strip(),
+        "status": str(requirement.get("status") or "").strip(),
+        "route": str(requirement.get("route") or "").strip(),
+        **routes,
+        "authority_required": str(requirement.get("authority_required") or "").strip(),
+        "authority_granted": bool(requirement.get("authority_granted")),
+        "blockers": _as_str_list(requirement.get("blockers")),
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+
 def lens_host_runtime_implementation_plan(
     *,
     manifest: dict[str, Any] | None = None,
@@ -427,6 +490,11 @@ def lens_host_runtime_loop_readiness_audit(
 
     blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
     ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    blocked_requirement_handoffs = [_runtime_loop_operator_handoff(item) for item in blocked_requirements]
+    first_blocked_requirement = (
+        str(_as_dict(blocked_requirements[0]).get("id") or "").strip() if blocked_requirements else ""
+    )
+    first_blocked_requirement_handoff = blocked_requirement_handoffs[0] if blocked_requirement_handoffs else {}
     blockers = _ordered_unique(
         [
             *_as_str_list(implementation_plan.get("blockers")),
@@ -467,6 +535,10 @@ def lens_host_runtime_loop_readiness_audit(
         "requirements_blocked_total": len(blocked_requirements),
         "requirements": requirements,
         "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "operator_surface_readback_ready": True,
+        "first_blocked_requirement": first_blocked_requirement,
+        "first_blocked_requirement_handoff": first_blocked_requirement_handoff,
+        "blocked_requirement_handoffs": blocked_requirement_handoffs,
         "blockers": blockers,
         "source_readbacks": {
             "runtime_plan_status": str(implementation_plan.get("status") or "").strip(),
@@ -506,11 +578,11 @@ def lens_host_runtime_loop_readiness_audit(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_runtime_loop_operator_surface_readback",
+        "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers",
         "message": (
-            "Lens can audit resident host runtime loop readiness, but the loop remains blocked by the "
-            "missing resident runtime loop, process supervision, service/surface prerequisites, receipt "
-            "emission, and resident-claim authority."
+            "Lens can audit resident host runtime loop readiness and point each blocked requirement to the "
+            "operator review surface, but the loop remains blocked by resident host supervision authority, "
+            "service/surface prerequisites, receipt emission, and resident-claim authority."
         ),
     }
 
