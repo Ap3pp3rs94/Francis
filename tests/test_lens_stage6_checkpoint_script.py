@@ -476,6 +476,38 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "authority_grant_implementation"
         not in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
     )
+    assert payload["resident_host_supervision_authority_readiness_audit"]["operator_surface_readback_ready"] is True
+    assert (
+        payload["resident_host_supervision_authority_readiness_audit"]["first_blocked_requirement"]
+        == "exact_supervision_authority_approval"
+    )
+    assert [
+        item["id"]
+        for item in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirement_handoffs"]
+    ] == payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
+    assert payload["resident_host_supervision_authority_readiness_audit"]["first_blocked_requirement_handoff"] == {
+        "id": "exact_supervision_authority_approval",
+        "label": "Exact approved host supervision authority request",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority/requests",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "approval_action": "lens.host.supervision_authority",
+        "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert (
+        payload["resident_host_supervision_authority_readiness_audit"]["next_smallest_truthful_gap"]
+        == "host_supervision_authority_exact_approval_request"
+    )
     assert (
         "process_supervision_authority"
         in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]

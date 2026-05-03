@@ -2478,7 +2478,22 @@ def _stage6_readiness(
                     supervision_authority_readiness.get("requirements_blocked_total")
                 ),
                 "blocked_requirements": _as_list(supervision_authority_readiness.get("blocked_requirements")),
+                "operator_surface_readback_ready": bool(
+                    supervision_authority_readiness.get("operator_surface_readback_ready")
+                ),
+                "first_blocked_requirement": _safe_str(
+                    supervision_authority_readiness.get("first_blocked_requirement")
+                ).strip(),
+                "first_blocked_requirement_handoff": _as_dict(
+                    supervision_authority_readiness.get("first_blocked_requirement_handoff")
+                ),
+                "blocked_requirement_handoffs": _as_list(
+                    supervision_authority_readiness.get("blocked_requirement_handoffs")
+                ),
                 "blockers": _as_list(supervision_authority_readiness.get("blockers")),
+                "next_smallest_truthful_gap": _safe_str(
+                    supervision_authority_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,

@@ -17925,6 +17925,43 @@ authority blocker handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens supervision authority handoff checkpoint readback
+
+Stage 6/Lens status and checkpoint diagnostics now carry the same host
+supervision authority blocker handoff that `/lens/host/supervision/authority/readiness`
+exposes directly. The `resident_host_supervision_authority_readiness_audit`
+criterion in `/lens/status` and `scripts/lens-stage6-checkpoint.ps1` now include
+`operator_surface_readback_ready`, `first_blocked_requirement`,
+`first_blocked_requirement_handoff`, `blocked_requirement_handoffs`, and
+`next_smallest_truthful_gap`. The checkpoint now verifies that the current first
+blocked requirement is `exact_supervision_authority_approval` and that it points
+to the existing approval request/readback route family before considering the
+supervision authority readiness audit observed.
+
+This is backend/API/checkpoint readback-only. It does not create or approve
+supervision authority requests, grant supervision authority, launch or supervise
+a process, install or control a service, register tray presence, bind a hotkey,
+open or control an overlay, implement summon-anywhere, write memory, decide
+approvals, write receipts, grant resident-runtime execution authority, or claim
+resident status. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens supervision
+authority handoff checkpoint readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -414,6 +414,15 @@ $HostSupervisionAuthorityReadinessRequirementsTotal = [int](Get-PropertyValue -P
 $HostSupervisionAuthorityReadinessRequirementsReadyTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_ready_total' -Default 0)
 $HostSupervisionAuthorityReadinessRequirementsBlockedTotal = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'requirements_blocked_total' -Default 0)
 $HostSupervisionAuthorityReadinessBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blocked_requirements' -Default @())
+$HostSupervisionAuthorityReadinessOperatorSurfaceReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'operator_surface_readback_ready' -Default $false)
+$HostSupervisionAuthorityReadinessFirstBlockedRequirement = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'first_blocked_requirement' -Default '')
+$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff = Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'first_blocked_requirement_handoff' -Default ([ordered]@{})
+$HostSupervisionAuthorityReadinessBlockedRequirementHandoffs = Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blocked_requirement_handoffs' -Default @()
+$HostSupervisionAuthorityReadinessFirstHandoffRoute = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff -Name 'route' -Default '')
+$HostSupervisionAuthorityReadinessFirstHandoffRequestRoute = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff -Name 'request_route' -Default '')
+$HostSupervisionAuthorityReadinessFirstHandoffRequestsRoute = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff -Name 'requests_route' -Default '')
+$HostSupervisionAuthorityReadinessFirstHandoffApprovalAction = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff -Name 'approval_action' -Default '')
+$HostSupervisionAuthorityReadinessNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'next_smallest_truthful_gap' -Default '')
 $HostSupervisionAuthorityReadinessEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'evidence' -Default @())
 $HostSupervisionAuthorityReadinessBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blockers' -Default @())
 $HostSupervisionAuthorityReadinessObserved = (
@@ -430,6 +439,13 @@ $HostSupervisionAuthorityReadinessObserved = (
   $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/readiness' -and
   $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/grants' -and
   $HostSupervisionAuthorityReadinessBlockedRequirements -notcontains 'authority_grant_implementation' -and
+  $HostSupervisionAuthorityReadinessOperatorSurfaceReadbackReady -and
+  $HostSupervisionAuthorityReadinessFirstBlockedRequirement -eq 'exact_supervision_authority_approval' -and
+  $HostSupervisionAuthorityReadinessFirstHandoffRoute -eq '/lens/host/supervision/authority/requests' -and
+  $HostSupervisionAuthorityReadinessFirstHandoffRequestRoute -eq '/lens/host/supervision/authority/request' -and
+  $HostSupervisionAuthorityReadinessFirstHandoffRequestsRoute -eq '/lens/host/supervision/authority/requests' -and
+  $HostSupervisionAuthorityReadinessFirstHandoffApprovalAction -eq 'lens.host.supervision_authority' -and
+  $HostSupervisionAuthorityReadinessNextSmallestTruthfulGap -eq 'host_supervision_authority_exact_approval_request' -and
   $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'process_supervision_authority' -and
   $HostSupervisionAuthorityReadinessBlockers -notcontains 'host_supervision_authority_grant_not_implemented' -and
   $HostSupervisionAuthorityReadinessBlockers -contains 'process_supervision_authority_not_granted'
@@ -1627,6 +1643,11 @@ $Payload = [ordered]@{
     requirements_ready_total = $HostSupervisionAuthorityReadinessRequirementsReadyTotal
     requirements_blocked_total = $HostSupervisionAuthorityReadinessRequirementsBlockedTotal
     blocked_requirements = $HostSupervisionAuthorityReadinessBlockedRequirements
+    operator_surface_readback_ready = $HostSupervisionAuthorityReadinessOperatorSurfaceReadbackReady
+    first_blocked_requirement = $HostSupervisionAuthorityReadinessFirstBlockedRequirement
+    first_blocked_requirement_handoff = $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff
+    blocked_requirement_handoffs = $HostSupervisionAuthorityReadinessBlockedRequirementHandoffs
+    next_smallest_truthful_gap = $HostSupervisionAuthorityReadinessNextSmallestTruthfulGap
     execution_authority = $false
     approval_decision_authority = $false
     local_process_launch_authority = $false

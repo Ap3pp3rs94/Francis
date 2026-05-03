@@ -2699,6 +2699,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_readiness_criterion["requirements_total"] >= 11
     assert host_supervision_readiness_criterion["requirements_blocked_total"] >= 6
     assert "authority_grant_implementation" not in host_supervision_readiness_criterion["blocked_requirements"]
+    assert host_supervision_readiness_criterion["operator_surface_readback_ready"] is True
+    assert host_supervision_readiness_criterion["first_blocked_requirement"] == "exact_supervision_authority_approval"
+    assert [item["id"] for item in host_supervision_readiness_criterion["blocked_requirement_handoffs"]] == (
+        host_supervision_readiness_criterion["blocked_requirements"]
+    )
+    assert host_supervision_readiness_criterion["first_blocked_requirement_handoff"] == {
+        "id": "exact_supervision_authority_approval",
+        "label": "Exact approved host supervision authority request",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority/requests",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "approval_action": "lens.host.supervision_authority",
+        "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert (
+        host_supervision_readiness_criterion["next_smallest_truthful_gap"]
+        == "host_supervision_authority_exact_approval_request"
+    )
     assert "process_supervision_authority" in host_supervision_readiness_criterion["blocked_requirements"]
     assert "service_control_authority" in host_supervision_readiness_criterion["blocked_requirements"]
     assert "host_supervision_authority_grant_not_implemented" not in host_supervision_readiness_criterion["blockers"]
