@@ -2623,6 +2623,85 @@ def _readiness_requirement(
     )
 
 
+def _supervision_authority_operator_handoff(requirement: dict[str, Any]) -> dict[str, Any]:
+    requirement_id = _safe_str(requirement.get("id")).strip()
+    route_handoffs = {
+        "exact_supervision_authority_approval": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "request_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ROUTE,
+            "requests_route": LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+            "grant_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "approval_action": LENS_HOST_SUPERVISION_AUTHORITY_REQUEST_ACTION,
+            "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        },
+        "actor_scope": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "preflight_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+            "next_step": "provide_system_write_scope_before_supervision_authority_boundary",
+        },
+        "resident_supervision_gate": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "host_route": "/lens/host",
+            "manifest_route": "/lens/host/manifest",
+            "supervision_route": "/lens/host/supervision",
+            "next_step": "resolve_resident_host_supervision_gate_blockers_before_authority_grant",
+        },
+        "process_supervision_authority": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_exact_host_supervision_authority_before_process_supervision",
+        },
+        "process_restart_authority": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_exact_host_supervision_authority_before_process_restart",
+        },
+        "service_install_authority": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_exact_host_supervision_authority_before_service_install",
+        },
+        "service_control_authority": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_exact_host_supervision_authority_before_service_control",
+        },
+        "resident_claim_authority": {
+            "readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_exact_host_supervision_authority_before_resident_claim",
+        },
+    }
+    return _filtered_record(
+        {
+            "id": requirement_id,
+            "label": _safe_str(requirement.get("label")).strip(),
+            "status": _safe_str(requirement.get("status")).strip(),
+            "route": _safe_str(requirement.get("route")).strip(),
+            **route_handoffs.get(requirement_id, {}),
+            "authority_required": _safe_str(requirement.get("authority_required")).strip(),
+            "authority_granted": bool(requirement.get("authority_granted")),
+            "blockers": _str_list(requirement.get("blockers")),
+            "would_execute": False,
+            "would_mutate": False,
+        }
+    )
+
+
 def lens_resident_runtime_authority_grant_readiness_audit(
     *,
     approval_id: Any = "",
@@ -3190,6 +3269,19 @@ def lens_host_supervision_authority_readiness_audit(
     ]
     blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
     ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    blocked_requirement_handoffs = [_supervision_authority_operator_handoff(item) for item in blocked_requirements]
+    first_blocked_requirement = (
+        _safe_str(_as_dict(blocked_requirements[0]).get("id")).strip() if blocked_requirements else ""
+    )
+    first_blocked_requirement_handoff = blocked_requirement_handoffs[0] if blocked_requirement_handoffs else {}
+    next_smallest_truthful_gap = (
+        "host_supervision_authority_exact_approval_request"
+        if first_blocked_requirement == "exact_supervision_authority_approval"
+        else (
+            _safe_str(first_blocked_requirement_handoff.get("next_step")).strip()
+            or "resident_host_supervision_authority_readiness_blockers"
+        )
+    )
     ready = not blocked_requirements and not blockers
     return {
         "ok": True,
@@ -3226,7 +3318,12 @@ def lens_host_supervision_authority_readiness_audit(
         "requirements_blocked_total": len(blocked_requirements),
         "requirements": requirements,
         "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "operator_surface_readback_ready": True,
+        "first_blocked_requirement": first_blocked_requirement,
+        "first_blocked_requirement_handoff": first_blocked_requirement_handoff,
+        "blocked_requirement_handoffs": blocked_requirement_handoffs,
         "blockers": blockers,
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
         "source_readbacks": {
             "supervision_gate_status": _safe_str(supervision_gate.get("status")).strip(),
             "preflight_status": _safe_str(preflight.get("status")).strip(),
@@ -3265,7 +3362,7 @@ def lens_host_supervision_authority_readiness_audit(
             "resident_claim_authority": authority_granted,
             "mutation_authority_granted": False,
             "authority_granted": authority_granted,
-            "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+            "next_step": next_smallest_truthful_gap,
         },
     }
 

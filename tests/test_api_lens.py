@@ -1313,6 +1313,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness["authority_route"] == "/lens/host/supervision/authority"
     assert supervision_authority_readiness["denials_route"] == "/lens/host/supervision/authority/denials"
     assert supervision_authority_readiness["grants_route"] == "/lens/host/supervision/authority/grants"
+    assert supervision_authority_readiness["operator_surface_readback_ready"] is True
+    assert supervision_authority_readiness["first_blocked_requirement"] == "exact_supervision_authority_approval"
+    assert [item["id"] for item in supervision_authority_readiness["blocked_requirement_handoffs"]] == (
+        supervision_authority_readiness["blocked_requirements"]
+    )
+    assert supervision_authority_readiness["first_blocked_requirement_handoff"] == {
+        "id": "exact_supervision_authority_approval",
+        "label": "Exact approved host supervision authority request",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority/requests",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "approval_action": "lens.host.supervision_authority",
+        "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert (
+        supervision_authority_readiness["next_smallest_truthful_gap"]
+        == "host_supervision_authority_exact_approval_request"
+    )
     assert supervision_authority_readiness["ready"] is False
     assert supervision_authority_readiness["preflight_ready"] is True
     assert supervision_authority_readiness["authority_ready"] is False
@@ -3160,6 +3188,19 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness_body["denials_route"] == "/lens/host/supervision/authority/denials"
     assert supervision_authority_readiness_body["grants_route"] == "/lens/host/supervision/authority/grants"
     assert supervision_authority_readiness_body["approval_id"] == supervision_authority_approval_id
+    assert supervision_authority_readiness_body["operator_surface_readback_ready"] is True
+    assert [item["id"] for item in supervision_authority_readiness_body["blocked_requirement_handoffs"]] == (
+        supervision_authority_readiness_body["blocked_requirements"]
+    )
+    assert (
+        supervision_authority_readiness_body["first_blocked_requirement"]
+        == (supervision_authority_readiness_body["blocked_requirements"][0])
+    )
+    direct_first_blocker_handoff = supervision_authority_readiness_body["first_blocked_requirement_handoff"]
+    assert direct_first_blocker_handoff["id"] == supervision_authority_readiness_body["first_blocked_requirement"]
+    assert direct_first_blocker_handoff["readiness_route"] == "/lens/host/supervision/authority/readiness"
+    assert direct_first_blocker_handoff["would_execute"] is False
+    assert direct_first_blocker_handoff["would_mutate"] is False
     assert supervision_authority_readiness_body["ready"] is False
     assert supervision_authority_readiness_body["preflight_ready"] is True
     assert supervision_authority_readiness_body["authority_ready"] is True

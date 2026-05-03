@@ -17891,6 +17891,40 @@ supervision handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens supervision authority blocker handoff readback
+
+Stage 6/Lens host supervision authority readiness now exposes direct operator
+handoffs for its blocked requirements. `/lens/host/supervision/authority/readiness`
+returns `operator_surface_readback_ready`, `first_blocked_requirement`,
+`first_blocked_requirement_handoff`, `blocked_requirement_handoffs`, and
+`next_smallest_truthful_gap`. With no approval selected, the current first
+blocked requirement is `exact_supervision_authority_approval`; the handoff points
+to the existing approval request, request readback, grant, grant readback, denial
+readback, and readiness routes. The next smallest truthful gap is now
+`host_supervision_authority_exact_approval_request`.
+
+This is backend/API readback-only. It does not create or approve supervision
+authority requests, grant supervision authority, launch or supervise a process,
+install or control a service, register tray presence, bind a hotkey, open or
+control an overlay, implement summon-anywhere, write memory, decide approvals,
+write receipts, grant resident-runtime execution authority, or claim resident
+status. Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy,
+and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens supervision
+authority blocker handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
