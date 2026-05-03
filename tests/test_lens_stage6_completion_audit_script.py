@@ -880,6 +880,61 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert authority_request_readback["governance"]["memory_write"] is False
     assert authority_request_readback["governance"]["resident_claim_authority"] is False
 
+    summon_anywhere_blockers_proof = payload["summon_anywhere_blockers_proof"]
+    assert summon_anywhere_blockers_proof["status"] == "proof_passed"
+    assert summon_anywhere_blockers_proof["ok"] is True
+    assert summon_anywhere_blockers_proof["exit_code"] == 0
+    assert "scripts/lens-summon-preflight.ps1 -Mode Status" in summon_anywhere_blockers_proof["evidence"]
+    assert summon_anywhere_blockers_proof["acceptance_criterion"] == "summon_anywhere"
+    assert summon_anywhere_blockers_proof["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_anywhere_blockers_proof["summon_preflight_observed"] is True
+    assert summon_anywhere_blockers_proof["stage6_family_projection_observed"] is True
+    assert summon_anywhere_blockers_proof["side_effects_denied"] is True
+    assert summon_anywhere_blockers_proof["os_binding_authority_request_readback_observed"] is True
+    assert summon_anywhere_blockers_proof["first_blocker_family"] == "resident_host"
+    assert summon_anywhere_blockers_proof["blocked_families"] == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    summon_anywhere_groups = summon_anywhere_blockers_proof["blocker_groups"]
+    assert "local_process_launch_authority_not_granted" in summon_anywhere_groups["resident_host"]
+    assert "tray_host_missing" in summon_anywhere_groups["tray_presence"]
+    assert "overlay_window_missing" in summon_anywhere_groups["overlay_window"]
+    assert "global_hotkey_binding_disabled" in summon_anywhere_groups["global_hotkey_binding"]
+    assert "global_hotkey_registration_disabled" in summon_anywhere_groups["global_hotkey_binding"]
+    assert "hotkey_registration_authority_not_granted" in summon_anywhere_groups["global_hotkey_binding"]
+    assert "lens_summon_binding_not_implemented" in summon_anywhere_groups["summon_binding"]
+    assert "summon_authority_not_granted" in summon_anywhere_groups["summon_binding"]
+    assert "summon_authority_not_granted" in summon_anywhere_groups["authority"]
+    assert "hotkey_registration_authority_not_granted" in summon_anywhere_groups["authority"]
+    assert "overlay_control_authority_not_granted" in summon_anywhere_groups["authority"]
+    assert "local_process_launch_authority_not_granted" in summon_anywhere_groups["authority"]
+    assert summon_anywhere_blockers_proof["lens_status_readback"]["ok"] is True
+    assert summon_anywhere_blockers_proof["os_binding_authority_request_readback"]["ok"] is True
+    assert summon_anywhere_blockers_proof["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_anywhere_blockers_proof["governance"]["diagnostic_only"] is True
+    assert summon_anywhere_blockers_proof["governance"]["wraps_summon_preflight"] is True
+    assert summon_anywhere_blockers_proof["governance"]["wraps_lens_status"] is True
+    assert summon_anywhere_blockers_proof["governance"]["read_only_contract"] is True
+    assert summon_anywhere_blockers_proof["governance"]["os_binding_authority_request_readback"] is True
+    assert summon_anywhere_blockers_proof["governance"]["approval_request_write"] is False
+    assert summon_anywhere_blockers_proof["governance"]["product_execution_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["execution_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["approval_decision_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["memory_write"] is False
+    assert summon_anywhere_blockers_proof["governance"]["overlay_control_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["summon_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["capture_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["new_sensing_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["local_process_launch_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["hotkey_registration_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["resident_claim_authority"] is False
+    assert summon_anywhere_blockers_proof["governance"]["mutation_authority_granted"] is False
+
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
     assert process_boundary["ok"] is True
@@ -1037,6 +1092,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>"
         in (payload["evidence"])
     )
+    assert "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/os-binding/authority/requests" in payload["evidence"]
     assert "/lens/os-binding/authority/request" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement" in payload["evidence"]
@@ -1066,6 +1122,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["command_palette_shell_bridge_readback"] is True
     assert governance["command_palette_os_binding_blockers_proof_readback"] is True
     assert governance["os_binding_authority_request_readback"] is True
+    assert governance["summon_anywhere_blockers_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

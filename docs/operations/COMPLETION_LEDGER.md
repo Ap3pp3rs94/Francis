@@ -17216,6 +17216,40 @@ proof consumption of OS-binding authority request readback:
 - `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens completion audit consumes summon blocker proof
+
+Stage 6/Lens completion audit now consumes the direct
+`scripts/lens-summon-anywhere-blockers-proof.ps1` diagnostic before treating
+`summon_anywhere_blockers` as the audited acceptance-criteria handoff. The audit
+now exposes `summon_anywhere_blockers_proof` with proof status, blocker-family
+readback, Lens status readback, OS-binding authority request readback, summon
+preflight readback, and read-only governance denial flags, and it includes
+`summon_anywhere_blockers_proof_readback` in the audit governance map.
+
+This is completion-audit readback only. It does not grant OS-binding authority;
+does not create approval requests, decide approvals, open a palette, register a
+global hotkey, summon Francis, launch or supervise a process, control tray or
+overlay surfaces, write memory, claim resident state, capture screen state,
+create new sensing, or grant execution, hotkey-registration, tray-registration,
+overlay-control, process-supervision, service-control, summon, resident-claim,
+approval-decision, memory-write, or mutation authority. Stage 6 remains active
+and blocked on the real `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens completion-audit
+consumption of summon-anywhere blocker proof:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with the normal local CRLF warning for the PowerShell script.
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
