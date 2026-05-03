@@ -17106,6 +17106,41 @@ authority request readback:
 - `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens OS-binding authority request readiness/status consumption
+
+Stage 6/Lens now consumes the OS-binding command-palette authority request
+readback in `GET /lens/os-binding/readiness` and `GET /lens/status`. The
+readiness route now exposes an `authority_request_readback` summary with the
+request/readback routes, status counts, latest approval id, and authority flags,
+and treats the read-only request readback as an explicit readiness requirement.
+The Lens status payload now includes the raw
+`os_binding_authority_requests` readback, publishes the authority/request/readback
+routes in its receipts map, and projects the request-readback status/counts into
+the Stage 6 `os_binding_readiness` criterion.
+
+This is backend-only/readback-only consumption of an existing approval-request
+surface. It does not grant OS-binding authority; does not open a palette,
+register a global hotkey, summon Francis, launch or supervise a process, control
+tray or overlay surfaces, decide approvals, write memory, claim resident state,
+capture screen state, create new sensing, or grant execution,
+hotkey-registration, tray-registration, overlay-control, process-supervision,
+service-control, summon, resident-claim, approval-decision, memory-write, or
+mutation authority. Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens OS-binding
+authority request readiness/status consumption:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority tests\test_api_lens.py::test_lens_os_binding_authority_request_creates_approval_only_readback tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

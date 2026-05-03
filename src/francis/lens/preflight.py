@@ -18,6 +18,16 @@ def _safe_str(value: Any, default: str = "") -> str:
     return parsed if parsed.strip() else default
 
 
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(parsed, 0)
+
+
 def _bool(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -828,6 +838,51 @@ def _os_binding_plan_step(
     }
 
 
+def _os_binding_authority_request_summary(readback: dict[str, Any] | None) -> dict[str, Any]:
+    payload = readback if isinstance(readback, dict) else {}
+    latest = _dict_value(payload, "latest")
+    governance = _dict_value(payload, "governance")
+    readback_ready = (
+        _safe_str(payload.get("kind")).strip() == "lens.os_binding.command_palette_binding_authority.request_readback"
+    )
+    return {
+        "kind": _safe_str(
+            payload.get("kind"),
+            "lens.os_binding.command_palette_binding_authority.request_readback",
+        ),
+        "status": _safe_str(payload.get("status"), "missing"),
+        "readback_ready": readback_ready,
+        "route": _safe_str(payload.get("route"), "/lens/os-binding/authority/requests"),
+        "authority_route": _safe_str(payload.get("authority_route"), "/lens/os-binding/authority"),
+        "request_route": _safe_str(payload.get("request_route"), "/lens/os-binding/authority/request"),
+        "readiness_route": _safe_str(payload.get("readiness_route"), "/lens/os-binding/readiness"),
+        "plan_route": _safe_str(payload.get("plan_route"), "/lens/os-binding/plan"),
+        "pending_count": _int_value(payload.get("pending_count")),
+        "approved_count": _int_value(payload.get("approved_count")),
+        "rejected_count": _int_value(payload.get("rejected_count")),
+        "emergency_count": _int_value(payload.get("emergency_count")),
+        "total_count": _int_value(payload.get("total_count")),
+        "latest_approval_id": _safe_str(latest.get("id")).strip(),
+        "latest_status": _safe_str(latest.get("status")).strip(),
+        "authority_granted": bool(payload.get("authority_granted")),
+        "os_level_command_palette_binding_authority": bool(payload.get("os_level_command_palette_binding_authority")),
+        "os_level_command_palette": bool(payload.get("os_level_command_palette")),
+        "summon_anywhere": bool(payload.get("summon_anywhere")),
+        "opens_palette": bool(payload.get("opens_palette")),
+        "registers_hotkey": bool(payload.get("registers_hotkey")),
+        "launches_process": bool(payload.get("launches_process")),
+        "controls_overlay": bool(payload.get("controls_overlay")),
+        "governance": {
+            "read_only_contract": bool(governance.get("read_only_contract")),
+            "approval_request_write": bool(governance.get("approval_request_write")),
+            "execution_authority": bool(governance.get("execution_authority")),
+            "approval_decision_authority": bool(governance.get("approval_decision_authority")),
+            "memory_write": bool(governance.get("memory_write")),
+            "resident_claim_authority": bool(governance.get("resident_claim_authority")),
+        },
+    }
+
+
 def lens_os_binding_implementation_plan(
     *,
     preflight: dict[str, Any] | None = None,
@@ -989,13 +1044,18 @@ def lens_os_binding_implementation_plan(
     }
 
 
-def lens_os_binding_readiness(*, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+def lens_os_binding_readiness(
+    *,
+    preflight: dict[str, Any] | None = None,
+    authority_request_readback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
     summon_gate = lens_summon_enablement_gate(preflight=lens_preflight_payload)
     implementation_plan = lens_os_binding_implementation_plan(
         preflight=lens_preflight_payload,
         summon_gate=summon_gate,
     )
+    authority_request_summary = _os_binding_authority_request_summary(authority_request_readback)
     blocker_groups = _dict_value(summon_gate, "blocker_groups")
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
     palette_blockers = ["os_level_command_palette_missing"]
@@ -1012,6 +1072,15 @@ def lens_os_binding_readiness(*, preflight: dict[str, Any] | None = None) -> dic
         "authority": _string_list(blocker_groups.get("authority")),
     }
     requirements = [
+        _os_binding_requirement(
+            "authority_request_readback",
+            label="Authority request readback",
+            ready=bool(authority_request_summary.get("readback_ready")),
+            blockers=[]
+            if bool(authority_request_summary.get("readback_ready"))
+            else ["os_binding_authority_request_readback_missing"],
+            route="/lens/os-binding/authority/requests",
+        ),
         _os_binding_requirement(
             "os_level_command_palette",
             label="OS-level command palette binding",
@@ -1080,6 +1149,9 @@ def lens_os_binding_readiness(*, preflight: dict[str, Any] | None = None) -> dic
         "plan_route": "/lens/os-binding/plan",
         "status_route": "/lens/status",
         "preflight_route": "/lens/preflight",
+        "authority_route": "/lens/os-binding/authority",
+        "authority_request_route": "/lens/os-binding/authority/request",
+        "authority_requests_route": "/lens/os-binding/authority/requests",
         "summon_route": "/lens/summon",
         "tray_route": "/lens/tray",
         "overlay_route": "/lens/overlay",
@@ -1099,6 +1171,7 @@ def lens_os_binding_readiness(*, preflight: dict[str, Any] | None = None) -> dic
         "blocked_requirements": blocked_requirements,
         "blockers": _dedupe([blocker for blockers in grouped_blockers.values() for blocker in blockers]),
         "blocker_groups": grouped_blockers,
+        "authority_request_readback": authority_request_summary,
         "implementation_plan": {
             "kind": _safe_str(implementation_plan.get("kind"), "lens.os_binding.implementation_plan"),
             "route": _safe_str(implementation_plan.get("route"), "/lens/os-binding/plan"),

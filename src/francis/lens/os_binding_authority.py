@@ -197,7 +197,9 @@ def _readback_status(counts: dict[str, int]) -> tuple[str, str]:
 
 
 def _request_payload(*, actor: Any, route: str) -> dict[str, Any]:
-    readiness = lens_os_binding_readiness()
+    readiness = lens_os_binding_readiness(
+        authority_request_readback=lens_os_binding_authority_request_readback(),
+    )
     plan = lens_os_binding_implementation_plan()
     readiness_governance = _as_dict(readiness.get("governance"))
     plan_body = _as_dict(plan.get("plan"))

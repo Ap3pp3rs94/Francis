@@ -352,6 +352,9 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert body["plan_route"] == "/lens/os-binding/plan"
     assert body["status_route"] == "/lens/status"
     assert body["preflight_route"] == "/lens/preflight"
+    assert body["authority_route"] == "/lens/os-binding/authority"
+    assert body["authority_request_route"] == "/lens/os-binding/authority/request"
+    assert body["authority_requests_route"] == "/lens/os-binding/authority/requests"
     assert body["summon_route"] == "/lens/summon"
     assert body["ready"] is False
     assert body["os_binding_ready"] is False
@@ -367,8 +370,8 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
         "global_hotkey_binding",
         "summon_binding",
     ]
-    assert body["requirements_total"] == 7
-    assert body["requirements_ready_total"] == 0
+    assert body["requirements_total"] == 8
+    assert body["requirements_ready_total"] == 1
     assert body["requirements_blocked_total"] == 7
     assert body["blocked_requirements"] == [
         "os_level_command_palette",
@@ -380,6 +383,8 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
         "authority_boundary",
     ]
     requirements = {item["id"]: item for item in body["requirements"]}
+    assert requirements["authority_request_readback"]["route"] == "/lens/os-binding/authority/requests"
+    assert requirements["authority_request_readback"]["ready"] is True
     assert requirements["os_level_command_palette"]["route"] == "/lens/os-binding/plan"
     assert requirements["os_level_command_palette"]["ready"] is False
     assert requirements["global_hotkey_binding"]["route"] == "/lens/summon"
@@ -397,6 +402,26 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert "lens_tray_presence_not_implemented" in blocker_groups["tray_presence"]
     assert "lens_overlay_window_not_implemented" in blocker_groups["overlay_window"]
     assert "summon_authority_not_granted" in blocker_groups["authority"]
+    authority_readback = body["authority_request_readback"]
+    assert authority_readback["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert authority_readback["status"] == "none"
+    assert authority_readback["readback_ready"] is True
+    assert authority_readback["route"] == "/lens/os-binding/authority/requests"
+    assert authority_readback["authority_route"] == "/lens/os-binding/authority"
+    assert authority_readback["request_route"] == "/lens/os-binding/authority/request"
+    assert authority_readback["pending_count"] == 0
+    assert authority_readback["approved_count"] == 0
+    assert authority_readback["total_count"] == 0
+    assert authority_readback["latest_approval_id"] == ""
+    assert authority_readback["authority_granted"] is False
+    assert authority_readback["os_level_command_palette_binding_authority"] is False
+    assert authority_readback["opens_palette"] is False
+    assert authority_readback["registers_hotkey"] is False
+    assert authority_readback["launches_process"] is False
+    assert authority_readback["controls_overlay"] is False
+    assert authority_readback["governance"]["read_only_contract"] is True
+    assert authority_readback["governance"]["approval_request_write"] is False
+    assert authority_readback["governance"]["memory_write"] is False
     assert body["summon_enablement_gate"] == {
         "route": "/lens/summon",
         "status": "blocked",
@@ -724,6 +749,32 @@ def test_lens_os_binding_authority_request_creates_approval_only_readback(
     assert readback_body["governance"]["overlay_control_authority"] is False
     assert readback_body["governance"]["memory_write"] is False
     assert readback_body["governance"]["resident_claim_authority"] is False
+    readiness_response = client.get("/lens/os-binding/readiness")
+    assert readiness_response.status_code == 200
+    readiness_body = readiness_response.json()
+    readiness_authority = readiness_body["authority_request_readback"]
+    assert readiness_authority["status"] == "pending_review"
+    assert readiness_authority["readback_ready"] is True
+    assert readiness_authority["pending_count"] == 1
+    assert readiness_authority["approved_count"] == 0
+    assert readiness_authority["total_count"] == 1
+    assert readiness_authority["latest_approval_id"] == approval_id
+    assert readiness_authority["authority_granted"] is False
+    assert readiness_authority["os_level_command_palette_binding_authority"] is False
+    assert readiness_body["requirements_ready_total"] == 1
+    status_response = client.get("/lens/status?limit=10")
+    assert status_response.status_code == 200
+    status_body = status_response.json()
+    assert status_body["os_binding_authority_requests"]["pending_count"] == 1
+    assert status_body["os_binding_authority_requests"]["latest"]["id"] == approval_id
+    assert status_body["os_binding_readiness"]["authority_request_readback"]["latest_approval_id"] == approval_id
+    os_binding_criterion = _criterion(status_body, "os_binding_readiness")
+    assert os_binding_criterion["authority_request_readback_status"] == "pending_review"
+    assert os_binding_criterion["authority_request_pending_count"] == 1
+    assert os_binding_criterion["authority_request_total_count"] == 1
+    assert os_binding_criterion["authority_request_latest_approval_id"] == approval_id
+    assert os_binding_criterion["authority_granted"] is False
+    assert os_binding_criterion["os_level_command_palette_binding_authority"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -791,6 +842,17 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "capture_authority": False,
         "new_sensing_authority": False,
     }
+    os_binding_authority_requests = body["os_binding_authority_requests"]
+    assert os_binding_authority_requests["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert os_binding_authority_requests["status"] == "none"
+    assert os_binding_authority_requests["route"] == "/lens/os-binding/authority/requests"
+    assert os_binding_authority_requests["authority_route"] == "/lens/os-binding/authority"
+    assert os_binding_authority_requests["request_route"] == "/lens/os-binding/authority/request"
+    assert os_binding_authority_requests["pending_count"] == 0
+    assert os_binding_authority_requests["approved_count"] == 0
+    assert os_binding_authority_requests["total_count"] == 0
+    assert os_binding_authority_requests["authority_granted"] is False
+    assert os_binding_authority_requests["os_level_command_palette_binding_authority"] is False
     assert body["command_palette"]["status"] == "readback_ready"
     assert body["command_palette"]["summon_anywhere"] is False
     assert body["command_palette"]["availability"] == "chat_ui_only"
@@ -821,8 +883,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["summon_anywhere"] is False
     assert os_binding["first_blocker_family"] == "palette_binding"
     assert os_binding["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
-    assert os_binding["requirements_total"] == 7
-    assert os_binding["requirements_ready_total"] == 0
+    assert os_binding["requirements_total"] == 8
+    assert os_binding["requirements_ready_total"] == 1
     assert os_binding["requirements_blocked_total"] == 7
     assert os_binding["blocked_requirements"] == [
         "os_level_command_palette",
@@ -833,6 +895,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "overlay_window",
         "authority_boundary",
     ]
+    assert os_binding["authority_request_readback"]["status"] == "none"
+    assert os_binding["authority_request_readback"]["readback_ready"] is True
+    assert os_binding["authority_request_readback"]["pending_count"] == 0
+    assert os_binding["authority_request_readback"]["total_count"] == 0
+    assert os_binding["authority_request_readback"]["authority_granted"] is False
+    os_binding_requirements = {item["id"]: item for item in os_binding["requirements"]}
+    assert os_binding_requirements["authority_request_readback"]["ready"] is True
+    assert os_binding_requirements["authority_request_readback"]["route"] == "/lens/os-binding/authority/requests"
     assert "os_level_command_palette_missing" in os_binding["blocker_groups"]["palette_binding"]
     assert "global_hotkey_binding_missing" in os_binding["blocker_groups"]["global_hotkey_binding"]
     assert "summon_binding_missing" in os_binding["blocker_groups"]["summon_binding"]
@@ -2150,6 +2220,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert pilot_mode["write_guard"] == "system.write plus operator posture"
     assert body["mode_selector"]["status"] == "readback_ready"
     assert body["pilot_indicator"]["status"] == "standby"
+    assert body["receipts"]["lens_os_binding_authority_route"] == "/lens/os-binding/authority"
+    assert body["receipts"]["lens_os_binding_authority_request_route"] == "/lens/os-binding/authority/request"
+    assert body["receipts"]["lens_os_binding_authority_requests_route"] == "/lens/os-binding/authority/requests"
     assert body["receipts"]["lens_resident_surface_route"] == "/lens/resident-surface"
     assert body["receipts"]["lens_resident_surface_activation_route"] == "/lens/resident-surface/activation"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
@@ -2166,15 +2239,32 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     os_binding_criterion = _criterion(body, "os_binding_readiness")
     assert os_binding_criterion["status"] == "blocked"
     assert os_binding_criterion["audit_status"] == "complete"
-    assert os_binding_criterion["evidence"] == ["/lens/os-binding/readiness", "/lens/summon", "/lens/status"]
+    assert os_binding_criterion["evidence"] == [
+        "/lens/os-binding/readiness",
+        "/lens/os-binding/authority/requests",
+        "/lens/os-binding/authority/request",
+        "/lens/summon",
+        "/lens/status",
+    ]
     assert os_binding_criterion["ready"] is False
     assert os_binding_criterion["os_binding_ready"] is False
     assert os_binding_criterion["os_level_command_palette"] is False
     assert os_binding_criterion["summon_anywhere"] is False
+    assert os_binding_criterion["authority_request_readback_status"] == "none"
+    assert os_binding_criterion["authority_request_readback_ready"] is True
+    assert os_binding_criterion["authority_route"] == "/lens/os-binding/authority"
+    assert os_binding_criterion["authority_request_route"] == "/lens/os-binding/authority/request"
+    assert os_binding_criterion["authority_requests_route"] == "/lens/os-binding/authority/requests"
+    assert os_binding_criterion["authority_request_pending_count"] == 0
+    assert os_binding_criterion["authority_request_approved_count"] == 0
+    assert os_binding_criterion["authority_request_total_count"] == 0
+    assert os_binding_criterion["authority_request_latest_approval_id"] == ""
+    assert os_binding_criterion["authority_granted"] is False
+    assert os_binding_criterion["os_level_command_palette_binding_authority"] is False
     assert os_binding_criterion["first_blocker_family"] == "palette_binding"
     assert os_binding_criterion["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
-    assert os_binding_criterion["requirements_total"] == 7
-    assert os_binding_criterion["requirements_ready_total"] == 0
+    assert os_binding_criterion["requirements_total"] == 8
+    assert os_binding_criterion["requirements_ready_total"] == 1
     assert os_binding_criterion["requirements_blocked_total"] == 7
     assert "os_level_command_palette" in os_binding_criterion["blocked_requirements"]
     assert "os_level_command_palette_missing" in os_binding_criterion["blockers"]

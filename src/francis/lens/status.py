@@ -58,6 +58,7 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_loop_denial_receipts,
     lens_host_runtime_loop_readiness_audit,
 )
+from francis.lens.os_binding_authority import lens_os_binding_authority_request_readback
 from francis.lens.preflight import (
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
@@ -1248,6 +1249,7 @@ def _stage6_readiness(
     supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
+    os_binding_authority_requests = _as_dict(os_binding_readiness.get("authority_request_readback"))
     return {
         "stage": "Stage 6 / Lens MVP",
         "claim": "backend_readback_contract_only",
@@ -1288,11 +1290,38 @@ def _stage6_readiness(
                 "id": "os_binding_readiness",
                 "status": _safe_str(os_binding_readiness.get("status")).strip() or "missing",
                 "audit_status": _safe_str(os_binding_readiness.get("audit_status")).strip(),
-                "evidence": ["/lens/os-binding/readiness", "/lens/summon", "/lens/status"],
+                "evidence": [
+                    "/lens/os-binding/readiness",
+                    "/lens/os-binding/authority/requests",
+                    "/lens/os-binding/authority/request",
+                    "/lens/summon",
+                    "/lens/status",
+                ],
                 "ready": bool(os_binding_readiness.get("ready")),
                 "os_binding_ready": bool(os_binding_readiness.get("os_binding_ready")),
                 "os_level_command_palette": bool(os_binding_readiness.get("os_level_command_palette")),
                 "summon_anywhere": bool(os_binding_readiness.get("summon_anywhere")),
+                "authority_request_readback_status": _safe_str(os_binding_authority_requests.get("status")).strip()
+                or "missing",
+                "authority_request_readback_ready": bool(os_binding_authority_requests.get("readback_ready")),
+                "authority_route": _safe_str(os_binding_authority_requests.get("authority_route")).strip()
+                or "/lens/os-binding/authority",
+                "authority_request_route": _safe_str(os_binding_authority_requests.get("request_route")).strip()
+                or "/lens/os-binding/authority/request",
+                "authority_requests_route": _safe_str(os_binding_authority_requests.get("route")).strip()
+                or "/lens/os-binding/authority/requests",
+                "authority_request_pending_count": _safe_int(os_binding_authority_requests.get("pending_count")),
+                "authority_request_approved_count": _safe_int(os_binding_authority_requests.get("approved_count")),
+                "authority_request_rejected_count": _safe_int(os_binding_authority_requests.get("rejected_count")),
+                "authority_request_emergency_count": _safe_int(os_binding_authority_requests.get("emergency_count")),
+                "authority_request_total_count": _safe_int(os_binding_authority_requests.get("total_count")),
+                "authority_request_latest_approval_id": _safe_str(
+                    os_binding_authority_requests.get("latest_approval_id")
+                ).strip(),
+                "authority_granted": bool(os_binding_authority_requests.get("authority_granted")),
+                "os_level_command_palette_binding_authority": bool(
+                    os_binding_authority_requests.get("os_level_command_palette_binding_authority")
+                ),
                 "first_blocker_family": _safe_str(os_binding_readiness.get("first_blocker_family")).strip(),
                 "next_smallest_truthful_gap": _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
                 or "os_level_command_palette_binding",
@@ -2811,7 +2840,11 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     command_palette = _command_palette_surface(approvals=approvals)
     resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
     preflight = lens_preflight()
-    os_binding_readiness = lens_os_binding_readiness(preflight=preflight)
+    os_binding_authority_requests = lens_os_binding_authority_request_readback(limit=safe_limit)
+    os_binding_readiness = lens_os_binding_readiness(
+        preflight=preflight,
+        authority_request_readback=os_binding_authority_requests,
+    )
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
@@ -2849,6 +2882,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_host": resident_host,
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,
+        "os_binding_authority_requests": os_binding_authority_requests,
         "summon_enablement_gate": summon_enablement_gate,
         "tray_enablement_gate": tray_enablement_gate,
         "overlay_enablement_gate": overlay_enablement_gate,
@@ -2890,6 +2924,9 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_host_runtime_loop_denials_route": "/lens/host/runtime-loop/denials",
             "lens_host_runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
             "lens_os_binding_readiness_route": "/lens/os-binding/readiness",
+            "lens_os_binding_authority_route": "/lens/os-binding/authority",
+            "lens_os_binding_authority_request_route": "/lens/os-binding/authority/request",
+            "lens_os_binding_authority_requests_route": "/lens/os-binding/authority/requests",
             "lens_host_supervision_authority_request_route": "/lens/host/supervision/authority/request",
             "lens_host_supervision_authority_requests_route": "/lens/host/supervision/authority/requests",
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
