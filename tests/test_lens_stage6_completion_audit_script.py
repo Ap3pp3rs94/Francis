@@ -935,6 +935,110 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_blockers_proof["governance"]["resident_claim_authority"] is False
     assert summon_anywhere_blockers_proof["governance"]["mutation_authority_granted"] is False
 
+    summon_authority_blocker_proof = payload["summon_authority_blocker_proof"]
+    assert summon_authority_blocker_proof["status"] == "proof_passed"
+    assert summon_authority_blocker_proof["ok"] is True
+    assert summon_authority_blocker_proof["exit_code"] == 0
+    assert (
+        "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status" in (summon_authority_blocker_proof["evidence"])
+    )
+    assert "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status" in (summon_authority_blocker_proof["evidence"])
+    assert "scripts/lens-summon-preflight.ps1 -Mode Status" in summon_authority_blocker_proof["evidence"]
+    assert summon_authority_blocker_proof["acceptance_criterion"] == "summon_anywhere"
+    assert summon_authority_blocker_proof["previous_summon_blocker_family"] == "summon_binding"
+    assert summon_authority_blocker_proof["summon_authority_blocker_family"] == "authority"
+    assert summon_authority_blocker_proof["sixth_summon_blocker_family"] == "authority"
+    assert summon_authority_blocker_proof["next_summon_blocker_family"] == "stage6_lens_completion_audit"
+    assert summon_authority_blocker_proof["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_authority_blocker_proof["previous_binding_next_smallest_truthful_gap"] == (
+        "summon_authority_blocker_boundary"
+    )
+    assert summon_authority_blocker_proof["direct_summon_preflight_next_smallest_truthful_gap"] == (
+        "summon_anywhere_blockers"
+    )
+    assert summon_authority_blocker_proof["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert summon_authority_blocker_proof["summon_authority_family_observed"] is True
+    assert summon_authority_blocker_proof["previous_summon_binding_bridge_observed"] is True
+    assert summon_authority_blocker_proof["summon_preflight_authority_observed"] is True
+    assert summon_authority_blocker_proof["all_summon_blocker_families_consumed"] is True
+    assert summon_authority_blocker_proof["handoff_aligned"] is True
+    assert summon_authority_blocker_proof["side_effects_denied"] is True
+    assert summon_authority_blocker_proof["summon_authority_blockers"] == [
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+        "local_process_launch_authority_not_granted",
+    ]
+    assert (
+        summon_authority_blocker_proof["direct_summon_preflight_authority_blockers"]
+        == summon_authority_blocker_proof["summon_authority_blockers"]
+    )
+    assert summon_authority_blocker_proof["direct_summon_preflight_binding_blockers"] == [
+        "lens_summon_binding_not_implemented",
+        "summon_authority_not_granted",
+    ]
+
+    summon_authority_boundary = summon_authority_blocker_proof["summon_authority_boundary"]
+    assert summon_authority_boundary["status"] == "blocked"
+    assert summon_authority_boundary["ready"] is False
+    assert summon_authority_boundary["summon_name"] == "Francis Lens Summon"
+    assert summon_authority_boundary["config_path"] == "config/runtime/lens/summon.json"
+    assert summon_authority_boundary["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_authority_boundary["binding_scope"] == "global"
+    assert summon_authority_boundary["palette_route"] == "/lens/status"
+    assert summon_authority_boundary["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
+    assert summon_authority_boundary["binding_enabled"] is False
+    assert summon_authority_boundary["register_hotkey"] is False
+    assert summon_authority_boundary["startup_register"] is False
+    assert "summon_authority_not_granted" in summon_authority_boundary["blockers"]
+    assert "hotkey_registration_authority_not_granted" in summon_authority_boundary["blockers"]
+    assert "overlay_control_authority_not_granted" in summon_authority_boundary["blockers"]
+    assert "local_process_launch_authority_not_granted" in summon_authority_boundary["blockers"]
+    assert (
+        summon_authority_boundary["summon_binding_blockers"]
+        == (summon_authority_blocker_proof["direct_summon_preflight_binding_blockers"])
+    )
+    assert (
+        summon_authority_boundary["authority_blockers"]
+        == (summon_authority_blocker_proof["direct_summon_preflight_authority_blockers"])
+    )
+
+    summon_authority_governance = summon_authority_blocker_proof["governance"]
+    assert summon_authority_governance["diagnostic_only"] is True
+    assert summon_authority_governance["wraps_summon_anywhere_blockers_proof"] is True
+    assert summon_authority_governance["wraps_summon_binding_blocker_proof"] is True
+    assert summon_authority_governance["wraps_summon_preflight"] is True
+    assert summon_authority_governance["read_only_contract"] is True
+    assert summon_authority_governance["approval_request_write"] is False
+    assert summon_authority_governance["resident_runtime_execution_authority"] is False
+    assert summon_authority_governance["product_execution_authority"] is False
+    assert summon_authority_governance["execution_authority"] is False
+    assert summon_authority_governance["approval_decision_authority"] is False
+    assert summon_authority_governance["local_process_launch_authority"] is False
+    assert summon_authority_governance["process_supervision_authority"] is False
+    assert summon_authority_governance["process_restart_authority"] is False
+    assert summon_authority_governance["service_install_authority"] is False
+    assert summon_authority_governance["service_control_authority"] is False
+    assert summon_authority_governance["tray_registration_authority"] is False
+    assert summon_authority_governance["tray_icon_authority"] is False
+    assert summon_authority_governance["notification_authority"] is False
+    assert summon_authority_governance["hotkey_registration_authority"] is False
+    assert summon_authority_governance["overlay_control_authority"] is False
+    assert summon_authority_governance["window_management_authority"] is False
+    assert summon_authority_governance["capture_authority"] is False
+    assert summon_authority_governance["new_sensing_authority"] is False
+    assert summon_authority_governance["summon_authority"] is False
+    assert summon_authority_governance["memory_write"] is False
+    assert summon_authority_governance["receipt_write_authority"] is False
+    assert summon_authority_governance["resident_claim_authority"] is False
+    assert summon_authority_governance["mutation_authority_granted"] is False
+
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
     assert process_boundary["ok"] is True
@@ -1093,6 +1197,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         in (payload["evidence"])
     )
     assert "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status" in payload["evidence"]
     assert "/lens/os-binding/authority/requests" in payload["evidence"]
     assert "/lens/os-binding/authority/request" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement" in payload["evidence"]
@@ -1123,6 +1228,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["command_palette_os_binding_blockers_proof_readback"] is True
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
+    assert governance["summon_authority_blocker_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
     assert governance["execution_authority"] is False

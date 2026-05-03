@@ -17755,6 +17755,44 @@ blocker handoff proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens completion audit consumes summon authority proof
+
+Stage 6/Lens completion audit now consumes
+`scripts/lens-summon-authority-blocker-proof.ps1` as part of the audited
+summon-anywhere evidence chain. The audit exposes
+`summon_authority_blocker_proof`, requires
+`summon_authority_blocker_proof_readback` before
+`stage6_completion_reviewed` can be true, and records the proof in the top-level
+evidence list. A direct audit readback returned `status: blocked`,
+`stage_state: active`, `ready_to_close: false`,
+`next_smallest_truthful_gap: summon_anywhere_blockers`,
+`stage6_completion_reviewed: true`, `summon_authority_status: proof_passed`,
+and `summon_authority_readback: true`.
+
+This is readback-only / diagnostic-only. It does not implement or bind
+summon-anywhere, grant summon authority, register a global hotkey, open or
+control an overlay, register tray presence, launch or supervise a process,
+install or control a service, write memory, decide approvals, grant
+resident-runtime authority, or claim resident status. Stage 6 remains active and
+blocked on summon-anywhere, helpful/not-noisy, and system-resident presence
+closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens completion audit
+summon authority proof consumption:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,@{Name='summon_authority_status';Expression={$_.summon_authority_blocker_proof.status}},@{Name='summon_authority_ok';Expression={$_.summon_authority_blocker_proof.ok}},@{Name='summon_authority_readback';Expression={$_.governance.summon_authority_blocker_proof_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; returned blocked/active, ready_to_close=false, next_smallest_truthful_gap=summon_anywhere_blockers, stage6_completion_reviewed=true, summon_authority_status=proof_passed, summon_authority_readback=true`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

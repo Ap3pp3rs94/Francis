@@ -96,6 +96,7 @@ $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot '
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
+$SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -120,6 +121,10 @@ $SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShe
   '-Mode', 'Status'
 )
 $SummonAnywhereBlockersProof = $SummonAnywhereBlockersProofResult.payload
+$SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBlockerProofScript -ScriptArgs @(
+  '-Mode', 'Status'
+)
+$SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
@@ -835,6 +840,99 @@ $SummonAnywhereBlockersProofObserved = (
   -not [bool]$SummonAnywhereBlockersProofGovernance.resident_claim_authority -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.mutation_authority_granted
 )
+$SummonAuthorityBlockerProofGovernance = $SummonAuthorityBlockerProof.governance
+$SummonAuthorityBoundary = $SummonAuthorityBlockerProof.summon_authority_boundary
+$SummonAuthorityBlockers = ConvertTo-StringArray -Value $SummonAuthorityBlockerProof.summon_authority_blockers
+$DirectSummonPreflightAuthorityBlockers = ConvertTo-StringArray -Value $SummonAuthorityBlockerProof.direct_summon_preflight_authority_blockers
+$DirectSummonPreflightBindingBlockers = ConvertTo-StringArray -Value $SummonAuthorityBlockerProof.direct_summon_preflight_binding_blockers
+$SummonAuthorityBoundaryRequiredBeforeEnable = ConvertTo-StringArray -Value $SummonAuthorityBoundary.required_before_enable
+$SummonAuthorityBoundaryBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.blockers
+$SummonAuthorityBoundaryBindingBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.summon_binding_blockers
+$SummonAuthorityBoundaryAuthorityBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.authority_blockers
+$SummonAuthorityBlockerProofObserved = (
+  [int]$SummonAuthorityBlockerProofResult.exit_code -eq 0 -and
+  [bool]$SummonAuthorityBlockerProof.ok -and
+  [string]$SummonAuthorityBlockerProof.kind -eq 'lens.summon_authority_blocker.proof' -and
+  [string]$SummonAuthorityBlockerProof.status -eq 'proof_passed' -and
+  [string]$SummonAuthorityBlockerProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonAuthorityBlockerProof.previous_summon_blocker_family -eq 'summon_binding' -and
+  [string]$SummonAuthorityBlockerProof.summon_authority_blocker_family -eq 'authority' -and
+  [string]$SummonAuthorityBlockerProof.sixth_summon_blocker_family -eq 'authority' -and
+  [string]$SummonAuthorityBlockerProof.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAuthorityBlockerProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
+  [string]$SummonAuthorityBlockerProof.direct_summon_preflight_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonAuthorityBlockerProof.summon_authority_family_observed -and
+  [bool]$SummonAuthorityBlockerProof.previous_summon_binding_bridge_observed -and
+  [bool]$SummonAuthorityBlockerProof.summon_preflight_authority_observed -and
+  [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed -and
+  [bool]$SummonAuthorityBlockerProof.handoff_aligned -and
+  [bool]$SummonAuthorityBlockerProof.side_effects_denied -and
+  $SummonAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  $SummonAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $SummonAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+  $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  $DirectSummonPreflightAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  $DirectSummonPreflightAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $DirectSummonPreflightAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+  $DirectSummonPreflightAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $DirectSummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
+  [string]$SummonAuthorityBoundary.status -eq 'blocked' -and
+  -not [bool]$SummonAuthorityBoundary.ready -and
+  [string]$SummonAuthorityBoundary.summon_name -eq 'Francis Lens Summon' -and
+  [string]$SummonAuthorityBoundary.config_path -eq 'config/runtime/lens/summon.json' -and
+  [string]$SummonAuthorityBoundary.global_hotkey -eq 'Ctrl+Alt+Space' -and
+  [string]$SummonAuthorityBoundary.binding_scope -eq 'global' -and
+  [string]$SummonAuthorityBoundary.palette_route -eq '/lens/status' -and
+  $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'resident_host_process' -and
+  $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'tray_presence' -and
+  $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'overlay_window' -and
+  $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'summon_binding' -and
+  -not [bool]$SummonAuthorityBoundary.binding_enabled -and
+  -not [bool]$SummonAuthorityBoundary.register_hotkey -and
+  -not [bool]$SummonAuthorityBoundary.startup_register -and
+  $SummonAuthorityBoundaryBlockers -contains 'summon_authority_not_granted' -and
+  $SummonAuthorityBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $SummonAuthorityBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+  $SummonAuthorityBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
+  $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonAuthorityBoundaryBindingBlockers -contains 'summon_authority_not_granted' -and
+  $SummonAuthorityBoundaryAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  $SummonAuthorityBoundaryAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $SummonAuthorityBoundaryAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+  $SummonAuthorityBoundaryAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  [bool]$SummonAuthorityBlockerProofGovernance.diagnostic_only -and
+  [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
+  [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof -and
+  [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_preflight -and
+  [bool]$SummonAuthorityBlockerProofGovernance.read_only_contract -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.approval_request_write -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.resident_runtime_execution_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.product_execution_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.execution_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.process_supervision_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.process_restart_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.service_install_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.service_control_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.tray_registration_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.tray_icon_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.notification_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.hotkey_registration_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.overlay_control_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.window_management_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.capture_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.new_sensing_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.summon_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.memory_write -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.receipt_write_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.mutation_authority_granted
+)
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
@@ -842,7 +940,8 @@ $Stage6CompletionReviewed = (
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   $OsBindingAuthorityRequestReadbackObserved -and
-  $SummonAnywhereBlockersProofObserved
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAuthorityBlockerProofObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -920,6 +1019,18 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $SummonAnywhereBlockersProofObserved
 ) {
   'summon_anywhere_blockers_proof_readback'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $CommandPaletteShellBridgeObserved -and
+  $CommandPaletteOsBindingObserved -and
+  $OsBindingAuthorityRequestReadbackObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  -not $SummonAuthorityBlockerProofObserved
+) {
+  'summon_authority_blocker_proof_readback'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -1020,6 +1131,8 @@ $Payload = [ordered]@{
     'The audit must consume the OS-binding authority request readback before treating authority review visibility as part of the Stage 6 summon-anywhere blocker evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers_proof_readback') {
     'The audit must consume the direct summon-anywhere blocker proof before treating grouped resident host, tray, overlay, global hotkey, summon binding, and authority blockers as audited Stage 6 evidence.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_authority_blocker_proof_readback') {
+    'The audit must consume the summon authority blocker proof before treating the full summon-anywhere blocker chain, including the final authority family, as audited Stage 6 evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
     'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
@@ -1649,6 +1762,76 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  summon_authority_blocker_proof = [ordered]@{
+    status = if ($SummonAuthorityBlockerProofObserved) { [string]$SummonAuthorityBlockerProof.status } else { 'missing_or_failed' }
+    ok = $SummonAuthorityBlockerProofObserved
+    exit_code = [int]$SummonAuthorityBlockerProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $SummonAuthorityBlockerProof.evidence)
+    acceptance_criterion = [string]$SummonAuthorityBlockerProof.acceptance_criterion
+    previous_summon_blocker_family = [string]$SummonAuthorityBlockerProof.previous_summon_blocker_family
+    summon_authority_blocker_family = [string]$SummonAuthorityBlockerProof.summon_authority_blocker_family
+    sixth_summon_blocker_family = [string]$SummonAuthorityBlockerProof.sixth_summon_blocker_family
+    next_summon_blocker_family = [string]$SummonAuthorityBlockerProof.next_summon_blocker_family
+    summon_next_smallest_truthful_gap = [string]$SummonAuthorityBlockerProof.summon_next_smallest_truthful_gap
+    previous_binding_next_smallest_truthful_gap = [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap
+    direct_summon_preflight_next_smallest_truthful_gap = [string]$SummonAuthorityBlockerProof.direct_summon_preflight_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap
+    summon_authority_family_observed = [bool]$SummonAuthorityBlockerProof.summon_authority_family_observed
+    previous_summon_binding_bridge_observed = [bool]$SummonAuthorityBlockerProof.previous_summon_binding_bridge_observed
+    summon_preflight_authority_observed = [bool]$SummonAuthorityBlockerProof.summon_preflight_authority_observed
+    all_summon_blocker_families_consumed = [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed
+    handoff_aligned = [bool]$SummonAuthorityBlockerProof.handoff_aligned
+    side_effects_denied = [bool]$SummonAuthorityBlockerProof.side_effects_denied
+    summon_authority_blockers = [string[]]@($SummonAuthorityBlockers)
+    direct_summon_preflight_authority_blockers = [string[]]@($DirectSummonPreflightAuthorityBlockers)
+    direct_summon_preflight_binding_blockers = [string[]]@($DirectSummonPreflightBindingBlockers)
+    summon_authority_boundary = [ordered]@{
+      status = [string]$SummonAuthorityBoundary.status
+      ready = [bool]$SummonAuthorityBoundary.ready
+      summon_name = [string]$SummonAuthorityBoundary.summon_name
+      config_path = [string]$SummonAuthorityBoundary.config_path
+      global_hotkey = [string]$SummonAuthorityBoundary.global_hotkey
+      binding_scope = [string]$SummonAuthorityBoundary.binding_scope
+      palette_route = [string]$SummonAuthorityBoundary.palette_route
+      required_before_enable = [string[]]@($SummonAuthorityBoundaryRequiredBeforeEnable)
+      binding_enabled = [bool]$SummonAuthorityBoundary.binding_enabled
+      register_hotkey = [bool]$SummonAuthorityBoundary.register_hotkey
+      startup_register = [bool]$SummonAuthorityBoundary.startup_register
+      blockers = [string[]]@($SummonAuthorityBoundaryBlockers)
+      summon_binding_blockers = [string[]]@($SummonAuthorityBoundaryBindingBlockers)
+      authority_blockers = [string[]]@($SummonAuthorityBoundaryAuthorityBlockers)
+    }
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonAuthorityBlockerProofGovernance.diagnostic_only
+      wraps_summon_anywhere_blockers_proof = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_anywhere_blockers_proof
+      wraps_summon_binding_blocker_proof = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof
+      wraps_summon_preflight = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_preflight
+      read_only_contract = [bool]$SummonAuthorityBlockerProofGovernance.read_only_contract
+      approval_request_write = $false
+      resident_runtime_execution_authority = $false
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      tray_registration_authority = $false
+      tray_icon_authority = $false
+      notification_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -1909,6 +2092,7 @@ $Payload = [ordered]@{
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
     'scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status',
+    'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status',
     '/lens/host/persistent-supervision/enablement',
     '/lens/host/persistent-supervision/enablement/execution',
     '/lens/host/persistent-supervision/enablement/execution/readiness',
@@ -1946,6 +2130,7 @@ $Payload = [ordered]@{
     command_palette_os_binding_blockers_proof_readback = $CommandPaletteOsBindingObserved
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
+    summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false
