@@ -1132,6 +1132,55 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert command_palette_shell_bridge["governance"]["tray_registration_authority"] is False
     assert command_palette_shell_bridge["governance"]["local_process_launch_authority"] is False
     assert command_palette_shell_bridge["governance"]["mutation_authority_granted"] is False
+    command_palette_os_binding = payload["command_palette_os_binding_blockers_proof"]
+    assert command_palette_os_binding["status"] == "proof_passed"
+    assert command_palette_os_binding["ok"] is True
+    assert command_palette_os_binding["exit_code"] == 0
+    assert command_palette_os_binding["acceptance_criterion"] == "summon_anywhere"
+    assert command_palette_os_binding["os_level_command_palette_binding_observed"] is True
+    assert command_palette_os_binding["summon_preflight_observed"] is True
+    assert command_palette_os_binding["tray_preflight_observed"] is True
+    assert command_palette_os_binding["overlay_preflight_observed"] is True
+    assert command_palette_os_binding["side_effects_denied"] is True
+    assert command_palette_os_binding["blocked_families"] == [
+        "palette_binding",
+        "global_hotkey_binding",
+        "summon_binding",
+        "tray_presence",
+        "overlay_window",
+        "authority",
+    ]
+    assert command_palette_os_binding["first_blocker_family"] == "palette_binding"
+    assert command_palette_os_binding["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert "scripts/lens-command-palette-os-binding-proof.ps1" in command_palette_os_binding["evidence"][0]
+    os_binding_groups = command_palette_os_binding["blocker_groups"]
+    assert "os_level_command_palette_missing" in os_binding_groups["palette_binding"]
+    assert "global_hotkey_binding_disabled" in os_binding_groups["global_hotkey_binding"]
+    assert "lens_summon_binding_not_implemented" in os_binding_groups["summon_binding"]
+    assert "tray_host_disabled" in os_binding_groups["tray_presence"]
+    assert "overlay_window_disabled" in os_binding_groups["overlay_window"]
+    assert "summon_authority_not_granted" in os_binding_groups["authority"]
+    assert command_palette_os_binding["command_palette"]["availability"] == "chat_ui_only"
+    assert command_palette_os_binding["command_palette"]["os_level_command_palette"] is False
+    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert command_palette_os_binding["tray_preflight"]["ready"] is False
+    assert command_palette_os_binding["overlay_preflight"]["ready"] is False
+    assert command_palette_os_binding["governance"]["read_only_contract"] is True
+    assert command_palette_os_binding["governance"]["diagnostic_only"] is True
+    assert command_palette_os_binding["governance"]["opens_palette"] is False
+    assert command_palette_os_binding["governance"]["execution_authority"] is False
+    assert command_palette_os_binding["governance"]["approval_decision_authority"] is False
+    assert command_palette_os_binding["governance"]["memory_write"] is False
+    assert command_palette_os_binding["governance"]["overlay_control_authority"] is False
+    assert command_palette_os_binding["governance"]["window_management_authority"] is False
+    assert command_palette_os_binding["governance"]["summon_authority"] is False
+    assert command_palette_os_binding["governance"]["hotkey_registration_authority"] is False
+    assert command_palette_os_binding["governance"]["tray_registration_authority"] is False
+    assert command_palette_os_binding["governance"]["local_process_launch_authority"] is False
+    assert command_palette_os_binding["governance"]["service_control_authority"] is False
+    assert command_palette_os_binding["governance"]["capture_authority"] is False
+    assert command_palette_os_binding["governance"]["new_sensing_authority"] is False
+    assert command_palette_os_binding["governance"]["mutation_authority_granted"] is False
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["governance"] == {
         "read_only_contract": True,
@@ -1160,6 +1209,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_runtime_overlay_window_boundary_proof_observed": True,
         "resident_runtime_resident_claim_boundary_proof_observed": True,
         "command_palette_shell_bridge_observed": True,
+        "command_palette_os_binding_blockers_proof_observed": True,
         "resident_host_supervision_authority_preflight_observed": True,
         "resident_host_supervision_authority_denial_boundary_observed": True,
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,

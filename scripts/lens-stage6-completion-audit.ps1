@@ -689,11 +689,71 @@ $CommandPaletteShellBridgeObserved = (
   $CommandPaletteShellBridgeBlockers -contains 'summon_anywhere_missing' -and
   $CommandPaletteShellBridgeBlockers -contains 'global_hotkey_binding_missing'
 )
+$CommandPaletteOsBindingProof = $Checkpoint.command_palette_os_binding_blockers_proof
+$CommandPaletteOsBindingGroups = $CommandPaletteOsBindingProof.blocker_groups
+$CommandPaletteOsBindingGovernance = $CommandPaletteOsBindingProof.governance
+$CommandPaletteOsBindingFamilies = ConvertTo-StringArray -Value $CommandPaletteOsBindingProof.blocked_families
+$CommandPaletteOsBindingPaletteBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.palette_binding
+$CommandPaletteOsBindingGlobalHotkeyBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.global_hotkey_binding
+$CommandPaletteOsBindingSummonBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.summon_binding
+$CommandPaletteOsBindingTrayBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.tray_presence
+$CommandPaletteOsBindingOverlayBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.overlay_window
+$CommandPaletteOsBindingAuthorityBlockers = ConvertTo-StringArray -Value $CommandPaletteOsBindingGroups.authority
+$CommandPaletteOsBindingObserved = (
+  [bool]$CommandPaletteOsBindingProof.ok -and
+  [string]$CommandPaletteOsBindingProof.status -eq 'proof_passed' -and
+  [int]$CommandPaletteOsBindingProof.exit_code -eq 0 -and
+  [string]$CommandPaletteOsBindingProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [bool]$CommandPaletteOsBindingProof.os_level_command_palette_binding_observed -and
+  [bool]$CommandPaletteOsBindingProof.summon_preflight_observed -and
+  [bool]$CommandPaletteOsBindingProof.tray_preflight_observed -and
+  [bool]$CommandPaletteOsBindingProof.overlay_preflight_observed -and
+  [bool]$CommandPaletteOsBindingProof.side_effects_denied -and
+  $CommandPaletteOsBindingFamilies -contains 'palette_binding' -and
+  $CommandPaletteOsBindingFamilies -contains 'global_hotkey_binding' -and
+  $CommandPaletteOsBindingFamilies -contains 'summon_binding' -and
+  $CommandPaletteOsBindingFamilies -contains 'tray_presence' -and
+  $CommandPaletteOsBindingFamilies -contains 'overlay_window' -and
+  $CommandPaletteOsBindingFamilies -contains 'authority' -and
+  [string]$CommandPaletteOsBindingProof.first_blocker_family -eq 'palette_binding' -and
+  [string]$CommandPaletteOsBindingProof.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
+  $CommandPaletteOsBindingPaletteBlockers -contains 'os_level_command_palette_missing' -and
+  $CommandPaletteOsBindingPaletteBlockers -contains 'summon_anywhere_missing' -and
+  $CommandPaletteOsBindingPaletteBlockers -contains 'global_hotkey_binding_missing' -and
+  $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
+  $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
+  $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $CommandPaletteOsBindingSummonBlockers -contains 'summon_authority_not_granted' -and
+  $CommandPaletteOsBindingTrayBlockers -contains 'tray_host_disabled' -and
+  $CommandPaletteOsBindingTrayBlockers -contains 'tray_registration_authority_not_granted' -and
+  $CommandPaletteOsBindingOverlayBlockers -contains 'overlay_window_disabled' -and
+  $CommandPaletteOsBindingOverlayBlockers -contains 'overlay_control_authority_not_granted' -and
+  $CommandPaletteOsBindingAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  $CommandPaletteOsBindingAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  [bool]$CommandPaletteOsBindingGovernance.read_only_contract -and
+  [bool]$CommandPaletteOsBindingGovernance.diagnostic_only -and
+  -not [bool]$CommandPaletteOsBindingGovernance.opens_palette -and
+  -not [bool]$CommandPaletteOsBindingGovernance.execution_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.approval_decision_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.memory_write -and
+  -not [bool]$CommandPaletteOsBindingGovernance.overlay_control_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.window_management_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.summon_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.hotkey_registration_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.tray_registration_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.local_process_launch_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.service_control_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.capture_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.new_sensing_authority -and
+  -not [bool]$CommandPaletteOsBindingGovernance.mutation_authority_granted
+)
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
-  $CommandPaletteShellBridgeObserved
+  $CommandPaletteShellBridgeObserved -and
+  $CommandPaletteOsBindingObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -741,6 +801,15 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $CommandPaletteShellBridgeObserved
 ) {
   'command_palette_shell_bridge_readback'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $CommandPaletteShellBridgeObserved -and
+  -not $CommandPaletteOsBindingObserved
+) {
+  'command_palette_os_binding_blocker_proof'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -835,6 +904,8 @@ $Payload = [ordered]@{
     'The audit must consume the resident-host process supervision handoff proof before treating resident-host process supervision as an acceptance blocker instead of a missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
+  } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
+    'The audit must consume the command-palette OS-binding blocker proof before treating palette binding, global hotkey binding, summon binding, tray presence, overlay window, and authority as grouped summon-anywhere blockers.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
     'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
@@ -872,6 +943,16 @@ $Payload = [ordered]@{
     summon = [string[]]@($Blockers | Where-Object { $_ -match 'summon|hotkey|global_hotkey' } | Sort-Object -Unique)
     command_palette = [string[]]@(
       $CommandPaletteShellBridgeBlockers | Where-Object { $_ -match 'command_palette|summon|hotkey|global_hotkey' } | Sort-Object -Unique
+    )
+    command_palette_os_binding = [string[]]@(
+      @(
+        $CommandPaletteOsBindingPaletteBlockers
+        $CommandPaletteOsBindingGlobalHotkeyBlockers
+        $CommandPaletteOsBindingSummonBlockers
+        $CommandPaletteOsBindingTrayBlockers
+        $CommandPaletteOsBindingOverlayBlockers
+        $CommandPaletteOsBindingAuthorityBlockers
+      ) | Where-Object { $_ -match 'command_palette|summon|hotkey|global_hotkey|tray|overlay|authority|process_launch' } | Sort-Object -Unique
     )
     tray = [string[]]@($Blockers | Where-Object { $_ -match 'tray' } | Sort-Object -Unique)
     overlay = [string[]]@($Blockers | Where-Object { $_ -match 'overlay|window' } | Sort-Object -Unique)
@@ -1326,6 +1407,55 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  command_palette_os_binding_blockers_proof = [ordered]@{
+    status = if ($CommandPaletteOsBindingObserved) { [string]$CommandPaletteOsBindingProof.status } else { 'missing_or_failed' }
+    ok = $CommandPaletteOsBindingObserved
+    exit_code = [int]$CommandPaletteOsBindingProof.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $CommandPaletteOsBindingProof.evidence)
+    acceptance_criterion = [string]$CommandPaletteOsBindingProof.acceptance_criterion
+    os_level_command_palette_binding_observed = [bool]$CommandPaletteOsBindingProof.os_level_command_palette_binding_observed
+    summon_preflight_observed = [bool]$CommandPaletteOsBindingProof.summon_preflight_observed
+    tray_preflight_observed = [bool]$CommandPaletteOsBindingProof.tray_preflight_observed
+    overlay_preflight_observed = [bool]$CommandPaletteOsBindingProof.overlay_preflight_observed
+    side_effects_denied = [bool]$CommandPaletteOsBindingProof.side_effects_denied
+    blocked_families = [string[]]@($CommandPaletteOsBindingFamilies)
+    first_blocker_family = [string]$CommandPaletteOsBindingProof.first_blocker_family
+    next_smallest_truthful_gap = [string]$CommandPaletteOsBindingProof.next_smallest_truthful_gap
+    blocker_groups = [ordered]@{
+      palette_binding = [string[]]@($CommandPaletteOsBindingPaletteBlockers)
+      global_hotkey_binding = [string[]]@($CommandPaletteOsBindingGlobalHotkeyBlockers)
+      summon_binding = [string[]]@($CommandPaletteOsBindingSummonBlockers)
+      tray_presence = [string[]]@($CommandPaletteOsBindingTrayBlockers)
+      overlay_window = [string[]]@($CommandPaletteOsBindingOverlayBlockers)
+      authority = [string[]]@($CommandPaletteOsBindingAuthorityBlockers)
+    }
+    command_palette = $CommandPaletteOsBindingProof.command_palette
+    summon_preflight = $CommandPaletteOsBindingProof.summon_preflight
+    tray_preflight = $CommandPaletteOsBindingProof.tray_preflight
+    overlay_preflight = $CommandPaletteOsBindingProof.overlay_preflight
+    governance = [ordered]@{
+      diagnostic_only = [bool]$CommandPaletteOsBindingGovernance.diagnostic_only
+      wraps_command_palette_shell_bridge = [bool]$CommandPaletteOsBindingGovernance.wraps_command_palette_shell_bridge
+      wraps_summon_preflight = [bool]$CommandPaletteOsBindingGovernance.wraps_summon_preflight
+      wraps_tray_preflight = [bool]$CommandPaletteOsBindingGovernance.wraps_tray_preflight
+      wraps_overlay_preflight = [bool]$CommandPaletteOsBindingGovernance.wraps_overlay_preflight
+      read_only_contract = [bool]$CommandPaletteOsBindingGovernance.read_only_contract
+      opens_palette = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      summon_authority = $false
+      hotkey_registration_authority = $false
+      tray_registration_authority = $false
+      local_process_launch_authority = $false
+      service_control_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -1584,6 +1714,7 @@ $Payload = [ordered]@{
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
+    'scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     '/lens/host/persistent-supervision/enablement',
     '/lens/host/persistent-supervision/enablement/execution',
     '/lens/host/persistent-supervision/enablement/execution/readiness',
@@ -1616,6 +1747,7 @@ $Payload = [ordered]@{
     resident_runtime_overlay_window_boundary_proof_readback = $ResidentRuntimeOverlayWindowBoundaryObserved
     resident_runtime_resident_claim_boundary_proof_readback = $ResidentRuntimeResidentClaimBoundaryObserved
     command_palette_shell_bridge_readback = $CommandPaletteShellBridgeObserved
+    command_palette_os_binding_blockers_proof_readback = $CommandPaletteOsBindingObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

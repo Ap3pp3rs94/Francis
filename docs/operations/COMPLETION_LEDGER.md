@@ -16898,6 +16898,48 @@ window stabilization:
 - `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens audit consumes command-palette OS-binding blocker proof
+
+Stage 6/Lens checkpoint and completion-audit readback now consume the
+command-palette OS-binding blocker proof as a first-class audit input.
+`scripts/lens-stage6-checkpoint.ps1 -Mode Status` invokes
+`scripts/lens-command-palette-os-binding-proof.ps1` with the same temporary Lens
+status snapshot used by the command-palette shell bridge, exposes
+`command_palette_os_binding_blockers_proof`, and only advances the checkpoint to
+`stage6_lens_completion_audit` after that proof is observed. The completion
+audit now also requires this proof before treating palette binding, global
+hotkey binding, summon binding, tray presence, overlay window, and authority as
+grouped `summon_anywhere` acceptance blockers rather than missing audit proof.
+
+The consumed proof remains explicitly blocked and diagnostic-only:
+`status=proof_passed`, `first_blocker_family=palette_binding`,
+`next_smallest_truthful_gap=os_level_command_palette_binding`, and blocked
+families for `palette_binding`, `global_hotkey_binding`, `summon_binding`,
+`tray_presence`, `overlay_window`, and `authority`. This does not open a
+palette, register a hotkey, summon Francis, launch a product process, control
+tray or overlay surfaces, decide approvals, execute actions, write memory,
+capture screen state, create new sensing, or grant local-process-launch,
+service-control, hotkey-registration, tray-registration, overlay-control,
+summon, approval, execution, memory-write, or mutation authority. Stage 6
+remains active and blocked on the real `summon_anywhere`, `helpful_not_noisy`,
+and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens audit consumption
+of the command-palette OS-binding blocker proof:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting the updated completion-audit test`
+- `git diff --check`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
