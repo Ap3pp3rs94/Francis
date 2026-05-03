@@ -17288,6 +17288,41 @@ bridge consumption of summon authority readback:
 - `git diff --check`
   Result: `passed` with the normal local CRLF warning for the PowerShell script.
 
+### 2026-05-03 - Stage 6/Lens summon tray-presence blocker handoff proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-summon-tray-presence-blocker-proof.ps1` diagnostic for the second
+summon-anywhere blocker family. The proof consumes the existing
+summon-anywhere blocker proof, the previous resident-host bridge proof, and the
+resident-runtime tray-presence boundary proof, then exposes
+`tray_presence_boundary` readback with direct tray preflight evidence and
+`next_smallest_truthful_gap: summon_overlay_window_blocker_boundary`.
+
+This is diagnostic/readback-only handoff proof. It does not register a tray
+icon, enable notifications, summon Francis, bind a global hotkey, open an
+overlay, launch or supervise a process, control a service, write memory, decide
+approvals, capture screen state, create new sensing, claim resident state, or
+grant tray-registration, tray-icon, notification, summon, hotkey-registration,
+overlay-control, process-supervision, service-control, approval-decision,
+resident-runtime execution, memory-write, resident-claim, or mutation authority.
+It does not close Stage 6; Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon
+tray-presence blocker handoff proof:
+
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-tray-presence-blocker-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,summon_tray_family_observed,previous_resident_host_bridge_observed,tray_presence_boundary_observed,handoff_aligned,side_effects_denied,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; returned proof_passed with next_smallest_truthful_gap=summon_overlay_window_blocker_boundary and all authority-denial flags intact`
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_tray_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
