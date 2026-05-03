@@ -384,6 +384,36 @@ $HostSupervisorOwnedSessionObserved = (
   -not [bool]$HostSupervisorOwnedSession.resident_supervised_runtime -and
   -not [bool]$HostSupervisorOwnedSession.resident_claim_allowed
 )
+$HostSupervisionAuthorityReadiness = $Checkpoint.resident_host_supervision_authority_readiness_audit
+$HostSupervisionAuthorityReadinessBlockedRequirements = ConvertTo-StringArray -Value $HostSupervisionAuthorityReadiness.blocked_requirements
+$HostSupervisionAuthorityReadinessFirstBlockedRequirement = [string]$HostSupervisionAuthorityReadiness.first_blocked_requirement
+$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff = $HostSupervisionAuthorityReadiness.first_blocked_requirement_handoff
+$HostSupervisionAuthorityReadinessBlockedRequirementHandoffs = @(
+  $HostSupervisionAuthorityReadiness.blocked_requirement_handoffs
+)
+$HostSupervisionAuthorityReadinessHandoffObserved = (
+  [bool]$HostSupervisionAuthorityReadiness.ok -and
+  [string]$HostSupervisionAuthorityReadiness.status -eq 'blocked' -and
+  -not [bool]$HostSupervisionAuthorityReadiness.ready -and
+  [bool]$HostSupervisionAuthorityReadiness.operator_surface_readback_ready -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'exact_supervision_authority_approval' -and
+  $HostSupervisionAuthorityReadinessFirstBlockedRequirement -eq 'exact_supervision_authority_approval' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.id -eq 'exact_supervision_authority_approval' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.route -eq '/lens/host/supervision/authority/requests' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.readiness_route -eq '/lens/host/supervision/authority/readiness' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.request_route -eq '/lens/host/supervision/authority/request' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.requests_route -eq '/lens/host/supervision/authority/requests' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.grant_route -eq '/lens/host/supervision/authority' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.grants_route -eq '/lens/host/supervision/authority/grants' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.denials_route -eq '/lens/host/supervision/authority/denials' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.approval_action -eq 'lens.host.supervision_authority' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.next_step -eq 'create_or_select_exact_approved_host_supervision_authority_request' -and
+  [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.authority_required -eq 'operator_approval' -and
+  -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.authority_granted -and
+  -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.would_execute -and
+  -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.would_mutate -and
+  [string]$HostSupervisionAuthorityReadiness.next_smallest_truthful_gap -eq 'host_supervision_authority_exact_approval_request'
+)
 $ResidentRuntimeBoundary = $Checkpoint.resident_runtime_authority_boundary
 $ResidentRuntimeBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeBoundary.blockers
 $ResidentRuntimeBoundaryObserved = (
@@ -937,6 +967,7 @@ $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   $OsBindingAuthorityRequestReadbackObserved -and
@@ -986,6 +1017,15 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  -not $HostSupervisionAuthorityReadinessHandoffObserved
+) {
+  'resident_host_supervision_authority_readiness_handoff'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   -not $CommandPaletteShellBridgeObserved
 ) {
   'command_palette_shell_bridge_readback'
@@ -994,6 +1034,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   -not $CommandPaletteOsBindingObserved
 ) {
@@ -1003,6 +1044,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   -not $OsBindingAuthorityRequestReadbackObserved
@@ -1013,6 +1055,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   $OsBindingAuthorityRequestReadbackObserved -and
@@ -1024,6 +1067,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   $OsBindingAuthorityRequestReadbackObserved -and
@@ -1123,6 +1167,8 @@ $Payload = [ordered]@{
     'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_supervision_handoff') {
     'The audit must consume the resident-host process supervision handoff proof before treating resident-host process supervision as an acceptance blocker instead of a missing audit readback.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_host_supervision_authority_readiness_handoff') {
+    'The audit must consume the host supervision authority readiness handoff before treating exact approval-request review as an audited resident-host supervision blocker.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
@@ -1197,6 +1243,11 @@ $Payload = [ordered]@{
     resident_host_process_supervision_handoff = [string[]]@(
       $ResidentHostProcessSupervisionBlockerProofBlockers | Where-Object {
         $_ -match 'process_supervision|process_restart|resident_host_process|service_'
+      } | Sort-Object -Unique
+    )
+    host_supervision_authority_readiness_handoff = [string[]]@(
+      $HostSupervisionAuthorityReadinessBlockedRequirements | Where-Object {
+        $_ -match 'approval|authority|supervision'
       } | Sort-Object -Unique
     )
     service_activation = [string[]]@(
@@ -2105,6 +2156,28 @@ $Payload = [ordered]@{
     'scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status',
     'scripts/lens-resident-runtime-resident-claim-boundary-proof.ps1 -Mode Status'
   )
+  resident_host_supervision_authority_readiness_handoff = [ordered]@{
+    status = [string]$HostSupervisionAuthorityReadiness.status
+    audit_status = [string]$HostSupervisionAuthorityReadiness.audit_status
+    ok = [bool]$HostSupervisionAuthorityReadiness.ok
+    ready = [bool]$HostSupervisionAuthorityReadiness.ready
+    readback_ready = [bool]$HostSupervisionAuthorityReadiness.operator_surface_readback_ready
+    handoff_observed = $HostSupervisionAuthorityReadinessHandoffObserved
+    first_blocked_requirement = $HostSupervisionAuthorityReadinessFirstBlockedRequirement
+    first_blocked_requirement_handoff = $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff
+    blocked_requirements = $HostSupervisionAuthorityReadinessBlockedRequirements
+    blocked_requirement_handoffs = $HostSupervisionAuthorityReadinessBlockedRequirementHandoffs
+    next_smallest_truthful_gap = [string]$HostSupervisionAuthorityReadiness.next_smallest_truthful_gap
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    memory_write = $false
+    resident_claim_authority = $false
+  }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -2112,6 +2185,7 @@ $Payload = [ordered]@{
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
+    resident_host_supervision_authority_readiness_handoff_readback = $HostSupervisionAuthorityReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved

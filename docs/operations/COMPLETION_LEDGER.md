@@ -17962,6 +17962,42 @@ authority handoff checkpoint readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens supervision authority handoff completion-audit readback
+
+Stage 6/Lens completion audit now consumes the host supervision authority
+blocker handoff that the Stage 6 checkpoint reads from `/lens/status`. The
+completion audit exposes
+`resident_host_supervision_authority_readiness_handoff`, requires the handoff
+before treating `stage6_completion_reviewed` as true, and records a governance
+readback flag for the audited handoff. The consumed handoff remains blocked on
+`exact_supervision_authority_approval`, points to the existing
+`/lens/host/supervision/authority/request` and
+`/lens/host/supervision/authority/requests` route family, and keeps
+`next_smallest_truthful_gap` at
+`host_supervision_authority_exact_approval_request`.
+
+This is completion-audit/readback-only. It does not create or approve
+supervision authority requests, grant supervision authority, launch or supervise
+a process, install or control a service, register tray presence, bind a hotkey,
+open or control an overlay, implement summon-anywhere, write memory, decide
+approvals, write receipts, grant resident-runtime execution authority, or claim
+resident status. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens supervision
+authority handoff completion-audit readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

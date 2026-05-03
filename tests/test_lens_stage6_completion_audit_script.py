@@ -164,6 +164,50 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "process_restart_authority_not_granted"
         in payload["closure_blockers"]["resident_host_process_supervision_handoff"]
     )
+    host_authority_handoff = payload["resident_host_supervision_authority_readiness_handoff"]
+    assert host_authority_handoff["status"] == "blocked"
+    assert host_authority_handoff["audit_status"] == "complete"
+    assert host_authority_handoff["ok"] is True
+    assert host_authority_handoff["ready"] is False
+    assert host_authority_handoff["readback_ready"] is True
+    assert host_authority_handoff["handoff_observed"] is True
+    assert host_authority_handoff["first_blocked_requirement"] == "exact_supervision_authority_approval"
+    assert [item["id"] for item in host_authority_handoff["blocked_requirement_handoffs"]] == (
+        host_authority_handoff["blocked_requirements"]
+    )
+    assert host_authority_handoff["first_blocked_requirement_handoff"] == {
+        "id": "exact_supervision_authority_approval",
+        "label": "Exact approved host supervision authority request",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority/requests",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "approval_action": "lens.host.supervision_authority",
+        "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert host_authority_handoff["next_smallest_truthful_gap"] == ("host_supervision_authority_exact_approval_request")
+    assert host_authority_handoff["execution_authority"] is False
+    assert host_authority_handoff["approval_decision_authority"] is False
+    assert host_authority_handoff["local_process_launch_authority"] is False
+    assert host_authority_handoff["process_supervision_authority"] is False
+    assert host_authority_handoff["process_restart_authority"] is False
+    assert host_authority_handoff["service_install_authority"] is False
+    assert host_authority_handoff["service_control_authority"] is False
+    assert host_authority_handoff["memory_write"] is False
+    assert host_authority_handoff["resident_claim_authority"] is False
+    assert (
+        "exact_supervision_authority_approval"
+        in (payload["closure_blockers"]["host_supervision_authority_readiness_handoff"])
+    )
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
     assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
@@ -1211,6 +1255,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["process_supervision_authority_boundary_readback"] is True
     assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
     assert governance["resident_host_process_handoff_consumed"] is True
+    assert governance["resident_host_supervision_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True
