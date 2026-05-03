@@ -5594,6 +5594,25 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "resident_loop_receipt_emission",
         "resident_loop_claim_checkpoint",
     ]
+    assert criterion["next_smallest_truthful_gap"] == "resident_host_runtime_loop_operator_surface_readback"
+    assert criterion["first_blocked_requirement"] == "resident_loop_process_supervision"
+    assert len(criterion["requirement_readback"]) == 12
+    blocked_requirement_readback = criterion["blocked_requirement_readback"]
+    assert [item["id"] for item in blocked_requirement_readback] == criterion["blocked_requirements"]
+    assert blocked_requirement_readback[0] == {
+        "id": "resident_loop_process_supervision",
+        "label": "Resident loop process supervision",
+        "status": "blocked",
+        "route": "/lens/host/supervision",
+        "ready": False,
+        "authority_required": "process_supervision_authority",
+        "authority_granted": False,
+        "blockers": [
+            "resident_host_process_missing",
+            "process_supervision_authority_not_granted",
+            "process_restart_authority_not_granted",
+        ],
+    }
     assert criterion["execution_authority"] is False
     assert criterion["resident_runtime_execution_authority"] is False
     assert criterion["process_supervision_authority"] is False

@@ -17824,6 +17824,39 @@ family API readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens runtime-loop blocker operator readback
+
+Stage 6/Lens resident-host runtime-loop readiness now exposes normalized
+operator readback through `/lens/status`. The
+`resident_host_runtime_loop_readiness_audit` criterion includes
+`next_smallest_truthful_gap`, `first_blocked_requirement`,
+`requirement_readback`, and `blocked_requirement_readback`, with each runtime
+loop requirement carrying its route, status, authority boundary, and blockers.
+The current first blocked requirement is
+`resident_loop_process_supervision`.
+
+This is backend/API readback-only. It does not implement the resident runtime
+loop, launch or supervise a process, install or control a service, register tray
+presence, bind a hotkey, open or control an overlay, implement summon-anywhere,
+write memory, decide approvals, write receipts, grant resident-runtime
+execution authority, or claim resident status. Stage 6 remains active and
+blocked on summon-anywhere, helpful/not-noisy, and system-resident presence
+closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens runtime-loop
+blocker operator readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

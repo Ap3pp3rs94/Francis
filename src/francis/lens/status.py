@@ -103,6 +103,33 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _runtime_loop_requirement_readback(
+    runtime_loop_readiness: dict[str, Any], *, ready: bool | None = None
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for value in _as_list(runtime_loop_readiness.get("requirements")):
+        requirement = _as_dict(value)
+        requirement_id = _safe_str(requirement.get("id")).strip()
+        if not requirement_id:
+            continue
+        requirement_ready = bool(requirement.get("ready"))
+        if ready is not None and requirement_ready is not ready:
+            continue
+        items.append(
+            {
+                "id": requirement_id,
+                "label": _safe_str(requirement.get("label")).strip(),
+                "status": _safe_str(requirement.get("status")).strip() or ("ready" if requirement_ready else "blocked"),
+                "route": _safe_str(requirement.get("route")).strip(),
+                "ready": requirement_ready,
+                "authority_required": _safe_str(requirement.get("authority_required")).strip(),
+                "authority_granted": bool(requirement.get("authority_granted")),
+                "blockers": [_safe_str(item).strip() for item in _as_list(requirement.get("blockers"))],
+            }
+        )
+    return items
+
+
 def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     display = redact_governed_display_value(item)
@@ -1229,6 +1256,13 @@ def _stage6_readiness(
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
     runtime_loop_denial_receipts = _as_dict(resident_host.get("runtime_loop_denial_receipts"))
     runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
+    runtime_loop_requirement_readback = _runtime_loop_requirement_readback(runtime_loop_readiness)
+    runtime_loop_blocked_requirement_readback = _runtime_loop_requirement_readback(runtime_loop_readiness, ready=False)
+    first_runtime_loop_blocked_requirement = (
+        _safe_str(runtime_loop_blocked_requirement_readback[0].get("id")).strip()
+        if runtime_loop_blocked_requirement_readback
+        else ""
+    )
     persistent_supervision_enablement_authority_readiness = _as_dict(
         resident_host.get("persistent_supervision_enablement_authority_readiness")
     )
@@ -1833,6 +1867,12 @@ def _stage6_readiness(
                     "/lens/host/runtime-loop/denials",
                     "/lens/status",
                 ],
+                "next_smallest_truthful_gap": _safe_str(
+                    runtime_loop_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
+                "first_blocked_requirement": first_runtime_loop_blocked_requirement,
+                "requirement_readback": runtime_loop_requirement_readback,
+                "blocked_requirement_readback": runtime_loop_blocked_requirement_readback,
                 "ready": bool(runtime_loop_readiness.get("ready")),
                 "loop_ready": bool(runtime_loop_readiness.get("loop_ready")),
                 "execution_ready": bool(runtime_loop_readiness.get("execution_ready")),
