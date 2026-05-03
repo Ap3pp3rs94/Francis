@@ -16975,6 +16975,40 @@ readiness API readback:
 - `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
   Result: `passed after formatting src\francis\lens\preflight.py`
 
+### 2026-05-03 - Stage 6/Lens status consumes OS-binding readiness
+
+Stage 6/Lens canonical status readback now consumes the read-only
+`/lens/os-binding/readiness` contract directly. `GET /lens/status` now includes
+`os_binding_readiness`, exposes `lens_os_binding_readiness_route` in its receipt
+route map, and includes an `os_binding_readiness` Stage 6 criterion with
+blocked requirement counts, blocker groups, `first_blocker_family`, and
+`next_smallest_truthful_gap=os_level_command_palette_binding`.
+
+The Stage 6 closure readback now includes `/lens/os-binding/readiness` in the
+`summon_anywhere` evidence path and carries the OS-level command-palette blocker
+into the summon-anywhere blocker list. This only makes the existing blocker more
+visible through the canonical status surface. It does not open a palette,
+register a hotkey, summon Francis, launch a product process, control tray or
+overlay surfaces, decide approvals, execute actions, write memory, capture
+screen state, create new sensing, or grant local-process-launch,
+process-supervision, service-control, hotkey-registration, tray-registration,
+overlay-control, summon, resident-claim, approval, execution, memory-write, or
+mutation authority. Stage 6 remains active and blocked on the real
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens status consumption
+of OS-binding readiness:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\status.py`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

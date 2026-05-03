@@ -59,6 +59,7 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_loop_readiness_audit,
 )
 from francis.lens.preflight import (
+    lens_os_binding_readiness,
     lens_overlay_enablement_gate,
     lens_preflight,
     lens_summon_enablement_gate,
@@ -1053,6 +1054,7 @@ def _stage6_closure_readback(
     resident_host: dict[str, Any],
     command_palette: dict[str, Any],
     pilot_indicator: dict[str, Any],
+    os_binding_readiness: dict[str, Any],
     summon_enablement_gate: dict[str, Any],
     tray_enablement_gate: dict[str, Any],
     overlay_enablement_gate: dict[str, Any],
@@ -1063,13 +1065,17 @@ def _stage6_closure_readback(
     pilot_ready = bool(
         _safe_str(pilot_indicator.get("status")).strip() or _safe_str(pilot_indicator.get("route")).strip()
     )
-    summon_ready = bool(command_palette.get("summon_anywhere")) and bool(summon_enablement_gate.get("ready"))
+    os_binding_ready = bool(os_binding_readiness.get("ready"))
+    summon_ready = (
+        bool(command_palette.get("summon_anywhere")) and bool(summon_enablement_gate.get("ready")) and os_binding_ready
+    )
     helpful_ready = bool(resident_surface_activation.get("resident_surface_ready")) and bool(
         resident_surface_activation.get("operator_experience_proof")
     )
     system_resident_ready = (
         bool(resident_host.get("resident"))
         and bool(hud_runtime.get("resident_overlay"))
+        and os_binding_ready
         and bool(summon_enablement_gate.get("summon_anywhere"))
         and bool(tray_enablement_gate.get("tray_presence"))
         and bool(overlay_enablement_gate.get("overlay_window"))
@@ -1077,6 +1083,7 @@ def _stage6_closure_readback(
     )
     summon_blockers = _stage6_blockers(
         ["summon_anywhere_missing"] if not summon_ready else [],
+        os_binding_readiness.get("blockers"),
         resident_host.get("blockers"),
         summon_enablement_gate.get("blockers"),
     )
@@ -1090,6 +1097,7 @@ def _stage6_closure_readback(
     system_blockers = _stage6_blockers(
         resident_host.get("blockers"),
         hud_runtime.get("blockers"),
+        os_binding_readiness.get("blockers"),
         summon_enablement_gate.get("blockers"),
         tray_enablement_gate.get("blockers"),
         overlay_enablement_gate.get("blockers"),
@@ -1101,7 +1109,7 @@ def _stage6_closure_readback(
             label="Summon anywhere",
             ready=summon_ready,
             status="ready" if summon_ready else "blocked",
-            evidence=["/lens/summon", "/lens/status"],
+            evidence=["/lens/os-binding/readiness", "/lens/summon", "/lens/status"],
             blockers=summon_blockers,
             basis="OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
         ),
@@ -1145,7 +1153,10 @@ def _stage6_closure_readback(
     next_gap = "stage6_lens_completion_audit"
     blocked_ids = {_safe_str(item.get("id")).strip() for item in blocked_criteria}
     if "summon_anywhere" in blocked_ids:
-        summon_next_gap = _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        summon_next_gap = (
+            _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
+            or _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        )
         next_gap = summon_next_gap or "summon_anywhere_blockers"
     elif "helpful_not_noisy" in blocked_ids:
         next_gap = "resident_surface_operator_experience_proof"
@@ -1191,6 +1202,7 @@ def _stage6_readiness(
     reactor: dict[str, Any],
     command_palette: dict[str, Any],
     preflight: dict[str, Any],
+    os_binding_readiness: dict[str, Any],
     summon_enablement_gate: dict[str, Any],
     tray_enablement_gate: dict[str, Any],
     overlay_enablement_gate: dict[str, Any],
@@ -1245,6 +1257,7 @@ def _stage6_readiness(
             resident_host=resident_host,
             command_palette=command_palette,
             pilot_indicator=pilot_indicator,
+            os_binding_readiness=os_binding_readiness,
             summon_enablement_gate=summon_enablement_gate,
             tray_enablement_gate=tray_enablement_gate,
             overlay_enablement_gate=overlay_enablement_gate,
@@ -1270,6 +1283,36 @@ def _stage6_readiness(
                 "status": "readback_ready" if _as_list(command_palette.get("commands")) else "missing",
                 "evidence": ["/lens/status"],
                 "command_count": _safe_int(command_palette.get("command_total")),
+            },
+            {
+                "id": "os_binding_readiness",
+                "status": _safe_str(os_binding_readiness.get("status")).strip() or "missing",
+                "audit_status": _safe_str(os_binding_readiness.get("audit_status")).strip(),
+                "evidence": ["/lens/os-binding/readiness", "/lens/summon", "/lens/status"],
+                "ready": bool(os_binding_readiness.get("ready")),
+                "os_binding_ready": bool(os_binding_readiness.get("os_binding_ready")),
+                "os_level_command_palette": bool(os_binding_readiness.get("os_level_command_palette")),
+                "summon_anywhere": bool(os_binding_readiness.get("summon_anywhere")),
+                "first_blocker_family": _safe_str(os_binding_readiness.get("first_blocker_family")).strip(),
+                "next_smallest_truthful_gap": _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
+                or "os_level_command_palette_binding",
+                "requirements_total": _safe_int(os_binding_readiness.get("requirements_total")),
+                "requirements_ready_total": _safe_int(os_binding_readiness.get("requirements_ready_total")),
+                "requirements_blocked_total": _safe_int(os_binding_readiness.get("requirements_blocked_total")),
+                "blocked_requirements": _as_list(os_binding_readiness.get("blocked_requirements")),
+                "blockers": _as_list(os_binding_readiness.get("blockers")),
+                "blocker_groups": _as_dict(os_binding_readiness.get("blocker_groups")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "service_control_authority": False,
+                "hotkey_registration_authority": False,
+                "tray_registration_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
             },
             {
                 "id": "mode_visibility",
@@ -2768,6 +2811,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     command_palette = _command_palette_surface(approvals=approvals)
     resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
     preflight = lens_preflight()
+    os_binding_readiness = lens_os_binding_readiness(preflight=preflight)
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
@@ -2804,6 +2848,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "hud": hud,
         "resident_host": resident_host,
         "preflight": preflight,
+        "os_binding_readiness": os_binding_readiness,
         "summon_enablement_gate": summon_enablement_gate,
         "tray_enablement_gate": tray_enablement_gate,
         "overlay_enablement_gate": overlay_enablement_gate,
@@ -2844,6 +2889,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_host_activation_denials_route": "/lens/host/activation/denials",
             "lens_host_runtime_loop_denials_route": "/lens/host/runtime-loop/denials",
             "lens_host_runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+            "lens_os_binding_readiness_route": "/lens/os-binding/readiness",
             "lens_host_supervision_authority_request_route": "/lens/host/supervision/authority/request",
             "lens_host_supervision_authority_requests_route": "/lens/host/supervision/authority/requests",
             "lens_host_supervision_authority_preflight_route": "/lens/host/supervision/authority",
@@ -2907,6 +2953,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             reactor=reactor,
             command_palette=command_palette,
             preflight=preflight,
+            os_binding_readiness=os_binding_readiness,
             summon_enablement_gate=summon_enablement_gate,
             tray_enablement_gate=tray_enablement_gate,
             overlay_enablement_gate=overlay_enablement_gate,

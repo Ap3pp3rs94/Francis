@@ -455,10 +455,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "helpful_not_noisy",
         "system_resident_presence",
     ]
-    assert closure["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert closure["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
     closure_criteria = {item["id"]: item for item in closure["criteria"]}
     assert closure_criteria["summon_anywhere"]["ready"] is False
+    assert closure_criteria["summon_anywhere"]["evidence"] == [
+        "/lens/os-binding/readiness",
+        "/lens/summon",
+        "/lens/status",
+    ]
     assert "summon_anywhere_missing" in closure_criteria["summon_anywhere"]["blockers"]
+    assert "os_level_command_palette_missing" in closure_criteria["summon_anywhere"]["blockers"]
     assert closure_criteria["mode_visibility"]["ready"] is True
     assert closure_criteria["pilot_visibility_groundwork"]["ready"] is True
     assert closure_criteria["system_resident_presence"]["ready"] is False
@@ -489,6 +495,41 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "summon_authority": False,
         "mutation_authority_granted": False,
     }
+    os_binding_response = client.get("/lens/os-binding/readiness")
+    assert os_binding_response.status_code == 200
+    assert body["os_binding_readiness"] == os_binding_response.json()
+    os_binding = body["os_binding_readiness"]
+    assert os_binding["kind"] == "lens.os_binding.readiness"
+    assert os_binding["status"] == "blocked"
+    assert os_binding["route"] == "/lens/os-binding/readiness"
+    assert os_binding["ready"] is False
+    assert os_binding["os_binding_ready"] is False
+    assert os_binding["os_level_command_palette"] is False
+    assert os_binding["summon_anywhere"] is False
+    assert os_binding["first_blocker_family"] == "palette_binding"
+    assert os_binding["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert os_binding["requirements_total"] == 7
+    assert os_binding["requirements_ready_total"] == 0
+    assert os_binding["requirements_blocked_total"] == 7
+    assert os_binding["blocked_requirements"] == [
+        "os_level_command_palette",
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "authority_boundary",
+    ]
+    assert "os_level_command_palette_missing" in os_binding["blocker_groups"]["palette_binding"]
+    assert "global_hotkey_binding_missing" in os_binding["blocker_groups"]["global_hotkey_binding"]
+    assert "summon_binding_missing" in os_binding["blocker_groups"]["summon_binding"]
+    assert os_binding["governance"]["execution_authority"] is False
+    assert os_binding["governance"]["approval_decision_authority"] is False
+    assert os_binding["governance"]["memory_write"] is False
+    assert os_binding["governance"]["hotkey_registration_authority"] is False
+    assert os_binding["governance"]["tray_registration_authority"] is False
+    assert os_binding["governance"]["overlay_control_authority"] is False
+    assert body["receipts"]["lens_os_binding_readiness_route"] == "/lens/os-binding/readiness"
     assert body["hud"]["readback_ready"] is True
     assert body["hud"]["runtime_status"] == "readback_only"
     assert body["hud"]["resident_overlay"] is False
@@ -1806,6 +1847,33 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "resident_overlay_runtime_missing" in _criterion(body, "hud_layer_runtime")["blockers"]
     assert _criterion(body, "command_palette_commands")["status"] == "readback_ready"
     assert _criterion(body, "command_palette_commands")["command_count"] == body["command_palette"]["command_total"]
+    os_binding_criterion = _criterion(body, "os_binding_readiness")
+    assert os_binding_criterion["status"] == "blocked"
+    assert os_binding_criterion["audit_status"] == "complete"
+    assert os_binding_criterion["evidence"] == ["/lens/os-binding/readiness", "/lens/summon", "/lens/status"]
+    assert os_binding_criterion["ready"] is False
+    assert os_binding_criterion["os_binding_ready"] is False
+    assert os_binding_criterion["os_level_command_palette"] is False
+    assert os_binding_criterion["summon_anywhere"] is False
+    assert os_binding_criterion["first_blocker_family"] == "palette_binding"
+    assert os_binding_criterion["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert os_binding_criterion["requirements_total"] == 7
+    assert os_binding_criterion["requirements_ready_total"] == 0
+    assert os_binding_criterion["requirements_blocked_total"] == 7
+    assert "os_level_command_palette" in os_binding_criterion["blocked_requirements"]
+    assert "os_level_command_palette_missing" in os_binding_criterion["blockers"]
+    assert "os_level_command_palette_missing" in os_binding_criterion["blocker_groups"]["palette_binding"]
+    assert os_binding_criterion["execution_authority"] is False
+    assert os_binding_criterion["approval_decision_authority"] is False
+    assert os_binding_criterion["local_process_launch_authority"] is False
+    assert os_binding_criterion["process_supervision_authority"] is False
+    assert os_binding_criterion["service_control_authority"] is False
+    assert os_binding_criterion["hotkey_registration_authority"] is False
+    assert os_binding_criterion["tray_registration_authority"] is False
+    assert os_binding_criterion["overlay_control_authority"] is False
+    assert os_binding_criterion["summon_authority"] is False
+    assert os_binding_criterion["memory_write"] is False
+    assert os_binding_criterion["resident_claim_authority"] is False
     assert _criterion(body, "mode_visibility")["status"] == "readback_ready"
     assert _criterion(body, "approvals_view")["status"] == "readback_ready"
     assert _criterion(body, "incident_view")["status"] == "readback_ready"
