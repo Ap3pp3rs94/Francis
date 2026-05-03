@@ -519,6 +519,215 @@ def test_lens_os_binding_plan_blocks_os_palette_without_authority(
     assert governance["resident_claim_authority"] is False
 
 
+def test_lens_os_binding_authority_request_requires_system_write_without_binding(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/os-binding/authority/request",
+        json={
+            "actor": "test.lens.no_scope",
+            "reason": "try to request OS binding authority without scope",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["approval_requested"] is False
+    assert body["applied"] is False
+    assert body["executed"] is False
+    assert body["error"] == "api_permission_denied"
+    assert body["action"] == "lens.os_binding.command_palette_binding_authority"
+    assert body["authority_granted"] is False
+    assert body["os_level_command_palette_binding_authority"] is False
+    assert body["opens_palette"] is False
+    assert body["registers_hotkey"] is False
+    assert body["launches_process"] is False
+    assert body["controls_overlay"] is False
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["required_scope"] == "system.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["approval_request_write"] is False
+    assert body["governance"]["os_level_command_palette_binding_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["summon_authority"] is False
+    assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    assert client.get("/approvals/list?status=pending").json()["items"] == []
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_os_binding_authority_request_creates_approval_only_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    contract = client.get("/lens/os-binding/authority")
+    assert contract.status_code == 200
+    contract_body = contract.json()
+    assert contract_body["kind"] == "lens.os_binding.command_palette_binding_authority.contract"
+    assert contract_body["status"] == "approval_request_ready"
+    assert contract_body["route"] == "/lens/os-binding/authority"
+    assert contract_body["request_route"] == "/lens/os-binding/authority/request"
+    assert contract_body["readback_route"] == "/lens/os-binding/authority/requests"
+    assert contract_body["readiness_route"] == "/lens/os-binding/readiness"
+    assert contract_body["plan_route"] == "/lens/os-binding/plan"
+    assert contract_body["creates_approval_request"] is True
+    assert contract_body["grants_authority"] is False
+    assert contract_body["opens_palette"] is False
+    assert contract_body["registers_hotkey"] is False
+    assert contract_body["summons"] is False
+    assert contract_body["launches_process"] is False
+    assert contract_body["controls_overlay"] is False
+    assert contract_body["writes_memory"] is False
+    assert contract_body["decides_approval"] is False
+    assert contract_body["claims_resident"] is False
+    assert contract_body["governance"]["read_only_contract"] is True
+    assert contract_body["governance"]["approval_request_write"] is True
+    assert contract_body["governance"]["os_level_command_palette_binding_authority"] is False
+
+    response = client.post(
+        "/lens/os-binding/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "prove governed OS binding authority request",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "approval_requested"
+    assert body["approval_requested"] is True
+    assert body["applied"] is False
+    assert body["executed"] is False
+    assert body["action"] == "lens.os_binding.command_palette_binding_authority"
+    assert body["authority_granted"] is False
+    assert body["os_level_command_palette_binding_authority"] is False
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["opens_palette"] is False
+    assert body["registers_hotkey"] is False
+    assert body["launches_process"] is False
+    assert body["controls_overlay"] is False
+    assert body["governance"]["approval_request_write"] is True
+    assert body["governance"]["approval_action"] == "lens.os_binding.command_palette_binding_authority"
+    assert body["governance"]["os_level_command_palette_binding_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["approval_decision_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["summon_authority"] is False
+    assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    approval_id = str(body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    pending_payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending_payload["action"] == "lens.os_binding.command_palette_binding_authority"
+    assert pending_payload["reason"] == "prove governed OS binding authority request"
+    requested = pending_payload["payload"]
+    assert requested["request_kind"] == "lens.os_binding.command_palette_binding_authority.request"
+    assert requested["route"] == "/lens/os-binding/authority/request"
+    assert requested["authority_route"] == "/lens/os-binding/authority"
+    assert requested["readback_route"] == "/lens/os-binding/authority/requests"
+    assert requested["readiness_route"] == "/lens/os-binding/readiness"
+    assert requested["plan_route"] == "/lens/os-binding/plan"
+    assert requested["readiness"]["ready"] is False
+    assert requested["readiness"]["os_level_command_palette"] is False
+    assert "os_level_command_palette" in requested["readiness"]["blocked_requirements"]
+    assert "os_level_command_palette_missing" in requested["readiness"]["blockers"]
+    assert requested["implementation_plan"]["plan_available"] is True
+    assert requested["implementation_plan"]["implementation_ready"] is False
+    assert "os_level_command_palette_contract" in requested["implementation_plan"]["blocked_requirements"]
+    assert requested["authority_boundary"]["authority_ready"] is False
+    assert requested["authority_boundary"]["authority_granted"] is False
+    assert requested["authority_boundary"]["os_level_command_palette_binding_authority"] is False
+    assert requested["authority_boundary"]["opens_palette"] is False
+    assert requested["authority_boundary"]["registers_hotkey"] is False
+    assert requested["authority_boundary"]["launches_process"] is False
+    assert "os_level_command_palette_binding_authority_not_granted" in requested["authority_boundary"]["blockers"]
+    assert requested["governance"]["approval_request_write"] is True
+    assert requested["governance"]["os_level_command_palette_binding_authority"] is False
+    assert requested["governance"]["would_open_palette"] is False
+    assert requested["governance"]["would_register_hotkey"] is False
+    assert requested["governance"]["would_launch_process"] is False
+    assert requested["governance"]["would_open_overlay"] is False
+    assert requested["governance"]["would_write_memory"] is False
+
+    readback = client.get("/lens/os-binding/authority/requests?limit=10")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert readback_body["status"] == "pending_review"
+    assert readback_body["route"] == "/lens/os-binding/authority/requests"
+    assert readback_body["authority_route"] == "/lens/os-binding/authority"
+    assert readback_body["request_route"] == "/lens/os-binding/authority/request"
+    assert readback_body["pending_count"] == 1
+    assert readback_body["approved_count"] == 0
+    assert readback_body["total_count"] == 1
+    assert readback_body["latest"]["id"] == approval_id
+    assert readback_body["latest"]["action"] == "lens.os_binding.command_palette_binding_authority"
+    assert readback_body["authority_granted"] is False
+    assert readback_body["os_level_command_palette_binding_authority"] is False
+    assert readback_body["os_level_command_palette"] is False
+    assert readback_body["summon_anywhere"] is False
+    assert readback_body["opens_palette"] is False
+    assert readback_body["registers_hotkey"] is False
+    assert readback_body["launches_process"] is False
+    assert readback_body["controls_overlay"] is False
+    assert readback_body["governance"]["read_only_contract"] is True
+    assert readback_body["governance"]["approval_request_write"] is False
+    assert readback_body["governance"]["os_level_command_palette_binding_authority"] is False
+    assert readback_body["governance"]["hotkey_registration_authority"] is False
+    assert readback_body["governance"]["summon_authority"] is False
+    assert readback_body["governance"]["overlay_control_authority"] is False
+    assert readback_body["governance"]["memory_write"] is False
+    assert readback_body["governance"]["resident_claim_authority"] is False
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

@@ -40,6 +40,8 @@ from francis.lens import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
+    lens_os_binding_authority_request_contract,
+    lens_os_binding_authority_request_readback,
     lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
@@ -61,6 +63,7 @@ from francis.lens import (
     request_lens_host_persistent_supervision_enablement_execution_authority,
     request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
+    request_lens_os_binding_authority,
     request_lens_resident_runtime_execution_authority,
 )
 
@@ -150,6 +153,11 @@ class LensHostPersistentSupervisionEnablementExecutionAuthorityGrantIn(BaseModel
     lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
+class LensOsBindingAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens OS-binding command palette authority review"
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -169,6 +177,29 @@ def os_binding_readiness() -> dict[str, Any]:
 @router.get("/os-binding/plan")
 def os_binding_plan() -> dict[str, Any]:
     return lens_os_binding_implementation_plan()
+
+
+@router.get("/os-binding/authority")
+def os_binding_authority() -> dict[str, Any]:
+    return lens_os_binding_authority_request_contract()
+
+
+@router.get("/os-binding/authority/requests")
+def os_binding_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_os_binding_authority_request_readback(limit=limit)
+
+
+@router.post("/os-binding/authority/request")
+def os_binding_authority_request(
+    request: Request,
+    payload: LensOsBindingAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_os_binding_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
 
 
 @router.get("/summon")

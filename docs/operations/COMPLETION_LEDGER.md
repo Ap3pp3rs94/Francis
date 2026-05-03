@@ -17072,6 +17072,40 @@ proof child timeout stabilization:
 - `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py -q`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens OS-binding authority request readback
+
+Stage 6/Lens now has a governed backend-only OS-binding command-palette
+authority request boundary at `POST /lens/os-binding/authority/request`, a
+read-only contract at `GET /lens/os-binding/authority`, and read-only request
+readback at `GET /lens/os-binding/authority/requests`. The request path requires
+the existing `system.write` API scope, creates a normal approval request for
+`lens.os_binding.command_palette_binding_authority`, and snapshots the existing
+`/lens/os-binding/readiness` and `/lens/os-binding/plan` blockers into the
+approval payload. Missing-scope attempts are denied without creating approval
+requests.
+
+This is backend-only approval-request/readback work. It does not grant
+OS-binding authority; does not open a palette, register a global hotkey, summon
+Francis, launch or supervise a process, control tray or overlay surfaces, decide
+approvals, write memory, claim resident state, capture screen state, create new
+sensing, or grant execution, hotkey-registration, tray-registration,
+overlay-control, process-supervision, service-control, summon, resident-claim,
+approval-decision, memory-write, or mutation authority. Stage 6 remains active
+and blocked on the real `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens OS-binding
+authority request readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_authority_request_requires_system_write_without_binding tests\test_api_lens.py::test_lens_os_binding_authority_request_creates_approval_only_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
