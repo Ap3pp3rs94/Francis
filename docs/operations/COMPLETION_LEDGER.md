@@ -17793,6 +17793,37 @@ summon authority proof consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens summon blocker family API readback
+
+Stage 6/Lens summon-anywhere readiness now exposes the ordered blocker-family
+readback directly through the Lens API/status path. `/lens/summon` now returns
+`first_blocker_family`, `blocked_families`, and `blocker_family_readback` with
+the route and authority boundary for each summon blocker family. The Stage 6
+status readiness criterion carries the same family readback so an operator or
+next API consumer can see that the current first blocker is `resident_host`
+without running the proof scripts.
+
+This is backend/API readback-only. It does not implement summon-anywhere, grant
+summon authority, register a global hotkey, open or control an overlay, register
+tray presence, launch or supervise a resident process, install or control a
+service, write memory, decide approvals, or claim resident status. Stage 6
+remains active and blocked on summon-anywhere, helpful/not-noisy, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon blocker
+family API readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

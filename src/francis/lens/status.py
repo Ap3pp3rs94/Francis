@@ -2490,9 +2490,12 @@ def _stage6_readiness(
                     summon_enablement_gate.get("next_smallest_truthful_gap")
                 ).strip()
                 or "summon_anywhere_blockers",
+                "first_blocker_family": _safe_str(summon_enablement_gate.get("first_blocker_family")).strip(),
+                "blocked_families": _as_list(summon_enablement_gate.get("blocked_families")),
                 "global_hotkey": _safe_str(summon_enablement_gate.get("global_hotkey")).strip(),
                 "blockers": _as_list(summon_enablement_gate.get("blockers")),
                 "blocker_groups": _as_dict(summon_enablement_gate.get("blocker_groups")),
+                "blocker_family_readback": _as_list(summon_enablement_gate.get("blocker_family_readback")),
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,

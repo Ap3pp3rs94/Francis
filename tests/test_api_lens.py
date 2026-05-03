@@ -428,6 +428,15 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
         "ready": False,
         "summon_anywhere": False,
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "first_blocker_family": "resident_host",
+        "blocked_families": [
+            "resident_host",
+            "tray_presence",
+            "overlay_window",
+            "global_hotkey_binding",
+            "summon_binding",
+            "authority",
+        ],
     }
     implementation_plan = body["implementation_plan"]
     assert implementation_plan["kind"] == "lens.os_binding.implementation_plan"
@@ -2026,6 +2035,15 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_enablement_gate["summon_anywhere"] is False
     assert summon_enablement_gate["acceptance_criterion"] == "summon_anywhere"
     assert summon_enablement_gate["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_enablement_gate["first_blocker_family"] == "resident_host"
+    assert summon_enablement_gate["blocked_families"] == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
     assert summon_enablement_gate["summon_binding_ready"] is False
     assert summon_enablement_gate["resident_host_ready"] is False
     assert summon_enablement_gate["tray_ready"] is False
@@ -2051,6 +2069,25 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "overlay_window_missing" in summon_gate_groups["overlay_window"]
     assert "global_hotkey_binding_missing" in summon_gate_groups["global_hotkey_binding"]
     assert "summon_binding_missing" in summon_gate_groups["summon_binding"]
+    blocker_family_readback = {item["id"]: item for item in summon_enablement_gate["blocker_family_readback"]}
+    assert list(blocker_family_readback) == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    assert blocker_family_readback["resident_host"]["route"] == "/lens/host"
+    assert blocker_family_readback["resident_host"]["status"] == "blocked"
+    assert blocker_family_readback["resident_host"]["ready"] is False
+    assert blocker_family_readback["resident_host"]["authority_required"] == "resident_runtime_execution_authority"
+    assert "resident_host_process_missing" in blocker_family_readback["resident_host"]["blockers"]
+    assert blocker_family_readback["tray_presence"]["route"] == "/lens/tray"
+    assert blocker_family_readback["overlay_window"]["route"] == "/lens/overlay"
+    assert blocker_family_readback["global_hotkey_binding"]["route"] == "/lens/summon"
+    assert blocker_family_readback["summon_binding"]["route"] == "/lens/summon"
+    assert blocker_family_readback["authority"]["route"] == "/lens/preflight"
     assert summon_enablement_gate["summon_preflight"] == preflight_surfaces["summon"]
     assert summon_enablement_gate["surface_dependencies"]["host"]["ready"] is False
     assert summon_enablement_gate["surface_dependencies"]["tray"]["status"] == "blocked"
@@ -2881,6 +2918,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_gate_criterion["evidence"] == ["/lens/summon", "/lens/preflight", "/lens/status"]
     assert summon_gate_criterion["global_hotkey"] == "Ctrl+Alt+Space"
     assert summon_gate_criterion["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_gate_criterion["first_blocker_family"] == "resident_host"
+    assert summon_gate_criterion["blocked_families"] == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    status_family_readback = {item["id"]: item for item in summon_gate_criterion["blocker_family_readback"]}
+    assert status_family_readback["resident_host"]["route"] == "/lens/host"
+    assert status_family_readback["resident_host"]["status"] == "blocked"
     assert "summon_authority_not_granted" in summon_gate_criterion["blockers"]
     assert summon_gate_criterion["execution_authority"] is False
     assert summon_gate_criterion["approval_decision_authority"] is False

@@ -122,6 +122,45 @@ def _dedupe(values: list[str]) -> list[str]:
     return deduped
 
 
+def _summon_blocker_family_readback(blocker_groups: dict[str, list[str]]) -> list[dict[str, Any]]:
+    routes = {
+        "resident_host": "/lens/host",
+        "tray_presence": "/lens/tray",
+        "overlay_window": "/lens/overlay",
+        "global_hotkey_binding": "/lens/summon",
+        "summon_binding": "/lens/summon",
+        "authority": "/lens/preflight",
+    }
+    labels = {
+        "resident_host": "Resident host",
+        "tray_presence": "Tray presence",
+        "overlay_window": "Overlay window",
+        "global_hotkey_binding": "Global hotkey binding",
+        "summon_binding": "Summon binding",
+        "authority": "Authority boundary",
+    }
+    authority_required = {
+        "resident_host": "resident_runtime_execution_authority",
+        "tray_presence": "tray_registration_authority",
+        "overlay_window": "overlay_control_authority",
+        "global_hotkey_binding": "hotkey_registration_authority",
+        "summon_binding": "summon_authority",
+        "authority": "operator_approved_authority",
+    }
+    return [
+        {
+            "id": family,
+            "label": labels[family],
+            "status": "blocked" if blockers else "ready",
+            "ready": not blockers,
+            "route": routes[family],
+            "authority_required": authority_required[family],
+            "blockers": blockers,
+        }
+        for family, blockers in blocker_groups.items()
+    ]
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -737,6 +776,9 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         ),
         "authority": _authority_blockers(blockers),
     }
+    blocker_family_readback = _summon_blocker_family_readback(blocker_groups)
+    blocked_families = [_safe_str(item.get("id")).strip() for item in blocker_family_readback if not item["ready"]]
+    first_blocker_family = blocked_families[0] if blocked_families else ""
     return {
         "ok": True,
         "kind": "lens.summon.enablement_gate",
@@ -749,6 +791,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "summon_anywhere": ready,
         "acceptance_criterion": "summon_anywhere",
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "first_blocker_family": first_blocker_family,
+        "blocked_families": blocked_families,
         "summon_binding_ready": summon_ready,
         "resident_host_ready": resident_host_ready,
         "tray_ready": tray_ready,
@@ -759,6 +803,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "required_before_enable": _string_list(summon.get("required_before_enable")),
         "blockers": blockers,
         "blocker_groups": blocker_groups,
+        "blocker_family_readback": blocker_family_readback,
         "summon_preflight": summon,
         "surface_dependencies": {
             "host": {
@@ -1194,6 +1239,8 @@ def lens_os_binding_readiness(
                 summon_gate.get("next_smallest_truthful_gap"),
                 "summon_anywhere_blockers",
             ),
+            "first_blocker_family": _safe_str(summon_gate.get("first_blocker_family")).strip(),
+            "blocked_families": _string_list(summon_gate.get("blocked_families")),
         },
         "governance": _base_governance(
             service_control_authority=False,
