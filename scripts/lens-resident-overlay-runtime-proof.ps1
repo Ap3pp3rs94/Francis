@@ -227,7 +227,7 @@ $PowerShellPath = Get-PowerShellPath
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
 
-$ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status') -TimeoutSeconds 30
+$ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status') -TimeoutSeconds 120
 $SupervisorArgs = @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $SupervisorArgs += @('-DataDir', $DataDir)

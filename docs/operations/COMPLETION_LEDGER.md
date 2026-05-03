@@ -17044,6 +17044,34 @@ implementation-plan readback:
 - `python -m ruff format --check src\francis\lens\preflight.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens resident overlay proof child timeout stabilization
+
+Stage 6/Lens resident overlay runtime proof now gives its nested
+`scripts/lens-resident-surface-proof.ps1` child proof enough time to complete on
+the slower Windows CI path. The parent
+`scripts/lens-resident-overlay-runtime-proof.ps1` still observes the same
+blocked resident overlay runtime boundary, but the child resident-surface proof
+timeout was widened from 30 seconds to 120 seconds so its payload is not
+misread as empty under normal CI load.
+
+This is diagnostic-only timing stabilization. It does not open an overlay,
+register a hotkey, summon Francis, launch a product process, supervise a
+resident process, control tray or overlay surfaces, decide approvals, execute
+actions, write receipts or memory, claim resident status, capture screen state,
+create new sensing, or grant local-process-launch, process-supervision,
+service-control, hotkey-registration, tray-registration, overlay-control,
+summon, resident-claim, approval, execution, memory-write, or mutation
+authority. Stage 6 remains active and blocked on the real `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens resident overlay
+proof child timeout stabilization:
+
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py -q`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:
