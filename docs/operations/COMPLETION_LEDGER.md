@@ -17650,6 +17650,42 @@ These remain true and should block any "finished" claim:
   handoff/completion, blocked sender-attempt, sender-readiness, sender-contract,
   and operator-summary sender-contract readbacks.
 
+### 2026-05-03 - Stage 6/Lens summon global-hotkey binding blocker handoff proof
+
+Stage 6/Lens now has a focused
+`scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1` diagnostic for
+the fourth summon-anywhere blocker family. The proof consumes the existing
+summon-anywhere blocker proof, the previous overlay-window handoff proof, and
+the resident-runtime hotkey-summon boundary proof. It confirms that
+`global_hotkey_binding` is the next blocked summon-anywhere family after
+`overlay_window`, preserves the `Ctrl+Alt+Space` global binding readback, and
+returns `next_smallest_truthful_gap: summon_binding_blocker_boundary`.
+
+This is readback-only / diagnostic-only. It does not register a global hotkey,
+bind summon-anywhere, open or control an overlay, register tray presence, launch
+or supervise a process, install or control a service, write memory, decide
+approvals, grant resident-runtime authority, or claim resident status. The
+wrapped resident-runtime hotkey-summon boundary still truthfully reports its
+existing resident-runtime execution-authority readback, but this summon-level
+handoff grants no new authority. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon
+global-hotkey binding blocker handoff proof:
+
+- `python -m pytest tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_summon_blocker_family,summon_global_hotkey_family_observed,previous_overlay_window_bridge_observed,hotkey_summon_boundary_observed,handoff_aligned,side_effects_denied,governance | ConvertTo-Json -Depth 8`
+  Result: `passed; returned proof_passed with next_smallest_truthful_gap=summon_binding_blocker_boundary and all authority-denial flags intact`
+- `python -m pytest tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
