@@ -440,7 +440,7 @@ $AuthorityBounded = $false
 if ($PowerShellPath -and $HostScriptExists -and $SupervisorScriptExists) {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
   $LaunchStartedProcess = Start-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Launch', '-RunSeconds', [string]$RunSeconds)
-  $SupervisorResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $SupervisorScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Observe', '-RunSeconds', [string]$RunSeconds, '-DataDir', $ProofDataRoot) -TimeoutSeconds ([Math]::Max(90, ($RunSeconds * 2) + 60))
+  $SupervisorResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $SupervisorScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Observe', '-RunSeconds', [string]$RunSeconds, '-DataDir', $ProofDataRoot) -TimeoutSeconds ([Math]::Max(150, ($RunSeconds * 2) + 120))
   $LaunchResult = Complete-JsonScript -StartedProcess $LaunchStartedProcess -TimeoutSeconds ([Math]::Max(30, $RunSeconds + 30))
   $LaunchPayload = Get-PropertyValue -Payload $LaunchResult -Name 'payload'
   $LaunchProcess = Get-PropertyValue -Payload $LaunchPayload -Name 'process_readback'

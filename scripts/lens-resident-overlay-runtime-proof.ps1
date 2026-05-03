@@ -232,7 +232,7 @@ $SupervisorArgs = @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeco
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $SupervisorArgs += @('-DataDir', $DataDir)
 }
-$SupervisorResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SupervisorObservationProofPath -ScriptArgs $SupervisorArgs -TimeoutSeconds ([Math]::Max(120, ($SupervisorRunSeconds * 2) + 75))
+$SupervisorResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SupervisorObservationProofPath -ScriptArgs $SupervisorArgs -TimeoutSeconds ([Math]::Max(190, ($SupervisorRunSeconds * 2) + 150))
 
 $ResidentSurfacePayload = Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'payload'
 $SupervisorPayload = Get-PropertyValue -Payload $SupervisorResult -Name 'payload'

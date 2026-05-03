@@ -16863,6 +16863,41 @@ OS-binding blocker proof:
   launcher; Ubuntu runners did not provide a powershell binary while Windows
   jobs passed`
 
+### 2026-05-03 - Stage 6/Lens bounded observation window stabilization
+
+Stage 6/Lens diagnostic proof windows were tightened against CI timing variance
+after run `25266153920` showed the existing resident-overlay runtime proof could
+miss the stopped-state observation on Windows 3.12 even though final host status
+readback showed the bounded foreground process had stopped. The bounded
+supervisor runner now gives the running-state and stopped-state observations
+larger deterministic windows, and the wrapper proofs/tests now allow those
+bounded waits to complete instead of timing out around the old shorter window.
+
+This is diagnostic proof stabilization only. It does not create resident
+supervision, install or control a service, open an overlay, register a hotkey,
+create tray presence, summon Francis, execute product actions, decide approvals,
+write memory, or grant process-supervision, process-restart, local-process,
+service-control, overlay-control, hotkey-registration, tray-registration,
+approval, execution, memory-write, sensing, capture, or mutation authority.
+Stage 6 remains active and blocked on real `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens bounded observation
+window stabilization:
+
+- `gh run view 25266153920 --log-failed`
+  Result: `confirmed the remaining CI failure was
+  tests/test_lens_resident_overlay_runtime_proof_script.py on Windows 3.12, not
+  the new command-palette OS-binding proof`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed after extending the bounded observation windows`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

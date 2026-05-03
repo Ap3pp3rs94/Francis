@@ -463,7 +463,7 @@ if ($Mode -eq 'SuperviseOnce') {
   $HostStarted = [bool](Get-PropertyValue -Payload $StartedProcess -Name 'started' -Default $false)
   $Payload.supervisor_started_process = $HostStarted
 
-  $RunningObservationTimeout = [Math]::Max(25, $RunSeconds + 25)
+  $RunningObservationTimeout = [Math]::Max(45, $RunSeconds + 45)
   $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
   $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
   $RunningObserved = (
@@ -489,7 +489,7 @@ if ($Mode -eq 'SuperviseOnce') {
   }
 
   $Completion = Complete-BoundedHostProcess -StartedProcess $StartedProcess -TimeoutSeconds ([Math]::Max(45, $RunSeconds + 45))
-  $StoppedObservationTimeout = [Math]::Max(20, $RunSeconds + 20)
+  $StoppedObservationTimeout = [Math]::Max(60, $RunSeconds + 60)
   $StoppedState = Wait-ForHostStoppedState -StatePath $HostStatePath -PidPath $HostPidPath -ExpectedPid $RunningPid -TimeoutSeconds $StoppedObservationTimeout
   $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
   $StoppedObserved = (
@@ -552,7 +552,7 @@ if ($Mode -eq 'SuperviseOnce') {
   exit 1
 }
 
-$RunningObservationTimeout = [Math]::Max(25, $RunSeconds + 25)
+$RunningObservationTimeout = [Math]::Max(45, $RunSeconds + 45)
 $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'foreground_running' -TimeoutSeconds $RunningObservationTimeout
 $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
 $RunningObserved = (
@@ -574,7 +574,7 @@ if ($RunningObserved) {
     })
 }
 
-$StoppedObservationTimeout = [Math]::Max(20, $RunSeconds + 20)
+$StoppedObservationTimeout = [Math]::Max(60, $RunSeconds + 60)
 $StoppedState = Wait-ForHostStoppedState -StatePath $HostStatePath -PidPath $HostPidPath -ExpectedPid $RunningPid -TimeoutSeconds $StoppedObservationTimeout
 $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
 $StoppedObserved = (
