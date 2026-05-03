@@ -17250,6 +17250,44 @@ consumption of summon-anywhere blocker proof:
 - `git diff --check`
   Result: `passed` with the normal local CRLF warning for the PowerShell script.
 
+### 2026-05-03 - Stage 6/Lens resident-host bridge consumes authority readback
+
+Stage 6/Lens summon resident-host blocker proof now preserves the upstream
+summon-anywhere blocker proof's OS-binding authority request readback before
+handing off the first blocker family. The
+`scripts/lens-summon-resident-host-blocker-proof.ps1` payload now exposes
+`summon_os_binding_authority_request_readback_observed` and
+`summon_os_binding_authority_request_readback`, verifies the
+`/lens/os-binding/authority/requests`, `/lens/os-binding/authority/request`,
+`/lens/os-binding/readiness`, and `/lens/os-binding/plan` route contract, and
+records the bridge governance flag
+`summon_os_binding_authority_request_readback`.
+
+This is resident-host bridge readback only. It does not grant OS-binding
+authority; does not create approval requests, decide approvals, open a palette,
+register a global hotkey, summon Francis, launch or supervise a product process,
+control tray or overlay surfaces, write memory, claim resident state, capture
+screen state, create new sensing, or grant execution, hotkey-registration,
+tray-registration, overlay-control, process-supervision, service-control,
+summon, resident-claim, approval-decision, memory-write, or mutation authority.
+The opt-in process-supervision handoff path remains bounded diagnostic proof,
+and Stage 6 remains active and blocked on the real `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens resident-host
+bridge consumption of summon authority readback:
+
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with the normal local CRLF warning for the PowerShell script.
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

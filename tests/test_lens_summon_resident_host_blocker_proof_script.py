@@ -62,6 +62,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["first_summon_blocker_family"] == "resident_host"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["summon_os_binding_authority_request_readback_observed"] is True
     assert payload["resident_host_lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["resident_host_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
@@ -72,6 +73,30 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["resident_host_process_supervision_handoff_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
+
+    authority_readback = payload["summon_os_binding_authority_request_readback"]
+    assert authority_readback["status"] == "none"
+    assert authority_readback["ok"] is True
+    assert authority_readback["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
+    assert authority_readback["route"] == "/lens/os-binding/authority/requests"
+    assert authority_readback["request_route"] == "/lens/os-binding/authority/request"
+    assert authority_readback["readiness_route"] == "/lens/os-binding/readiness"
+    assert authority_readback["plan_route"] == "/lens/os-binding/plan"
+    assert authority_readback["stage6_criterion_readback_ready"] is True
+    assert authority_readback["authority_granted"] is False
+    assert authority_readback["os_level_command_palette_binding_authority"] is False
+    assert authority_readback["os_level_command_palette"] is False
+    assert authority_readback["summon_anywhere"] is False
+    assert authority_readback["opens_palette"] is False
+    assert authority_readback["registers_hotkey"] is False
+    assert authority_readback["launches_process"] is False
+    assert authority_readback["controls_overlay"] is False
+    assert authority_readback["governance"]["read_only_contract"] is True
+    assert authority_readback["governance"]["approval_request_write"] is False
+    assert authority_readback["governance"]["execution_authority"] is False
+    assert authority_readback["governance"]["approval_decision_authority"] is False
+    assert authority_readback["governance"]["memory_write"] is False
+    assert authority_readback["governance"]["resident_claim_authority"] is False
 
     assert payload["summon_resident_host_blockers"] == ["local_process_launch_authority_not_granted"]
     assert payload["resident_host_runtime_blockers"] == ["lens_host_runtime_not_implemented"]
@@ -98,6 +123,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_first_family"]["status"] == "resident_host_first"
+    assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
     assert checks["resident_host_lifecycle_proof"]["status"] == "runtime_blocked"
     assert checks["resident_host_process_supervision_handoff"]["status"] == "process_handoff_consumed"
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"
@@ -111,6 +137,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["governance"] == {
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
+        "summon_os_binding_authority_request_readback": True,
         "wraps_resident_host_lifecycle_blockers_proof": True,
         "wraps_resident_host_process_supervision_blocker_proof": True,
         "read_only_contract": True,
@@ -150,10 +177,13 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff()
     assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
+    assert payload["summon_os_binding_authority_request_readback_observed"] is True
 
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
     assert "resident_host_process_supervision_handoff" not in checks
     assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" not in payload["evidence"]
+    assert payload["governance"]["summon_os_binding_authority_request_readback"] is True
     assert payload["governance"]["wraps_resident_host_process_supervision_blocker_proof"] is False
     assert payload["governance"]["bounded_local_process_launch"] is False
     assert payload["governance"]["temporary_runtime_state_write"] is False

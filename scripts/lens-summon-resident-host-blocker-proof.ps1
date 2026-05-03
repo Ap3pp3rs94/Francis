@@ -153,6 +153,8 @@ $SummonBlockedFamilies = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonPayload -Name 'blocked_families' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$SummonAuthorityReadback = Get-PropertyValue -Payload $SummonPayload -Name 'os_binding_authority_request_readback'
+$SummonAuthorityReadbackGovernance = Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'governance'
 
 $HostResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostLifecycleProofScript -ScriptArgs @('-Mode', 'Status')
 $HostPayload = $HostResult.payload
@@ -198,6 +200,30 @@ $SummonFirstFamilyObserved = (
   [string]$SummonBlockedFamilies[0] -eq 'resident_host' -and
   $SummonResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers'
+)
+$SummonAuthorityReadbackObserved = (
+  [bool](Get-PropertyValue -Payload $SummonPayload -Name 'os_binding_authority_request_readback_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'kind' -Default '') -eq 'lens.os_binding.command_palette_binding_authority.request_readback' -and
+  [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'route' -Default '') -eq '/lens/os-binding/authority/requests' -and
+  [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'request_route' -Default '') -eq '/lens/os-binding/authority/request' -and
+  [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'readiness_route' -Default '') -eq '/lens/os-binding/readiness' -and
+  [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'plan_route' -Default '') -eq '/lens/os-binding/plan' -and
+  [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'stage6_criterion_readback_ready' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette_binding_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'summon_anywhere' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'opens_palette' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'registers_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'launches_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'controls_overlay' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'read_only_contract' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'approval_request_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'resident_claim_authority' -Default $true)
 )
 $HostLifecycleObserved = (
   [int]$HostResult.exit_code -eq 0 -and
@@ -275,6 +301,7 @@ $SideEffectsDenied = (
 
 $Checks = @(
   (New-Check -Id 'summon_first_family' -Status $(if ($SummonFirstFamilyObserved) { 'resident_host_first' } else { 'missing_or_unexpected' }) -Passed $SummonFirstFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must name resident_host as the first blocked acceptance family.'),
+  (New-Check -Id 'summon_os_binding_authority_readback' -Status $(if ($SummonAuthorityReadbackObserved) { 'authority_readback_consumed' } else { 'missing_or_unexpected' }) -Passed $SummonAuthorityReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1:/lens/os-binding/authority/requests' -Reason 'The resident-host bridge must preserve the summon blocker proof authority-request readback before handing off the first blocker family.'),
   (New-Check -Id 'resident_host_lifecycle_proof' -Status $(if ($HostLifecycleObserved) { 'runtime_blocked' } else { 'missing_or_unexpected' }) -Passed $HostLifecycleObserved -Evidence 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status' -Reason 'The resident-host lifecycle proof must consume the first family and point to the runtime blocker boundary.')
 )
 if ($ConsumeProcessSupervisionHandoff) {
@@ -323,6 +350,7 @@ $Payload = [ordered]@{
   acceptance_criterion = 'summon_anywhere'
   first_summon_blocker_family = 'resident_host'
   summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+  summon_os_binding_authority_request_readback_observed = $SummonAuthorityReadbackObserved
   resident_host_lifecycle_next_smallest_truthful_gap = 'resident_host_runtime_blocker_boundary'
   resident_host_process_supervision_next_smallest_truthful_gap = $ResidentHostProcessSupervisionNextSmallestTruthfulGap
   resident_host_next_smallest_truthful_gap = $ResidentHostNextSmallestTruthfulGap
@@ -337,6 +365,32 @@ $Payload = [ordered]@{
   foreground_run_seconds = $ForegroundRunSeconds
   host_launch_run_seconds = $HostLaunchRunSeconds
   supervisor_run_seconds = $SupervisorRunSeconds
+  summon_os_binding_authority_request_readback = [ordered]@{
+    status = if ($SummonAuthorityReadbackObserved) { [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'status' -Default '') } else { 'missing_or_failed' }
+    ok = $SummonAuthorityReadbackObserved
+    kind = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'kind' -Default '')
+    route = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'route' -Default '')
+    request_route = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'request_route' -Default '')
+    readiness_route = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'readiness_route' -Default '')
+    plan_route = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'plan_route' -Default '')
+    stage6_criterion_readback_ready = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'stage6_criterion_readback_ready' -Default $false)
+    authority_granted = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'authority_granted' -Default $false)
+    os_level_command_palette_binding_authority = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette_binding_authority' -Default $false)
+    os_level_command_palette = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette' -Default $false)
+    summon_anywhere = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'summon_anywhere' -Default $false)
+    opens_palette = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'opens_palette' -Default $false)
+    registers_hotkey = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'registers_hotkey' -Default $false)
+    launches_process = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'launches_process' -Default $false)
+    controls_overlay = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'controls_overlay' -Default $false)
+    governance = [ordered]@{
+      read_only_contract = [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'read_only_contract' -Default $false)
+      approval_request_write = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      resident_claim_authority = $false
+    }
+  }
   summon_resident_host_blockers = [string[]]@($SummonResidentHostBlockers)
   resident_host_runtime_blockers = [string[]]@($HostRuntimeBlockers)
   resident_host_process_readback_blockers = [string[]]@($HostProcessReadbackBlockers)
@@ -358,6 +412,7 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     diagnostic_only = $true
     wraps_summon_anywhere_blockers_proof = $true
+    summon_os_binding_authority_request_readback = $SummonAuthorityReadbackObserved
     wraps_resident_host_lifecycle_blockers_proof = $true
     wraps_resident_host_process_supervision_blocker_proof = [bool]$ConsumeProcessSupervisionHandoff
     read_only_contract = $true
