@@ -319,6 +319,103 @@ def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     raise AssertionError(f"missing Stage 6 criterion: {criterion_id}")
 
 
+def test_lens_os_binding_readiness_groups_blockers_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/os-binding/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.readiness"
+    assert body["status"] == "blocked"
+    assert body["audit_status"] == "complete"
+    assert body["route"] == "/lens/os-binding/readiness"
+    assert body["status_route"] == "/lens/status"
+    assert body["preflight_route"] == "/lens/preflight"
+    assert body["summon_route"] == "/lens/summon"
+    assert body["ready"] is False
+    assert body["os_binding_ready"] is False
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["acceptance_criterion"] == "summon_anywhere"
+    assert body["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert body["first_blocker_family"] == "palette_binding"
+    assert body["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
+    assert body["requirements_total"] == 7
+    assert body["requirements_ready_total"] == 0
+    assert body["requirements_blocked_total"] == 7
+    assert body["blocked_requirements"] == [
+        "os_level_command_palette",
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "authority_boundary",
+    ]
+    requirements = {item["id"]: item for item in body["requirements"]}
+    assert requirements["os_level_command_palette"]["route"] == "/lens/status"
+    assert requirements["os_level_command_palette"]["ready"] is False
+    assert requirements["global_hotkey_binding"]["route"] == "/lens/summon"
+    assert requirements["summon_binding"]["route"] == "/lens/summon"
+    assert requirements["resident_host"]["route"] == "/lens/host"
+    assert requirements["tray_presence"]["route"] == "/lens/tray"
+    assert requirements["overlay_window"]["route"] == "/lens/overlay"
+    blocker_groups = body["blocker_groups"]
+    assert "os_level_command_palette_missing" in blocker_groups["palette_binding"]
+    assert "summon_anywhere_missing" in blocker_groups["palette_binding"]
+    assert "global_hotkey_binding_disabled" in blocker_groups["global_hotkey_binding"]
+    assert "global_hotkey_registration_disabled" in blocker_groups["global_hotkey_binding"]
+    assert "lens_summon_binding_not_implemented" in blocker_groups["summon_binding"]
+    assert "resident_host_process_missing" in blocker_groups["resident_host"]
+    assert "lens_tray_presence_not_implemented" in blocker_groups["tray_presence"]
+    assert "lens_overlay_window_not_implemented" in blocker_groups["overlay_window"]
+    assert "summon_authority_not_granted" in blocker_groups["authority"]
+    assert body["summon_enablement_gate"] == {
+        "route": "/lens/summon",
+        "status": "blocked",
+        "ready": False,
+        "summon_anywhere": False,
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
+    }
+    governance = body["governance"]
+    assert governance["read_only_contract"] is True
+    assert governance["execution_authority"] is False
+    assert governance["approval_decision_authority"] is False
+    assert governance["memory_write"] is False
+    assert governance["summon_authority"] is False
+    assert governance["hotkey_registration_authority"] is False
+    assert governance["tray_registration_authority"] is False
+    assert governance["overlay_control_authority"] is False
+    assert governance["process_supervision_authority"] is False
+    assert governance["resident_claim_authority"] is False
+
+
 def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

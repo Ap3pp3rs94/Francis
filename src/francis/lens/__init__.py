@@ -61,6 +61,7 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_loop_readiness_audit,
 )
 from francis.lens.preflight import (
+    lens_os_binding_readiness,
     lens_overlay_enablement_gate,
     lens_preflight,
     lens_summon_enablement_gate,
@@ -109,6 +110,7 @@ __all__ = [
     "lens_host_supervision_authority_preflight",
     "lens_host_supervision_gate",
     "lens_host_status",
+    "lens_os_binding_readiness",
     "lens_overlay_enablement_gate",
     "lens_preflight",
     "lens_resident_runtime_activation_denial_receipts",

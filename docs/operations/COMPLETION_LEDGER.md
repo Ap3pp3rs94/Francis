@@ -16940,6 +16940,41 @@ of the command-palette OS-binding blocker proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens OS-binding readiness API readback
+
+Stage 6/Lens now exposes a direct read-only
+`GET /lens/os-binding/readiness` contract for the OS-binding blocker family
+that currently prevents a truthful summon-anywhere claim. The route composes
+the existing Lens preflight and summon enablement gate, then projects the
+blocked OS-level command palette, global hotkey binding, summon binding,
+resident host, tray presence, overlay window, and authority-boundary
+requirements into stable readback fields with grouped blockers and requirement
+counts.
+
+The new readback reports `status=blocked`,
+`first_blocker_family=palette_binding`, and
+`next_smallest_truthful_gap=os_level_command_palette_binding`. It is backend
+readback only. It does not open a palette, register a hotkey, summon Francis,
+launch a product process, control tray or overlay surfaces, decide approvals,
+execute actions, write memory, capture screen state, create new sensing, or
+grant local-process-launch, service-control, process-supervision,
+hotkey-registration, tray-registration, overlay-control, summon,
+resident-claim, approval, execution, memory-write, or mutation authority.
+Stage 6 remains active and blocked on the real `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence` acceptance criteria.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens OS-binding
+readiness API readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\preflight.py`
+
 ## 5. Known truthful gaps
 
 These remain true and should block any "finished" claim:

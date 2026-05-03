@@ -103,6 +103,15 @@ def _authority_blockers(blockers: list[str]) -> list[str]:
     ]
 
 
+def _dedupe(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        item = _safe_str(value).strip()
+        if item and item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -765,6 +774,158 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             overlay_control_authority=False,
         ),
         "message": "Lens summon enablement is read-only; global hotkey binding and summon-anywhere remain blocked.",
+    }
+
+
+def _os_binding_requirement(
+    requirement_id: str,
+    *,
+    label: str,
+    ready: bool,
+    blockers: list[str],
+    route: str,
+    required_before_enable: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": requirement_id,
+        "label": label,
+        "ready": ready,
+        "status": "ready" if ready else "blocked",
+        "route": route,
+        "blockers": blockers,
+        "required_before_enable": required_before_enable or [],
+    }
+
+
+def lens_os_binding_readiness(*, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+    lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
+    summon_gate = lens_summon_enablement_gate(preflight=lens_preflight_payload)
+    blocker_groups = _dict_value(summon_gate, "blocker_groups")
+    required_before_enable = _string_list(summon_gate.get("required_before_enable"))
+    palette_blockers = ["os_level_command_palette_missing"]
+    if not bool(summon_gate.get("summon_anywhere")):
+        palette_blockers.append("summon_anywhere_missing")
+    palette_blockers.extend(_string_list(blocker_groups.get("global_hotkey_binding")))
+    grouped_blockers = {
+        "palette_binding": _dedupe(palette_blockers),
+        "global_hotkey_binding": _string_list(blocker_groups.get("global_hotkey_binding")),
+        "summon_binding": _string_list(blocker_groups.get("summon_binding")),
+        "resident_host": _string_list(blocker_groups.get("resident_host")),
+        "tray_presence": _string_list(blocker_groups.get("tray_presence")),
+        "overlay_window": _string_list(blocker_groups.get("overlay_window")),
+        "authority": _string_list(blocker_groups.get("authority")),
+    }
+    requirements = [
+        _os_binding_requirement(
+            "os_level_command_palette",
+            label="OS-level command palette binding",
+            ready=False,
+            blockers=grouped_blockers["palette_binding"],
+            route="/lens/status",
+            required_before_enable=["global_hotkey_binding", "summon_binding"],
+        ),
+        _os_binding_requirement(
+            "global_hotkey_binding",
+            label="Global hotkey binding",
+            ready=not grouped_blockers["global_hotkey_binding"],
+            blockers=grouped_blockers["global_hotkey_binding"],
+            route="/lens/summon",
+            required_before_enable=required_before_enable,
+        ),
+        _os_binding_requirement(
+            "summon_binding",
+            label="Summon binding",
+            ready=not grouped_blockers["summon_binding"],
+            blockers=grouped_blockers["summon_binding"],
+            route="/lens/summon",
+            required_before_enable=required_before_enable,
+        ),
+        _os_binding_requirement(
+            "resident_host",
+            label="Resident host",
+            ready=bool(summon_gate.get("resident_host_ready")),
+            blockers=grouped_blockers["resident_host"],
+            route="/lens/host",
+        ),
+        _os_binding_requirement(
+            "tray_presence",
+            label="Tray presence",
+            ready=bool(summon_gate.get("tray_ready")),
+            blockers=grouped_blockers["tray_presence"],
+            route="/lens/tray",
+        ),
+        _os_binding_requirement(
+            "overlay_window",
+            label="Overlay window",
+            ready=bool(summon_gate.get("overlay_ready")),
+            blockers=grouped_blockers["overlay_window"],
+            route="/lens/overlay",
+        ),
+        _os_binding_requirement(
+            "authority_boundary",
+            label="Authority boundary",
+            ready=not grouped_blockers["authority"],
+            blockers=grouped_blockers["authority"],
+            route="/lens/preflight",
+        ),
+    ]
+    blocked_requirements = [_safe_str(item.get("id")).strip() for item in requirements if not bool(item.get("ready"))]
+    first_blocker_family = next(
+        (family for family, blockers in grouped_blockers.items() if blockers),
+        "",
+    )
+    ready = not blocked_requirements and bool(summon_gate.get("ready"))
+    return {
+        "ok": True,
+        "kind": "lens.os_binding.readiness",
+        "status": "ready_for_operator_review" if ready else "blocked",
+        "audit_status": "complete",
+        "route": "/lens/os-binding/readiness",
+        "status_route": "/lens/status",
+        "preflight_route": "/lens/preflight",
+        "summon_route": "/lens/summon",
+        "tray_route": "/lens/tray",
+        "overlay_route": "/lens/overlay",
+        "host_route": "/lens/host",
+        "ready": ready,
+        "os_binding_ready": ready,
+        "os_level_command_palette": False,
+        "summon_anywhere": bool(summon_gate.get("summon_anywhere")) and ready,
+        "acceptance_criterion": "summon_anywhere",
+        "next_smallest_truthful_gap": "os_level_command_palette_binding",
+        "first_blocker_family": first_blocker_family,
+        "required_before_enable": required_before_enable,
+        "requirements": requirements,
+        "requirements_total": len(requirements),
+        "requirements_ready_total": len(requirements) - len(blocked_requirements),
+        "requirements_blocked_total": len(blocked_requirements),
+        "blocked_requirements": blocked_requirements,
+        "blockers": _dedupe([blocker for blockers in grouped_blockers.values() for blocker in blockers]),
+        "blocker_groups": grouped_blockers,
+        "summon_enablement_gate": {
+            "route": _safe_str(summon_gate.get("route"), "/lens/summon"),
+            "status": _safe_str(summon_gate.get("status"), "blocked"),
+            "ready": bool(summon_gate.get("ready")),
+            "summon_anywhere": bool(summon_gate.get("summon_anywhere")),
+            "next_smallest_truthful_gap": _safe_str(
+                summon_gate.get("next_smallest_truthful_gap"),
+                "summon_anywhere_blockers",
+            ),
+        },
+        "governance": _base_governance(
+            service_control_authority=False,
+            process_supervision_authority=False,
+            resident_claim_authority=False,
+            hotkey_registration_authority=False,
+            tray_registration_authority=False,
+            tray_icon_authority=False,
+            notification_authority=False,
+            window_management_authority=False,
+        ),
+        "message": (
+            "Lens OS-binding readiness is read-only; OS-level palette binding, global hotkey, "
+            "tray, overlay, and summon-anywhere remain blocked."
+        ),
     }
 
 
