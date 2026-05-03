@@ -117,6 +117,93 @@ function New-Check {
   }
 }
 
+function New-BlockerFamilyHandoff {
+  param(
+    [string]$Family,
+    [string[]]$Blockers
+  )
+
+  $MetadataByFamily = @{
+    resident_host = [ordered]@{
+      label = 'Resident host'
+      proof_script = 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status'
+      route = '/lens/host'
+      readiness_route = '/lens/host/runtime-loop/readiness'
+      next_step = 'run_resident_host_blocker_proof'
+      next_smallest_truthful_gap = 'resident_host_runtime_blocker_boundary'
+      authority_required = 'resident_runtime_execution_authority'
+    }
+    tray_presence = [ordered]@{
+      label = 'Tray presence'
+      proof_script = 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status'
+      route = '/lens/tray'
+      readiness_route = '/lens/tray/readiness'
+      next_step = 'run_tray_presence_blocker_proof'
+      next_smallest_truthful_gap = 'summon_overlay_window_blocker_boundary'
+      authority_required = 'tray_registration_authority'
+    }
+    overlay_window = [ordered]@{
+      label = 'Overlay window'
+      proof_script = 'scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status'
+      route = '/lens/overlay'
+      readiness_route = '/lens/overlay/readiness'
+      next_step = 'run_overlay_window_blocker_proof'
+      next_smallest_truthful_gap = 'summon_global_hotkey_binding_blocker_boundary'
+      authority_required = 'overlay_control_authority'
+    }
+    global_hotkey_binding = [ordered]@{
+      label = 'Global hotkey binding'
+      proof_script = 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status'
+      route = '/lens/summon'
+      readiness_route = '/lens/summon/readiness'
+      next_step = 'run_global_hotkey_binding_blocker_proof'
+      next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
+      authority_required = 'hotkey_registration_authority'
+    }
+    summon_binding = [ordered]@{
+      label = 'Summon binding'
+      proof_script = 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status'
+      route = '/lens/summon'
+      readiness_route = '/lens/summon/readiness'
+      next_step = 'run_summon_binding_blocker_proof'
+      next_smallest_truthful_gap = 'summon_authority_blocker_boundary'
+      authority_required = 'summon_authority'
+    }
+    authority = [ordered]@{
+      label = 'Summon authority'
+      proof_script = 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status'
+      route = '/lens/summon'
+      readiness_route = '/lens/summon/readiness'
+      next_step = 'run_summon_authority_blocker_proof'
+      next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+      authority_required = 'summon_hotkey_overlay_and_process_authority'
+    }
+  }
+
+  if (-not $MetadataByFamily.ContainsKey($Family)) {
+    return $null
+  }
+
+  $Metadata = $MetadataByFamily[$Family]
+  return [ordered]@{
+    id = $Family
+    label = [string]$Metadata.label
+    status = if (@($Blockers).Count -gt 0) { 'blocked' } else { 'ready' }
+    blockers = [string[]]@($Blockers)
+    proof_script = [string]$Metadata.proof_script
+    route = [string]$Metadata.route
+    readiness_route = [string]$Metadata.readiness_route
+    next_step = [string]$Metadata.next_step
+    next_smallest_truthful_gap = [string]$Metadata.next_smallest_truthful_gap
+    authority_required = [string]$Metadata.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+
 function Get-LensStatus {
   param(
     [string]$StatusPath
@@ -353,9 +440,53 @@ $OsBindingAuthorityRequestReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'resident_claim_authority' -Default $true)
 )
 
+$Stage6BlockerFamilyHandoffs = @()
+foreach ($Family in @($Stage6BlockedFamilies)) {
+  $FamilyBlockers = ConvertTo-StringArray -Value (
+    Get-PropertyValue -Payload $Stage6BlockerGroups -Name $Family -Default @()
+  )
+  $Handoff = New-BlockerFamilyHandoff -Family $Family -Blockers $FamilyBlockers
+  if ($null -ne $Handoff) {
+    $Stage6BlockerFamilyHandoffs += $Handoff
+  }
+}
+
+$FirstBlockerFamilyHandoff = if (@($Stage6BlockerFamilyHandoffs).Count -gt 0) {
+  $Stage6BlockerFamilyHandoffs[0]
+} else {
+  $null
+}
+
+$AllFamilyHandoffsBounded = $true
+foreach ($Handoff in @($Stage6BlockerFamilyHandoffs)) {
+  if (
+    -not [bool](Get-PropertyValue -Payload $Handoff -Name 'read_only_contract' -Default $false) -or
+    -not [bool](Get-PropertyValue -Payload $Handoff -Name 'diagnostic_only' -Default $false) -or
+    [bool](Get-PropertyValue -Payload $Handoff -Name 'authority_granted' -Default $true) -or
+    [bool](Get-PropertyValue -Payload $Handoff -Name 'would_execute' -Default $true) -or
+    [bool](Get-PropertyValue -Payload $Handoff -Name 'would_mutate' -Default $true)
+  ) {
+    $AllFamilyHandoffsBounded = $false
+  }
+}
+
+$FirstBlockerFamilyHandoffObserved = (
+  @($Stage6BlockedFamilies).Count -gt 0 -and
+  @($Stage6BlockerFamilyHandoffs).Count -eq @($Stage6BlockedFamilies).Count -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'id' -Default '') -eq [string]$Stage6BlockedFamilies[0] -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'id' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '') -eq '/lens/host' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
+  $AllFamilyHandoffsBounded
+)
+
 $Checks = @(
   (New-Check -Id 'summon_preflight_readback' -Status $(if ($SummonPreflightObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must name summon-anywhere as blocked and point to summon_anywhere_blockers.'),
   (New-Check -Id 'stage6_family_projection' -Status $(if ($Stage6FamilyProjectionObserved) { 'blocked_families_projected' } else { 'missing_or_unexpected' }) -Passed $Stage6FamilyProjectionObserved -Evidence 'summon preflight blockers projected into Stage 6 acceptance families' -Reason 'The handoff proof must expose the same blocker-family shape used by the Stage 6 completion audit.'),
+  (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstBlockerFamilyHandoffObserved -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof without granting authority.'),
   (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
   (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.')
 )
@@ -376,8 +507,11 @@ $Payload = [ordered]@{
   stage6_family_projection_observed = $Stage6FamilyProjectionObserved
   side_effects_denied = $SideEffectsDenied
   os_binding_authority_request_readback_observed = $OsBindingAuthorityRequestReadbackObserved
+  first_blocker_family_handoff_observed = $FirstBlockerFamilyHandoffObserved
   first_blocker_family = if (@($Stage6BlockedFamilies).Count -gt 0) { [string]$Stage6BlockedFamilies[0] } else { '' }
+  first_blocker_family_handoff = $FirstBlockerFamilyHandoff
   blocked_families = [string[]]@($Stage6BlockedFamilies)
+  blocked_family_handoffs = @($Stage6BlockerFamilyHandoffs)
   blocker_groups = $Stage6BlockerGroups
   blockers = [string[]]@($SummonPreflightBlockers)
   lens_status_readback = [ordered]@{
@@ -443,6 +577,7 @@ $Payload = [ordered]@{
     wraps_lens_status = $true
     read_only_contract = [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false)
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
+    first_blocker_family_handoff_readback = $FirstBlockerFamilyHandoffObserved
     approval_request_write = $false
     product_execution_authority = $false
     execution_authority = $false

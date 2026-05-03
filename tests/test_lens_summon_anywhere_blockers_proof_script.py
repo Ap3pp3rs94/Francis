@@ -117,7 +117,25 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert payload["stage6_family_projection_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["os_binding_authority_request_readback_observed"] is True
+    assert payload["first_blocker_family_handoff_observed"] is True
     assert payload["first_blocker_family"] == "resident_host"
+    assert payload["first_blocker_family_handoff"] == {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "blockers": ["local_process_launch_authority_not_granted"],
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
     assert payload["blocked_families"] == [
         "resident_host",
         "tray_presence",
@@ -126,6 +144,28 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "summon_binding",
         "authority",
     ]
+    assert [handoff["id"] for handoff in payload["blocked_family_handoffs"]] == payload["blocked_families"]
+    assert [handoff["proof_script"] for handoff in payload["blocked_family_handoffs"]] == [
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status",
+    ]
+    assert [handoff["next_smallest_truthful_gap"] for handoff in payload["blocked_family_handoffs"]] == [
+        "resident_host_runtime_blocker_boundary",
+        "summon_overlay_window_blocker_boundary",
+        "summon_global_hotkey_binding_blocker_boundary",
+        "summon_binding_blocker_boundary",
+        "summon_authority_blocker_boundary",
+        "stage6_lens_completion_audit",
+    ]
+    assert all(handoff["read_only_contract"] is True for handoff in payload["blocked_family_handoffs"])
+    assert all(handoff["diagnostic_only"] is True for handoff in payload["blocked_family_handoffs"])
+    assert all(handoff["authority_granted"] is False for handoff in payload["blocked_family_handoffs"])
+    assert all(handoff["would_execute"] is False for handoff in payload["blocked_family_handoffs"])
+    assert all(handoff["would_mutate"] is False for handoff in payload["blocked_family_handoffs"])
 
     blocker_groups = payload["blocker_groups"]
     assert blocker_groups["resident_host"] == ["local_process_launch_authority_not_granted"]
@@ -201,6 +241,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_preflight_readback"]["status"] == "blocked_readback_ready"
     assert checks["stage6_family_projection"]["status"] == "blocked_families_projected"
+    assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
     assert checks["summon_side_effects_denied"]["status"] == "diagnostic_bounded"
     assert checks["os_binding_authority_request_readback"]["status"] == "readback_ready"
     assert all(item["passed"] for item in payload["checks"])
@@ -211,6 +252,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "wraps_lens_status": True,
         "read_only_contract": True,
         "os_binding_authority_request_readback": True,
+        "first_blocker_family_handoff_readback": True,
         "approval_request_write": False,
         "product_execution_authority": False,
         "execution_authority": False,

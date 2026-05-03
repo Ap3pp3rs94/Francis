@@ -17998,6 +17998,40 @@ authority handoff completion-audit readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens summon-anywhere blocker family handoff readback
+
+Stage 6/Lens summon-anywhere blocker proof now carries explicit read-only
+handoffs from the aggregate blocker-family list to the existing bounded proof
+scripts for `resident_host`, `tray_presence`, `overlay_window`,
+`global_hotkey_binding`, `summon_binding`, and `authority`. The proof exposes
+`first_blocker_family_handoff`, `blocked_family_handoffs`, and a governance
+`first_blocker_family_handoff_readback` flag. The current first handoff remains
+`resident_host`, points to
+`scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status`, and names
+`resident_host_runtime_blocker_boundary` as its next blocker boundary.
+
+This is diagnostic/readback-only. It does not implement summon-anywhere, grant
+summon authority, register a hotkey, open or control an overlay, launch or
+supervise a process, create or decide approvals, write memory, write receipts,
+or claim resident status. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon-anywhere
+blocker family handoff readback:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,first_blocker_family,first_blocker_family_handoff_observed,@{Name='first_handoff_gap';Expression={$_.first_blocker_family_handoff.next_smallest_truthful_gap}},@{Name='handoff_count';Expression={$_.blocked_family_handoffs.Count}},governance | ConvertTo-Json -Depth 8`
+  Result: `passed; returned proof_passed with first_blocker_family_handoff_observed=true, handoff_count=6, first_handoff_gap=resident_host_runtime_blocker_boundary, and all authority-denial flags intact`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
