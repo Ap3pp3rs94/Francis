@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "lens-command-palette-os-binding-proof.ps1"
 
 
+def _powershell() -> str:
+    exe = shutil.which("powershell") or shutil.which("pwsh")
+    if exe is None:
+        pytest.skip("PowerShell is not available")
+    return exe
+
+
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
-            "powershell",
+            _powershell(),
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",

@@ -16849,13 +16849,19 @@ OS-binding blocker proof:
 
 - `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
   Result: `failed before fixing strict-mode filtered-check counting; passed
-  after fix`
+  after fix; later CI failed on Ubuntu before the test launcher was aligned
+  with the existing `powershell`/`pwsh` helper pattern; passed locally after
+  that correction`
 - `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_overlay_preflight_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
   Result: `passed`
 - `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py`
   Result: `passed`
 - `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py`
   Result: `passed`
+- `gh run watch 25265502701 --exit-status`
+  Result: `failed before fixing the new test's cross-platform PowerShell
+  launcher; Ubuntu runners did not provide a powershell binary while Windows
+  jobs passed`
 
 ## 5. Known truthful gaps
 
