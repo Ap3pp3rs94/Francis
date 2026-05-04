@@ -922,6 +922,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert command_palette_os_binding["summon_preflight_observed"] is True
     assert command_palette_os_binding["tray_preflight_observed"] is True
     assert command_palette_os_binding["overlay_preflight_observed"] is True
+    assert command_palette_os_binding["os_binding_candidate_observed"] is True
     assert command_palette_os_binding["side_effects_denied"] is True
     assert command_palette_os_binding["blocked_families"] == [
         "palette_binding",
@@ -948,11 +949,49 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "local_process_launch_authority_not_granted" in os_binding_groups["authority"]
     assert command_palette_os_binding["command_palette"]["availability"] == "chat_ui_only"
     assert command_palette_os_binding["command_palette"]["os_level_command_palette"] is False
+    os_binding_candidate = command_palette_os_binding["os_binding_candidate"]
+    assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
+    assert os_binding_candidate["status"] == "blocked"
+    assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["binding_scope"] == "global"
+    assert os_binding_candidate["route"] == "/lens/status"
+    assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
+    assert os_binding_candidate["bridge_script"] == "scripts/lens-command-palette.ps1"
+    assert os_binding_candidate["proof_script"] == "scripts/lens-command-palette-os-binding-proof.ps1"
+    assert os_binding_candidate["requires_approval_kind"] == "lens.os_binding.command_palette_binding_authority"
+    assert "lens.os_binding.command_palette_binding_authority" in os_binding_candidate["required_authority"]
+    assert "hotkey_registration_authority" in os_binding_candidate["required_authority"]
+    assert "summon_authority" in os_binding_candidate["required_authority"]
+    assert "local_process_launch_authority" in os_binding_candidate["required_authority"]
+    assert "palette_binding" in os_binding_candidate["required_preflight_families"]
+    assert "global_hotkey_binding" in os_binding_candidate["required_preflight_families"]
+    assert "summon_binding" in os_binding_candidate["required_preflight_families"]
+    assert "authority" in os_binding_candidate["required_preflight_families"]
+    assert "os_level_command_palette_missing" in os_binding_candidate["blocked_by"]
+    assert "global_hotkey_binding_disabled" in os_binding_candidate["blocked_by"]
+    assert "lens_summon_binding_not_implemented" in os_binding_candidate["blocked_by"]
+    assert "summon_authority_not_granted" in os_binding_candidate["blocked_by"]
+    assert "hotkey_registration_authority_not_granted" in os_binding_candidate["blocked_by"]
+    assert "local_process_launch_authority_not_granted" in os_binding_candidate["blocked_by"]
+    assert os_binding_candidate["current_authorized_effect"] == "readback_only_status"
+    assert os_binding_candidate["candidate_effect_if_authorized"] == (
+        "open_lens_command_palette_from_governed_os_binding"
+    )
+    assert os_binding_candidate["open_mode_authorized"] is False
+    assert os_binding_candidate["open_mode_refusal"] == "lens_command_palette_open_not_authorized"
+    assert os_binding_candidate["would_register_hotkey_now"] is False
+    assert os_binding_candidate["would_open_palette_now"] is False
+    assert os_binding_candidate["would_summon_anywhere_now"] is False
+    assert os_binding_candidate["would_launch_process_now"] is False
+    assert os_binding_candidate["would_write_memory_now"] is False
+    assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
     assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
     assert command_palette_os_binding["tray_preflight"]["ready"] is False
     assert command_palette_os_binding["overlay_preflight"]["ready"] is False
     assert command_palette_os_binding["governance"]["read_only_contract"] is True
     assert command_palette_os_binding["governance"]["diagnostic_only"] is True
+    assert command_palette_os_binding["governance"]["os_binding_candidate_boundary_readback"] is True
     assert command_palette_os_binding["governance"]["opens_palette"] is False
     assert command_palette_os_binding["governance"]["execution_authority"] is False
     assert command_palette_os_binding["governance"]["approval_decision_authority"] is False
@@ -1342,6 +1381,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["resident_runtime_resident_claim_boundary_proof_readback"] is True
     assert governance["command_palette_shell_bridge_readback"] is True
     assert governance["command_palette_os_binding_blockers_proof_readback"] is True
+    assert governance["command_palette_os_binding_candidate_readback"] is True
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
     assert governance["summon_anywhere_first_blocker_family_handoff_readback"] is True

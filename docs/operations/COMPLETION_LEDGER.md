@@ -18346,6 +18346,36 @@ OS-binding candidate readback:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-checkpoint.ps1`
 
+### 2026-05-04 - Stage 6/Lens completion audit OS-binding candidate readback
+
+Stage 6/Lens completion audit now consumes and preserves the command-palette
+OS-binding candidate that the checkpoint carries from
+`scripts/lens-command-palette-os-binding-proof.ps1`. The audit requires
+`os_binding_candidate_observed` before treating the command-palette OS-binding
+blocker proof as observed, emits the candidate object in
+`command_palette_os_binding_blockers_proof`, and exposes
+`command_palette_os_binding_candidate_readback` in audit governance.
+
+This is completion-audit/readback-only. It does not bind a global hotkey, open
+an OS command palette, summon Francis anywhere, launch or supervise a process,
+control overlay or tray surfaces, decide approvals, grant authority, write
+memory, create user-facing controls, or claim resident status. Stage 6 remains
+active and blocked on real OS-level command-palette binding, summon-anywhere
+behavior, helpful/not-noisy resident behavior, and system-resident presence
+closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens completion audit
+OS-binding candidate readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
