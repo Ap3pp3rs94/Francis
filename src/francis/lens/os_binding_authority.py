@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests, request as create_approval_request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
+from francis.kernel.paths import data_dir
 from francis.lens.preflight import lens_os_binding_implementation_plan, lens_os_binding_readiness
 
 LENS_OS_BINDING_AUTHORITY_SCOPE = "system.write"
@@ -13,9 +19,13 @@ LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION = "lens.os_binding.command_palette_bind
 LENS_OS_BINDING_AUTHORITY_ROUTE = "/lens/os-binding/authority"
 LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE = "/lens/os-binding/authority/request"
 LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE = "/lens/os-binding/authority/requests"
+LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE = "/lens/os-binding/authority/grants"
 LENS_OS_BINDING_READINESS_ROUTE = "/lens/os-binding/readiness"
 LENS_OS_BINDING_PLAN_ROUTE = "/lens/os-binding/plan"
 _APPROVAL_STATUSES = ("pending", "approved", "rejected", "emergency")
+_DEFAULT_LEASE_SECONDS = 60 * 60
+_MIN_LEASE_SECONDS = 60
+_MAX_LEASE_SECONDS = 24 * 60 * 60
 
 
 def _safe_str(value: Any) -> str:
@@ -62,6 +72,16 @@ def _safe_limit(value: Any, *, default: int = 5) -> int:
     return max(1, min(50, parsed))
 
 
+def _safe_lease_seconds(value: Any) -> int:
+    if isinstance(value, bool):
+        return _DEFAULT_LEASE_SECONDS
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return _DEFAULT_LEASE_SECONDS
+    return max(_MIN_LEASE_SECONDS, min(_MAX_LEASE_SECONDS, parsed))
+
+
 def _record_ts(value: Any) -> float:
     if isinstance(value, bool):
         return 0.0
@@ -69,6 +89,46 @@ def _record_ts(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _filtered_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in record.items() if value not in ("", {}, [], None)}
+
+
+def _os_binding_authority_grant_receipt_root() -> Path:
+    return data_dir() / "lens" / "os_binding_authority_grants"
+
+
+def _os_binding_authority_grant_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"losbag_{ts}_{digest}"
+
+
+def _os_binding_authority_grant_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = _safe_str(receipt_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _os_binding_authority_grant_receipt_root() / f"{cleaned}.json"
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    return raw if isinstance(raw, dict) else None
 
 
 def _permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
@@ -155,6 +215,20 @@ def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _approval_by_id(approval_id: str) -> tuple[dict[str, Any] | None, str]:
+    requested_id = approval_id.strip()
+    if not requested_id:
+        return None, "missing"
+    for status in _APPROVAL_STATUSES:
+        for record in list_requests(status=status, limit=5000):
+            if not isinstance(record, dict) or _safe_str(record.get("id")).strip() != requested_id:
+                continue
+            if _safe_str(record.get("action")).strip() != LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION:
+                return record, "wrong_action"
+            return record, status
+    return None, "not_found"
+
+
 def _approval_items(*, limit: int) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], dict[str, int]]:
     by_status: dict[str, list[dict[str, Any]]] = {}
     counts: dict[str, int] = {}
@@ -184,7 +258,9 @@ def _approval_items(*, limit: int) -> tuple[dict[str, list[dict[str, Any]]], lis
     return by_status, all_items[:limit], counts
 
 
-def _readback_status(counts: dict[str, int]) -> tuple[str, str]:
+def _readback_status(counts: dict[str, int], *, authority_granted: bool = False) -> tuple[str, str]:
+    if authority_granted:
+        return "authority_granted", "review_os_binding_implementation_plan_before_command_palette_binding"
     if counts.get("pending", 0) > 0:
         return "pending_review", "operator_decide_pending_os_binding_command_palette_authority_request"
     if counts.get("emergency", 0) > 0:
@@ -216,6 +292,7 @@ def _request_payload(*, actor: Any, route: str) -> dict[str, Any]:
         "route": route,
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "readback_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "status_route": "/lens/status",
@@ -285,6 +362,7 @@ def lens_os_binding_authority_request_contract() -> dict[str, Any]:
         "action": LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION,
         "creates_approval_request": True,
         "grants_authority": False,
+        "requires_separate_approved_request": True,
         "opens_palette": False,
         "registers_hotkey": False,
         "summons": False,
@@ -339,11 +417,356 @@ def request_lens_os_binding_authority(
     }
 
 
+def _os_binding_authority_grant_receipt(grant_response: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = _safe_str(grant_response.get("approval_id")).strip()
+    actor = _safe_str(grant_response.get("actor")).strip()
+    route = _safe_str(grant_response.get("route")).strip() or LENS_OS_BINDING_AUTHORITY_ROUTE
+    lease_seconds = _safe_lease_seconds(grant_response.get("lease_seconds"))
+    receipt_id = _os_binding_authority_grant_receipt_id(
+        approval_id=approval_id,
+        actor=actor,
+        route=route,
+        ts=ts,
+    )
+    return _filtered_record(
+        {
+            "kind": "lens.os_binding.command_palette_binding_authority.grant_receipt",
+            "receipt_id": receipt_id,
+            "ts": ts,
+            "status": "authority_granted",
+            "approval_id": approval_id,
+            "actor": actor,
+            "route": route,
+            "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
+            "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
+            "requests_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+            "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+            "lease_seconds": lease_seconds,
+            "expires_ts": ts + lease_seconds,
+            "authority_granted": True,
+            "os_level_command_palette_binding_authority": True,
+            "os_level_command_palette": False,
+            "summon_anywhere": False,
+            "opens_palette": False,
+            "registers_hotkey": False,
+            "launches_process": False,
+            "controls_overlay": False,
+            "governance": {
+                **_governance(
+                    route=LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+                    approval_request_write=False,
+                    read_only_contract=True,
+                ),
+                "gate": "lens_os_binding_command_palette_authority_grant_receipt",
+                "authority_grant_boundary": True,
+                "authority_granted": True,
+                "os_level_command_palette_binding_authority": True,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "tray_registration_authority": False,
+                "overlay_control_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "service_control_authority": False,
+                "window_management_authority": False,
+                "capture_authority": False,
+                "resident_claim_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+    )
+
+
+def _record_os_binding_authority_grant_receipt(grant_response: dict[str, Any]) -> dict[str, Any]:
+    receipt = _os_binding_authority_grant_receipt(grant_response)
+    path = _os_binding_authority_grant_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    try:
+        _atomic_write_json(path, receipt)
+    except OSError:
+        return {}
+    return receipt
+
+
+def _read_os_binding_authority_grant_receipt(path: Path) -> dict[str, Any] | None:
+    item = _read_json(path)
+    if not isinstance(item, dict) or _safe_str(item.get("kind")).strip() != (
+        "lens.os_binding.command_palette_binding_authority.grant_receipt"
+    ):
+        return None
+    return item
+
+
+def _os_binding_authority_grant_active(item: dict[str, Any], *, now: int | None = None) -> bool:
+    if _safe_str(item.get("status")).strip() != "authority_granted":
+        return False
+    if not bool(item.get("authority_granted")):
+        return False
+    try:
+        expires_ts = int(item.get("expires_ts"))
+    except (TypeError, ValueError):
+        return False
+    return expires_ts > (now if now is not None else _now_s())
+
+
+def _list_os_binding_authority_grant_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    root = _os_binding_authority_grant_receipt_root()
+    if not root.exists():
+        return [], 0
+    now = _now_s()
+    items: list[dict[str, Any]] = []
+    for path in root.glob("*.json"):
+        item = _read_os_binding_authority_grant_receipt(path)
+        if item is None:
+            continue
+        if approval_id and _safe_str(item.get("approval_id")).strip() != approval_id:
+            continue
+        if status and _safe_str(item.get("status")).strip() != status:
+            continue
+        if active_only and not _os_binding_authority_grant_active(item, now=now):
+            continue
+        items.append(item)
+    items.sort(key=lambda item: (_record_ts(item.get("ts")), _safe_str(item.get("receipt_id"))), reverse=True)
+    return items[:limit], len(items)
+
+
+def lens_os_binding_authority_grant_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    safe_status = _safe_str(status).strip()
+    items, total = _list_os_binding_authority_grant_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+        status=safe_status,
+        active_only=active_only,
+    )
+    latest = items[0] if items else None
+    active_latest = next((item for item in items if _os_binding_authority_grant_active(item)), None)
+    authority_granted = bool(active_latest)
+    return {
+        "ok": True,
+        "kind": "lens.os_binding.command_palette_binding_authority.grant_receipts",
+        "status": "readback_ready" if items else "empty",
+        "route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
+        "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
+        "requests_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+        "limit": safe_limit,
+        "approval_id": safe_approval_id,
+        "filter_status": safe_status,
+        "active_only": active_only,
+        "total": total,
+        "latest": latest,
+        "active_latest": active_latest,
+        "authority_granted": authority_granted,
+        "os_level_command_palette_binding_authority": authority_granted,
+        "os_level_command_palette": False,
+        "summon_anywhere": False,
+        "opens_palette": False,
+        "registers_hotkey": False,
+        "launches_process": False,
+        "controls_overlay": False,
+        "items": items,
+        "governance": {
+            **_governance(
+                route=LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_os_binding_command_palette_authority_grant_receipts_readback",
+            "authority_grant_boundary": True,
+            "authority_granted": authority_granted,
+            "os_level_command_palette_binding_authority": authority_granted,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "overlay_control_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "window_management_authority": False,
+            "capture_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+            "receipt_write_authority": False,
+            "next_step": (
+                "review_os_binding_implementation_plan_before_command_palette_binding"
+                if authority_granted
+                else "grant_exact_approved_os_binding_command_palette_authority_request"
+            ),
+        },
+    }
+
+
+def grant_lens_os_binding_authority(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    reason: Any = "attempt Lens OS-binding command palette authority grant",
+    route: str = LENS_OS_BINDING_AUTHORITY_ROUTE,
+    method: str = "POST",
+    record_receipt: bool = False,
+    lease_seconds: Any = _DEFAULT_LEASE_SECONDS,
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_OS_BINDING_AUTHORITY_ROUTE
+    safe_approval_id = _safe_str(approval_id).strip()
+    approval, approval_lookup_status = _approval_by_id(safe_approval_id)
+    approval = _as_dict(approval)
+    approval_status = _safe_str(approval.get("status")).strip() if approval else approval_lookup_status
+    approval_ready = bool(approval) and approval_status == "approved"
+    permission = _permission(actor, route=safe_route, method=method)
+    blockers: list[str] = []
+    if not safe_approval_id:
+        blockers.append("approval_id_required")
+    elif approval_lookup_status == "not_found":
+        blockers.append("os_binding_authority_approval_not_found")
+    elif approval_lookup_status == "wrong_action":
+        blockers.append("os_binding_authority_approval_wrong_action")
+    elif not approval_ready:
+        blockers.append("os_binding_authority_approval_not_approved")
+    if not permission.allowed:
+        blockers.append("system_write_scope_not_ready")
+    deduped_blockers = _dedupe_strs(blockers)
+    active_authority = approval_ready and permission.allowed and not deduped_blockers
+    safe_lease_seconds = _safe_lease_seconds(lease_seconds)
+    status = "authority_granted" if active_authority else "blocked"
+    next_step = (
+        "review_os_binding_implementation_plan_before_command_palette_binding"
+        if active_authority
+        else "select_exact_approved_os_binding_command_palette_authority_request"
+    )
+    governance = {
+        **_governance(
+            route=safe_route,
+            approval_request_write=False,
+            read_only_contract=False,
+        ),
+        "gate": (
+            "lens_os_binding_command_palette_authority_grant_boundary"
+            if active_authority
+            else "lens_os_binding_command_palette_authority_grant_denial_boundary"
+        ),
+        "authority_grant_boundary": True,
+        "authority_granted": active_authority,
+        "os_level_command_palette_binding_authority": active_authority,
+        "approval_request_write": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "summon_authority": False,
+        "hotkey_registration_authority": False,
+        "tray_registration_authority": False,
+        "overlay_control_authority": False,
+        "local_process_launch_authority": False,
+        "process_supervision_authority": False,
+        "service_control_authority": False,
+        "window_management_authority": False,
+        "capture_authority": False,
+        "resident_claim_authority": False,
+        "mutation_authority_granted": False,
+        "receipt_write_authority": active_authority,
+        "permission": permission.evidence,
+        "next_step": next_step,
+    }
+    response: dict[str, Any] = {
+        "ok": True,
+        "kind": (
+            "lens.os_binding.command_palette_binding_authority.grant"
+            if active_authority
+            else "lens.os_binding.command_palette_binding_authority.grant_denial"
+        ),
+        "status": status,
+        "route": safe_route,
+        "method": method,
+        "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
+        "requests_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
+        "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
+        "approval_id": safe_approval_id,
+        "approval": {
+            "required": True,
+            "found": bool(approval),
+            "status": approval_status,
+            "approved": approval_ready,
+            "item": _approval_item(approval) if approval else {},
+        },
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "lease_seconds": safe_lease_seconds,
+        "receipt_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "receipt_written": False,
+        "receipt": {},
+        "applied": False,
+        "executed": False,
+        "approval_requested": False,
+        "authority_granted": active_authority,
+        "os_level_command_palette_binding_authority": active_authority,
+        "os_level_command_palette": False,
+        "summon_anywhere": False,
+        "opens_palette": False,
+        "registers_hotkey": False,
+        "launches_process": False,
+        "controls_overlay": False,
+        "permission": permission.evidence,
+        "blockers": deduped_blockers,
+        "grant": {
+            "reason": "approved_os_binding_command_palette_authority_lease",
+            "lease_seconds": safe_lease_seconds,
+            "would_grant_os_level_command_palette_binding_authority": active_authority,
+            "would_open_palette": False,
+            "would_register_hotkey": False,
+            "would_summon": False,
+            "would_launch_process": False,
+            "would_control_overlay": False,
+            "would_write_memory": False,
+            "would_decide_approval": False,
+            "would_claim_resident": False,
+            "grant_receipt_written": False,
+        },
+        "governance": governance,
+    }
+    if record_receipt and active_authority:
+        receipt = _record_os_binding_authority_grant_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["applied"] = True
+            response["grant"]["grant_receipt_written"] = True
+    elif record_receipt:
+        governance["grant_receipt_write_blocker"] = "os_binding_command_palette_authority_not_ready"
+    return response
+
+
 def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_limit(limit)
     by_status, latest_items, counts = _approval_items(limit=safe_limit)
     total = sum(counts.values())
-    status, next_step = _readback_status(counts)
+    grants = lens_os_binding_authority_grant_receipts(limit=1, active_only=True)
+    active_grant = _as_dict(grants.get("active_latest"))
+    active_grant_id = _safe_str(active_grant.get("receipt_id")).strip()
+    authority_granted = bool(active_grant)
+    status, next_step = _readback_status(counts, authority_granted=authority_granted)
     latest = latest_items[0] if latest_items else None
     return {
         "ok": True,
@@ -352,8 +775,10 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
+        "active_grant_receipt_id": active_grant_id,
         "decision_route": "/approvals/decision",
         "approval_action": LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION,
         "pending_count": counts.get("pending", 0),
@@ -364,8 +789,8 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "latest": latest,
         "items": latest_items,
         "by_status": by_status,
-        "authority_granted": False,
-        "os_level_command_palette_binding_authority": False,
+        "authority_granted": authority_granted,
+        "os_level_command_palette_binding_authority": authority_granted,
         "os_level_command_palette": False,
         "summon_anywhere": False,
         "opens_palette": False,
@@ -379,6 +804,10 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
                 read_only_contract=True,
             ),
             "gate": "lens_os_binding_command_palette_authority_request_readback",
+            "authority_grant_receipts_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+            "active_grant_receipt_id": active_grant_id,
+            "authority_granted": authority_granted,
+            "os_level_command_palette_binding_authority": authority_granted,
             "next_step": next_step,
         },
     }

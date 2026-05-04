@@ -18167,6 +18167,42 @@ checkpoint summon handoff readback:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-completion-audit.ps1`
 
+### 2026-05-04 - Stage 6/Lens OS-binding authority grant receipt boundary
+
+Stage 6/Lens now has an explicit OS-binding command-palette authority grant
+boundary after the existing governed approval request path. `POST
+/lens/os-binding/authority` requires an exact approved
+`lens.os_binding.command_palette_binding_authority` approval and a `system.write`
+actor before writing a bounded grant receipt. `GET
+/lens/os-binding/authority/grants` reads those grant receipts, and
+`/lens/os-binding/authority/requests`, `/lens/os-binding/readiness`, and
+`/lens/status` can now report an active grant receipt id through the existing
+OS-binding readback flow.
+
+This is backend/API authority-grant receipt work. It can grant only the
+OS-binding command-palette authority receipt after the approval gate; it does
+not open a palette, register a global hotkey, summon Francis anywhere, launch
+or supervise a process, register tray presence, open or control an overlay,
+decide approvals, write memory, or claim resident status. Stage 6 remains active
+and blocked on real summon-anywhere behavior, helpful/not-noisy resident
+behavior, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens OS-binding
+authority grant receipt boundary:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `failed before fix because /lens/os-binding/readiness did not normalize active_grant_receipt_id; then passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

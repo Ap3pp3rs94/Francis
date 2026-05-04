@@ -11,6 +11,7 @@ from francis.lens import (
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
+    grant_lens_os_binding_authority,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
@@ -40,6 +41,7 @@ from francis.lens import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
     lens_host_supervision_gate,
+    lens_os_binding_authority_grant_receipts,
     lens_os_binding_authority_request_contract,
     lens_os_binding_authority_request_readback,
     lens_os_binding_implementation_plan,
@@ -158,6 +160,13 @@ class LensOsBindingAuthorityRequestIn(BaseModel):
     reason: str = "request Lens OS-binding command palette authority review"
 
 
+class LensOsBindingAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens OS-binding command palette authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -191,6 +200,21 @@ def os_binding_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[st
     return lens_os_binding_authority_request_readback(limit=limit)
 
 
+@router.get("/os-binding/authority/grants")
+def os_binding_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_os_binding_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
 @router.post("/os-binding/authority/request")
 def os_binding_authority_request(
     request: Request,
@@ -201,6 +225,22 @@ def os_binding_authority_request(
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+    )
+
+
+@router.post("/os-binding/authority")
+def os_binding_authority_grant(
+    request: Request,
+    payload: LensOsBindingAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_os_binding_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
     )
 
 
