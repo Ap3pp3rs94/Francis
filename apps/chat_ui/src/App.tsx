@@ -4485,10 +4485,21 @@ function SystemPanel(props: {
   const lensRuntimeLoopBlockedRequirements = lensRuntimeLoopReadiness?.blocked_requirements ?? [];
   const lensRuntimeLoopBlockers = lensRuntimeLoopReadiness?.blockers ?? [];
   const lensRuntimeLoopNextGap = safeString(lensRuntimeLoopReadiness?.next_smallest_truthful_gap).trim();
+  const lensRuntimeLoopHandoffCount = lensRuntimeLoopReadiness?.blocked_requirement_handoffs.length ?? 0;
+  const lensRuntimeLoopFirstHandoff = lensRuntimeLoopReadiness?.first_blocked_requirement_handoff;
+  const lensRuntimeLoopFirstHandoffId =
+    safeString(lensRuntimeLoopFirstHandoff?.id).trim() ||
+    safeString(lensRuntimeLoopReadiness?.first_blocked_requirement).trim();
+  const lensRuntimeLoopFirstHandoffRoute =
+    safeString(lensRuntimeLoopFirstHandoff?.request_route).trim() ||
+    safeString(lensRuntimeLoopFirstHandoff?.readiness_route).trim() ||
+    safeString(lensRuntimeLoopFirstHandoff?.route).trim();
+  const lensRuntimeLoopFirstHandoffNextStep = safeString(lensRuntimeLoopFirstHandoff?.next_step).trim();
   const lensRuntimeLoopReadinessLoaded = Boolean(
     lensRuntimeLoopReadinessStatus ||
       lensRuntimeLoopReadinessRoute ||
       lensRuntimeLoopBlockedRequirements.length ||
+      lensRuntimeLoopHandoffCount ||
       lensRuntimeLoopBlockers.length,
   );
   const lensClaim = safeString(lensStage6Readiness?.claim).trim();
@@ -5593,6 +5604,9 @@ function SystemPanel(props: {
                     {safeNumber(lensRuntimeLoopReadiness?.requirements_ready_total, 0)}/
                     {safeNumber(lensRuntimeLoopReadiness?.requirements_total, 0)}
                   </span>
+                  {lensRuntimeLoopReadiness?.operator_surface_readback_ready ? (
+                    <span style={badgeStyle("readback")}>handoff {lensRuntimeLoopHandoffCount}</span>
+                  ) : null}
                 </div>
                 <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                   loop <code>{lensRuntimeLoopReadiness?.resident_runtime_loop ? "true" : "false"}</code>
@@ -5615,6 +5629,21 @@ function SystemPanel(props: {
                 {lensRuntimeLoopNextGap ? (
                   <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                     next gap <code>{lensRuntimeLoopNextGap}</code>
+                  </div>
+                ) : null}
+                {lensRuntimeLoopFirstHandoffId ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    handoff <code>{lensRuntimeLoopFirstHandoffId}</code>
+                    {lensRuntimeLoopFirstHandoffNextStep ? (
+                      <>
+                        {" / "}next <code>{lensRuntimeLoopFirstHandoffNextStep}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensRuntimeLoopFirstHandoffRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    handoff route <code>{lensRuntimeLoopFirstHandoffRoute}</code>
                   </div>
                 ) : null}
                 {lensRuntimeLoopReadinessRoute ? (

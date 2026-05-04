@@ -68,6 +68,54 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       "resident_loop_service_lifecycle",
       "resident_loop_surface_presence",
     ],
+    operator_surface_readback_ready: true,
+    first_blocked_requirement: "resident_loop_process_supervision",
+    first_blocked_requirement_handoff: {
+      id: "resident_loop_process_supervision",
+      label: "Resident loop process supervision",
+      status: "blocked",
+      route: "/lens/host/supervision",
+      readiness_route: "/lens/host/supervision/authority/readiness",
+      request_route: "/lens/host/supervision/authority/request",
+      requests_route: "/lens/host/supervision/authority/requests",
+      grant_route: "/lens/host/supervision/authority",
+      grants_route: "/lens/host/supervision/authority/grants",
+      denials_route: "/lens/host/supervision/authority/denials",
+      next_step: "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+      authority_required: "process_supervision_authority",
+      authority_granted: false,
+      blockers: [
+        "resident_host_process_missing",
+        "process_supervision_authority_not_granted",
+        "process_restart_authority_not_granted",
+      ],
+      would_execute: false,
+      would_mutate: false,
+    },
+    blocked_requirement_handoffs: [
+      {
+        id: "resident_loop_process_supervision",
+        label: "Resident loop process supervision",
+        status: "blocked",
+        route: "/lens/host/supervision",
+        readiness_route: "/lens/host/supervision/authority/readiness",
+        request_route: "/lens/host/supervision/authority/request",
+        requests_route: "/lens/host/supervision/authority/requests",
+        grant_route: "/lens/host/supervision/authority",
+        grants_route: "/lens/host/supervision/authority/grants",
+        denials_route: "/lens/host/supervision/authority/denials",
+        next_step: "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+        authority_required: "process_supervision_authority",
+        authority_granted: false,
+        blockers: [
+          "resident_host_process_missing",
+          "process_supervision_authority_not_granted",
+          "process_restart_authority_not_granted",
+        ],
+        would_execute: false,
+        would_mutate: false,
+      },
+    ],
     blockers: ["resident_runtime_loop_not_implemented", "resident_runtime_loop_not_supervised"],
     source_readbacks: {
       runtime_plan_status: "blocked",
@@ -90,7 +138,7 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       receipt_write_authority: false,
       resident_claim_authority: false,
     },
-    next_smallest_truthful_gap: "resident_host_runtime_loop_operator_surface_readback",
+    next_smallest_truthful_gap: "resident_host_supervision_authority_readiness_blockers",
     message: "Lens can audit resident host runtime loop readiness, but the loop remains blocked.",
   };
   const restoreFetch = installFetch((url, init) => {
@@ -577,9 +625,30 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       snapshot.resident_host.runtime_loop_readiness.blocked_requirements[0],
       "resident_loop_process_supervision",
     );
+    assert.equal(snapshot.resident_host.runtime_loop_readiness.operator_surface_readback_ready, true);
+    assert.equal(
+      snapshot.resident_host.runtime_loop_readiness.first_blocked_requirement,
+      "resident_loop_process_supervision",
+    );
+    assert.equal(
+      snapshot.resident_host.runtime_loop_readiness.first_blocked_requirement_handoff?.request_route,
+      "/lens/host/supervision/authority/request",
+    );
+    assert.equal(
+      snapshot.resident_host.runtime_loop_readiness.first_blocked_requirement_handoff?.next_step,
+      "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+    );
+    assert.equal(snapshot.resident_host.runtime_loop_readiness.first_blocked_requirement_handoff?.would_execute, false);
+    assert.deepEqual(
+      snapshot.resident_host.runtime_loop_readiness.blocked_requirement_handoffs.map((item) => item.id),
+      snapshot.resident_host.runtime_loop_readiness.blocked_requirements.slice(0, 1),
+    );
     assert.equal(snapshot.resident_host.runtime_loop_readiness.blockers[0], "resident_runtime_loop_not_implemented");
     assert.equal(snapshot.resident_host.runtime_loop_readiness.governance.execution_authority, false);
-    assert.equal(snapshot.resident_host.runtime_loop_readiness.next_smallest_truthful_gap, "resident_host_runtime_loop_operator_surface_readback");
+    assert.equal(
+      snapshot.resident_host.runtime_loop_readiness.next_smallest_truthful_gap,
+      "resident_host_supervision_authority_readiness_blockers",
+    );
     assert.equal(snapshot.receipts.lens_host_activation_denials_route, "/lens/host/activation/denials");
     assert.equal(snapshot.receipts.lens_host_runtime_loop_readiness_route, "/lens/host/runtime-loop/readiness");
     assert.equal(snapshot.runtime_loop_readiness.route, "/lens/host/runtime-loop/readiness");

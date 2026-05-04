@@ -18667,6 +18667,39 @@ handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens runtime-loop handoff UI readback
+
+Stage 6/Lens chat UI now preserves and displays the runtime-loop handoff fields
+that `/lens/status` already exposes for
+`resident_host_runtime_loop_readiness_audit`. The Lens client parses
+`operator_surface_readback_ready`, `first_blocked_requirement`,
+`first_blocked_requirement_handoff`, and `blocked_requirement_handoffs`; the
+existing Lens runtime-loop card now shows the first blocked requirement handoff,
+its next step, and its review route.
+
+This is UI/client readback-only. It does not create a resident host, supervise
+or restart a process, install or control a service, register a tray icon,
+register a hotkey, open an overlay, summon Francis, decide approvals, write
+memory, grant execution authority, create new user-facing controls, or claim
+Stage 6 closure. It only makes the existing backend blocker handoff visible in
+the operator surface.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, supervised
+resident process ownership, and system-resident presence closure. The next
+smallest truthful gap remains the summon-anywhere/resident-host blocker path,
+with no new authority introduced by this UI readback.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens runtime-loop
+handoff UI readback:
+
+- `node --test --experimental-strip-types src\lens\index.test.ts`
+  Result: `passed`
+- `npm run test`
+  Result: `passed`
+- `npm run build`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

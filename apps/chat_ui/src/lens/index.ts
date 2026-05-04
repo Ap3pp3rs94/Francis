@@ -187,12 +187,44 @@ export type LensRuntimeLoopReadiness = {
   requirements_blocked_total: number;
   requirements: Array<Record<string, unknown>>;
   blocked_requirements: string[];
+  operator_surface_readback_ready?: boolean;
+  first_blocked_requirement?: string;
+  first_blocked_requirement_handoff?: LensRuntimeLoopRequirementHandoff;
+  blocked_requirement_handoffs: LensRuntimeLoopRequirementHandoff[];
   blockers: string[];
   source_readbacks: Record<string, string>;
   evidence: string[];
   governance: Record<string, unknown>;
   next_smallest_truthful_gap?: string;
   message?: string;
+};
+
+export type LensRuntimeLoopRequirementHandoff = {
+  id?: string;
+  label?: string;
+  status?: string;
+  route?: string;
+  readiness_route?: string;
+  request_route?: string;
+  requests_route?: string;
+  grant_route?: string;
+  grants_route?: string;
+  denials_route?: string;
+  execution_readiness_route?: string;
+  execution_request_route?: string;
+  execution_requests_route?: string;
+  execution_grant_route?: string;
+  execution_grants_route?: string;
+  summon_route?: string;
+  tray_route?: string;
+  overlay_route?: string;
+  loop_route?: string;
+  next_step?: string;
+  authority_required?: string;
+  authority_granted?: boolean;
+  blockers: string[];
+  would_execute?: boolean;
+  would_mutate?: boolean;
 };
 
 export type LensResidentHost = {
@@ -627,9 +659,52 @@ function parseActivationDenialReceipts(value: unknown): LensActivationDenialRece
   };
 }
 
+function parseRuntimeLoopRequirementHandoff(value: unknown): LensRuntimeLoopRequirementHandoff | null {
+  if (!isRecord(value)) return null;
+  const id = safeString(value.id).trim();
+  const status = safeString(value.status).trim();
+  const nextStep = safeString(value.next_step).trim();
+  if (!id && !status && !nextStep) return null;
+  return {
+    id: id || undefined,
+    label: safeString(value.label).trim() || undefined,
+    status: status || undefined,
+    route: safeString(value.route).trim() || undefined,
+    readiness_route: safeString(value.readiness_route).trim() || undefined,
+    request_route: safeString(value.request_route).trim() || undefined,
+    requests_route: safeString(value.requests_route).trim() || undefined,
+    grant_route: safeString(value.grant_route).trim() || undefined,
+    grants_route: safeString(value.grants_route).trim() || undefined,
+    denials_route: safeString(value.denials_route).trim() || undefined,
+    execution_readiness_route: safeString(value.execution_readiness_route).trim() || undefined,
+    execution_request_route: safeString(value.execution_request_route).trim() || undefined,
+    execution_requests_route: safeString(value.execution_requests_route).trim() || undefined,
+    execution_grant_route: safeString(value.execution_grant_route).trim() || undefined,
+    execution_grants_route: safeString(value.execution_grants_route).trim() || undefined,
+    summon_route: safeString(value.summon_route).trim() || undefined,
+    tray_route: safeString(value.tray_route).trim() || undefined,
+    overlay_route: safeString(value.overlay_route).trim() || undefined,
+    loop_route: safeString(value.loop_route).trim() || undefined,
+    next_step: nextStep || undefined,
+    authority_required: safeString(value.authority_required).trim() || undefined,
+    authority_granted:
+      typeof value.authority_granted === "boolean" ? safeBoolean(value.authority_granted, false) : undefined,
+    blockers: safeStringList(value.blockers),
+    would_execute: typeof value.would_execute === "boolean" ? safeBoolean(value.would_execute, false) : undefined,
+    would_mutate: typeof value.would_mutate === "boolean" ? safeBoolean(value.would_mutate, false) : undefined,
+  };
+}
+
 function parseRuntimeLoopReadiness(value: unknown): LensRuntimeLoopReadiness {
   const raw = safeRecord(value);
   const requirements = Array.isArray(raw.requirements) ? raw.requirements.filter(isRecord) : [];
+  const blockedRequirementHandoffs = Array.isArray(raw.blocked_requirement_handoffs)
+    ? raw.blocked_requirement_handoffs
+        .map(parseRuntimeLoopRequirementHandoff)
+        .filter((item): item is LensRuntimeLoopRequirementHandoff => item !== null)
+    : [];
+  const firstBlockedRequirementHandoff =
+    parseRuntimeLoopRequirementHandoff(raw.first_blocked_requirement_handoff) ?? blockedRequirementHandoffs[0];
   return {
     ok: safeBoolean(raw.ok, false),
     kind: safeString(raw.kind).trim() || undefined,
@@ -661,6 +736,13 @@ function parseRuntimeLoopReadiness(value: unknown): LensRuntimeLoopReadiness {
     requirements_blocked_total: safeNumber(raw.requirements_blocked_total, 0),
     requirements,
     blocked_requirements: safeStringList(raw.blocked_requirements),
+    operator_surface_readback_ready:
+      typeof raw.operator_surface_readback_ready === "boolean"
+        ? safeBoolean(raw.operator_surface_readback_ready, false)
+        : undefined,
+    first_blocked_requirement: safeString(raw.first_blocked_requirement).trim() || undefined,
+    first_blocked_requirement_handoff: firstBlockedRequirementHandoff,
+    blocked_requirement_handoffs: blockedRequirementHandoffs,
     blockers: safeStringList(raw.blockers),
     source_readbacks: parseStringMap(raw.source_readbacks),
     evidence: safeStringList(raw.evidence),
