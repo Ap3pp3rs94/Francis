@@ -933,6 +933,9 @@ def _os_binding_requirement(
     blockers: list[str],
     route: str,
     required_before_enable: list[str] | None = None,
+    authority_granted: bool = False,
+    authority_required: str = "",
+    active_grant_receipt_id: str = "",
 ) -> dict[str, Any]:
     return {
         "id": requirement_id,
@@ -942,6 +945,9 @@ def _os_binding_requirement(
         "route": route,
         "blockers": blockers,
         "required_before_enable": required_before_enable or [],
+        "authority_required": authority_required,
+        "authority_granted": authority_granted,
+        "active_grant_receipt_id": active_grant_receipt_id,
     }
 
 
@@ -953,6 +959,8 @@ def _os_binding_plan_step(
     blockers: list[str],
     route: str,
     authority_required: str = "",
+    authority_granted: bool = False,
+    active_grant_receipt_id: str = "",
     source: str = "",
 ) -> dict[str, Any]:
     return {
@@ -964,7 +972,8 @@ def _os_binding_plan_step(
         "source": source,
         "blockers": [] if ready else _dedupe(blockers),
         "authority_required": authority_required,
-        "authority_granted": False,
+        "authority_granted": authority_granted,
+        "active_grant_receipt_id": active_grant_receipt_id,
         "would_open_palette": False,
         "would_register_hotkey": False,
         "would_summon": False,
@@ -1027,11 +1036,15 @@ def lens_os_binding_implementation_plan(
     *,
     preflight: dict[str, Any] | None = None,
     summon_gate: dict[str, Any] | None = None,
+    authority_request_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
     summon_gate_payload = (
         summon_gate if isinstance(summon_gate, dict) else lens_summon_enablement_gate(preflight=lens_preflight_payload)
     )
+    authority_request_summary = _os_binding_authority_request_summary(authority_request_readback)
+    authority_granted = bool(authority_request_summary.get("authority_granted"))
+    active_grant_receipt_id = _safe_str(authority_request_summary.get("active_grant_receipt_id")).strip()
     blocker_groups = _dict_value(summon_gate_payload, "blocker_groups")
     required_before_enable = _string_list(summon_gate_payload.get("required_before_enable"))
     palette_blockers = ["os_level_command_palette_missing"]
@@ -1055,6 +1068,8 @@ def lens_os_binding_implementation_plan(
             route="/lens/status",
             source="lens.command_palette.shell_bridge",
             authority_required="os_level_command_palette_binding_authority",
+            authority_granted=authority_granted,
+            active_grant_receipt_id=active_grant_receipt_id,
             blockers=grouped_blockers["palette_binding"],
         ),
         _os_binding_plan_step(
@@ -1123,6 +1138,10 @@ def lens_os_binding_implementation_plan(
         "implementation_ready": False,
         "execution_ready": False,
         "os_binding_ready": False,
+        "authority_granted": authority_granted,
+        "os_level_command_palette_binding_authority": authority_granted,
+        "active_grant_receipt_id": active_grant_receipt_id,
+        "authority_grant_consumed": authority_granted,
         "os_level_command_palette": False,
         "summon_anywhere": False,
         "acceptance_criterion": "summon_anywhere",
@@ -1134,6 +1153,7 @@ def lens_os_binding_implementation_plan(
         "blocked_requirements": blocked_steps,
         "blockers": blockers,
         "blocker_groups": grouped_blockers,
+        "authority_request_readback": authority_request_summary,
         "plan": {
             "status": "blocked",
             "steps": steps,
@@ -1156,6 +1176,9 @@ def lens_os_binding_implementation_plan(
                 summon_gate_payload.get("next_smallest_truthful_gap"),
                 "summon_anywhere_blockers",
             ),
+            "authority_request_readback_status": _safe_str(authority_request_summary.get("status"), "missing"),
+            "active_grant_receipt_id": active_grant_receipt_id,
+            "authority_granted": authority_granted,
         },
         "evidence": [
             "/lens/os-binding/plan",
@@ -1194,8 +1217,11 @@ def lens_os_binding_readiness(
     implementation_plan = lens_os_binding_implementation_plan(
         preflight=lens_preflight_payload,
         summon_gate=summon_gate,
+        authority_request_readback=authority_request_readback,
     )
     authority_request_summary = _os_binding_authority_request_summary(authority_request_readback)
+    authority_granted = bool(authority_request_summary.get("authority_granted"))
+    active_grant_receipt_id = _safe_str(authority_request_summary.get("active_grant_receipt_id")).strip()
     blocker_groups = _dict_value(summon_gate, "blocker_groups")
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
     palette_blockers = ["os_level_command_palette_missing"]
@@ -1220,6 +1246,9 @@ def lens_os_binding_readiness(
             if bool(authority_request_summary.get("readback_ready"))
             else ["os_binding_authority_request_readback_missing"],
             route="/lens/os-binding/authority/requests",
+            authority_required="os_level_command_palette_binding_authority",
+            authority_granted=authority_granted,
+            active_grant_receipt_id=active_grant_receipt_id,
         ),
         _os_binding_requirement(
             "os_level_command_palette",
@@ -1228,6 +1257,9 @@ def lens_os_binding_readiness(
             blockers=grouped_blockers["palette_binding"],
             route="/lens/os-binding/plan",
             required_before_enable=["global_hotkey_binding", "summon_binding"],
+            authority_required="os_level_command_palette_binding_authority",
+            authority_granted=authority_granted,
+            active_grant_receipt_id=active_grant_receipt_id,
         ),
         _os_binding_requirement(
             "global_hotkey_binding",
@@ -1298,6 +1330,10 @@ def lens_os_binding_readiness(
         "host_route": "/lens/host",
         "ready": ready,
         "os_binding_ready": ready,
+        "authority_granted": authority_granted,
+        "os_level_command_palette_binding_authority": authority_granted,
+        "active_grant_receipt_id": active_grant_receipt_id,
+        "authority_grant_consumed": authority_granted,
         "os_level_command_palette": False,
         "summon_anywhere": bool(summon_gate.get("summon_anywhere")) and ready,
         "acceptance_criterion": "summon_anywhere",
@@ -1318,6 +1354,12 @@ def lens_os_binding_readiness(
             "status": _safe_str(implementation_plan.get("status"), "blocked"),
             "plan_available": bool(implementation_plan.get("plan_available")),
             "implementation_ready": bool(implementation_plan.get("implementation_ready")),
+            "authority_granted": bool(implementation_plan.get("authority_granted")),
+            "os_level_command_palette_binding_authority": bool(
+                implementation_plan.get("os_level_command_palette_binding_authority")
+            ),
+            "active_grant_receipt_id": _safe_str(implementation_plan.get("active_grant_receipt_id")).strip(),
+            "authority_grant_consumed": bool(implementation_plan.get("authority_grant_consumed")),
             "blocked_requirements": _string_list(implementation_plan.get("blocked_requirements")),
             "next_smallest_truthful_gap": _safe_str(
                 implementation_plan.get("next_smallest_truthful_gap"),

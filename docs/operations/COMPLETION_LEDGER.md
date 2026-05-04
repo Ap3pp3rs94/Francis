@@ -18207,6 +18207,41 @@ authority grant receipt boundary:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens OS-binding authority grant consumption readback
+
+Stage 6/Lens OS-binding plan, readiness, and `/lens/status` now consume the
+active OS-binding command-palette authority grant receipt as explicit readback
+state. `/lens/os-binding/plan` is routed through the same authority request
+readback used by readiness, and the plan/readiness/status payloads now expose
+`authority_granted`, `os_level_command_palette_binding_authority`,
+`active_grant_receipt_id`, and `authority_grant_consumed` while keeping the
+actual OS-level command palette, hotkey registration, summon-anywhere, process
+launch, overlay control, approval-decision, and memory-write claims false.
+
+This is backend/API readback-only consumption of an existing authority receipt.
+It does not open a palette, register a global hotkey, summon Francis anywhere,
+launch or supervise a process, register tray presence, open or control an
+overlay, decide approvals, write memory, or claim resident status. Stage 6
+remains active and blocked on real command-palette binding, summon-anywhere
+behavior, helpful/not-noisy resident behavior, and system-resident presence
+closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens OS-binding
+authority grant consumption readback:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\status.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `failed before formatting src\francis\lens\status.py, then passed`
+- `python -m mypy src\francis\lens\preflight.py src\francis\lens\status.py src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

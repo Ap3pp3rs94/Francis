@@ -187,7 +187,9 @@ def os_binding_readiness() -> dict[str, Any]:
 
 @router.get("/os-binding/plan")
 def os_binding_plan() -> dict[str, Any]:
-    return lens_os_binding_implementation_plan()
+    return lens_os_binding_implementation_plan(
+        authority_request_readback=lens_os_binding_authority_request_readback(),
+    )
 
 
 @router.get("/os-binding/authority")

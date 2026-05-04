@@ -1344,6 +1344,12 @@ def _stage6_readiness(
                 or "/lens/os-binding/authority/request",
                 "authority_requests_route": _safe_str(os_binding_authority_requests.get("route")).strip()
                 or "/lens/os-binding/authority/requests",
+                "authority_grants_route": _safe_str(os_binding_authority_requests.get("grants_route")).strip()
+                or "/lens/os-binding/authority/grants",
+                "active_grant_receipt_id": _safe_str(
+                    os_binding_authority_requests.get("active_grant_receipt_id")
+                ).strip(),
+                "authority_grant_consumed": bool(os_binding_readiness.get("authority_grant_consumed")),
                 "authority_request_pending_count": _safe_int(os_binding_authority_requests.get("pending_count")),
                 "authority_request_approved_count": _safe_int(os_binding_authority_requests.get("approved_count")),
                 "authority_request_rejected_count": _safe_int(os_binding_authority_requests.get("rejected_count")),

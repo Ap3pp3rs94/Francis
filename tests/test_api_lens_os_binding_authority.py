@@ -166,16 +166,64 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert readback["launches_process"] is False
     assert readback["controls_overlay"] is False
 
+    plan = client.get("/lens/os-binding/plan").json()
+    assert plan["kind"] == "lens.os_binding.implementation_plan"
+    assert plan["status"] == "blocked"
+    assert plan["authority_granted"] is True
+    assert plan["os_level_command_palette_binding_authority"] is True
+    assert plan["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert plan["authority_grant_consumed"] is True
+    assert plan["os_level_command_palette"] is False
+    assert plan["summon_anywhere"] is False
+    assert plan["plan"]["would_open_palette"] is False
+    assert plan["plan"]["would_register_hotkey"] is False
+    assert plan["plan"]["would_summon"] is False
+    assert plan["plan"]["would_launch_process"] is False
+    assert plan["plan"]["would_write_memory"] is False
+    assert plan["authority_request_readback"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    steps = {item["id"]: item for item in plan["plan"]["steps"]}
+    palette_step = steps["os_level_command_palette_contract"]
+    assert palette_step["ready"] is False
+    assert palette_step["authority_required"] == "os_level_command_palette_binding_authority"
+    assert palette_step["authority_granted"] is True
+    assert palette_step["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert "os_level_command_palette_missing" in palette_step["blockers"]
+
     readiness = client.get("/lens/os-binding/readiness").json()
     authority_readback = readiness["authority_request_readback"]
     assert authority_readback["status"] == "authority_granted"
     assert authority_readback["active_grant_receipt_id"] == receipt["receipt_id"]
     assert authority_readback["authority_granted"] is True
     assert authority_readback["os_level_command_palette_binding_authority"] is True
+    assert readiness["authority_granted"] is True
+    assert readiness["os_level_command_palette_binding_authority"] is True
+    assert readiness["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert readiness["authority_grant_consumed"] is True
     assert readiness["status"] == "blocked"
     assert readiness["ready"] is False
     assert readiness["os_level_command_palette"] is False
     assert readiness["summon_anywhere"] is False
+    requirements = {item["id"]: item for item in readiness["requirements"]}
+    assert requirements["authority_request_readback"]["authority_granted"] is True
+    assert requirements["authority_request_readback"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert requirements["os_level_command_palette"]["authority_granted"] is True
+    assert requirements["os_level_command_palette"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert requirements["os_level_command_palette"]["ready"] is False
+    assert readiness["implementation_plan"]["authority_granted"] is True
+    assert readiness["implementation_plan"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert readiness["implementation_plan"]["authority_grant_consumed"] is True
+
+    status = client.get("/lens/status?limit=10").json()
+    os_binding_criterion = next(
+        item for item in status["stage6_readiness"]["criteria"] if item["id"] == "os_binding_readiness"
+    )
+    assert os_binding_criterion["authority_granted"] is True
+    assert os_binding_criterion["os_level_command_palette_binding_authority"] is True
+    assert os_binding_criterion["authority_grants_route"] == "/lens/os-binding/authority/grants"
+    assert os_binding_criterion["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert os_binding_criterion["authority_grant_consumed"] is True
+    assert os_binding_criterion["os_level_command_palette"] is False
+    assert os_binding_criterion["summon_anywhere"] is False
 
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
