@@ -16,6 +16,7 @@ from francis.lens.activation import (
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     lens_host_activation_denial_receipts,
+    lens_host_activation_authority_grant_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -369,6 +370,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervision_authority_readiness = lens_host_supervision_authority_readiness_audit(limit=limit)
     activation_request = lens_host_activation_request_contract()
     activation_state = lens_host_activation_readback(limit=limit)
+    activation_authority_grant_receipts = lens_host_activation_authority_grant_receipts(limit=limit)
     activation_execution_preflight = lens_host_activation_execution_preflight()
     activation_execution_plan = lens_host_activation_execution_plan()
     resident_runtime_preflight = lens_resident_runtime_activation_preflight()
@@ -492,6 +494,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "activation_request": activation_request,
         "activation_readback_route": _safe_str(activation_state.get("route")).strip(),
         "activation_state": activation_state,
+        "activation_authority_grants_route": _safe_str(activation_authority_grant_receipts.get("route")).strip(),
+        "activation_authority_grants": activation_authority_grant_receipts,
         "activation_execution_preflight_route": _safe_str(activation_execution_preflight.get("route")).strip(),
         "activation_execution_preflight": activation_execution_preflight,
         "activation_execution_plan_route": _safe_str(activation_execution_plan.get("route")).strip(),

@@ -13,11 +13,13 @@ from francis.lens import (
     deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
     grant_lens_os_binding_authority,
+    grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     grant_lens_host_supervision_authority,
     lens_host_activation_denial_receipts,
+    lens_host_activation_authority_grant_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
     lens_host_activation_readback,
@@ -84,6 +86,13 @@ class LensHostActivationExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens host foreground activation"
+
+
+class LensHostActivationAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens host activation authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
 class LensResidentRuntimeExecuteIn(BaseModel):
@@ -615,6 +624,37 @@ def host_activation_denials(
     status: str = "",
 ) -> dict[str, Any]:
     return lens_host_activation_denial_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
+@router.get("/host/activation/authority/grants")
+def host_activation_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_host_activation_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.post("/host/activation/authority")
+def host_activation_authority_grant(
+    request: Request,
+    payload: LensHostActivationAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_host_activation_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
 
 
 @router.get("/host/activation/preflight")

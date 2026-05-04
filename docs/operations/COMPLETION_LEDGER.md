@@ -18700,6 +18700,47 @@ handoff UI readback:
 - `npm run build`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens host activation authority grant boundary
+
+Stage 6/Lens now has a bounded host activation authority grant boundary for the
+existing `/lens/host/activation/request` approval flow. An exact approved host
+activation request can now produce a leased authority receipt at
+`/lens/host/activation/authority`, with readback at
+`/lens/host/activation/authority/grants`. `/lens/host/activation` reports the
+active grant, and the activation preflight/plan consume that grant by clearing
+only `local_process_launch_authority_not_granted` for the matching approval.
+
+This is a governed authority receipt and readback slice. It does not launch a
+Lens host process, install or control a service, supervise or restart a process,
+register a tray icon, register a hotkey, open an overlay, summon Francis, decide
+approvals, write memory, or claim resident presence. `/lens/host/activation/execute`
+still stays denial-only and writes a denial receipt when execution is attempted;
+with an activation authority grant present, the denial reason moves to the
+remaining Lens readiness gates instead of the missing local process launch
+authority.
+
+Stage 6 remains active and blocked on real execution boundary, OS-level command
+palette binding, summon-anywhere behavior, helpful/not-noisy resident behavior,
+supervised resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens host activation
+authority grant boundary:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_is_consumed_without_launch -q`
+  Result: `failed before filtering the global Lens preflight's generic local
+  process launch blocker, then passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_request_creates_approval_only_receipt tests\test_api_lens.py::test_lens_host_activation_readback_tracks_decision_without_execution -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `interrupted after running beyond the recent successful audit timing
+  window without output; not counted as passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

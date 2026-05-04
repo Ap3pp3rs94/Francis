@@ -1085,6 +1085,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "plan_route": "/lens/host/activation/plan",
         "execute_route": "/lens/host/activation/execute",
         "denials_route": "/lens/host/activation/denials",
+        "authority_route": "/lens/host/activation/authority",
+        "authority_grants_route": "/lens/host/activation/authority/grants",
         "method": "POST",
         "action": "lens.host.foreground_activation",
         "mode": "foreground_status_session",
@@ -1105,12 +1107,15 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "plan_route": "/lens/host/activation/plan",
             "execute_route": "/lens/host/activation/execute",
             "denials_route": "/lens/host/activation/denials",
+            "authority_route": "/lens/host/activation/authority",
+            "authority_grants_route": "/lens/host/activation/authority/grants",
             "read_only_contract": False,
             "activation_authority": False,
             "execution_authority": False,
             "approval_decision_authority": False,
             "memory_write": False,
             "local_process_launch_authority": False,
+            "receipt_write_authority": False,
             "service_install_authority": False,
             "service_control_authority": False,
             "overlay_control_authority": False,
@@ -6453,6 +6458,147 @@ def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch,
     status_body = lens_status.json()
     assert status_body["approvals_view"]["pending_count"] == 1
     assert status_body["resident_host"]["activation_request_route"] == "/lens/host/activation/request"
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_activation_authority_grant_is_consumed_without_launch(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/host/activation/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants bounded host activation authority",
+            "mode": "foreground_status_session",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved host activation authority review",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    empty_grants = client.get("/lens/host/activation/authority/grants")
+    assert empty_grants.status_code == 200
+    assert empty_grants.json()["status"] == "empty"
+    assert empty_grants.json()["authority_granted"] is False
+
+    grant = client.post(
+        "/lens/host/activation/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants bounded host activation authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["kind"] == "lens.host.activation_authority.grant"
+    assert grant_body["status"] == "authority_granted"
+    assert grant_body["approval_id"] == approval_id
+    assert grant_body["authority_granted"] is True
+    assert grant_body["activation_authority"] is True
+    assert grant_body["local_process_launch_authority"] is True
+    assert grant_body["launches_process"] is False
+    assert grant_body["grant"]["would_grant_local_process_launch_authority"] is True
+    assert grant_body["grant"]["would_launch_process"] is False
+    assert grant_body["receipt_written"] is True
+    grant_receipt = grant_body["receipt"]
+    assert grant_receipt["kind"] == "lens.host.activation_authority.grant.receipt"
+    assert grant_receipt["approval_id"] == approval_id
+    assert grant_receipt["authorities"]["local_process_launch_authority"] is True
+    assert grant_receipt["governance"]["local_process_launch_authority"] is True
+    grant_receipt_path = data_root / "lens" / "host_activation_authority_grants" / f"{grant_receipt['receipt_id']}.json"
+    assert grant_receipt_path.exists()
+
+    grants = client.get(f"/lens/host/activation/authority/grants?limit=10&approval_id={approval_id}")
+    assert grants.status_code == 200
+    grants_body = grants.json()
+    assert grants_body["kind"] == "lens.host.activation_authority.grant_receipts"
+    assert grants_body["status"] == "readback_ready"
+    assert grants_body["total"] == 1
+    assert grants_body["active_latest"]["receipt_id"] == grant_receipt["receipt_id"]
+    assert grants_body["authority_granted"] is True
+    assert grants_body["local_process_launch_authority"] is True
+    assert grants_body["governance"]["execution_authority"] is False
+
+    readback = client.get("/lens/host/activation?limit=10")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["status"] == "authority_granted"
+    assert readback_body["active_grant_receipt_id"] == grant_receipt["receipt_id"]
+    assert readback_body["activation_authority"] is True
+    assert readback_body["local_process_launch_authority"] is True
+    assert readback_body["governance"]["local_process_launch_authority"] is True
+
+    preflight = client.get(f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write")
+    assert preflight.status_code == 200
+    preflight_body = preflight.json()
+    assert preflight_body["status"] == "blocked"
+    assert preflight_body["authority"]["active_grant_receipt_id"] == grant_receipt["receipt_id"]
+    assert preflight_body["authority"]["local_process_launch_authority"] is True
+    assert "local_process_launch_authority_not_granted" not in preflight_body["blockers"]
+    assert "lens_preflight_blocked" in preflight_body["blockers"]
+    assert preflight_body["governance"]["local_process_launch_authority"] is True
+    assert preflight_body["governance"]["execution_authority"] is False
+
+    plan = client.get(f"/lens/host/activation/plan?approval_id={approval_id}&actor=test.system.write")
+    assert plan.status_code == 200
+    plan_body = plan.json()
+    assert plan_body["status"] == "blocked"
+    plan_steps = {step["id"]: step for step in plan_body["plan"]["steps"]}
+    assert plan_steps["launch_foreground_status_session"]["authority_granted"] is True
+    assert plan_body["plan"]["would_launch_process"] is False
+    assert "local_process_launch_authority_not_granted" not in plan_body["blockers"]
+    assert plan_body["governance"]["local_process_launch_authority"] is True
+    assert plan_body["governance"]["execution_authority"] is False
+
+    denied = client.post(
+        "/lens/host/activation/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "prove grant does not launch without remaining Lens gates",
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["status"] == "denied_no_activation_execution_boundary"
+    assert denied_body["executed"] is False
+    assert denied_body["denial"]["reason"] == "lens_preflight_blocked"
+    assert denied_body["denial"]["would_launch_process"] is False
+    assert "local_process_launch_authority_not_granted" not in denied_body["blockers"]
+    assert denied_body["governance"]["local_process_launch_authority"] is True
+    assert denied_body["governance"]["execution_authority"] is False
+    assert denied_body["receipt_written"] is True
+    assert denied_body["receipt"]["governance"]["local_process_launch_authority"] is True
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
