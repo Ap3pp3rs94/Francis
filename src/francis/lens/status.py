@@ -2547,6 +2547,12 @@ def _stage6_readiness(
                 or "summon_anywhere_blockers",
                 "first_blocker_family": _safe_str(summon_enablement_gate.get("first_blocker_family")).strip(),
                 "blocked_families": _as_list(summon_enablement_gate.get("blocked_families")),
+                "first_blocker_family_handoff_observed": bool(
+                    summon_enablement_gate.get("first_blocker_family_handoff_observed")
+                ),
+                "first_blocker_family_handoff": _as_dict(summon_enablement_gate.get("first_blocker_family_handoff")),
+                "blocked_family_handoffs": _as_list(summon_enablement_gate.get("blocked_family_handoffs")),
+                "operator_surface_readback_ready": bool(summon_enablement_gate.get("operator_surface_readback_ready")),
                 "global_hotkey": _safe_str(summon_enablement_gate.get("global_hotkey")).strip(),
                 "blockers": _as_list(summon_enablement_gate.get("blockers")),
                 "blocker_groups": _as_dict(summon_enablement_gate.get("blocker_groups")),

@@ -18067,6 +18067,37 @@ summon handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens summon handoff status readback
+
+Stage 6/Lens `/lens/status` now carries the same summon-anywhere blocker-family
+handoff shape that the focused summon blocker proof and completion audit already
+consume. The `summon_enablement_gate` payload exposes
+`first_blocker_family_handoff_observed`, `first_blocker_family_handoff`,
+`blocked_family_handoffs`, `operator_surface_readback_ready`, and a governance
+`first_blocker_family_handoff_readback` flag. The Stage 6 readiness criterion
+for `summon_enablement_gate` projects those fields so the operator/status API
+can name the first bounded handoff directly without reading the proof script.
+
+This is backend/API readback-only. It does not implement summon-anywhere, grant
+summon authority, register a hotkey, open or control an overlay, launch or
+supervise a process, create or decide approvals, write memory, write receipts,
+or claim resident status. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens summon handoff
+status readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `failed before fix on the normalized resident-host handoff blocker expectation, then passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting src\francis\lens\status.py, then passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

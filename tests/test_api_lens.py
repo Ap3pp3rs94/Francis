@@ -2064,7 +2064,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_enablement_gate["acceptance_criterion"] == "summon_anywhere"
     assert summon_enablement_gate["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_enablement_gate["first_blocker_family"] == "resident_host"
-    assert summon_enablement_gate["blocked_families"] == [
+    expected_summon_blocked_families = [
         "resident_host",
         "tray_presence",
         "overlay_window",
@@ -2072,6 +2072,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "summon_binding",
         "authority",
     ]
+    assert summon_enablement_gate["blocked_families"] == expected_summon_blocked_families
+    assert summon_enablement_gate["operator_surface_readback_ready"] is True
+    assert summon_enablement_gate["first_blocker_family_handoff_observed"] is True
     assert summon_enablement_gate["summon_binding_ready"] is False
     assert summon_enablement_gate["resident_host_ready"] is False
     assert summon_enablement_gate["tray_ready"] is False
@@ -2098,14 +2101,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "global_hotkey_binding_missing" in summon_gate_groups["global_hotkey_binding"]
     assert "summon_binding_missing" in summon_gate_groups["summon_binding"]
     blocker_family_readback = {item["id"]: item for item in summon_enablement_gate["blocker_family_readback"]}
-    assert list(blocker_family_readback) == [
-        "resident_host",
-        "tray_presence",
-        "overlay_window",
-        "global_hotkey_binding",
-        "summon_binding",
-        "authority",
-    ]
+    assert list(blocker_family_readback) == expected_summon_blocked_families
     assert blocker_family_readback["resident_host"]["route"] == "/lens/host"
     assert blocker_family_readback["resident_host"]["status"] == "blocked"
     assert blocker_family_readback["resident_host"]["ready"] is False
@@ -2116,6 +2112,52 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert blocker_family_readback["global_hotkey_binding"]["route"] == "/lens/summon"
     assert blocker_family_readback["summon_binding"]["route"] == "/lens/summon"
     assert blocker_family_readback["authority"]["route"] == "/lens/preflight"
+    expected_first_summon_handoff = {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "blockers": [
+            "resident_host_process_missing",
+            "lens_host_runtime_not_implemented",
+            "local_process_launch_authority_not_granted",
+        ],
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert summon_enablement_gate["first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert [handoff["id"] for handoff in summon_enablement_gate["blocked_family_handoffs"]] == (
+        expected_summon_blocked_families
+    )
+    assert [handoff["proof_script"] for handoff in summon_enablement_gate["blocked_family_handoffs"]] == [
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+        "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status",
+    ]
+    assert [handoff["next_smallest_truthful_gap"] for handoff in summon_enablement_gate["blocked_family_handoffs"]] == [
+        "resident_host_runtime_blocker_boundary",
+        "summon_overlay_window_blocker_boundary",
+        "summon_global_hotkey_binding_blocker_boundary",
+        "summon_binding_blocker_boundary",
+        "summon_authority_blocker_boundary",
+        "stage6_lens_completion_audit",
+    ]
+    assert all(handoff["read_only_contract"] is True for handoff in summon_enablement_gate["blocked_family_handoffs"])
+    assert all(handoff["diagnostic_only"] is True for handoff in summon_enablement_gate["blocked_family_handoffs"])
+    assert all(handoff["authority_granted"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
+    assert all(handoff["would_execute"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
+    assert all(handoff["would_mutate"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
     assert summon_enablement_gate["summon_preflight"] == preflight_surfaces["summon"]
     assert summon_enablement_gate["surface_dependencies"]["host"]["ready"] is False
     assert summon_enablement_gate["surface_dependencies"]["tray"]["status"] == "blocked"
@@ -2133,6 +2175,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "mutation_authority_granted": False,
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
+        "first_blocker_family_handoff_readback": True,
     }
     tray_enablement_gate = body["tray_enablement_gate"]
     assert tray_enablement_gate["kind"] == "lens.tray.enablement_gate"
@@ -2975,14 +3018,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_gate_criterion["global_hotkey"] == "Ctrl+Alt+Space"
     assert summon_gate_criterion["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_gate_criterion["first_blocker_family"] == "resident_host"
-    assert summon_gate_criterion["blocked_families"] == [
-        "resident_host",
-        "tray_presence",
-        "overlay_window",
-        "global_hotkey_binding",
-        "summon_binding",
-        "authority",
-    ]
+    assert summon_gate_criterion["blocked_families"] == expected_summon_blocked_families
+    assert summon_gate_criterion["operator_surface_readback_ready"] is True
+    assert summon_gate_criterion["first_blocker_family_handoff_observed"] is True
+    assert summon_gate_criterion["first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert [handoff["id"] for handoff in summon_gate_criterion["blocked_family_handoffs"]] == (
+        expected_summon_blocked_families
+    )
     status_family_readback = {item["id"]: item for item in summon_gate_criterion["blocker_family_readback"]}
     assert status_family_readback["resident_host"]["route"] == "/lens/host"
     assert status_family_readback["resident_host"]["status"] == "blocked"

@@ -161,6 +161,92 @@ def _summon_blocker_family_readback(blocker_groups: dict[str, list[str]]) -> lis
     ]
 
 
+def _summon_blocker_family_handoffs(blocker_family_readback: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    metadata_by_family = {
+        "resident_host": {
+            "label": "Resident host",
+            "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/host",
+            "readiness_route": "/lens/host/runtime-loop/readiness",
+            "next_step": "run_resident_host_blocker_proof",
+            "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+            "authority_required": "resident_runtime_execution_authority",
+        },
+        "tray_presence": {
+            "label": "Tray presence",
+            "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/tray",
+            "readiness_route": "/lens/tray/readiness",
+            "next_step": "run_tray_presence_blocker_proof",
+            "next_smallest_truthful_gap": "summon_overlay_window_blocker_boundary",
+            "authority_required": "tray_registration_authority",
+        },
+        "overlay_window": {
+            "label": "Overlay window",
+            "proof_script": "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/overlay",
+            "readiness_route": "/lens/overlay/readiness",
+            "next_step": "run_overlay_window_blocker_proof",
+            "next_smallest_truthful_gap": "summon_global_hotkey_binding_blocker_boundary",
+            "authority_required": "overlay_control_authority",
+        },
+        "global_hotkey_binding": {
+            "label": "Global hotkey binding",
+            "proof_script": "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/summon",
+            "readiness_route": "/lens/summon/readiness",
+            "next_step": "run_global_hotkey_binding_blocker_proof",
+            "next_smallest_truthful_gap": "summon_binding_blocker_boundary",
+            "authority_required": "hotkey_registration_authority",
+        },
+        "summon_binding": {
+            "label": "Summon binding",
+            "proof_script": "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/summon",
+            "readiness_route": "/lens/summon/readiness",
+            "next_step": "run_summon_binding_blocker_proof",
+            "next_smallest_truthful_gap": "summon_authority_blocker_boundary",
+            "authority_required": "summon_authority",
+        },
+        "authority": {
+            "label": "Summon authority",
+            "proof_script": "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status",
+            "route": "/lens/summon",
+            "readiness_route": "/lens/summon/readiness",
+            "next_step": "run_summon_authority_blocker_proof",
+            "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+            "authority_required": "summon_hotkey_overlay_and_process_authority",
+        },
+    }
+    handoffs: list[dict[str, Any]] = []
+    for family_readback in blocker_family_readback:
+        family = _safe_str(family_readback.get("id")).strip()
+        blockers = _string_list(family_readback.get("blockers"))
+        metadata = metadata_by_family.get(family)
+        if not metadata or not blockers:
+            continue
+        handoffs.append(
+            {
+                "id": family,
+                "label": metadata["label"],
+                "status": "blocked",
+                "blockers": blockers,
+                "proof_script": metadata["proof_script"],
+                "route": metadata["route"],
+                "readiness_route": metadata["readiness_route"],
+                "next_step": metadata["next_step"],
+                "next_smallest_truthful_gap": metadata["next_smallest_truthful_gap"],
+                "authority_required": metadata["authority_required"],
+                "authority_granted": False,
+                "read_only_contract": True,
+                "diagnostic_only": True,
+                "would_execute": False,
+                "would_mutate": False,
+            }
+        )
+    return handoffs
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -779,6 +865,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
     blocker_family_readback = _summon_blocker_family_readback(blocker_groups)
     blocked_families = [_safe_str(item.get("id")).strip() for item in blocker_family_readback if not item["ready"]]
     first_blocker_family = blocked_families[0] if blocked_families else ""
+    blocked_family_handoffs = _summon_blocker_family_handoffs(blocker_family_readback)
+    first_blocker_family_handoff = blocked_family_handoffs[0] if blocked_family_handoffs else {}
     return {
         "ok": True,
         "kind": "lens.summon.enablement_gate",
@@ -793,6 +881,10 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "first_blocker_family": first_blocker_family,
         "blocked_families": blocked_families,
+        "first_blocker_family_handoff_observed": bool(first_blocker_family_handoff),
+        "first_blocker_family_handoff": first_blocker_family_handoff,
+        "blocked_family_handoffs": blocked_family_handoffs,
+        "operator_surface_readback_ready": True,
         "summon_binding_ready": summon_ready,
         "resident_host_ready": resident_host_ready,
         "tray_ready": tray_ready,
@@ -827,6 +919,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             hotkey_registration_authority=False,
             tray_registration_authority=False,
             overlay_control_authority=False,
+            first_blocker_family_handoff_readback=bool(first_blocker_family_handoff),
         ),
         "message": "Lens summon enablement is read-only; global hotkey binding and summon-anywhere remain blocked.",
     }
