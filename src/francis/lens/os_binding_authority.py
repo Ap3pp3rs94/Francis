@@ -20,6 +20,8 @@ LENS_OS_BINDING_AUTHORITY_ROUTE = "/lens/os-binding/authority"
 LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE = "/lens/os-binding/authority/request"
 LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE = "/lens/os-binding/authority/requests"
 LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE = "/lens/os-binding/authority/grants"
+LENS_OS_BINDING_EXECUTE_ROUTE = "/lens/os-binding/execute"
+LENS_OS_BINDING_DENIALS_ROUTE = "/lens/os-binding/denials"
 LENS_OS_BINDING_READINESS_ROUTE = "/lens/os-binding/readiness"
 LENS_OS_BINDING_PLAN_ROUTE = "/lens/os-binding/plan"
 _APPROVAL_STATUSES = ("pending", "approved", "rejected", "emergency")
@@ -103,10 +105,20 @@ def _os_binding_authority_grant_receipt_root() -> Path:
     return data_dir() / "lens" / "os_binding_authority_grants"
 
 
+def _os_binding_execution_denial_receipt_root() -> Path:
+    return data_dir() / "lens" / "os_binding_execution_denials"
+
+
 def _os_binding_authority_grant_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
     seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
     digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
     return f"losbag_{ts}_{digest}"
+
+
+def _os_binding_execution_denial_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"losbed_{ts}_{digest}"
 
 
 def _os_binding_authority_grant_receipt_path(receipt_id: Any) -> Path | None:
@@ -114,6 +126,13 @@ def _os_binding_authority_grant_receipt_path(receipt_id: Any) -> Path | None:
     if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
         return None
     return _os_binding_authority_grant_receipt_root() / f"{cleaned}.json"
+
+
+def _os_binding_execution_denial_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = _safe_str(receipt_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _os_binding_execution_denial_receipt_root() / f"{cleaned}.json"
 
 
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
@@ -155,6 +174,9 @@ def _governance(
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
         "readback_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "decision_route": "/approvals/decision",
@@ -293,6 +315,8 @@ def _request_payload(*, actor: Any, route: str) -> dict[str, Any]:
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "readback_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
         "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "status_route": "/lens/status",
@@ -356,6 +380,9 @@ def lens_os_binding_authority_request_contract() -> dict[str, Any]:
         "route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
         "readback_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "method": "POST",
@@ -704,6 +731,8 @@ def grant_lens_os_binding_authority(
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
         "requests_route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
         "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "approval_id": safe_approval_id,
@@ -761,6 +790,361 @@ def grant_lens_os_binding_authority(
     return response
 
 
+def _os_binding_execution_denial_status(
+    *,
+    permission_allowed: bool,
+    authority_granted: bool,
+) -> tuple[str, str]:
+    if not permission_allowed:
+        return "blocked", "configure_actor_scope_before_attempting_os_binding_command_palette_execution"
+    if not authority_granted:
+        return "denied_no_os_binding_authority", "grant_os_binding_command_palette_authority_before_execution"
+    return "denied_no_os_binding_execution_boundary", "implement_os_binding_command_palette_execution_boundary"
+
+
+def _os_binding_execution_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = _safe_str(denial.get("approval_id")).strip()
+    actor = _safe_str(denial.get("actor")).strip()
+    route = _safe_str(denial.get("route")).strip() or LENS_OS_BINDING_EXECUTE_ROUTE
+    receipt_id = _os_binding_execution_denial_receipt_id(
+        approval_id=approval_id,
+        actor=actor,
+        route=route,
+        ts=ts,
+    )
+    permission = _as_dict(denial.get("permission"))
+    execution_denial = _as_dict(denial.get("denial"))
+    plan = _as_dict(denial.get("plan"))
+    readiness = _as_dict(denial.get("readiness"))
+    active_grant_receipt_id = _safe_str(denial.get("active_grant_receipt_id")).strip()
+    authority_granted = bool(denial.get("authority_granted"))
+    return _filtered_record(
+        {
+            "kind": "lens.os_binding.command_palette_binding.denial.receipt",
+            "receipt_id": receipt_id,
+            "id": receipt_id,
+            "status": _safe_str(denial.get("status")).strip(),
+            "route": route,
+            "method": _safe_str(denial.get("method")).strip() or "POST",
+            "source_kind": _safe_str(denial.get("kind")).strip(),
+            "source_route": route,
+            "approval_id": approval_id,
+            "active_grant_receipt_id": active_grant_receipt_id,
+            "actor": actor,
+            "reason": _safe_str(denial.get("reason")).strip(),
+            "created_ts": ts,
+            "blockers": _str_list(denial.get("blockers")),
+            "permission": {
+                "ready": bool(permission.get("ready")),
+                "allowed": bool(permission.get("allowed")),
+                "reason": _safe_str(permission.get("reason")).strip(),
+                "required_scope": _safe_str(permission.get("required_scope")).strip(),
+            },
+            "readiness": {
+                "status": _safe_str(readiness.get("status")).strip(),
+                "ready": bool(readiness.get("ready")),
+                "os_binding_ready": bool(readiness.get("os_binding_ready")),
+                "os_level_command_palette": bool(readiness.get("os_level_command_palette")),
+                "summon_anywhere": bool(readiness.get("summon_anywhere")),
+            },
+            "plan": {
+                "status": _safe_str(plan.get("status")).strip(),
+                "plan_available": bool(plan.get("plan_available")),
+                "implementation_ready": bool(plan.get("implementation_ready")),
+                "execution_ready": bool(plan.get("execution_ready")),
+            },
+            "execution": {
+                "applied": bool(denial.get("applied")),
+                "executed": bool(denial.get("executed")),
+                "would_open_palette": bool(execution_denial.get("would_open_palette")),
+                "would_register_hotkey": bool(execution_denial.get("would_register_hotkey")),
+                "would_summon": bool(execution_denial.get("would_summon")),
+                "would_launch_process": bool(execution_denial.get("would_launch_process")),
+                "would_control_overlay": bool(execution_denial.get("would_control_overlay")),
+                "would_write_memory": bool(execution_denial.get("would_write_memory")),
+                "would_decide_approval": bool(execution_denial.get("would_decide_approval")),
+                "would_claim_resident": bool(execution_denial.get("would_claim_resident")),
+            },
+            "denial": execution_denial,
+            "governance": {
+                "gate": "lens_os_binding_command_palette_execution_denial_receipt",
+                "denial_boundary": True,
+                "execution_boundary": True,
+                "authority_granted": authority_granted,
+                "os_level_command_palette_binding_authority": authority_granted,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "tray_registration_authority": False,
+                "overlay_control_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "service_control_authority": False,
+                "window_management_authority": False,
+                "capture_authority": False,
+                "resident_claim_authority": False,
+                "denial_receipt_write_authority": True,
+                "receipt_write_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+    )
+
+
+def _record_os_binding_execution_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    receipt = _os_binding_execution_denial_receipt(denial)
+    path = _os_binding_execution_denial_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    try:
+        _atomic_write_json(path, receipt)
+    except OSError:
+        return {}
+    return receipt
+
+
+def _read_os_binding_execution_denial_receipt(path: Path) -> dict[str, Any] | None:
+    item = _read_json(path)
+    if not isinstance(item, dict) or _safe_str(item.get("kind")).strip() != (
+        "lens.os_binding.command_palette_binding.denial.receipt"
+    ):
+        return None
+    return item
+
+
+def _list_os_binding_execution_denial_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    root = _os_binding_execution_denial_receipt_root()
+    if not root.exists():
+        return [], 0
+    items: list[dict[str, Any]] = []
+    for path in root.glob("*.json"):
+        item = _read_os_binding_execution_denial_receipt(path)
+        if item is None:
+            continue
+        if approval_id and _safe_str(item.get("approval_id")).strip() != approval_id:
+            continue
+        if status and _safe_str(item.get("status")).strip() != status:
+            continue
+        items.append(item)
+    items.sort(key=lambda item: (_record_ts(item.get("created_ts")), _safe_str(item.get("receipt_id"))), reverse=True)
+    return items[:limit], len(items)
+
+
+def lens_os_binding_execution_denial_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    safe_status = _safe_str(status).strip()
+    items, total = _list_os_binding_execution_denial_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+        status=safe_status,
+    )
+    latest = items[0] if items else None
+    return {
+        "ok": True,
+        "kind": "lens.os_binding.command_palette_binding.denial_receipts",
+        "status": "readback_ready" if items else "empty",
+        "route": LENS_OS_BINDING_DENIALS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
+        "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
+        "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
+        "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "limit": safe_limit,
+        "approval_id": safe_approval_id,
+        "filter_status": safe_status,
+        "total": total,
+        "latest": latest,
+        "items": items,
+        "governance": {
+            **_governance(
+                route=LENS_OS_BINDING_DENIALS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_os_binding_command_palette_execution_denial_receipts_readback",
+            "denial_boundary": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "overlay_control_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "window_management_authority": False,
+            "capture_authority": False,
+            "resident_claim_authority": False,
+            "denial_receipt_write_authority": False,
+            "receipt_write_authority": False,
+            "mutation_authority_granted": False,
+            "next_step": "review_os_binding_denial_receipts_before_adding_execution_authority",
+        },
+    }
+
+
+def deny_lens_os_binding_execution(
+    *,
+    actor: Any = "",
+    reason: Any = "attempt Lens OS-binding command palette execution",
+    route: str = LENS_OS_BINDING_EXECUTE_ROUTE,
+    method: str = "POST",
+    record_receipt: bool = False,
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_OS_BINDING_EXECUTE_ROUTE
+    safe_method = _safe_str(method).strip() or "POST"
+    permission = _permission(actor, route=safe_route, method=safe_method)
+    permission_payload = {
+        "ready": permission.allowed,
+        "allowed": permission.allowed,
+        "reason": permission.reason,
+        "required_scope": LENS_OS_BINDING_AUTHORITY_SCOPE,
+        "evidence": permission.evidence,
+    }
+    authority_readback = lens_os_binding_authority_request_readback(limit=5)
+    active_grant_receipt_id = _safe_str(authority_readback.get("active_grant_receipt_id")).strip()
+    authority_granted = bool(authority_readback.get("authority_granted"))
+    readiness = lens_os_binding_readiness(authority_request_readback=authority_readback)
+    plan = lens_os_binding_implementation_plan(authority_request_readback=authority_readback)
+    active_grant = _as_dict(lens_os_binding_authority_grant_receipts(limit=1, active_only=True).get("active_latest"))
+    approval_id = _safe_str(active_grant.get("approval_id")).strip()
+    blockers = _dedupe_strs(
+        [
+            *_str_list(readiness.get("blockers")),
+            *_str_list(plan.get("blockers")),
+            *([] if authority_granted else ["os_level_command_palette_binding_authority_not_granted"]),
+            "os_binding_execution_boundary_not_implemented",
+            "hotkey_registration_authority_not_granted",
+            "summon_authority_not_granted",
+            "overlay_control_authority_not_granted",
+            "resident_claim_authority_not_granted",
+            "receipt_write_authority_not_granted",
+            *([] if permission.allowed else ["system_write_scope_not_ready"]),
+        ]
+    )
+    status, next_step = _os_binding_execution_denial_status(
+        permission_allowed=permission.allowed,
+        authority_granted=authority_granted,
+    )
+    denial_reason = (
+        "os_binding_execution_boundary_not_implemented"
+        if authority_granted
+        else "os_level_command_palette_binding_authority_not_granted"
+    )
+    response: dict[str, Any] = {
+        "ok": True,
+        "kind": "lens.os_binding.command_palette_binding.execution_denial",
+        "status": status,
+        "route": safe_route,
+        "method": safe_method,
+        "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
+        "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
+        "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
+        "authority_grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "receipt_route": LENS_OS_BINDING_DENIALS_ROUTE,
+        "approval_id": approval_id,
+        "active_grant_receipt_id": active_grant_receipt_id,
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "receipt_written": False,
+        "receipt": {},
+        "permission": permission_payload,
+        "readiness": readiness,
+        "plan": plan,
+        "blockers": blockers,
+        "applied": False,
+        "executed": False,
+        "authority_granted": authority_granted,
+        "os_level_command_palette_binding_authority": authority_granted,
+        "os_level_command_palette": False,
+        "summon_anywhere": False,
+        "opens_palette": False,
+        "registers_hotkey": False,
+        "launches_process": False,
+        "controls_overlay": False,
+        "denial": {
+            "reason": denial_reason,
+            "next_step": next_step,
+            "message": (
+                "Lens OS-binding command palette execution is denied until the governed hotkey, summon, "
+                "overlay, tray, resident host, and execution boundaries exist."
+            ),
+            "would_open_palette": False,
+            "would_register_hotkey": False,
+            "would_summon": False,
+            "would_launch_process": False,
+            "would_control_overlay": False,
+            "would_write_memory": False,
+            "would_decide_approval": False,
+            "would_claim_resident": False,
+            "denial_receipt_written": False,
+        },
+        "governance": {
+            **_governance(
+                route=safe_route,
+                approval_request_write=False,
+                read_only_contract=False,
+            ),
+            "gate": "lens_os_binding_command_palette_execution_denial",
+            "execution_boundary": True,
+            "denial_boundary": True,
+            "authority_granted": authority_granted,
+            "os_level_command_palette_binding_authority": authority_granted,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "overlay_control_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "window_management_authority": False,
+            "capture_authority": False,
+            "resident_claim_authority": False,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "mutation_authority_granted": False,
+            "permission": permission_payload,
+            "next_step": next_step,
+        },
+    }
+    if (
+        record_receipt
+        and permission.allowed
+        and status
+        in {
+            "denied_no_os_binding_authority",
+            "denied_no_os_binding_execution_boundary",
+        }
+    ):
+        receipt = _record_os_binding_execution_denial_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["denial"]["denial_receipt_written"] = True
+            response["governance"]["denial_receipt_write_authority"] = True
+    elif record_receipt:
+        response["governance"]["denial_receipt_write_blocker"] = "os_binding_execution_not_ready"
+    return response
+
+
 def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_limit(limit)
     by_status, latest_items, counts = _approval_items(limit=safe_limit)
@@ -779,6 +1163,8 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
         "grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
+        "execute_route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "active_grant_receipt_id": active_grant_id,

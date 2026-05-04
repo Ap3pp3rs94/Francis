@@ -238,3 +238,132 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
 
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, data_root = _client(monkeypatch, tmp_path)
+
+    request_response = client.post(
+        "/lens/os-binding/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "request governed OS-binding authority",
+        },
+    )
+    assert request_response.status_code == 200
+    approval_id = request_response.json()["approval_id"]
+
+    decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "allow bounded authority grant receipt",
+        },
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "approved"
+
+    grant = client.post(
+        "/lens/os-binding/authority",
+        json={
+            "actor": "test.system.write",
+            "approval_id": approval_id,
+            "reason": "grant OS-binding authority receipt only",
+            "lease_seconds": 120,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    grant_receipt_id = grant_body["receipt"]["receipt_id"]
+
+    execute = client.post(
+        "/lens/os-binding/execute",
+        json={
+            "actor": "test.system.write",
+            "reason": "attempt OS palette binding after grant",
+        },
+    )
+
+    assert execute.status_code == 200
+    body = execute.json()
+    assert body["kind"] == "lens.os_binding.command_palette_binding.execution_denial"
+    assert body["status"] == "denied_no_os_binding_execution_boundary"
+    assert body["route"] == "/lens/os-binding/execute"
+    assert body["receipt_route"] == "/lens/os-binding/denials"
+    assert body["plan"]["execute_route"] == "/lens/os-binding/execute"
+    assert body["plan"]["denials_route"] == "/lens/os-binding/denials"
+    assert body["readiness"]["execute_route"] == "/lens/os-binding/execute"
+    assert body["readiness"]["denials_route"] == "/lens/os-binding/denials"
+    assert body["approval_id"] == approval_id
+    assert body["active_grant_receipt_id"] == grant_receipt_id
+    assert body["authority_granted"] is True
+    assert body["os_level_command_palette_binding_authority"] is True
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["opens_palette"] is False
+    assert body["registers_hotkey"] is False
+    assert body["launches_process"] is False
+    assert body["controls_overlay"] is False
+    assert body["applied"] is False
+    assert body["executed"] is False
+    assert body["receipt_written"] is True
+    assert body["denial"]["denial_receipt_written"] is True
+    assert body["denial"]["would_open_palette"] is False
+    assert body["denial"]["would_register_hotkey"] is False
+    assert body["denial"]["would_summon"] is False
+    assert body["denial"]["would_launch_process"] is False
+    assert body["denial"]["would_control_overlay"] is False
+    assert body["denial"]["would_write_memory"] is False
+    assert body["denial"]["would_decide_approval"] is False
+    assert body["denial"]["would_claim_resident"] is False
+    assert "os_binding_execution_boundary_not_implemented" in body["blockers"]
+    assert "hotkey_registration_authority_not_granted" in body["blockers"]
+    assert "summon_authority_not_granted" in body["blockers"]
+    assert body["governance"]["gate"] == "lens_os_binding_command_palette_execution_denial"
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["approval_decision_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["summon_authority"] is False
+    assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["resident_claim_authority"] is False
+    assert body["governance"]["denial_receipt_write_authority"] is True
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "lens.os_binding.command_palette_binding.denial.receipt"
+    assert receipt["status"] == "denied_no_os_binding_execution_boundary"
+    assert receipt["approval_id"] == approval_id
+    assert receipt["active_grant_receipt_id"] == grant_receipt_id
+    assert receipt["execution"]["would_register_hotkey"] is False
+    assert receipt["execution"]["would_summon"] is False
+    assert receipt["governance"]["denial_receipt_write_authority"] is True
+    assert receipt["governance"]["execution_authority"] is False
+    assert receipt["governance"]["memory_write"] is False
+
+    denials = client.get(f"/lens/os-binding/denials?limit=10&approval_id={approval_id}")
+    assert denials.status_code == 200
+    denials_body = denials.json()
+    assert denials_body["kind"] == "lens.os_binding.command_palette_binding.denial_receipts"
+    assert denials_body["status"] == "readback_ready"
+    assert denials_body["route"] == "/lens/os-binding/denials"
+    assert denials_body["execute_route"] == "/lens/os-binding/execute"
+    assert denials_body["plan_route"] == "/lens/os-binding/plan"
+    assert denials_body["readiness_route"] == "/lens/os-binding/readiness"
+    assert denials_body["authority_route"] == "/lens/os-binding/authority"
+    assert denials_body["grants_route"] == "/lens/os-binding/authority/grants"
+    assert denials_body["approval_id"] == approval_id
+    assert denials_body["total"] == 1
+    assert denials_body["latest"]["receipt_id"] == receipt["receipt_id"]
+    assert denials_body["items"][0]["active_grant_receipt_id"] == grant_receipt_id
+    assert denials_body["governance"]["read_only_contract"] is True
+    assert denials_body["governance"]["denial_receipt_write_authority"] is False
+    assert denials_body["governance"]["execution_authority"] is False
+    assert denials_body["governance"]["approval_decision_authority"] is False
+    assert denials_body["governance"]["memory_write"] is False
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

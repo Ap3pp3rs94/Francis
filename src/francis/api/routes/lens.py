@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from francis.lens import (
+    deny_lens_os_binding_execution,
     deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
@@ -44,6 +45,7 @@ from francis.lens import (
     lens_os_binding_authority_grant_receipts,
     lens_os_binding_authority_request_contract,
     lens_os_binding_authority_request_readback,
+    lens_os_binding_execution_denial_receipts,
     lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
@@ -167,6 +169,11 @@ class LensOsBindingAuthorityGrantIn(BaseModel):
     lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
+class LensOsBindingExecuteIn(BaseModel):
+    actor: str | None = None
+    reason: str = "attempt Lens OS-binding command palette execution"
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -217,6 +224,15 @@ def os_binding_authority_grants(
     )
 
 
+@router.get("/os-binding/denials")
+def os_binding_denials(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_os_binding_execution_denial_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
 @router.post("/os-binding/authority/request")
 def os_binding_authority_request(
     request: Request,
@@ -227,6 +243,20 @@ def os_binding_authority_request(
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+    )
+
+
+@router.post("/os-binding/execute")
+def os_binding_execute(
+    request: Request,
+    payload: LensOsBindingExecuteIn,
+) -> dict[str, Any]:
+    return deny_lens_os_binding_execution(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
     )
 
 

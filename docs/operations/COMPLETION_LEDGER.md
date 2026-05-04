@@ -18376,6 +18376,41 @@ OS-binding candidate readback:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-completion-audit.ps1`
 
+### 2026-05-04 - Stage 6/Lens OS-binding execution denial receipts
+
+Stage 6/Lens OS-binding now has an explicit execution-denial boundary for the
+future OS-level command-palette binding path. `POST /lens/os-binding/execute`
+evaluates the active OS-binding authority grant, reads the implementation plan
+and readiness state, denies execution while the real hotkey/summon/overlay/tray
+resident boundaries remain absent, and writes a denial receipt when called by a
+`system.write` actor. `GET /lens/os-binding/denials` reads those receipts, and
+the OS-binding plan/readiness payloads now expose the execution and denial
+readback routes.
+
+This is backend/API trace and receipt work for a blocked execution path. It does
+not open an OS command palette, register a global hotkey, summon Francis
+anywhere, launch or supervise a process, control overlay or tray surfaces,
+decide approvals, write memory, grant new authority, or claim resident status.
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens OS-binding
+execution denial receipts:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
