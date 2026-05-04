@@ -18313,6 +18313,39 @@ palette candidate proof:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-command-palette-os-binding-proof.ps1`
 
+### 2026-05-04 - Stage 6/Lens checkpoint OS-binding candidate readback
+
+Stage 6/Lens checkpoint now consumes the command-palette OS-binding candidate
+boundary emitted by `scripts/lens-command-palette-os-binding-proof.ps1`. The
+checkpoint requires the proof's `os_binding_candidate` before treating the
+command-palette OS-binding blocker proof as observed, and its
+`command_palette_os_binding_blockers_proof` block now carries
+`os_binding_candidate_observed`, the candidate object, and governance
+`os_binding_candidate_boundary_readback`. The checkpoint-level governance
+payload also exposes `command_palette_os_binding_candidate_readback`.
+
+This is checkpoint/readback-only. It does not bind a global hotkey, open an OS
+command palette, summon Francis anywhere, launch or supervise a process beyond
+the existing bounded checkpoint proof behavior, control overlay or tray
+surfaces, decide approvals, grant authority, write memory, create user-facing
+controls, or claim resident status. Stage 6 remains active and blocked on real
+OS-level command-palette binding, summon-anywhere behavior, helpful/not-noisy
+resident behavior, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens checkpoint
+OS-binding candidate readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-checkpoint.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
