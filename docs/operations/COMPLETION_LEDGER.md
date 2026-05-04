@@ -18200,6 +18200,10 @@ authority grant receipt boundary:
   Result: `passed`
 - `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens_os_binding_authority.py`
   Result: `passed`
+- `python -m mypy src\francis\lens\os_binding_authority.py`
+  Result: `failed before fix on expires_ts Optional[Any] parsing, then passed`
+- `python -m mypy src`
+  Result: `passed`
 - `git diff --check`
   Result: `passed`
 

@@ -507,8 +507,11 @@ def _os_binding_authority_grant_active(item: dict[str, Any], *, now: int | None 
         return False
     if not bool(item.get("authority_granted")):
         return False
+    raw_expires_ts = item.get("expires_ts")
+    if raw_expires_ts is None:
+        return False
     try:
-        expires_ts = int(item.get("expires_ts"))
+        expires_ts = int(raw_expires_ts)
     except (TypeError, ValueError):
         return False
     return expires_ts > (now if now is not None else _now_s())
