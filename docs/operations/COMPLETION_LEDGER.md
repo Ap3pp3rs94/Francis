@@ -18451,6 +18451,36 @@ observation window stabilization:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host-supervisor-observation-proof.ps1`
 
+### 2026-05-04 - Stage 6/Lens surface readiness route aliases
+
+Stage 6/Lens now exposes read-only readiness aliases for the surface gates
+advertised by summon blocker handoffs: `GET /lens/summon/readiness`,
+`GET /lens/tray/readiness`, and `GET /lens/overlay/readiness`. Each alias
+returns the same backend truth as its canonical readback route
+(`/lens/summon`, `/lens/tray`, `/lens/overlay`).
+
+This is backend/API readback-only route work. It does not bind a global
+hotkey, open an OS command palette, summon Francis anywhere, open an overlay,
+register a tray icon, launch or supervise a process, decide approvals, grant
+authority, write memory, create user-facing controls, or claim resident status.
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens surface readiness
+route aliases:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

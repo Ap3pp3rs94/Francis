@@ -3359,12 +3359,21 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     summon_response = client.get("/lens/summon")
     assert summon_response.status_code == 200
     assert summon_response.json() == summon_enablement_gate
+    summon_readiness_response = client.get("/lens/summon/readiness")
+    assert summon_readiness_response.status_code == 200
+    assert summon_readiness_response.json() == summon_enablement_gate
     tray_response = client.get("/lens/tray")
     assert tray_response.status_code == 200
     assert tray_response.json() == tray_enablement_gate
+    tray_readiness_response = client.get("/lens/tray/readiness")
+    assert tray_readiness_response.status_code == 200
+    assert tray_readiness_response.json() == tray_enablement_gate
     overlay_response = client.get("/lens/overlay")
     assert overlay_response.status_code == 200
     assert overlay_response.json() == overlay_enablement_gate
+    overlay_readiness_response = client.get("/lens/overlay/readiness")
+    assert overlay_readiness_response.status_code == 200
+    assert overlay_readiness_response.json() == overlay_enablement_gate
     surface_activation_response = client.get("/lens/resident-surface/activation")
     assert surface_activation_response.status_code == 200
     assert surface_activation_response.json()["kind"] == "lens.resident_surface.activation_boundary"

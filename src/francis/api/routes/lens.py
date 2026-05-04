@@ -276,16 +276,19 @@ def os_binding_authority_grant(
     )
 
 
+@router.get("/summon/readiness")
 @router.get("/summon")
 def summon() -> dict[str, Any]:
     return lens_summon_enablement_gate()
 
 
+@router.get("/tray/readiness")
 @router.get("/tray")
 def tray() -> dict[str, Any]:
     return lens_tray_enablement_gate()
 
 
+@router.get("/overlay/readiness")
 @router.get("/overlay")
 def overlay() -> dict[str, Any]:
     return lens_overlay_enablement_gate()
