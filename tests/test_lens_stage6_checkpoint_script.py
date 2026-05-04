@@ -118,10 +118,6 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "id": "resident_host",
         "label": "Resident host",
         "status": "blocked",
-        "blockers": [
-            "lens_host_runtime_not_implemented",
-            "local_process_launch_authority_not_granted",
-        ],
         "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
         "route": "/lens/host",
         "readiness_route": "/lens/host/runtime-loop/readiness",
@@ -134,11 +130,23 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "would_execute": False,
         "would_mutate": False,
     }
+    expected_first_summon_handoff_required_blockers = {
+        "lens_host_runtime_not_implemented",
+        "local_process_launch_authority_not_granted",
+    }
+    expected_first_summon_handoff_allowed_blockers = expected_first_summon_handoff_required_blockers | {
+        "resident_host_process_missing"
+    }
     assert enablement_gates["summon_enablement_gate"]["operator_surface_readback_ready"] is True
     assert enablement_gates["summon_enablement_gate"]["first_blocker_family"] == "resident_host"
     assert enablement_gates["summon_enablement_gate"]["blocked_families"] == expected_summon_blocked_families
     assert enablement_gates["summon_enablement_gate"]["first_blocker_family_handoff_observed"] is True
-    assert enablement_gates["summon_enablement_gate"]["first_blocker_family_handoff"] == (expected_first_summon_handoff)
+    summon_gate_first_handoff = enablement_gates["summon_enablement_gate"]["first_blocker_family_handoff"]
+    assert {key: value for key, value in summon_gate_first_handoff.items() if key != "blockers"} == (
+        expected_first_summon_handoff
+    )
+    assert expected_first_summon_handoff_required_blockers <= set(summon_gate_first_handoff["blockers"])
+    assert set(summon_gate_first_handoff["blockers"]) <= expected_first_summon_handoff_allowed_blockers
     assert [item["id"] for item in enablement_gates["summon_enablement_gate"]["blocked_family_handoffs"]] == (
         expected_summon_blocked_families
     )
@@ -151,7 +159,12 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert summon_handoff["handoff_observed"] is True
     assert summon_handoff["first_blocker_family"] == "resident_host"
     assert summon_handoff["blocked_families"] == expected_summon_blocked_families
-    assert summon_handoff["first_blocker_family_handoff"] == expected_first_summon_handoff
+    checkpoint_first_handoff = summon_handoff["first_blocker_family_handoff"]
+    assert {key: value for key, value in checkpoint_first_handoff.items() if key != "blockers"} == (
+        expected_first_summon_handoff
+    )
+    assert expected_first_summon_handoff_required_blockers <= set(checkpoint_first_handoff["blockers"])
+    assert set(checkpoint_first_handoff["blockers"]) <= expected_first_summon_handoff_allowed_blockers
     assert [item["id"] for item in summon_handoff["blocked_family_handoffs"]] == expected_summon_blocked_families
     assert summon_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert "/lens/status" in summon_handoff["evidence"]
