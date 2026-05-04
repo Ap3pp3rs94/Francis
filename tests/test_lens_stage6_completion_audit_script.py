@@ -104,6 +104,57 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["summon_anywhere_first_blocker_family_handoff_observed"] is True
     assert payload["summon_anywhere_first_blocker_family_handoff"] == expected_first_summon_handoff
     assert [item["id"] for item in payload["summon_anywhere_blocker_family_handoffs"]] == expected_summon_family_ids
+    expected_checkpoint_first_summon_handoff = {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    expected_checkpoint_required_blockers = {
+        "lens_host_runtime_not_implemented",
+        "local_process_launch_authority_not_granted",
+    }
+    expected_checkpoint_allowed_blockers = expected_checkpoint_required_blockers | {"resident_host_process_missing"}
+    assert payload["checkpoint_summon_enablement_gate_handoff_observed"] is True
+    checkpoint_summon_handoff = payload["checkpoint_summon_enablement_gate_handoff"]
+    assert checkpoint_summon_handoff["status"] == "blocked"
+    assert checkpoint_summon_handoff["ok"] is True
+    assert checkpoint_summon_handoff["ready"] is False
+    assert checkpoint_summon_handoff["summon_anywhere"] is False
+    assert checkpoint_summon_handoff["operator_surface_readback_ready"] is True
+    assert checkpoint_summon_handoff["handoff_observed"] is True
+    assert checkpoint_summon_handoff["first_blocker_family"] == "resident_host"
+    assert checkpoint_summon_handoff["blocked_families"] == expected_summon_family_ids
+    assert [item["id"] for item in checkpoint_summon_handoff["blocked_family_handoffs"]] == expected_summon_family_ids
+    checkpoint_first_summon_handoff = checkpoint_summon_handoff["first_blocker_family_handoff"]
+    assert {key: value for key, value in checkpoint_first_summon_handoff.items() if key != "blockers"} == (
+        expected_checkpoint_first_summon_handoff
+    )
+    assert expected_checkpoint_required_blockers <= set(checkpoint_first_summon_handoff["blockers"])
+    assert set(checkpoint_first_summon_handoff["blockers"]) <= expected_checkpoint_allowed_blockers
+    assert checkpoint_summon_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert "/lens/status" in checkpoint_summon_handoff["evidence"]
+    assert "summon_authority_not_granted" in checkpoint_summon_handoff["blockers"]
+    assert checkpoint_summon_handoff["execution_authority"] is False
+    assert checkpoint_summon_handoff["approval_decision_authority"] is False
+    assert checkpoint_summon_handoff["local_process_launch_authority"] is False
+    assert checkpoint_summon_handoff["hotkey_registration_authority"] is False
+    assert checkpoint_summon_handoff["tray_registration_authority"] is False
+    assert checkpoint_summon_handoff["overlay_control_authority"] is False
+    assert checkpoint_summon_handoff["summon_authority"] is False
+    assert checkpoint_summon_handoff["memory_write"] is False
+    assert checkpoint_summon_handoff["receipt_write_authority"] is False
+    assert checkpoint_summon_handoff["resident_claim_authority"] is False
     summon_blocker_groups = payload["summon_anywhere_blocker_groups"]
     assert "lens_host_runtime_not_implemented" in summon_blocker_groups["resident_host"]
     assert "local_process_launch_authority_not_granted" in summon_blocker_groups["resident_host"]
@@ -1294,6 +1345,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
     assert governance["summon_anywhere_first_blocker_family_handoff_readback"] is True
+    assert governance["checkpoint_summon_enablement_gate_handoff_readback"] is True
     assert governance["summon_authority_blocker_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True

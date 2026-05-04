@@ -18133,6 +18133,40 @@ handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens completion-audit checkpoint summon handoff readback
+
+Stage 6/Lens completion audit now consumes the top-level
+`summon_enablement_gate_handoff` block exposed by the Stage 6 checkpoint. The
+audit requires the checkpoint handoff before treating Stage 6 completion review
+as fully consumed, exposes
+`checkpoint_summon_enablement_gate_handoff_observed` and
+`checkpoint_summon_enablement_gate_handoff`, and records governance
+`checkpoint_summon_enablement_gate_handoff_readback`. The consumed checkpoint
+handoff remains blocked, names `resident_host` as the first blocker family,
+carries six read-only bounded blocker-family handoffs, and preserves
+`resident_host_runtime_blocker_boundary` as the first handoff gap.
+
+This is completion-audit/readback-only. It does not implement summon-anywhere,
+grant summon authority, register a hotkey, open or control an overlay, launch or
+supervise a process beyond existing bounded proof scripts, create or decide
+approvals, write memory, write receipts, or claim resident status. Stage 6
+remains active and blocked on summon-anywhere, helpful/not-noisy, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens completion-audit
+checkpoint summon handoff readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,@{Name='checkpoint_handoff_observed';Expression={$_.checkpoint_summon_enablement_gate_handoff_observed}},@{Name='checkpoint_handoff_ok';Expression={$_.checkpoint_summon_enablement_gate_handoff.ok}},@{Name='checkpoint_first_family';Expression={$_.checkpoint_summon_enablement_gate_handoff.first_blocker_family}},@{Name='checkpoint_first_gap';Expression={$_.checkpoint_summon_enablement_gate_handoff.first_blocker_family_handoff.next_smallest_truthful_gap}},@{Name='checkpoint_handoff_count';Expression={$_.checkpoint_summon_enablement_gate_handoff.blocked_family_handoffs.Count}},@{Name='governance_checkpoint_handoff';Expression={$_.governance.checkpoint_summon_enablement_gate_handoff_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; returned blocked/active, ready_to_close=false, stage6_completion_reviewed=true, checkpoint_handoff_observed=true, checkpoint_handoff_ok=true, checkpoint_first_family=resident_host, checkpoint_first_gap=resident_host_runtime_blocker_boundary, checkpoint_handoff_count=6, and governance_checkpoint_handoff=true`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
