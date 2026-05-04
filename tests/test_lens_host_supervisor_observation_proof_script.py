@@ -75,7 +75,7 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert checks["host_status_runner"]["passed"] is True
     assert checks["host_supervisor_runner"]["passed"] is True
     assert checks["bounded_launch_started"]["status"] == "launch_started_observed"
-    assert checks["supervisor_runner_consumed"]["status"] == "observation_completed"
+    assert checks["supervisor_runner_consumed"]["status"] == "supervised_session_completed"
     assert checks["supervisor_observed_running_state"]["status"] == "foreground_running_observed"
     assert checks["supervisor_observed_stopped_state"]["status"] == "foreground_stopped_observed"
     assert checks["status_readback_after_stop"]["status"] == "stopped_readback_ready"
@@ -84,13 +84,13 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
 
     proof = payload["proof"]
     assert proof["launch_exit_code"] == 0
-    assert proof["launch_status"] == "launch_started"
+    assert proof["launch_status"] == "supervisor_owned_launch_started"
     assert proof["launch_supported"] is True
     assert proof["launch_authority"] is False
     assert proof["diagnostic_launch_authority"] is True
     assert proof["supervisor_runner"] == "scripts/lens-host-supervisor.ps1"
     assert proof["supervisor_runner_exit_code"] == 0
-    assert proof["supervisor_runner_status"] == "observation_completed"
+    assert proof["supervisor_runner_status"] == "supervised_session_completed"
     assert proof["running_state_source"] == "supervisor_runner_observe"
     assert proof["running_state_status"] == "foreground_running"
     assert proof["running_pid"] > 0

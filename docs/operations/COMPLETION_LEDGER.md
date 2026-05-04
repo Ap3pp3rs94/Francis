@@ -18411,6 +18411,46 @@ execution denial receipts:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens supervisor observation window stabilization
+
+Stage 6/Lens supervisor observation proof now uses the existing
+`scripts/lens-host-supervisor.ps1 -Mode SuperviseOnce` bounded lifecycle instead
+of racing an independently launched host process against a separate observe
+runner. The proof still observes one temporary foreground host through running
+and stopped states, still records only diagnostic runtime state, and still
+reports blocked resident-host, service, tray, hotkey, overlay, and summon
+criteria.
+
+This is diagnostic/proof-stability work only. It does not create a resident
+host, supervise a persistent process, restart a process, install or control a
+service, register a tray icon, register a hotkey, open an overlay, summon
+Francis, decide approvals, write memory, grant execution authority, create UI
+controls, or claim Stage 6 closure. It removes a timing-sensitive proof window
+that could fail locally when the foreground process self-stopped before the
+separate observer finished its running-state readback.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens supervisor
+observation window stabilization:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py::test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle -q`
+  Result: `passed before fix when run alone; broader local run reproduced the timing flake`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host-supervisor-observation-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
