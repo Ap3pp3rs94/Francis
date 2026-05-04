@@ -238,6 +238,7 @@ $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readines
 $StageClaim = [string](Get-PropertyValue -Payload $Stage6Readiness -Name 'claim' -Default 'unavailable')
 
 $SummonCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'summon_anywhere'
+$SummonEnablementGateCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'summon_enablement_gate'
 $ModeCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'mode_visibility'
 $HudCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'hud_layer_runtime'
 $HostCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'resident_host_runtime'
@@ -449,6 +450,52 @@ $HostSupervisionAuthorityReadinessObserved = (
   $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'process_supervision_authority' -and
   $HostSupervisionAuthorityReadinessBlockers -notcontains 'host_supervision_authority_grant_not_implemented' -and
   $HostSupervisionAuthorityReadinessBlockers -contains 'process_supervision_authority_not_granted'
+)
+$SummonEnablementGateStatus = [string](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'status' -Default 'missing')
+$SummonEnablementGateReady = [bool](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'ready' -Default $true)
+$SummonEnablementGateSummonAnywhere = [bool](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'summon_anywhere' -Default $true)
+$SummonEnablementGateOperatorSurfaceReadbackReady = [bool](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'operator_surface_readback_ready' -Default $false)
+$SummonEnablementGateFirstBlockerFamily = [string](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'first_blocker_family' -Default '')
+$SummonEnablementGateBlockedFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'blocked_families' -Default @())
+$SummonEnablementGateFirstBlockerFamilyHandoffObserved = [bool](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'first_blocker_family_handoff_observed' -Default $false)
+$SummonEnablementGateFirstBlockerFamilyHandoff = Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'first_blocker_family_handoff' -Default ([ordered]@{})
+$SummonEnablementGateBlockedFamilyHandoffs = Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'blocked_family_handoffs' -Default @()
+$SummonEnablementGateFirstHandoffRoute = [string](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'route' -Default '')
+$SummonEnablementGateFirstHandoffReadinessRoute = [string](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'readiness_route' -Default '')
+$SummonEnablementGateFirstHandoffProofScript = [string](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'proof_script' -Default '')
+$SummonEnablementGateFirstHandoffNextGap = [string](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
+$SummonEnablementGateFirstHandoffAuthorityRequired = [string](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'authority_required' -Default '')
+$SummonEnablementGateFirstHandoffAuthorityGranted = [bool](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'authority_granted' -Default $true)
+$SummonEnablementGateFirstHandoffReadOnly = [bool](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'read_only_contract' -Default $false)
+$SummonEnablementGateFirstHandoffDiagnosticOnly = [bool](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'diagnostic_only' -Default $false)
+$SummonEnablementGateFirstHandoffWouldExecute = [bool](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'would_execute' -Default $true)
+$SummonEnablementGateFirstHandoffWouldMutate = [bool](Get-PropertyValue -Payload $SummonEnablementGateFirstBlockerFamilyHandoff -Name 'would_mutate' -Default $true)
+$SummonEnablementGateNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'next_smallest_truthful_gap' -Default '')
+$SummonEnablementGateEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'evidence' -Default @())
+$SummonEnablementGateBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'blockers' -Default @())
+$SummonEnablementGateHandoffObserved = (
+  $SummonEnablementGateStatus -eq 'blocked' -and
+  -not $SummonEnablementGateReady -and
+  -not $SummonEnablementGateSummonAnywhere -and
+  $SummonEnablementGateOperatorSurfaceReadbackReady -and
+  $SummonEnablementGateFirstBlockerFamily -eq 'resident_host' -and
+  $SummonEnablementGateFirstBlockerFamilyHandoffObserved -and
+  $SummonEnablementGateFirstHandoffRoute -eq '/lens/host' -and
+  $SummonEnablementGateFirstHandoffReadinessRoute -eq '/lens/host/runtime-loop/readiness' -and
+  $SummonEnablementGateFirstHandoffProofScript -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+  $SummonEnablementGateFirstHandoffNextGap -eq 'resident_host_runtime_blocker_boundary' -and
+  $SummonEnablementGateFirstHandoffAuthorityRequired -eq 'resident_runtime_execution_authority' -and
+  -not $SummonEnablementGateFirstHandoffAuthorityGranted -and
+  $SummonEnablementGateFirstHandoffReadOnly -and
+  $SummonEnablementGateFirstHandoffDiagnosticOnly -and
+  -not $SummonEnablementGateFirstHandoffWouldExecute -and
+  -not $SummonEnablementGateFirstHandoffWouldMutate -and
+  $SummonEnablementGateNextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
+  $SummonEnablementGateEvidence -contains '/lens/status' -and
+  $SummonEnablementGateBlockedFamilies -contains 'resident_host' -and
+  $SummonEnablementGateBlockedFamilies -contains 'authority' -and
+  $SummonEnablementGateBlockers -contains 'summon_binding_missing' -and
+  $SummonEnablementGateBlockers -contains 'summon_authority_not_granted'
 )
 $PersistentSupervisionEnablementDenialStatus = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementDenialCriterion -Name 'status' -Default 'missing')
 $PersistentSupervisionEnablementDenialBoundaryReady = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementDenialCriterion -Name 'boundary_ready' -Default $false)
@@ -1433,6 +1480,12 @@ $EnablementGates = @($EnablementGateIds | ForEach-Object {
       tray_presence = [bool](Get-PropertyValue -Payload $Gate -Name 'tray_presence' -Default $false)
       overlay_window = [bool](Get-PropertyValue -Payload $Gate -Name 'overlay_window' -Default $false)
       global_hotkey = [string](Get-PropertyValue -Payload $Gate -Name 'global_hotkey' -Default '')
+      first_blocker_family = [string](Get-PropertyValue -Payload $Gate -Name 'first_blocker_family' -Default '')
+      blocked_families = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Gate -Name 'blocked_families' -Default @())
+      operator_surface_readback_ready = [bool](Get-PropertyValue -Payload $Gate -Name 'operator_surface_readback_ready' -Default $false)
+      first_blocker_family_handoff_observed = [bool](Get-PropertyValue -Payload $Gate -Name 'first_blocker_family_handoff_observed' -Default $false)
+      first_blocker_family_handoff = Get-PropertyValue -Payload $Gate -Name 'first_blocker_family_handoff' -Default ([ordered]@{})
+      blocked_family_handoffs = Get-PropertyValue -Payload $Gate -Name 'blocked_family_handoffs' -Default @()
       blocker_groups = Get-PropertyValue -Payload $Gate -Name 'blocker_groups' -Default ([ordered]@{})
       presence_name = [string](Get-PropertyValue -Payload $Gate -Name 'presence_name' -Default '')
       overlay_name = [string](Get-PropertyValue -Payload $Gate -Name 'overlay_name' -Default '')
@@ -1664,6 +1717,33 @@ $Payload = [ordered]@{
     denial_receipt_write_authority = $false
     resident_claim_authority = $false
     blockers = $HostSupervisionAuthorityReadinessBlockers
+  }
+  summon_enablement_gate_handoff = [ordered]@{
+    status = $SummonEnablementGateStatus
+    ok = $SummonEnablementGateHandoffObserved
+    evidence = $SummonEnablementGateEvidence
+    ready = $SummonEnablementGateReady
+    summon_anywhere = $SummonEnablementGateSummonAnywhere
+    operator_surface_readback_ready = $SummonEnablementGateOperatorSurfaceReadbackReady
+    handoff_observed = $SummonEnablementGateFirstBlockerFamilyHandoffObserved
+    first_blocker_family = $SummonEnablementGateFirstBlockerFamily
+    blocked_families = $SummonEnablementGateBlockedFamilies
+    first_blocker_family_handoff = $SummonEnablementGateFirstBlockerFamilyHandoff
+    blocked_family_handoffs = $SummonEnablementGateBlockedFamilyHandoffs
+    next_smallest_truthful_gap = $SummonEnablementGateNextSmallestTruthfulGap
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    service_control_authority = $false
+    hotkey_registration_authority = $false
+    tray_registration_authority = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    memory_write = $false
+    receipt_write_authority = $false
+    resident_claim_authority = $false
+    blockers = $SummonEnablementGateBlockers
   }
   persistent_supervision_enablement_denial_boundary = [ordered]@{
     status = $PersistentSupervisionEnablementDenialStatus
@@ -2693,6 +2773,7 @@ $Payload = [ordered]@{
     resident_host_supervision_authority_denial_receipt_readback_observed = $HostSupervisionAuthorityDenialReceiptsObserved
     resident_host_supervision_authority_grant_receipt_readback_observed = $HostSupervisionAuthorityGrantReceiptsObserved
     resident_host_supervision_authority_readiness_audit_observed = $HostSupervisionAuthorityReadinessObserved
+    summon_enablement_gate_handoff_readback = $SummonEnablementGateHandoffObserved
     persistent_supervision_enablement_denial_boundary_observed = $PersistentSupervisionEnablementDenialObserved
     persistent_supervision_enablement_execution_denial_boundary_observed = $PersistentSupervisionEnablementExecutionDenialObserved
     temporary_runtime_state_write = $true

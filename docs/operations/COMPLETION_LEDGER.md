@@ -18098,6 +18098,41 @@ status readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens checkpoint summon handoff readback
+
+Stage 6/Lens checkpoint now consumes the summon enablement handoff projected
+through `/lens/status`. `scripts/lens-stage6-checkpoint.ps1` carries the
+summon gate handoff inside the `summon_enablement_gate` enablement gate entry
+and exposes a dedicated `summon_enablement_gate_handoff` checkpoint block with
+`handoff_observed`, `first_blocker_family_handoff`, `blocked_family_handoffs`,
+and governance `summon_enablement_gate_handoff_readback`. The first handoff
+remains `resident_host`, points to the bounded resident-host runtime-loop
+readiness path, and preserves `resident_host_runtime_blocker_boundary` as the
+first blocker-family boundary.
+
+This is checkpoint/readback-only. It does not implement summon-anywhere, grant
+summon authority, register a hotkey, open or control an overlay, launch or
+supervise a process beyond the existing bounded checkpoint proofs, create or
+decide approvals, write memory, write receipts, or claim resident status.
+Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens checkpoint summon
+handoff readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `failed before expectation correction on the checkpoint-normalized live resident-host handoff blockers, then passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `failed before formatting, then passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,@{Name='summon_handoff_ok';Expression={$_.summon_enablement_gate_handoff.ok}},@{Name='summon_handoff_observed';Expression={$_.summon_enablement_gate_handoff.handoff_observed}},@{Name='first_handoff_gap';Expression={$_.summon_enablement_gate_handoff.first_blocker_family_handoff.next_smallest_truthful_gap}},@{Name='handoff_count';Expression={$_.summon_enablement_gate_handoff.blocked_family_handoffs.Count}},@{Name='governance_handoff_readback';Expression={$_.governance.summon_enablement_gate_handoff_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; returned blocked/active, ready_to_close=false, summon_handoff_ok=true, summon_handoff_observed=true, first_handoff_gap=resident_host_runtime_blocker_boundary, handoff_count=6, and governance_handoff_readback=true`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -106,6 +106,66 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "local_process_launch_authority_not_granted" in summon_gate_groups["resident_host"]
     assert "global_hotkey_binding_missing" in summon_gate_groups["global_hotkey_binding"]
     assert "summon_binding_missing" in summon_gate_groups["summon_binding"]
+    expected_summon_blocked_families = [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    expected_first_summon_handoff = {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "blockers": [
+            "lens_host_runtime_not_implemented",
+            "local_process_launch_authority_not_granted",
+        ],
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert enablement_gates["summon_enablement_gate"]["operator_surface_readback_ready"] is True
+    assert enablement_gates["summon_enablement_gate"]["first_blocker_family"] == "resident_host"
+    assert enablement_gates["summon_enablement_gate"]["blocked_families"] == expected_summon_blocked_families
+    assert enablement_gates["summon_enablement_gate"]["first_blocker_family_handoff_observed"] is True
+    assert enablement_gates["summon_enablement_gate"]["first_blocker_family_handoff"] == (expected_first_summon_handoff)
+    assert [item["id"] for item in enablement_gates["summon_enablement_gate"]["blocked_family_handoffs"]] == (
+        expected_summon_blocked_families
+    )
+    summon_handoff = payload["summon_enablement_gate_handoff"]
+    assert summon_handoff["status"] == "blocked"
+    assert summon_handoff["ok"] is True
+    assert summon_handoff["ready"] is False
+    assert summon_handoff["summon_anywhere"] is False
+    assert summon_handoff["operator_surface_readback_ready"] is True
+    assert summon_handoff["handoff_observed"] is True
+    assert summon_handoff["first_blocker_family"] == "resident_host"
+    assert summon_handoff["blocked_families"] == expected_summon_blocked_families
+    assert summon_handoff["first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert [item["id"] for item in summon_handoff["blocked_family_handoffs"]] == expected_summon_blocked_families
+    assert summon_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert "/lens/status" in summon_handoff["evidence"]
+    assert "summon_authority_not_granted" in summon_handoff["blockers"]
+    assert summon_handoff["execution_authority"] is False
+    assert summon_handoff["approval_decision_authority"] is False
+    assert summon_handoff["local_process_launch_authority"] is False
+    assert summon_handoff["hotkey_registration_authority"] is False
+    assert summon_handoff["tray_registration_authority"] is False
+    assert summon_handoff["overlay_control_authority"] is False
+    assert summon_handoff["summon_authority"] is False
+    assert summon_handoff["memory_write"] is False
+    assert summon_handoff["receipt_write_authority"] is False
+    assert summon_handoff["resident_claim_authority"] is False
     assert enablement_gates["tray_enablement_gate"]["status"] == "blocked"
     assert enablement_gates["tray_enablement_gate"]["ready"] is False
     assert enablement_gates["tray_enablement_gate"]["tray_presence"] is False
@@ -1276,6 +1336,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_host_supervision_authority_denial_receipt_readback_observed": True,
         "resident_host_supervision_authority_grant_receipt_readback_observed": True,
         "resident_host_supervision_authority_readiness_audit_observed": True,
+        "summon_enablement_gate_handoff_readback": True,
         "persistent_supervision_enablement_denial_boundary_observed": True,
         "persistent_supervision_enablement_execution_denial_boundary_observed": True,
         "temporary_runtime_state_write": True,
