@@ -18032,6 +18032,41 @@ blocker family handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-03 - Stage 6/Lens completion-audit summon handoff readback
+
+Stage 6/Lens completion audit now consumes the summon-anywhere blocker-family
+handoff exposed by `scripts/lens-summon-anywhere-blockers-proof.ps1`. The audit
+requires the first blocker handoff before considering summon-anywhere blocker
+proof readback complete, exposes
+`summon_anywhere_first_blocker_family_handoff`,
+`summon_anywhere_blocker_family_handoffs`, and records
+`summon_anywhere_first_blocker_family_handoff_readback` in governance. The
+current first handoff remains `resident_host`, points to the bounded
+resident-host proof script, and names `resident_host_runtime_blocker_boundary`
+as the first blocker-family boundary.
+
+This is completion-audit/readback-only. It does not implement summon-anywhere,
+grant summon authority, register a hotkey, open or control an overlay, launch or
+supervise a process, create or decide approvals, write memory, write receipts,
+or claim resident status. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-03` Stage 6/Lens completion-audit
+summon handoff readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,summon_anywhere_first_blocker_family,summon_anywhere_first_blocker_family_handoff_observed,@{Name='first_handoff_gap';Expression={$_.summon_anywhere_first_blocker_family_handoff.next_smallest_truthful_gap}},@{Name='handoff_count';Expression={$_.summon_anywhere_blocker_family_handoffs.Count}},@{Name='audit_handoff_readback';Expression={$_.governance.summon_anywhere_first_blocker_family_handoff_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; returned blocked/active, ready_to_close=false, stage6_completion_reviewed=true, summon_anywhere_first_blocker_family=resident_host, summon_anywhere_first_blocker_family_handoff_observed=true, first_handoff_gap=resident_host_runtime_blocker_boundary, handoff_count=6, and audit_handoff_readback=true`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

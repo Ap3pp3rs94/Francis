@@ -823,6 +823,57 @@ $SummonAnywhereBlockersProofOverlayBlockers = ConvertTo-StringArray -Value $Summ
 $SummonAnywhereBlockersProofGlobalHotkeyBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.global_hotkey_binding
 $SummonAnywhereBlockersProofSummonBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.summon_binding
 $SummonAnywhereBlockersProofAuthorityBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.authority
+$SummonAnywhereBlockersProofFirstFamilyHandoff = $SummonAnywhereBlockersProof.first_blocker_family_handoff
+$SummonAnywhereBlockersProofFirstFamilyHandoffBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereBlockersProofFirstFamilyHandoff.blockers
+)
+$SummonAnywhereBlockersProofFamilyHandoffs = @($SummonAnywhereBlockersProof.blocked_family_handoffs)
+$SummonAnywhereBlockersProofFamilyHandoffIds = [string[]]@(
+  $SummonAnywhereBlockersProofFamilyHandoffs | ForEach-Object { [string]$_.id }
+)
+$SummonAnywhereBlockersProofFamilyHandoffsAligned = (
+  @($SummonAnywhereBlockersProofFamilyHandoffIds).Count -eq @($SummonAnywhereBlockersProofFamilies).Count
+)
+for ($Index = 0; $Index -lt @($SummonAnywhereBlockersProofFamilies).Count; $Index += 1) {
+  if (
+    @($SummonAnywhereBlockersProofFamilyHandoffIds).Count -le $Index -or
+    [string]$SummonAnywhereBlockersProofFamilyHandoffIds[$Index] -ne [string]$SummonAnywhereBlockersProofFamilies[$Index]
+  ) {
+    $SummonAnywhereBlockersProofFamilyHandoffsAligned = $false
+  }
+}
+$SummonAnywhereBlockersProofFamilyHandoffsBounded = $true
+foreach ($Handoff in @($SummonAnywhereBlockersProofFamilyHandoffs)) {
+  if (
+    -not [bool]$Handoff.read_only_contract -or
+    -not [bool]$Handoff.diagnostic_only -or
+    [bool]$Handoff.authority_granted -or
+    [bool]$Handoff.would_execute -or
+    [bool]$Handoff.would_mutate
+  ) {
+    $SummonAnywhereBlockersProofFamilyHandoffsBounded = $false
+  }
+}
+$SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
+  [bool]$SummonAnywhereBlockersProof.first_blocker_family_handoff_observed -and
+  [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback -and
+  $SummonAnywhereBlockersProofFamilyHandoffsAligned -and
+  $SummonAnywhereBlockersProofFamilyHandoffsBounded -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.id -eq 'resident_host' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.status -eq 'blocked' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.route -eq '/lens/host' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.readiness_route -eq '/lens/host/runtime-loop/readiness' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_step -eq 'run_resident_host_blocker_proof' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_required -eq 'resident_runtime_execution_authority' -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffBlockers -contains 'local_process_launch_authority_not_granted' -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_granted -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.read_only_contract -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.diagnostic_only -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_execute -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_mutate
+)
 $SummonAnywhereBlockersProofObserved = (
   [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
   [bool]$SummonAnywhereBlockersProof.ok -and
@@ -834,6 +885,7 @@ $SummonAnywhereBlockersProofObserved = (
   [bool]$SummonAnywhereBlockersProof.stage6_family_projection_observed -and
   [bool]$SummonAnywhereBlockersProof.side_effects_denied -and
   [bool]$SummonAnywhereBlockersProof.os_binding_authority_request_readback_observed -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved -and
   [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'resident_host' -and
   $SummonAnywhereBlockersProofFamilies -contains 'resident_host' -and
   $SummonAnywhereBlockersProofFamilies -contains 'tray_presence' -and
@@ -858,6 +910,7 @@ $SummonAnywhereBlockersProofObserved = (
   [bool]$SummonAnywhereBlockersProofGovernance.wraps_lens_status -and
   [bool]$SummonAnywhereBlockersProofGovernance.read_only_contract -and
   [bool]$SummonAnywhereBlockersProofGovernance.os_binding_authority_request_readback -and
+  [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.approval_request_write -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.product_execution_authority -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.execution_authority -and
@@ -1198,6 +1251,9 @@ $Payload = [ordered]@{
   summon_anywhere_blocker_groups = $SummonAnywhereBlockerGroups
   summon_anywhere_blocked_families = [string[]]@($SummonAnywhereBlockedFamilies)
   summon_anywhere_first_blocker_family = $SummonAnywhereFirstBlockerFamily
+  summon_anywhere_first_blocker_family_handoff_observed = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+  summon_anywhere_first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+  summon_anywhere_blocker_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
   summary = [ordered]@{
     criteria_total = [int]$Checkpoint.summary.criteria_total
     ready_total = [int]$Checkpoint.summary.ready_total
@@ -1779,8 +1835,11 @@ $Payload = [ordered]@{
     stage6_family_projection_observed = [bool]$SummonAnywhereBlockersProof.stage6_family_projection_observed
     side_effects_denied = [bool]$SummonAnywhereBlockersProof.side_effects_denied
     os_binding_authority_request_readback_observed = [bool]$SummonAnywhereBlockersProof.os_binding_authority_request_readback_observed
+    first_blocker_family_handoff_observed = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
     first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
     blocked_families = [string[]]@($SummonAnywhereBlockersProofFamilies)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
     blocker_groups = [ordered]@{
       resident_host = [string[]]@($SummonAnywhereBlockersProofResidentHostBlockers)
       tray_presence = [string[]]@($SummonAnywhereBlockersProofTrayBlockers)
@@ -1798,6 +1857,7 @@ $Payload = [ordered]@{
       wraps_lens_status = [bool]$SummonAnywhereBlockersProofGovernance.wraps_lens_status
       read_only_contract = [bool]$SummonAnywhereBlockersProofGovernance.read_only_contract
       os_binding_authority_request_readback = [bool]$SummonAnywhereBlockersProofGovernance.os_binding_authority_request_readback
+      first_blocker_family_handoff_readback = [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback
       approval_request_write = $false
       product_execution_authority = $false
       execution_authority = $false
@@ -2204,6 +2264,7 @@ $Payload = [ordered]@{
     command_palette_os_binding_blockers_proof_readback = $CommandPaletteOsBindingObserved
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
+    summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

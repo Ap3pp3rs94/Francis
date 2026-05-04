@@ -74,7 +74,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "helpful_not_noisy",
         "system_resident_presence",
     ]
-    assert payload["summon_anywhere_blocked_families"] == [
+    expected_summon_family_ids = [
         "resident_host",
         "tray_presence",
         "overlay_window",
@@ -82,7 +82,28 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "summon_binding",
         "authority",
     ]
+    expected_first_summon_handoff = {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "blockers": ["local_process_launch_authority_not_granted"],
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert payload["summon_anywhere_blocked_families"] == expected_summon_family_ids
     assert payload["summon_anywhere_first_blocker_family"] == "resident_host"
+    assert payload["summon_anywhere_first_blocker_family_handoff_observed"] is True
+    assert payload["summon_anywhere_first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert [item["id"] for item in payload["summon_anywhere_blocker_family_handoffs"]] == expected_summon_family_ids
     summon_blocker_groups = payload["summon_anywhere_blocker_groups"]
     assert "lens_host_runtime_not_implemented" in summon_blocker_groups["resident_host"]
     assert "local_process_launch_authority_not_granted" in summon_blocker_groups["resident_host"]
@@ -935,15 +956,13 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_blockers_proof["stage6_family_projection_observed"] is True
     assert summon_anywhere_blockers_proof["side_effects_denied"] is True
     assert summon_anywhere_blockers_proof["os_binding_authority_request_readback_observed"] is True
+    assert summon_anywhere_blockers_proof["first_blocker_family_handoff_observed"] is True
     assert summon_anywhere_blockers_proof["first_blocker_family"] == "resident_host"
-    assert summon_anywhere_blockers_proof["blocked_families"] == [
-        "resident_host",
-        "tray_presence",
-        "overlay_window",
-        "global_hotkey_binding",
-        "summon_binding",
-        "authority",
-    ]
+    assert summon_anywhere_blockers_proof["first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert summon_anywhere_blockers_proof["blocked_families"] == expected_summon_family_ids
+    assert [item["id"] for item in summon_anywhere_blockers_proof["blocked_family_handoffs"]] == (
+        expected_summon_family_ids
+    )
     summon_anywhere_groups = summon_anywhere_blockers_proof["blocker_groups"]
     assert "local_process_launch_authority_not_granted" in summon_anywhere_groups["resident_host"]
     assert "tray_host_missing" in summon_anywhere_groups["tray_presence"]
@@ -965,6 +984,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_blockers_proof["governance"]["wraps_lens_status"] is True
     assert summon_anywhere_blockers_proof["governance"]["read_only_contract"] is True
     assert summon_anywhere_blockers_proof["governance"]["os_binding_authority_request_readback"] is True
+    assert summon_anywhere_blockers_proof["governance"]["first_blocker_family_handoff_readback"] is True
     assert summon_anywhere_blockers_proof["governance"]["approval_request_write"] is False
     assert summon_anywhere_blockers_proof["governance"]["product_execution_authority"] is False
     assert summon_anywhere_blockers_proof["governance"]["execution_authority"] is False
@@ -1273,6 +1293,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["command_palette_os_binding_blockers_proof_readback"] is True
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
+    assert governance["summon_anywhere_first_blocker_family_handoff_readback"] is True
     assert governance["summon_authority_blocker_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True
     assert governance["service_activation_plan_observed"] is True
