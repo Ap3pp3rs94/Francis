@@ -60,6 +60,9 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert payload["resident_claim_allowed"] is False
     assert payload["bounded_host_launch_observed"] is True
     assert payload["foreground_process_observed"] is True
+    assert payload["runtime_heartbeat_observed"] is True
+    assert payload["heartbeat_count"] >= 1
+    assert payload["last_heartbeat_at"]
     assert payload["resident_host_process"] is False
     assert payload["resident_host_process_state"] == "foreground_observed_not_supervised"
     assert payload["resident_host_process_blocker"] == "resident_host_process_not_supervised"
@@ -76,6 +79,7 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert checks["host_lifecycle_preflight"]["status"] == "blocked_readback_ready"
     assert checks["foreground_readiness_proof"]["status"] == "proof_passed"
     assert checks["bounded_launch_proof"]["status"] == "bounded_launch_observed"
+    assert checks["host_runtime_heartbeat"]["status"] == "heartbeat_observed"
     assert checks["service_plan_no_install"]["status"] == "blocked_no_install"
     assert checks["service_not_installed"]["status"] == "not_installed"
     assert checks["process_supervision_disabled"]["status"] == "blocked"
@@ -93,6 +97,10 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert proof["bounded_host_launch_observed"] is True
     assert proof["host_launch_completed"] is True
     assert proof["host_launch_authority_boundary"] is True
+    assert proof["host_launch_runtime_heartbeat_observed"] is True
+    assert proof["host_launch_heartbeat_count"] == payload["heartbeat_count"]
+    assert proof["host_launch_heartbeat_count"] >= 1
+    assert proof["host_launch_last_heartbeat_at"] == payload["last_heartbeat_at"]
     assert proof["host_launch_ready_for_resident_claim"] is False
     assert proof["service_plan_status"] == "blocked"
     assert proof["service_plan_ready"] is False

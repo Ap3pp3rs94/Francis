@@ -59,6 +59,9 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["runtime_handoff_observed"] is True
     assert payload["bounded_runtime_observed"] is True
+    assert payload["runtime_heartbeat_observed"] is True
+    assert payload["heartbeat_count"] >= 1
+    assert payload["last_heartbeat_at"]
     assert payload["runtime_boundary_blocked"] is True
     assert payload["process_supervision_handoff_observed"] is True
     assert payload["side_effects_bounded"] is True
@@ -82,6 +85,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_host_runtime_handoff"]["status"] == "handoff_consumed"
     assert checks["bounded_runtime_observation"]["status"] == "foreground_observed_not_supervised"
+    assert checks["runtime_heartbeat_readback"]["status"] == "heartbeat_observed"
     assert checks["runtime_boundary_blocked"]["status"] == "blocked"
     assert checks["process_supervision_handoff"]["status"] == "next_blocker_identified"
     assert checks["side_effects_bounded"]["status"] == "diagnostic_bounded"
@@ -103,6 +107,10 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert proof["host_supervision_status"] == "proof_passed"
     assert proof["bounded_host_launch_observed"] is True
     assert proof["foreground_process_observed"] is True
+    assert proof["host_supervision_runtime_heartbeat_observed"] is True
+    assert proof["host_supervision_heartbeat_count"] == payload["heartbeat_count"]
+    assert proof["host_supervision_heartbeat_count"] >= 1
+    assert proof["host_supervision_last_heartbeat_at"] == payload["last_heartbeat_at"]
     assert proof["host_supervision_next_gap"] == "resident_host_process_not_supervised"
     assert proof["process_supervision_status"] == "blocked"
     assert proof["service_control_status"] == "blocked"

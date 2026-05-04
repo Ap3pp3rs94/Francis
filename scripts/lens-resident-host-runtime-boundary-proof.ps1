@@ -164,6 +164,9 @@ $HostProof = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'proof'
 $HostBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionPayload -Name 'blockers' -Default @())
 $SummonRuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'resident_host_runtime_blockers' -Default @())
 $SummonSurfaceBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'resident_host_surface_blockers' -Default @())
+$RuntimeHeartbeatObserved = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'runtime_heartbeat_observed' -Default $false)
+$RuntimeHeartbeatCount = [int](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'heartbeat_count' -Default 0)
+$RuntimeLastHeartbeatAt = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'last_heartbeat_at' -Default '')
 
 $RuntimeHandoffObserved = (
   [int](Get-PropertyValue -Payload $SummonResidentHostResult -Name 'exit_code' -Default -1) -eq 0 -and
@@ -178,6 +181,9 @@ $BoundedRuntimeObserved = (
   [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'bounded_host_launch_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'foreground_process_observed' -Default $false) -and
+  $RuntimeHeartbeatObserved -and
+  $RuntimeHeartbeatCount -gt 0 -and
+  -not [string]::IsNullOrWhiteSpace($RuntimeLastHeartbeatAt) -and
   [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'resident_host_process_state' -Default '') -eq 'foreground_observed_not_supervised'
 )
 $RuntimeBoundaryBlocked = (
@@ -224,6 +230,7 @@ $SideEffectsBounded = (
 $Checks = @(
   (New-Check -Id 'resident_host_runtime_handoff' -Status $(if ($RuntimeHandoffObserved) { 'handoff_consumed' } else { 'missing_or_unexpected' }) -Passed $RuntimeHandoffObserved -Evidence 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -Reason 'The previous resident-host handoff must point at the runtime blocker boundary.'),
   (New-Check -Id 'bounded_runtime_observation' -Status $(if ($BoundedRuntimeObserved) { 'foreground_observed_not_supervised' } else { 'not_observed' }) -Passed $BoundedRuntimeObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The runtime boundary must distinguish a bounded foreground observation from a resident supervised host.'),
+  (New-Check -Id 'runtime_heartbeat_readback' -Status $(if ($RuntimeHeartbeatObserved) { 'heartbeat_observed' } else { 'missing' }) -Passed $RuntimeHeartbeatObserved -Evidence 'host supervision runtime heartbeat readback' -Reason 'The resident-host runtime boundary must preserve bounded host heartbeat evidence.'),
   (New-Check -Id 'runtime_boundary_blocked' -Status $(if ($RuntimeBoundaryBlocked) { 'blocked' } else { 'unexpected_ready' }) -Passed $RuntimeBoundaryBlocked -Evidence 'runtime blockers + host supervision proof blockers' -Reason 'The resident host runtime remains blocked by missing runtime implementation and unsupervised process state.'),
   (New-Check -Id 'process_supervision_handoff' -Status $(if ($ProcessSupervisionHandoffObserved) { 'next_blocker_identified' } else { 'missing_or_unexpected' }) -Passed $ProcessSupervisionHandoffObserved -Evidence 'host supervision proof next_smallest_truthful_gap' -Reason 'After consuming the runtime boundary, the next concrete blocker is process supervision.'),
   (New-Check -Id 'side_effects_bounded' -Status $(if ($SideEffectsBounded) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsBounded -Evidence 'summon resident-host governance + host supervision governance' -Reason 'The proof may observe one bounded diagnostic host run but must not grant product/API launch, execution, supervision, service, summon, memory, approval, or resident-claim authority.')
@@ -255,6 +262,9 @@ $Payload = [ordered]@{
   next_smallest_truthful_gap = 'resident_host_process_not_supervised'
   runtime_handoff_observed = $RuntimeHandoffObserved
   bounded_runtime_observed = $BoundedRuntimeObserved
+  runtime_heartbeat_observed = $RuntimeHeartbeatObserved
+  heartbeat_count = $RuntimeHeartbeatCount
+  last_heartbeat_at = $RuntimeLastHeartbeatAt
   runtime_boundary_blocked = $RuntimeBoundaryBlocked
   process_supervision_handoff_observed = $ProcessSupervisionHandoffObserved
   side_effects_bounded = $SideEffectsBounded
@@ -282,6 +292,9 @@ $Payload = [ordered]@{
     host_supervision_status = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '')
     bounded_host_launch_observed = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'bounded_host_launch_observed' -Default $false)
     foreground_process_observed = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'foreground_process_observed' -Default $false)
+    host_supervision_runtime_heartbeat_observed = $RuntimeHeartbeatObserved
+    host_supervision_heartbeat_count = $RuntimeHeartbeatCount
+    host_supervision_last_heartbeat_at = $RuntimeLastHeartbeatAt
     host_supervision_next_gap = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'next_smallest_truthful_gap' -Default '')
     process_supervision_status = [string](Get-PropertyValue -Payload $HostProof -Name 'process_supervision_status' -Default '')
     service_control_status = [string](Get-PropertyValue -Payload $HostProof -Name 'service_control_status' -Default '')

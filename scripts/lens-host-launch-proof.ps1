@@ -283,6 +283,13 @@ $FinalStatusResult = $null
 $FinalStatusPayload = $null
 $FinalProcessReadback = $null
 $LaunchCompleted = $false
+$RuntimeHeartbeatObserved = $false
+$LaunchHeartbeatCount = 0
+$LaunchLastHeartbeatAt = ''
+$FinalHeartbeatCount = 0
+$FinalLastHeartbeatAt = ''
+$FinalStatusHeartbeatCount = 0
+$FinalStatusLastHeartbeatAt = ''
 
 if ($PowerShellPath -and $HostScriptExists) {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
@@ -316,6 +323,12 @@ if ($PowerShellPath -and $HostScriptExists) {
   $FinalStatusResult = Invoke-HostScript -PowerShellPath $PowerShellPath -HostScriptPath $HostScriptPath -ProofDataRoot $ProofDataRoot -ScriptArgs @('-Mode', 'Status')
   $FinalStatusPayload = Get-PropertyValue -Payload $FinalStatusResult -Name 'payload'
   $FinalProcessReadback = Get-PropertyValue -Payload $FinalStatusPayload -Name 'process_readback'
+  $LaunchHeartbeatCount = [int](Get-PropertyValue -Payload $LaunchProcess -Name 'heartbeat_count' -Default 0)
+  $LaunchLastHeartbeatAt = [string](Get-PropertyValue -Payload $LaunchProcess -Name 'last_heartbeat_at' -Default '')
+  $FinalHeartbeatCount = [int](Get-PropertyValue -Payload $FinalState -Name 'heartbeat_count' -Default 0)
+  $FinalLastHeartbeatAt = [string](Get-PropertyValue -Payload $FinalState -Name 'last_heartbeat_at' -Default '')
+  $FinalStatusHeartbeatCount = [int](Get-PropertyValue -Payload $FinalProcessReadback -Name 'heartbeat_count' -Default 0)
+  $FinalStatusLastHeartbeatAt = [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'last_heartbeat_at' -Default '')
   $LaunchCompleted = (
     [string](Get-PropertyValue -Payload $FinalState -Name 'status' -Default '') -eq 'foreground_stopped' -and
     -not [bool](Get-PropertyValue -Payload $FinalState -Name 'process_alive' -Default $true) -and
@@ -324,13 +337,21 @@ if ($PowerShellPath -and $HostScriptExists) {
     [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'status' -Default '') -eq 'state_present_process_not_running' -and
     [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'state_status' -Default '') -eq 'foreground_stopped'
   )
+  $RuntimeHeartbeatObserved = (
+    $LaunchCompleted -and
+    $FinalHeartbeatCount -gt 0 -and
+    -not [string]::IsNullOrWhiteSpace($FinalLastHeartbeatAt) -and
+    $FinalStatusHeartbeatCount -eq $FinalHeartbeatCount -and
+    $FinalStatusLastHeartbeatAt -eq $FinalLastHeartbeatAt
+  )
 }
 
 [void]$Checks.Add((New-Check -Id 'bounded_launch_started' -Status $(if ($LaunchObserved) { 'launch_started_observed' } else { 'not_observed' }) -Passed $LaunchObserved -Evidence 'scripts/lens-host.ps1 -Mode Launch' -Reason 'The existing launch runner must start and observe one bounded foreground host process.'))
 [void]$Checks.Add((New-Check -Id 'launch_authority_boundary' -Status $(if ($LaunchAuthorityBounded) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $LaunchAuthorityBounded -Evidence 'launch.governance' -Reason 'The launch proof must remain diagnostic and must not grant product/API launch or execution authority.'))
 [void]$Checks.Add((New-Check -Id 'bounded_launch_completion' -Status $(if ($LaunchCompleted) { 'self_stopped' } else { 'not_stopped' }) -Passed $LaunchCompleted -Evidence 'runtime/lens-host/status.json' -Reason 'The launched foreground host must self-stop and leave readback state only.'))
+[void]$Checks.Add((New-Check -Id 'runtime_heartbeat_readback' -Status $(if ($RuntimeHeartbeatObserved) { 'heartbeat_observed' } else { 'missing_or_mismatched' }) -Passed $RuntimeHeartbeatObserved -Evidence 'runtime/lens-host/status.json + process_readback' -Reason 'The bounded host launch must preserve heartbeat metadata through stopped-state status readback.'))
 
-$ProofPassed = $LaunchObserved -and $LaunchAuthorityBounded -and $LaunchCompleted
+$ProofPassed = $LaunchObserved -and $LaunchAuthorityBounded -and $LaunchCompleted -and $RuntimeHeartbeatObserved
 $ObservedPid = [int](Get-PropertyValue -Payload $LaunchProcess -Name 'pid' -Default 0)
 $FinalPid = [int](Get-PropertyValue -Payload $FinalState -Name 'pid' -Default 0)
 $Blockers = @(
@@ -356,6 +377,9 @@ $Payload = [ordered]@{
   bounded_host_launch_observed = $LaunchObserved
   launch_authority_boundary = $LaunchAuthorityBounded
   launch_completed = $LaunchCompleted
+  runtime_heartbeat_observed = $RuntimeHeartbeatObserved
+  heartbeat_count = $FinalHeartbeatCount
+  last_heartbeat_at = $FinalLastHeartbeatAt
   resident_host_process = $false
   supervised = $false
   service_managed = $false
@@ -377,6 +401,12 @@ $Payload = [ordered]@{
     diagnostic_launch_authority = [bool](Get-PropertyValue -Payload $LaunchPayload -Name 'diagnostic_launch_authority' -Default $false)
     observed_pid = $ObservedPid
     final_pid = $FinalPid
+    launch_process_heartbeat_count = $LaunchHeartbeatCount
+    launch_process_last_heartbeat_at = $LaunchLastHeartbeatAt
+    final_heartbeat_count = $FinalHeartbeatCount
+    final_last_heartbeat_at = $FinalLastHeartbeatAt
+    final_status_heartbeat_count = $FinalStatusHeartbeatCount
+    final_status_last_heartbeat_at = $FinalStatusLastHeartbeatAt
     final_state_status = [string](Get-PropertyValue -Payload $FinalState -Name 'status' -Default '')
     final_status_readback = [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'status' -Default '')
     final_status_state = [string](Get-PropertyValue -Payload $FinalProcessReadback -Name 'state_status' -Default '')

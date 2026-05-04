@@ -53,6 +53,9 @@ def test_lens_host_launch_proof_observes_bounded_launch_without_product_authorit
     assert payload["bounded_host_launch_observed"] is True
     assert payload["launch_authority_boundary"] is True
     assert payload["launch_completed"] is True
+    assert payload["runtime_heartbeat_observed"] is True
+    assert payload["heartbeat_count"] >= 1
+    assert payload["last_heartbeat_at"]
     assert payload["resident_host_process"] is False
     assert payload["supervised"] is False
     assert payload["service_managed"] is False
@@ -69,6 +72,7 @@ def test_lens_host_launch_proof_observes_bounded_launch_without_product_authorit
     assert checks["bounded_launch_started"]["status"] == "launch_started_observed"
     assert checks["launch_authority_boundary"]["status"] == "diagnostic_bounded"
     assert checks["bounded_launch_completion"]["status"] == "self_stopped"
+    assert checks["runtime_heartbeat_readback"]["status"] == "heartbeat_observed"
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
@@ -79,6 +83,11 @@ def test_lens_host_launch_proof_observes_bounded_launch_without_product_authorit
     assert proof["diagnostic_launch_authority"] is True
     assert proof["observed_pid"] > 0
     assert proof["final_pid"] == proof["observed_pid"]
+    assert proof["final_heartbeat_count"] == payload["heartbeat_count"]
+    assert proof["final_heartbeat_count"] >= 1
+    assert proof["final_last_heartbeat_at"] == payload["last_heartbeat_at"]
+    assert proof["final_status_heartbeat_count"] == proof["final_heartbeat_count"]
+    assert proof["final_status_last_heartbeat_at"] == proof["final_last_heartbeat_at"]
     assert proof["final_state_status"] == "foreground_stopped"
     assert proof["final_status_readback"] == "state_present_process_not_running"
     assert proof["final_status_state"] == "foreground_stopped"

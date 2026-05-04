@@ -257,6 +257,9 @@ $ServicePlanGovernance = Get-PropertyValue -Payload $ServicePlan -Name 'governan
 $PreflightChecks = @(Get-PropertyValue -Payload $PreflightPayload -Name 'checks' -Default @())
 $ProcessSupervisionCheck = Get-CheckById -Checks $PreflightChecks -Id 'process_supervision'
 $ServiceControlCheck = Get-CheckById -Checks $PreflightChecks -Id 'service_control_authority'
+$HostLaunchHeartbeatObserved = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'runtime_heartbeat_observed' -Default $false)
+$HostLaunchHeartbeatCount = [int](Get-PropertyValue -Payload $HostLaunchPayload -Name 'heartbeat_count' -Default 0)
+$HostLaunchLastHeartbeatAt = [string](Get-PropertyValue -Payload $HostLaunchPayload -Name 'last_heartbeat_at' -Default '')
 
 $PreflightOk = (
   [int](Get-PropertyValue -Payload $HostPreflight -Name 'exit_code' -Default -1) -eq 0 -and
@@ -275,6 +278,9 @@ $HostLaunchProofOk = (
   [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_authority_boundary' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false) -and
+  $HostLaunchHeartbeatObserved -and
+  $HostLaunchHeartbeatCount -gt 0 -and
+  -not [string]::IsNullOrWhiteSpace($HostLaunchLastHeartbeatAt) -and
   -not [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $ServicePlanBlocked = (
@@ -299,6 +305,7 @@ $Checks = @(
   (New-Check -Id 'host_lifecycle_preflight' -Status $(if ($PreflightOk) { 'blocked_readback_ready' } else { 'failed' }) -Passed $PreflightOk -Evidence 'scripts/lens-host-preflight.ps1 -Mode Status' -Reason 'Lifecycle preflight must be readable and blocked.')
   (New-Check -Id 'foreground_readiness_proof' -Status $(if ($ForegroundProofOk) { 'proof_passed' } else { 'failed' }) -Passed $ForegroundProofOk -Evidence 'scripts/lens-host-foreground-proof.ps1 -Mode Status' -Reason 'Bounded foreground process readback must be observable.')
   (New-Check -Id 'bounded_launch_proof' -Status $(if ($HostLaunchProofOk) { 'bounded_launch_observed' } else { 'failed' }) -Passed $HostLaunchProofOk -Evidence 'scripts/lens-host-launch-proof.ps1 -Mode Status' -Reason 'Bounded launch evidence must show one observed self-stopping host launch without claiming resident supervision.')
+  (New-Check -Id 'host_runtime_heartbeat' -Status $(if ($HostLaunchHeartbeatObserved) { 'heartbeat_observed' } else { 'missing' }) -Passed $HostLaunchHeartbeatObserved -Evidence 'lens-host-launch-proof runtime heartbeat readback' -Reason 'Supervision readiness must preserve the bounded host launch heartbeat proof.')
   (New-Check -Id 'service_plan_no_install' -Status $(if ($ServicePlanBlocked) { 'blocked_no_install' } else { 'failed' }) -Passed $ServicePlanBlocked -Evidence 'service_plan' -Reason 'Service plan must remain read-only and non-installing.')
   (New-Check -Id 'service_not_installed' -Status $(if ($ServiceNotInstalled) { 'not_installed' } else { 'installed' }) -Passed $ServiceNotInstalled -Evidence 'service.status' -Reason 'Resident host service is not installed by this proof.')
   (New-Check -Id 'process_supervision_disabled' -Status $(if ($SupervisionDisabled) { 'blocked' } else { 'unexpected' }) -Passed $SupervisionDisabled -Evidence 'process_supervision_enabled' -Reason 'Process supervision remains disabled until a later authority-changing slice.')
@@ -340,6 +347,9 @@ $Payload = [ordered]@{
   resident_claim_allowed = $false
   bounded_host_launch_observed = $HostLaunchProofOk
   foreground_process_observed = $HostLaunchProofOk
+  runtime_heartbeat_observed = $HostLaunchHeartbeatObserved
+  heartbeat_count = $HostLaunchHeartbeatCount
+  last_heartbeat_at = $HostLaunchLastHeartbeatAt
   resident_host_process = $false
   resident_host_process_state = if ($HostLaunchProofOk) { 'foreground_observed_not_supervised' } else { 'missing' }
   resident_host_process_blocker = $ObservedHostProcessBlocker
@@ -362,6 +372,9 @@ $Payload = [ordered]@{
     bounded_host_launch_observed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'bounded_host_launch_observed' -Default $false)
     host_launch_completed = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_completed' -Default $false)
     host_launch_authority_boundary = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'launch_authority_boundary' -Default $false)
+    host_launch_runtime_heartbeat_observed = $HostLaunchHeartbeatObserved
+    host_launch_heartbeat_count = $HostLaunchHeartbeatCount
+    host_launch_last_heartbeat_at = $HostLaunchLastHeartbeatAt
     host_launch_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostLaunchPayload -Name 'ready_for_resident_claim' -Default $true)
     service_plan_status = [string](Get-PropertyValue -Payload $ServicePlan -Name 'status' -Default '')
     service_plan_ready = [bool](Get-PropertyValue -Payload $ServicePlan -Name 'ready' -Default $false)

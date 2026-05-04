@@ -18518,6 +18518,41 @@ heartbeat readback:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host.ps1`
 
+### 2026-05-04 - Stage 6/Lens host heartbeat proof chain
+
+Stage 6/Lens host heartbeat metadata is now promoted through the bounded host
+launch proof chain. `scripts/lens-host-launch-proof.ps1` verifies that
+`heartbeat_count` and `last_heartbeat_at` survive from the final stopped runtime
+state into `process_readback`, `scripts/lens-host-supervision-proof.ps1`
+preserves that heartbeat proof while composing blocked supervision readiness,
+and `scripts/lens-resident-host-runtime-boundary-proof.ps1` carries the same
+heartbeat evidence into the resident-host runtime blocker boundary.
+
+This is diagnostic proof/readback work. It does not create a resident host,
+supervise or restart a process, install or control a service, register a tray
+icon, register a hotkey, open an overlay, summon Francis, decide approvals,
+write memory, grant execution authority, create UI controls, or claim Stage 6
+closure. It makes the existing bounded host runtime observation harder to
+overclaim by requiring heartbeat evidence before the runtime boundary can pass.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, supervised
+resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens host heartbeat
+proof chain:
+
+- `python -m pytest tests\test_lens_host_launch_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_launch_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_launch_proof_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 | ConvertFrom-Json | Select-Object status,runtime_heartbeat_observed,heartbeat_count,next_smallest_truthful_gap | ConvertTo-Json`
+  Result: `passed; returned proof_passed, runtime_heartbeat_observed=true, heartbeat_count=6, and next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host-launch-proof.ps1, scripts\lens-host-supervision-proof.ps1, and scripts\lens-resident-host-runtime-boundary-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
