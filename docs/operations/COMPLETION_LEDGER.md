@@ -18481,6 +18481,43 @@ route aliases:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens host runtime heartbeat readback
+
+Stage 6/Lens foreground host runtime now refreshes its status file while a
+bounded foreground session is alive. `scripts/lens-host.ps1 -Mode Foreground`
+writes `heartbeat_interval_ms`, `heartbeat_count`, and `last_heartbeat_at` into
+`data/runtime/lens-host/status.json`, carries the same fields into stopped
+state, and projects the latest heartbeat metadata through `-Mode Status` and
+bounded `-Mode Launch` process readback.
+
+This is resident-host runtime observability work. It does not create a
+resident host, supervise a persistent process, restart a process, install or
+control a service, register a tray icon, register a hotkey, open an overlay,
+summon Francis, decide approvals, write memory, grant execution authority,
+create UI controls, or claim Stage 6 closure. It makes the existing bounded
+host process easier to observe truthfully while keeping resident, tray,
+hotkey, overlay, and summon claims false.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens host runtime
+heartbeat readback:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,@{Name='host_observed';Expression={$_.host_launch_proof.process_observed}},@{Name='supervisor_observed';Expression={$_.host_supervisor_observation_proof.bounded_supervisor_observed}},@{Name='runtime_blocker';Expression={$_.resident_host_runtime_boundary_proof.first_blocker_family}} | ConvertTo-Json -Depth 6`
+  Result: `passed; returned blocked/active, ready_to_close=false, next_smallest_truthful_gap=stage6_lens_completion_audit, and supervisor_observed=true`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

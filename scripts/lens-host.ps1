@@ -150,6 +150,8 @@ $PidPath = Join-Path $RuntimeDir 'lens-host.pid'
 $ProcessStateExists = Test-Path -LiteralPath $ProcessStatePath -PathType Leaf
 $ProcessStateStatus = ''
 $ProcessStateUpdatedAt = ''
+$ProcessStateHeartbeatCount = 0
+$ProcessStateLastHeartbeatAt = ''
 if ($ProcessStateExists) {
   try {
     $ProcessStatePayload = Get-Content -LiteralPath $ProcessStatePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
@@ -160,6 +162,18 @@ if ($ProcessStateExists) {
     $UpdatedProperty = $ProcessStatePayload.PSObject.Properties['updated_at']
     if ($null -ne $UpdatedProperty) {
       $ProcessStateUpdatedAt = [string]$UpdatedProperty.Value
+    }
+    $HeartbeatProperty = $ProcessStatePayload.PSObject.Properties['heartbeat_count']
+    if ($null -ne $HeartbeatProperty) {
+      try {
+        $ProcessStateHeartbeatCount = [int]$HeartbeatProperty.Value
+      } catch {
+        $ProcessStateHeartbeatCount = 0
+      }
+    }
+    $LastHeartbeatProperty = $ProcessStatePayload.PSObject.Properties['last_heartbeat_at']
+    if ($null -ne $LastHeartbeatProperty) {
+      $ProcessStateLastHeartbeatAt = [string]$LastHeartbeatProperty.Value
     }
   } catch {
     $ProcessStateStatus = 'unreadable'
@@ -273,6 +287,8 @@ $payload = [ordered]@{
     state_exists = $ProcessStateExists
     state_status = $ProcessStateStatus
     state_updated_at = $ProcessStateUpdatedAt
+    heartbeat_count = $ProcessStateHeartbeatCount
+    last_heartbeat_at = $ProcessStateLastHeartbeatAt
     pid_path = 'data/runtime/lens-host/lens-host.pid'
     pid_present = $PidPresent
     pid = $PidValue
@@ -353,6 +369,9 @@ if ($Mode -eq 'Foreground') {
     summon_anywhere = $false
     started_at = $StartedAt
     updated_at = $StartedAt
+    heartbeat_interval_ms = 500
+    heartbeat_count = 0
+    last_heartbeat_at = $StartedAt
     bounded_run_seconds = $RunSeconds
     governance = $RunningGovernance
   }
@@ -360,8 +379,19 @@ if ($Mode -eq 'Foreground') {
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
   Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding ASCII
 
+  $HeartbeatCount = 0
+  $LastHeartbeatAt = $StartedAt
   if ($RunSeconds -gt 0) {
-    Start-Sleep -Seconds $RunSeconds
+    $HeartbeatDeadline = (Get-Date).AddSeconds($RunSeconds)
+    while ((Get-Date) -lt $HeartbeatDeadline) {
+      Start-Sleep -Milliseconds 500
+      $HeartbeatCount += 1
+      $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
+      $RunningState['updated_at'] = $LastHeartbeatAt
+      $RunningState['heartbeat_count'] = $HeartbeatCount
+      $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
+      Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
+    }
   }
 
   $StoppedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -379,6 +409,9 @@ if ($Mode -eq 'Foreground') {
     summon_anywhere = $false
     started_at = $StartedAt
     updated_at = $StoppedAt
+    heartbeat_interval_ms = 500
+    heartbeat_count = $HeartbeatCount
+    last_heartbeat_at = $LastHeartbeatAt
     bounded_run_seconds = $RunSeconds
     stop_reason = 'bounded_foreground_session_completed'
     governance = $RunningGovernance
@@ -392,6 +425,8 @@ if ($Mode -eq 'Foreground') {
   $payload.process_readback.state_exists = $true
   $payload.process_readback.state_status = 'foreground_stopped'
   $payload.process_readback.state_updated_at = $StoppedAt
+  $payload.process_readback.heartbeat_count = $HeartbeatCount
+  $payload.process_readback.last_heartbeat_at = $LastHeartbeatAt
   $payload.process_readback.pid_present = $false
   $payload.process_readback.pid = 0
   $payload.process_readback.process_alive = $false
@@ -470,6 +505,8 @@ if ($Mode -eq 'Launch') {
   $payload.process_readback.state_exists = $null -ne $RunningState
   $payload.process_readback.state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '')
   $payload.process_readback.state_updated_at = [string](Get-PropertyValue -Payload $RunningState -Name 'updated_at' -Default $ObservedAt)
+  $payload.process_readback.heartbeat_count = [int](Get-PropertyValue -Payload $RunningState -Name 'heartbeat_count' -Default 0)
+  $payload.process_readback.last_heartbeat_at = [string](Get-PropertyValue -Payload $RunningState -Name 'last_heartbeat_at' -Default '')
   $payload.process_readback.pid_present = Test-Path -LiteralPath $PidPath -PathType Leaf
   $payload.process_readback.pid = $ObservedPid
   $payload.process_readback.process_alive = $LaunchObserved
