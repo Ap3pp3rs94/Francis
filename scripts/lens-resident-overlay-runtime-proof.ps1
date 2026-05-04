@@ -226,8 +226,11 @@ function New-Check {
 $PowerShellPath = Get-PowerShellPath
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
+$ResidentSurfaceForegroundRunSeconds = [Math]::Min(30, [Math]::Max(25, $SupervisorRunSeconds))
+$ResidentSurfaceTimeoutSeconds = [Math]::Max(150, ($ResidentSurfaceForegroundRunSeconds * 2) + 120)
+$ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
 
-$ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status') -TimeoutSeconds 120
+$ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceArgs -TimeoutSeconds $ResidentSurfaceTimeoutSeconds
 $SupervisorArgs = @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $SupervisorArgs += @('-DataDir', $DataDir)
@@ -334,6 +337,7 @@ $Payload = [ordered]@{
   mode = $Mode.ToLowerInvariant()
   repo_root = $RepoRoot
   supervisor_run_seconds = $SupervisorRunSeconds
+  resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
   resident_overlay_runtime_ready = $false
   ready_for_lens_resident_claim = $false
   resident_claim_allowed = $false

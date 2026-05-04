@@ -18553,6 +18553,47 @@ proof chain:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-host-launch-proof.ps1, scripts\lens-host-supervision-proof.ps1, and scripts\lens-resident-host-runtime-boundary-proof.ps1`
 
+### 2026-05-04 - Stage 6/Lens resident overlay proof window stabilization
+
+Stage 6/Lens resident overlay runtime proof now aligns its nested resident
+surface foreground observation window with the supervisor observation window.
+`scripts/lens-resident-overlay-runtime-proof.ps1` invokes
+`scripts/lens-resident-surface-proof.ps1` with a bounded foreground run window of
+at least 25 seconds, capped by the resident surface proof contract, and exposes
+that run window as `resident_surface_foreground_run_seconds` in the overlay
+runtime proof payload.
+
+This is proof-stability and diagnostic readback work only. It does not create a
+resident host, supervise or restart a process, install or control a service,
+register a tray icon, register a hotkey, open an overlay, summon Francis, decide
+approvals, write memory, grant execution authority, create UI controls, or claim
+Stage 6 closure. It addresses the Windows CI failure where the outer activation
+boundary remained denial-safe, but the nested resident overlay runtime proof
+reported `proof_failed` after the resident surface foreground readback fell back
+to `resident_surface_runtime_missing`.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, supervised
+resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens resident overlay
+proof window stabilization:
+
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed with a Ruff cache write warning: access denied for .ruff_cache`
+- `python -m ruff format --check tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-resident-overlay-runtime-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
