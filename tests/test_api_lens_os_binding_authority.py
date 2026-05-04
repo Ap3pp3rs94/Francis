@@ -181,12 +181,18 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert plan["plan"]["would_launch_process"] is False
     assert plan["plan"]["would_write_memory"] is False
     assert plan["authority_request_readback"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert plan["command_palette_contract"]["readback_ready"] is True
+    assert plan["command_palette_contract"]["authority_granted"] is True
+    assert plan["command_palette_contract"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert plan["command_palette_contract"]["os_level_command_palette"] is False
     steps = {item["id"]: item for item in plan["plan"]["steps"]}
     palette_step = steps["os_level_command_palette_contract"]
     assert palette_step["ready"] is False
+    assert palette_step["readback_ready"] is True
     assert palette_step["authority_required"] == "os_level_command_palette_binding_authority"
     assert palette_step["authority_granted"] is True
     assert palette_step["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert palette_step["bridge_script"] == "scripts/lens-command-palette.ps1"
     assert "os_level_command_palette_missing" in palette_step["blockers"]
 
     readiness = client.get("/lens/os-binding/readiness").json()
@@ -203,15 +209,20 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert readiness["ready"] is False
     assert readiness["os_level_command_palette"] is False
     assert readiness["summon_anywhere"] is False
+    assert readiness["command_palette_contract"]["readback_ready"] is True
+    assert readiness["command_palette_contract"]["authority_granted"] is True
+    assert readiness["command_palette_contract"]["active_grant_receipt_id"] == receipt["receipt_id"]
     requirements = {item["id"]: item for item in readiness["requirements"]}
     assert requirements["authority_request_readback"]["authority_granted"] is True
     assert requirements["authority_request_readback"]["active_grant_receipt_id"] == receipt["receipt_id"]
     assert requirements["os_level_command_palette"]["authority_granted"] is True
     assert requirements["os_level_command_palette"]["active_grant_receipt_id"] == receipt["receipt_id"]
     assert requirements["os_level_command_palette"]["ready"] is False
+    assert requirements["os_level_command_palette"]["readback_ready"] is True
     assert readiness["implementation_plan"]["authority_granted"] is True
     assert readiness["implementation_plan"]["active_grant_receipt_id"] == receipt["receipt_id"]
     assert readiness["implementation_plan"]["authority_grant_consumed"] is True
+    assert readiness["implementation_plan"]["command_palette_contract"]["readback_ready"] is True
 
     status = client.get("/lens/status?limit=10").json()
     os_binding_criterion = next(

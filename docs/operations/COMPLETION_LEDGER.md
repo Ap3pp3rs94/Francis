@@ -18242,6 +18242,41 @@ authority grant consumption readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens OS-binding command palette bridge contract readback
+
+Stage 6/Lens OS-binding plan and readiness now surface the existing command
+palette shell bridge as a first-class readback contract. `/lens/os-binding/plan`
+and `/lens/os-binding/readiness` expose a `command_palette_contract` tied to
+`/lens/status`, `scripts/lens-command-palette.ps1`, and
+`scripts/lens-command-palette-os-binding-proof.ps1`; the OS-level palette
+requirement and plan step now carry the bridge source, route, local surface,
+availability, and readback-ready state while remaining blocked for real
+OS-level palette binding and summon-anywhere.
+
+This is backend/API readback-only contract wiring. It does not create a new
+command palette, open a palette, register a global hotkey, summon Francis
+anywhere, launch or supervise a process, register tray presence, open or
+control an overlay, decide approvals, write memory, or claim resident status.
+Stage 6 remains active and blocked on real command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens OS-binding command
+palette bridge contract readback:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `failed before formatting tests\test_api_lens.py, then passed`
+- `python -m mypy src\francis\lens\preflight.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

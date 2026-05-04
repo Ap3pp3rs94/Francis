@@ -387,6 +387,9 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert requirements["authority_request_readback"]["ready"] is True
     assert requirements["os_level_command_palette"]["route"] == "/lens/os-binding/plan"
     assert requirements["os_level_command_palette"]["ready"] is False
+    assert requirements["os_level_command_palette"]["readback_ready"] is True
+    assert requirements["os_level_command_palette"]["source"] == "lens.command_palette.shell_bridge"
+    assert requirements["os_level_command_palette"]["bridge_script"] == "scripts/lens-command-palette.ps1"
     assert requirements["global_hotkey_binding"]["route"] == "/lens/summon"
     assert requirements["summon_binding"]["route"] == "/lens/summon"
     assert requirements["resident_host"]["route"] == "/lens/host"
@@ -422,6 +425,21 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert authority_readback["governance"]["read_only_contract"] is True
     assert authority_readback["governance"]["approval_request_write"] is False
     assert authority_readback["governance"]["memory_write"] is False
+    command_palette_contract = body["command_palette_contract"]
+    assert command_palette_contract["kind"] == "lens.os_binding.command_palette_contract"
+    assert command_palette_contract["status"] == "blocked"
+    assert command_palette_contract["readback_ready"] is True
+    assert command_palette_contract["route"] == "/lens/status"
+    assert command_palette_contract["source"] == "lens.command_palette.shell_bridge"
+    assert command_palette_contract["bridge_script"] == "scripts/lens-command-palette.ps1"
+    assert command_palette_contract["proof_script"] == "scripts/lens-command-palette-os-binding-proof.ps1"
+    assert command_palette_contract["availability"] == "chat_ui_only"
+    assert command_palette_contract["authority_granted"] is False
+    assert command_palette_contract["os_level_command_palette"] is False
+    assert command_palette_contract["would_open_palette"] is False
+    assert command_palette_contract["would_register_hotkey"] is False
+    assert command_palette_contract["governance"]["read_only_contract"] is True
+    assert command_palette_contract["governance"]["execution_authority"] is False
     assert body["summon_enablement_gate"] == {
         "route": "/lens/summon",
         "status": "blocked",
@@ -457,6 +475,8 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert implementation_plan["governance"]["read_only_contract"] is True
     assert implementation_plan["governance"]["execution_authority"] is False
     assert implementation_plan["governance"]["hotkey_registration_authority"] is False
+    assert implementation_plan["command_palette_contract"]["readback_ready"] is True
+    assert implementation_plan["command_palette_contract"]["route"] == "/lens/status"
     governance = body["governance"]
     assert governance["read_only_contract"] is True
     assert governance["execution_authority"] is False
@@ -524,11 +544,21 @@ def test_lens_os_binding_plan_blocks_os_palette_without_authority(
     assert "global_hotkey_binding_disabled" in body["blocker_groups"]["global_hotkey_binding"]
     assert "lens_summon_binding_not_implemented" in body["blocker_groups"]["summon_binding"]
     assert "resident_host_process_missing" in body["blocker_groups"]["resident_host"]
+    command_palette_contract = body["command_palette_contract"]
+    assert command_palette_contract["readback_ready"] is True
+    assert command_palette_contract["source_route"] == "/lens/status"
+    assert command_palette_contract["local_surface"] == "chat_ui.command_palette"
+    assert command_palette_contract["authority_required"] == "os_level_command_palette_binding_authority"
+    assert command_palette_contract["governance"]["execution_authority"] is False
     steps = {item["id"]: item for item in body["plan"]["steps"]}
     assert steps["os_level_command_palette_contract"]["route"] == "/lens/status"
     assert steps["os_level_command_palette_contract"]["authority_required"] == (
         "os_level_command_palette_binding_authority"
     )
+    assert steps["os_level_command_palette_contract"]["readback_ready"] is True
+    assert steps["os_level_command_palette_contract"]["bridge_script"] == "scripts/lens-command-palette.ps1"
+    assert body["source_readbacks"]["command_palette_contract_readback_ready"] is True
+    assert body["source_readbacks"]["command_palette_contract_bridge_script"] == ("scripts/lens-command-palette.ps1")
     assert steps["global_hotkey_binding_contract"]["route"] == "/lens/summon"
     assert steps["global_hotkey_binding_contract"]["authority_required"] == "hotkey_registration_authority"
     assert steps["summon_binding_contract"]["authority_required"] == "summon_authority"
@@ -912,6 +942,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     os_binding_requirements = {item["id"]: item for item in os_binding["requirements"]}
     assert os_binding_requirements["authority_request_readback"]["ready"] is True
     assert os_binding_requirements["authority_request_readback"]["route"] == "/lens/os-binding/authority/requests"
+    assert os_binding_requirements["os_level_command_palette"]["readback_ready"] is True
+    assert os_binding_requirements["os_level_command_palette"]["source_route"] == "/lens/status"
+    assert os_binding["command_palette_contract"]["readback_ready"] is True
+    assert os_binding["command_palette_contract"]["bridge_script"] == "scripts/lens-command-palette.ps1"
     assert "os_level_command_palette_missing" in os_binding["blocker_groups"]["palette_binding"]
     assert "global_hotkey_binding_missing" in os_binding["blocker_groups"]["global_hotkey_binding"]
     assert "summon_binding_missing" in os_binding["blocker_groups"]["summon_binding"]
@@ -924,6 +958,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["implementation_plan"]["route"] == "/lens/os-binding/plan"
     assert os_binding["implementation_plan"]["plan_available"] is True
     assert os_binding["implementation_plan"]["implementation_ready"] is False
+    assert os_binding["implementation_plan"]["command_palette_contract"]["readback_ready"] is True
     assert body["receipts"]["lens_os_binding_readiness_route"] == "/lens/os-binding/readiness"
     assert body["hud"]["readback_ready"] is True
     assert body["hud"]["runtime_status"] == "readback_only"
