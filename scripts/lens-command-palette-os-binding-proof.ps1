@@ -268,11 +268,45 @@ $SideEffectsDenied = (
     (Get-PropertyValue -Object $OverlayGovernance -Name "overlay_control_authority") -eq $false
 )
 
+$OsBindingCandidateRequiredAuthority = @(
+    "lens.os_binding.command_palette_binding_authority",
+    "hotkey_registration_authority",
+    "summon_authority",
+    "local_process_launch_authority"
+)
+$OsBindingCandidateAuthorityBlockers = Select-Blockers -Blockers $AuthorityBlockers -Names @(
+    "summon_authority_not_granted",
+    "hotkey_registration_authority_not_granted",
+    "local_process_launch_authority_not_granted"
+)
+$OsBindingCandidateBlockedBy = Merge-Unique -Groups @(
+    $PaletteBindingBlockers,
+    $GlobalHotkeyBlockers,
+    $SummonBindingBlockers,
+    $OsBindingCandidateAuthorityBlockers
+)
+$OsBindingCandidateObserved = (
+    $PaletteBridgeObserved -and
+    $SummonPreflightObserved -and
+    $SideEffectsDenied -and
+    -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Object $SummonJson -Name "global_hotkey" -Default "")) -and
+    -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Object $SummonJson -Name "binding_scope" -Default "")) -and
+    (Test-ContainsAll -Actual $OsBindingCandidateBlockedBy -Expected @(
+        "os_level_command_palette_missing",
+        "global_hotkey_binding_disabled",
+        "lens_summon_binding_not_implemented",
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "local_process_launch_authority_not_granted"
+    ))
+)
+
 $Checks = @(
     (New-Check -Name "command_palette_shell_bridge" -Passed $PaletteBridgeObserved -Status "blocked_readback_ready" -Evidence $PaletteBindingBlockers),
     (New-Check -Name "summon_preflight" -Passed $SummonPreflightObserved -Status "blocked_readback_ready" -Evidence (Merge-Unique -Groups @($GlobalHotkeyBlockers, $SummonBindingBlockers))),
     (New-Check -Name "tray_preflight" -Passed $TrayPreflightObserved -Status "blocked_readback_ready" -Evidence $TrayPresenceBlockers),
     (New-Check -Name "overlay_preflight" -Passed $OverlayPreflightObserved -Status "blocked_readback_ready" -Evidence $OverlayWindowBlockers),
+    (New-Check -Name "os_binding_candidate_boundary" -Passed $OsBindingCandidateObserved -Status "candidate_blocked_readback_ready" -Evidence $OsBindingCandidateBlockedBy),
     (New-Check -Name "os_binding_side_effects_denied" -Passed $SideEffectsDenied -Status "diagnostic_bounded" -Evidence $AuthorityBlockers)
 )
 
@@ -298,6 +332,7 @@ $Payload = [ordered]@{
     summon_preflight_observed = $SummonPreflightObserved
     tray_preflight_observed = $TrayPreflightObserved
     overlay_preflight_observed = $OverlayPreflightObserved
+    os_binding_candidate_observed = $OsBindingCandidateObserved
     side_effects_denied = $SideEffectsDenied
     blocked_families = $BlockedFamilies
     first_blocker_family = "palette_binding"
@@ -309,6 +344,31 @@ $Payload = [ordered]@{
         tray_presence = $TrayPresenceBlockers
         overlay_window = $OverlayWindowBlockers
         authority = $AuthorityBlockers
+    }
+    os_binding_candidate = [ordered]@{
+        kind = "lens.command_palette.os_binding_candidate"
+        status = "blocked"
+        candidate = "global_hotkey_to_lens_command_palette_bridge"
+        trigger = Get-PropertyValue -Object $SummonJson -Name "global_hotkey"
+        binding_scope = Get-PropertyValue -Object $SummonJson -Name "binding_scope"
+        route = Get-PropertyValue -Object $PaletteJson -Name "route"
+        local_surface = Get-PropertyValue -Object $PaletteJson -Name "local_surface"
+        bridge_script = "scripts/lens-command-palette.ps1"
+        proof_script = "scripts/lens-command-palette-os-binding-proof.ps1"
+        requires_approval_kind = "lens.os_binding.command_palette_binding_authority"
+        required_authority = $OsBindingCandidateRequiredAuthority
+        required_preflight_families = [string[]]@("palette_binding", "global_hotkey_binding", "summon_binding", "authority")
+        blocked_by = $OsBindingCandidateBlockedBy
+        current_authorized_effect = "readback_only_status"
+        candidate_effect_if_authorized = "open_lens_command_palette_from_governed_os_binding"
+        open_mode_authorized = $false
+        open_mode_refusal = "lens_command_palette_open_not_authorized"
+        would_register_hotkey_now = $false
+        would_open_palette_now = $false
+        would_summon_anywhere_now = $false
+        would_launch_process_now = $false
+        would_write_memory_now = $false
+        next_smallest_truthful_gap = "os_level_command_palette_binding"
     }
     command_palette = [ordered]@{
         status = Get-PropertyValue -Object $PaletteJson -Name "status"
@@ -345,6 +405,7 @@ $Payload = [ordered]@{
         wraps_summon_preflight = $true
         wraps_tray_preflight = $true
         wraps_overlay_preflight = $true
+        os_binding_candidate_boundary_readback = $OsBindingCandidateObserved
         read_only_contract = $true
         opens_palette = $false
         execution_authority = $false

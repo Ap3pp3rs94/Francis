@@ -18277,6 +18277,42 @@ palette bridge contract readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens OS-binding command palette candidate proof
+
+Stage 6/Lens command-palette OS-binding proof now names the exact future
+candidate boundary for the summon-anywhere path. The
+`scripts/lens-command-palette-os-binding-proof.ps1` payload exposes an
+`os_binding_candidate` for a governed global-hotkey-to-Lens-command-palette
+bridge, including the intended trigger, bridge script, status route, local
+surface, required approval kind, required authorities, preflight families,
+current blockers, and the current authorized effect of readback-only status.
+The proof now fails if that candidate boundary cannot be derived from the
+existing command-palette, summon, tray, overlay, and authority readbacks.
+
+This is diagnostic/readback-only proof work. It does not bind a global hotkey,
+open an OS command palette, summon Francis anywhere, launch or supervise a
+process, control overlay or tray surfaces, decide approvals, grant authority,
+write memory, create user-facing controls, or claim resident status. Stage 6
+remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, and
+system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens OS-binding command
+palette candidate proof:
+
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `failed before fix because the candidate inherited tray/overlay authority blockers, then passed`
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <temporary lens-status JSON>`
+  Result: `passed; returned proof_passed with os_binding_candidate_observed=true, candidate=global_hotkey_to_lens_command_palette_bridge, trigger=Ctrl+Alt+Space, open_mode_authorized=false, blocked_by_count=9, and candidate_governance=true`
+- `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `failed before formatting, then passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for scripts\lens-command-palette-os-binding-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

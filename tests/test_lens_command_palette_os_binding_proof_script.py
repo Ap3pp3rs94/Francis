@@ -88,6 +88,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert payload["summon_preflight_observed"] is True
     assert payload["tray_preflight_observed"] is True
     assert payload["overlay_preflight_observed"] is True
+    assert payload["os_binding_candidate_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["blocked_families"] == [
         "palette_binding",
@@ -133,6 +134,53 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "overlay_control_authority_not_granted",
     ]
 
+    os_binding_candidate = payload["os_binding_candidate"]
+    assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
+    assert os_binding_candidate["status"] == "blocked"
+    assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["binding_scope"] == "global"
+    assert os_binding_candidate["route"] == "/lens/status"
+    assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
+    assert os_binding_candidate["bridge_script"] == "scripts/lens-command-palette.ps1"
+    assert os_binding_candidate["proof_script"] == "scripts/lens-command-palette-os-binding-proof.ps1"
+    assert os_binding_candidate["requires_approval_kind"] == ("lens.os_binding.command_palette_binding_authority")
+    assert os_binding_candidate["required_authority"] == [
+        "lens.os_binding.command_palette_binding_authority",
+        "hotkey_registration_authority",
+        "summon_authority",
+        "local_process_launch_authority",
+    ]
+    assert os_binding_candidate["required_preflight_families"] == [
+        "palette_binding",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    assert os_binding_candidate["blocked_by"] == [
+        "os_level_command_palette_missing",
+        "summon_anywhere_missing",
+        "global_hotkey_binding_missing",
+        "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
+        "hotkey_registration_authority_not_granted",
+        "lens_summon_binding_not_implemented",
+        "summon_authority_not_granted",
+        "local_process_launch_authority_not_granted",
+    ]
+    assert os_binding_candidate["current_authorized_effect"] == "readback_only_status"
+    assert os_binding_candidate["candidate_effect_if_authorized"] == (
+        "open_lens_command_palette_from_governed_os_binding"
+    )
+    assert os_binding_candidate["open_mode_authorized"] is False
+    assert os_binding_candidate["open_mode_refusal"] == "lens_command_palette_open_not_authorized"
+    assert os_binding_candidate["would_register_hotkey_now"] is False
+    assert os_binding_candidate["would_open_palette_now"] is False
+    assert os_binding_candidate["would_summon_anywhere_now"] is False
+    assert os_binding_candidate["would_launch_process_now"] is False
+    assert os_binding_candidate["would_write_memory_now"] is False
+    assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+
     command_palette = payload["command_palette"]
     assert command_palette["status"] == "blocked"
     assert command_palette["availability"] == "chat_ui_only"
@@ -163,6 +211,8 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert checks["tray_preflight"]["status"] == "blocked_readback_ready"
     assert checks["overlay_preflight"]["passed"] is True
     assert checks["overlay_preflight"]["status"] == "blocked_readback_ready"
+    assert checks["os_binding_candidate_boundary"]["passed"] is True
+    assert checks["os_binding_candidate_boundary"]["status"] == "candidate_blocked_readback_ready"
     assert checks["os_binding_side_effects_denied"]["passed"] is True
     assert checks["os_binding_side_effects_denied"]["status"] == "diagnostic_bounded"
 
@@ -172,6 +222,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "wraps_summon_preflight": True,
         "wraps_tray_preflight": True,
         "wraps_overlay_preflight": True,
+        "os_binding_candidate_boundary_readback": True,
         "read_only_contract": True,
         "opens_palette": False,
         "execution_authority": False,
