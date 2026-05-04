@@ -1876,7 +1876,12 @@ def _stage6_readiness(
                 "next_smallest_truthful_gap": _safe_str(
                     runtime_loop_readiness.get("next_smallest_truthful_gap")
                 ).strip(),
+                "operator_surface_readback_ready": bool(runtime_loop_readiness.get("operator_surface_readback_ready")),
                 "first_blocked_requirement": first_runtime_loop_blocked_requirement,
+                "first_blocked_requirement_handoff": _as_dict(
+                    runtime_loop_readiness.get("first_blocked_requirement_handoff")
+                ),
+                "blocked_requirement_handoffs": _as_list(runtime_loop_readiness.get("blocked_requirement_handoffs")),
                 "requirement_readback": runtime_loop_requirement_readback,
                 "blocked_requirement_readback": runtime_loop_blocked_requirement_readback,
                 "ready": bool(runtime_loop_readiness.get("ready")),

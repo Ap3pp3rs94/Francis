@@ -5774,8 +5774,11 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "resident_loop_receipt_emission",
         "resident_loop_claim_checkpoint",
     ]
+    assert criterion["operator_surface_readback_ready"] is True
     assert criterion["next_smallest_truthful_gap"] == "resident_host_supervision_authority_readiness_blockers"
     assert criterion["first_blocked_requirement"] == "resident_loop_process_supervision"
+    assert criterion["first_blocked_requirement_handoff"] == body["first_blocked_requirement_handoff"]
+    assert [item["id"] for item in criterion["blocked_requirement_handoffs"]] == criterion["blocked_requirements"]
     assert len(criterion["requirement_readback"]) == 12
     blocked_requirement_readback = criterion["blocked_requirement_readback"]
     assert [item["id"] for item in blocked_requirement_readback] == criterion["blocked_requirements"]

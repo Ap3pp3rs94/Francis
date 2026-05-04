@@ -18628,6 +18628,45 @@ resident-surface window stabilization:
 - `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py`
   Result: `passed`
 
+### 2026-05-04 - Stage 6/Lens runtime-loop status handoff readback
+
+Stage 6/Lens `/lens/status` now projects the exact runtime-loop readiness
+handoff already produced by `/lens/host/runtime-loop/readiness`. The
+`resident_host_runtime_loop_readiness_audit` status criterion now carries
+`operator_surface_readback_ready`, `first_blocked_requirement_handoff`, and
+`blocked_requirement_handoffs`, so the operator-facing status readback can name
+the next resident-host runtime blocker and its review routes without requiring a
+separate deeper endpoint call.
+
+This is backend/API readback only. It does not create a resident host, supervise
+or restart a process, install or control a service, register a tray icon,
+register a hotkey, open an overlay, summon Francis, decide approvals, write
+memory, grant execution authority, create UI controls, or claim Stage 6 closure.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, supervised
+resident process ownership, and system-resident presence closure. The completion
+audit still reports `ready_to_close=false` and `next_smallest_truthful_gap:
+summon_anywhere_blockers`.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens runtime-loop status
+handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `failed once with resident-surface observation timing returning resident_surface_runtime_missing, then passed on rerun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,@{Name='helpful_blockers';Expression={($_.criteria | Where-Object id -eq 'helpful_not_noisy').blockers -join ','}} | ConvertTo-Json -Depth 8`
+  Result: `passed; returned blocked/active, ready_to_close=false, next_smallest_truthful_gap=stage6_lens_completion_audit, and helpful_blockers=resident_surface_not_resident,resident_surface_runtime_not_supervised`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting, passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
