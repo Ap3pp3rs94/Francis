@@ -12,7 +12,10 @@ param(
   [int]$ResidentSurfaceForegroundRunSeconds = 15,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 20
+  [int]$SupervisorRunSeconds = 20,
+
+  [ValidateRange(30, 600)]
+  [int]$ChildProofTimeoutSeconds = 420
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,6 +37,31 @@ function ConvertTo-StringArray {
   return @([string]$Value)
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-JsonScript {
   param(
     [Parameter(Mandatory = $true)]
@@ -42,20 +70,95 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
-  if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+  if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
     return [ordered]@{
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $ArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $ScriptPath)
+  )
+  foreach ($Arg in $ScriptArgs) {
+    $ArgumentParts += (Quote-ProcessArgument -Value $Arg)
+  }
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = $ArgumentParts -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Started = $false
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StderrTask = $Process.StandardError.ReadToEndAsync()
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $Text = $StdoutTask.GetAwaiter().GetResult()
+  $ErrorText = $StderrTask.GetAwaiter().GetResult()
+  $Timer.Stop()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -64,9 +167,32 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
+    timeout_seconds = $TimeoutSeconds
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+  }
+}
+
+function New-ChildProofRunSummary {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Name,
+
+    [Parameter(Mandatory = $true)]
+    [object]$Result
+  )
+
+  return [ordered]@{
+    name = $Name
+    exit_code = [int]$Result.exit_code
+    timed_out = [bool]$Result.timed_out
+    timeout_seconds = [int]$Result.timeout_seconds
+    duration_ms = [int]$Result.duration_ms
+    error = [string]$Result.error
   }
 }
 
@@ -289,6 +415,19 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'process_supervision_disabled' -and
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+)
+$ChildProofRuns = @(
+  New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
+  New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
+  New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessSupervisionBoundaryResult
+  New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_enablement_authority' -Result $PersistentSupervisionEnablementAuthorityProofResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_execution_authority' -Result $PersistentSupervisionExecutionAuthorityProofResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
+)
+$ChildProofTimeouts = [string[]]@(
+  $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
 )
 $PersistentSupervisionEnablementDenial = $Checkpoint.persistent_supervision_enablement_denial_boundary
 $PersistentSupervisionEnablementDenialBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementDenial.blockers
@@ -1327,6 +1466,9 @@ $Payload = [ordered]@{
   transition_allowed = $ReadyToClose
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
+  child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+  child_proof_timeouts = [string[]]@($ChildProofTimeouts)
+  child_proof_runs = @($ChildProofRuns)
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
@@ -2411,6 +2553,7 @@ $Payload = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
     checkpoint_readback = $true
+    child_proof_timeout_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed

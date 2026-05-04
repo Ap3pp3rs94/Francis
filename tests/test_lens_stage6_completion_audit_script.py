@@ -49,6 +49,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "5",
         "-SupervisorRunSeconds",
         "3",
+        "-ChildProofTimeoutSeconds",
+        "420",
     )
 
     assert proc.returncode == 0, proc.stderr
@@ -63,6 +65,24 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["transition_allowed"] is False
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
+    assert payload["child_proof_timeout_seconds"] == 420
+    assert payload["child_proof_timeouts"] == []
+    child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
+    assert set(child_proof_runs) == {
+        "summon_anywhere_blockers",
+        "summon_authority_blocker",
+        "process_supervision_boundary",
+        "resident_host_process_supervision_blocker",
+        "persistent_supervision_plan",
+        "persistent_supervision_enablement_authority",
+        "persistent_supervision_execution_authority",
+        "persistent_supervision_resident_claim_boundary",
+    }
+    for run in child_proof_runs.values():
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 420
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["stage6_completion_reviewed"] is True
@@ -1362,6 +1382,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is True
+    assert governance["child_proof_timeout_readback"] is True
     assert governance["process_supervision_authority_boundary_readback"] is True
     assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
     assert governance["resident_host_process_handoff_consumed"] is True

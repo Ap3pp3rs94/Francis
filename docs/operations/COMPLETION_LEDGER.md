@@ -18741,6 +18741,44 @@ authority grant boundary:
   Result: `interrupted after running beyond the recent successful audit timing
   window without output; not counted as passed`
 
+### 2026-05-04 - Stage 6/Lens completion audit child-proof timeout readback
+
+Stage 6/Lens completion audit now runs its direct child proof scripts through a
+bounded subprocess wrapper with timeout, process-tree stop, stderr capture, and
+duration readback. The audit payload exposes `child_proof_timeout_seconds`,
+`child_proof_timeouts`, and `child_proof_runs`, and the completion-audit test
+asserts that every direct child proof returns without timing out.
+
+This is diagnostic/proof-harness stabilization only. It does not create a
+resident host, supervise or restart a process, install or control a service,
+register a tray icon, register a hotkey, open an overlay, summon Francis,
+decide approvals, write memory, grant execution authority, create UI controls,
+or claim Stage 6 closure. It makes the long completion audit fail with named
+child-proof timeout evidence instead of appearing to hang silently.
+
+Stage 6 remains active and blocked on real execution boundary, OS-level command
+palette binding, summon-anywhere behavior, helpful/not-noisy resident behavior,
+supervised resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens completion audit
+child-proof timeout readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed with ChildProofTimeoutSeconds=180 because
+  process_supervision_boundary and resident_host_process_supervision_blocker
+  exceeded the first diagnostic cap, then passed with the bounded
+  ChildProofTimeoutSeconds=420 contract`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed with a Ruff cache write warning: access denied for
+  .ruff_cache`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for
+  scripts\lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
