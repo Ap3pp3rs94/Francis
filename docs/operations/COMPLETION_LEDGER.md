@@ -18779,6 +18779,44 @@ child-proof timeout readback:
   Result: `passed with the expected PowerShell line-ending warning for
   scripts\lens-stage6-completion-audit.ps1`
 
+### 2026-05-04 - Stage 6/Lens checkpoint resident observation window stabilization
+
+Stage 6/Lens checkpoint proof now gives the resident-surface foreground runtime
+child proof the same stabilized 25-second minimum observation window used by
+the standalone resident overlay runtime proof. This follow-up was driven by CI
+run `25346396302` for commit `bb03ec0`, where Windows Python 3.13 returned
+`resident_surface_content_readback_ready` instead of
+`resident_surface_foreground_runtime_observed` for
+`tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`.
+
+This is proof-harness stabilization only. It does not create a resident host,
+supervise or restart a process, install or control a service, register a tray
+icon, register a hotkey, open an overlay, summon Francis, decide approvals,
+write memory, grant execution authority, create UI controls, or claim Stage 6
+closure. It only gives the already-required runtime observation enough time to
+be observed consistently inside the checkpoint proof chain.
+
+Stage 6 remains active and blocked on real execution boundary, OS-level command
+palette binding, summon-anywhere behavior, helpful/not-noisy resident behavior,
+supervised resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens checkpoint resident
+observation window stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for
+  scripts\lens-stage6-checkpoint.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
