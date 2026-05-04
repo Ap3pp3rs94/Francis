@@ -690,7 +690,7 @@ $ResidentRuntimeResidentClaimBoundaryProofPath = Join-Path $PSScriptRoot 'lens-r
 $CheckpointProofDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
   'francis-lens-stage6-checkpoint-{0}-{1}' -f $PID, [guid]::NewGuid().ToString('N')
 )
-$ResidentSurfaceForegroundMinimumSeconds = 5
+$ResidentSurfaceForegroundMinimumSeconds = 15
 $ResidentSurfaceForegroundObservationSeconds = [Math]::Max(
   $ResidentSurfaceForegroundRunSeconds,
   $ResidentSurfaceForegroundMinimumSeconds

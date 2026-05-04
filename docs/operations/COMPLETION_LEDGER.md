@@ -18594,6 +18594,40 @@ proof window stabilization:
 - `git diff --check`
   Result: `passed with the expected PowerShell line-ending warning for scripts\lens-resident-overlay-runtime-proof.ps1`
 
+### 2026-05-04 - Stage 6/Lens checkpoint resident-surface window stabilization
+
+Stage 6/Lens checkpoint proof now uses a resident-surface foreground observation
+minimum of 15 seconds when composing the checkpoint, even if the caller requests
+a shorter diagnostic window. This keeps
+`scripts/lens-stage6-checkpoint.ps1` aligned with the resident-surface proof's
+normal foreground runtime window and prevents the checkpoint from falling back to
+content-only readback on slower Windows 3.12 CI runs.
+
+This is checkpoint proof-stability work only. It does not create a resident
+host, supervise or restart a process, install or control a service, register a
+tray icon, register a hotkey, open an overlay, summon Francis, decide approvals,
+write memory, grant execution authority, create UI controls, or claim Stage 6
+closure. It addresses the Windows 3.12 CI failure where the Stage 6 checkpoint's
+`helpful_not_noisy` criterion reported `resident_surface_content_readback_ready`
+instead of the required bounded `resident_surface_foreground_runtime_observed`
+status.
+
+Stage 6 remains active and blocked on real OS-level command-palette binding,
+summon-anywhere behavior, helpful/not-noisy resident behavior, supervised
+resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens checkpoint
+resident-surface window stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
