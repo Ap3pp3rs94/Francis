@@ -1066,6 +1066,24 @@ def _stage6_summon_handoff(
     first_handoff = _as_dict(summon_enablement_gate.get("first_blocker_family_handoff"))
     first_family = _safe_str(summon_enablement_gate.get("first_blocker_family")).strip()
     if first_handoff:
+        family_id = first_family or _safe_str(first_handoff.get("id")).strip()
+        audit_handoff = (
+            {
+                "next_step": "consume_resident_host_process_supervision_handoff_before_stage6_closure",
+                "proof_script": (
+                    "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+                ),
+                "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                "authority_required": "process_supervision_authority",
+                "read_only_contract": True,
+                "diagnostic_only": True,
+                "would_execute": False,
+                "would_mutate": False,
+            }
+            if family_id == "resident_host"
+            else {}
+        )
         return {
             "next_step": "resolve_summon_anywhere_blockers_before_stage6_closure",
             "readiness_route": "/lens/summon/readiness",
@@ -1073,11 +1091,12 @@ def _stage6_summon_handoff(
             "preflight_route": "/lens/preflight",
             "status_route": "/lens/status",
             "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
-            "first_blocker_family": first_family or _safe_str(first_handoff.get("id")).strip(),
+            "first_blocker_family": family_id,
             "first_blocker_family_handoff": first_handoff,
             "first_blocker_family_next_smallest_truthful_gap": _safe_str(
                 first_handoff.get("next_smallest_truthful_gap")
             ).strip(),
+            "first_blocker_family_completion_audit_handoff": audit_handoff,
             "authority_required": _safe_str(first_handoff.get("authority_required")).strip(),
             "next_smallest_truthful_gap": next_smallest_truthful_gap,
             "read_only_contract": True,

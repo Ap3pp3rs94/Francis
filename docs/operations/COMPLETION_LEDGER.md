@@ -19315,6 +19315,42 @@ summon-family chain readback:
   Result: `passed before ledger update with the expected PowerShell line-ending
   warning for the edited Lens audit script`
 
+### 2026-05-05 - Stage 6/Lens status summon audit-handoff readback
+
+Stage 6/Lens `/lens/status` closure readback now carries the proven
+completion-audit bridge for the first summon-anywhere blocker family. The
+`summon_anywhere` closure handoff still names `resident_host` as the first
+blocked family and preserves the existing read-only resident-host lifecycle
+handoff, but it now also exposes a
+`first_blocker_family_completion_audit_handoff` pointing to the bounded
+process-supervision handoff proof that the Stage 6 completion audit consumes
+before handing back to `stage6_lens_completion_audit`.
+
+This is backend/API readback-only work. It does not create a resident host,
+launch or supervise a product process, install or control a service, open tray
+or overlay surfaces, bind a hotkey, summon Francis anywhere, decide approvals,
+write memory, write receipts, grant execution authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens status summon
+audit-handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed before and after formatting`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting, passed after`
+- `python -c "import json; from francis.lens.status import lens_status; closure=lens_status(limit=3)['stage6_readiness']['closure_readback']; handoff={i['id']:i for i in closure['criteria']}['summon_anywhere']['handoff']; print(json.dumps({'next_smallest_truthful_gap': closure['next_smallest_truthful_gap'], 'first_blocker_family': handoff.get('first_blocker_family'), 'audit_handoff': handoff.get('first_blocker_family_completion_audit_handoff')}, indent=2, sort_keys=True))"`
+  Result: `passed`; `/lens/status` reports `next_smallest_truthful_gap:
+  summon_anywhere_blockers`, first blocker family `resident_host`, and a
+  read-only completion-audit handoff to
+  `scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status
+  -ConsumeProcessSupervisionHandoff`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -908,6 +908,19 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "first_blocker_family": "resident_host",
         "first_blocker_family_handoff": expected_first_stage6_summon_handoff,
         "first_blocker_family_next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "first_blocker_family_completion_audit_handoff": {
+            "next_step": "consume_resident_host_process_supervision_handoff_before_stage6_closure",
+            "proof_script": (
+                "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+            ),
+            "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+            "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+            "authority_required": "process_supervision_authority",
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        },
         "authority_required": "resident_runtime_execution_authority",
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "read_only_contract": True,
