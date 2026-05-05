@@ -9,6 +9,9 @@ param(
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20,
 
+  [ValidateRange(2, 45)]
+  [int]$ResidentSurfaceForegroundRunSeconds = 40,
+
   [string]$DataDir = '',
 
   [string]$ApprovalId = '',
@@ -244,7 +247,11 @@ $LiveArgs = @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeo
 if (-not [string]::IsNullOrWhiteSpace($ProofDataRoot)) {
   $LiveArgs += @('-DataDir', $ProofDataRoot)
 }
-$OverlayArgs = @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorRunSeconds)
+$OverlayArgs = @(
+  '-Mode', 'Status',
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds
+)
 if (-not [string]::IsNullOrWhiteSpace($ProofDataRoot)) {
   $OverlayArgs += @('-DataDir', $ProofDataRoot)
 }
@@ -361,6 +368,7 @@ $Payload = [ordered]@{
   data_root = $ProofDataRoot
   startup_timeout_seconds = $StartupTimeoutSeconds
   supervisor_run_seconds = $SupervisorRunSeconds
+  resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
   live_operator_experience_proof = $LiveProofPassed
   resident_overlay_boundary_observed = $OverlayBoundaryObserved
   activation_boundary_observed = $ActivationBoundaryBlocked

@@ -1030,7 +1030,7 @@ $HostSupervisorOwnedSessionPassed = (
 )
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'blockers' -Default @())
 
-$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_runtime.proof'
+$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_runtime.proof'
 $ResidentOverlayRuntimeExitCode = -1
 $ResidentOverlayRuntimePayload = $null
 if ($ResidentOverlayRuntimeProof -is [System.Collections.IDictionary]) {
@@ -1056,7 +1056,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
 
-$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
+$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $ResidentOverlayActivationBoundaryExitCode = -1
 $ResidentOverlayActivationBoundaryPayload = $null
 if ($ResidentOverlayActivationBoundaryProof -is [System.Collections.IDictionary]) {
@@ -2596,6 +2596,8 @@ $Payload = [ordered]@{
     ok = $ResidentOverlayRuntimeProofPassed
     exit_code = $ResidentOverlayRuntimeExitCode
     evidence = @('scripts/lens-resident-surface-proof.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1')
+    resident_surface_foreground_run_seconds = [int](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_surface_foreground_run_seconds' -Default 0)
+    requested_resident_surface_foreground_run_seconds = [int](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'requested_resident_surface_foreground_run_seconds' -Default 0)
     bounded_supervisor_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'bounded_supervisor_observed' -Default $false)
     resident_overlay_runtime_ready = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_overlay_runtime_ready' -Default $false)
     resident_overlay_runtime = [bool](Get-PropertyValue -Payload $ResidentOverlayRuntimePayload -Name 'resident_overlay_runtime' -Default $false)
@@ -2611,6 +2613,7 @@ $Payload = [ordered]@{
     ok = $ResidentOverlayActivationBoundaryProofPassed
     exit_code = $ResidentOverlayActivationBoundaryExitCode
     evidence = @('scripts/lens-live-operator-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1', '/lens/resident-surface/activation')
+    resident_surface_foreground_run_seconds = [int](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_surface_foreground_run_seconds' -Default 0)
     live_operator_experience_proof = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'live_operator_experience_proof' -Default $false)
     resident_overlay_boundary_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false)
     activation_boundary_observed = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'activation_boundary_observed' -Default $false)

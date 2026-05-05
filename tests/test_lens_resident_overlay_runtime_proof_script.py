@@ -47,6 +47,8 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
         "Status",
         "-SupervisorRunSeconds",
         "25",
+        "-ResidentSurfaceForegroundRunSeconds",
+        "25",
         "-DataDir",
         str(data_dir),
     )
@@ -57,7 +59,9 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["supervisor_run_seconds"] == 25
-    assert payload["resident_surface_foreground_run_seconds"] == 40
+    assert payload["requested_resident_surface_foreground_run_seconds"] == 25
+    assert payload["resident_surface_foreground_run_seconds"] == 25
+    assert payload["resident_surface_timeout_seconds"] == 170
     assert payload["resident_overlay_runtime_ready"] is False
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
