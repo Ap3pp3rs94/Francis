@@ -19156,6 +19156,27 @@ proof observation-window stabilization:
   Result: `passed before ledger update with the expected PowerShell
   line-ending warnings for the edited Lens proof scripts`
 
+### 2026-05-05 - Stage 6/Lens process-supervision handoff CI retry stabilization
+
+The resident-host process-supervision handoff proof now retries its wrapped
+process-supervision authority boundary proof once before declaring a handoff
+mismatch. This mirrors the existing bounded child-proof retry pattern inside
+the process-supervision authority boundary proof and addresses a Windows 3.13
+CI flake where the child proof returned `proof_failed` once while the same
+focused proof passed locally and on the other CI matrix legs.
+
+This is diagnostic proof-harness stabilization only. It does not grant process
+supervision, process restart, service install/control, overlay/tray/hotkey,
+summon, execution, approval, memory-write, sensing, receipt-write, or resident
+claim authority. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens
+process-supervision handoff CI retry stabilization:
+
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

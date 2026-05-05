@@ -122,6 +122,53 @@ function Invoke-JsonScript {
   }
 }
 
+function Invoke-JsonScriptWithProofRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PowerShellPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ScriptPath,
+
+    [string[]]$ScriptArgs = @(),
+
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedKind,
+
+    [int]$Attempts = 2
+  )
+
+  $LastProof = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $Result = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ScriptArgs $ScriptArgs)
+    $Proof = if ($Result.Count -gt 0) { $Result[-1] } else { $null }
+    $LastProof = $Proof
+
+    $ExitCode = -1
+    $Payload = $null
+    if ($Proof -is [System.Collections.IDictionary]) {
+      if ($Proof.Contains('exit_code') -and $null -ne $Proof['exit_code']) {
+        $ExitCode = [int]$Proof['exit_code']
+      }
+      if ($Proof.Contains('payload') -and $null -ne $Proof['payload']) {
+        $Payload = $Proof['payload']
+      }
+    }
+
+    if (
+      $ExitCode -eq 0 -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+    ) {
+      return $Proof
+    }
+    if ($Attempt -lt $Attempts) {
+      Start-Sleep -Milliseconds 750
+    }
+  }
+  return $LastProof
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -152,13 +199,13 @@ $RuntimeResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
 )
-$ProcessResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs @(
+$ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
-)
+) -ExpectedKind 'lens.process_supervision_authority_boundary.proof'
 
 $RuntimePayload = Get-PropertyValue -Payload $RuntimeResult -Name 'payload'
 $ProcessPayload = Get-PropertyValue -Payload $ProcessResult -Name 'payload'
