@@ -18817,6 +18817,60 @@ observation window stabilization:
   Result: `passed with the expected PowerShell line-ending warning for
   scripts\lens-stage6-checkpoint.ps1`
 
+### 2026-05-04 - Stage 6/Lens resident proof timing race stabilization
+
+Stage 6/Lens resident proof harness now stabilizes the Windows foreground-host
+observation race exposed by CI run `25348792160` for commit `880b48f`, where
+Windows Python 3.12 timed out in
+`tests/test_lens_host_supervisor_script.py::test_lens_host_supervisor_observes_existing_bounded_host_without_restart`
+and Windows Python 3.12/3.13 failed
+`tests/test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority`
+with `resident_surface_status=proof_failed` and
+`resident_surface_runtime_missing`.
+
+The foreground Lens host now writes its PID before publishing
+`foreground_running`, retries runtime-state replacement under short Windows
+read contention, and allows the bounded diagnostic foreground run window needed
+by the resident-surface proof. The host supervisor now treats
+`foreground_running` as observable only when a live PID is also readable. The
+resident-surface proof now waits for that PID readback before consuming the
+API route, and the resident-overlay runtime proof gives the child
+resident-surface proof a 40-second foreground run window.
+
+This is proof-harness stabilization only. It does not create a resident host,
+supervise or restart a persistent process, install or control a service,
+register a tray icon, register a hotkey, open an overlay, summon Francis,
+decide approvals, write memory, grant execution authority, create UI controls,
+or claim Stage 6 closure.
+
+Stage 6 remains active and blocked on real execution boundary, OS-level command
+palette binding, summon-anywhere behavior, helpful/not-noisy resident behavior,
+supervised resident process ownership, and system-resident presence closure.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens resident proof
+timing race stabilization:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py::test_lens_host_supervisor_observes_existing_bounded_host_without_restart -q`
+  Result: `failed before the status-file replacement retry with a Windows
+  Move-Item status.json collision, then passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority -q`
+  Result: `failed before aligning the foreground host bounded run limit with
+  the 40-second resident-surface proof window, then passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status -ForegroundRunSeconds 40`
+  Result: `passed; returned proof_passed with
+  resident_surface_foreground_runtime_readback=true`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warnings for Lens
+  PowerShell proof scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

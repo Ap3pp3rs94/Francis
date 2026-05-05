@@ -226,7 +226,7 @@ function New-Check {
 $PowerShellPath = Get-PowerShellPath
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
-$ResidentSurfaceForegroundRunSeconds = [Math]::Min(30, [Math]::Max(25, $SupervisorRunSeconds))
+$ResidentSurfaceForegroundRunSeconds = [Math]::Min(45, [Math]::Max(40, $SupervisorRunSeconds + 10))
 $ResidentSurfaceTimeoutSeconds = [Math]::Max(150, ($ResidentSurfaceForegroundRunSeconds * 2) + 120)
 $ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
 

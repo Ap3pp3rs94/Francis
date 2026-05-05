@@ -160,7 +160,14 @@ function Wait-ForHostStatus {
   $Latest = Get-HostState -StatePath $StatePath -PidPath $PidPath
   while ((Get-Date) -lt $Deadline) {
     $Latest = Get-HostState -StatePath $StatePath -PidPath $PidPath
-    if ([string](Get-PropertyValue -Payload $Latest -Name 'state_status' -Default '') -eq $Status) {
+    $StateStatus = [string](Get-PropertyValue -Payload $Latest -Name 'state_status' -Default '')
+    $PidValue = [int](Get-PropertyValue -Payload $Latest -Name 'pid' -Default 0)
+    $ProcessAlive = [bool](Get-PropertyValue -Payload $Latest -Name 'process_alive' -Default $false)
+    $StatusReady = $StateStatus -eq $Status
+    if ($Status -eq 'foreground_running') {
+      $StatusReady = $StatusReady -and $PidValue -gt 0 -and $ProcessAlive
+    }
+    if ($StatusReady) {
       return $Latest
     }
     Start-Sleep -Milliseconds 100

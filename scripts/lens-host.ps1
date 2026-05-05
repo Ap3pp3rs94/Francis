@@ -3,7 +3,7 @@ param(
   [ValidateSet('Status', 'Foreground', 'Launch')]
   [string]$Mode = 'Status',
 
-  [ValidateRange(0, 30)]
+  [ValidateRange(0, 60)]
   [int]$RunSeconds = 0
 )
 
@@ -51,7 +51,19 @@ function Write-JsonFile {
   $TempPath = Join-Path $Parent ('.' + $FileName + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
   try {
     $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
-    Move-Item -LiteralPath $TempPath -Destination $Path -Force
+    $Moved = $false
+    for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1) {
+      try {
+        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop
+        $Moved = $true
+      } catch {
+        if ($Attempt -ge 19) {
+          throw
+        }
+        Start-Sleep -Milliseconds 50
+      }
+    }
   } finally {
     Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
   }
@@ -375,9 +387,9 @@ if ($Mode -eq 'Foreground') {
     bounded_run_seconds = $RunSeconds
     governance = $RunningGovernance
   }
-  Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
   Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding ASCII
+  Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
 
   $HeartbeatCount = 0
   $LastHeartbeatAt = $StartedAt

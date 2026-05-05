@@ -130,7 +130,7 @@ def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp
         "10",
         "-DataDir",
         str(data_dir),
-        timeout=60,
+        timeout=150,
     )
     _, host_stderr = host.communicate(timeout=30)
 

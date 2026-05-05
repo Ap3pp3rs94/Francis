@@ -3,7 +3,7 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [ValidateRange(2, 30)]
+  [ValidateRange(2, 60)]
   [int]$ForegroundRunSeconds = 15
 )
 
@@ -130,6 +130,50 @@ function Wait-ForRuntimeState {
     Start-Sleep -Milliseconds 100
   }
   return (Read-JsonFile -Path $StatePath)
+}
+
+function Wait-ForForegroundPid {
+  param(
+    [string]$PidPath,
+    [int]$TimeoutSeconds = 10
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $Latest = [ordered]@{
+    pid_present = $false
+    pid = 0
+    process_alive = $false
+  }
+  while ((Get-Date) -lt $Deadline) {
+    $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+    $PidValue = 0
+    if ($PidPresent) {
+      try {
+        $PidValue = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+      } catch {
+        $PidValue = 0
+      }
+    }
+    $ProcessAlive = $false
+    if ($PidValue -gt 0) {
+      try {
+        Get-Process -Id $PidValue -ErrorAction Stop | Out-Null
+        $ProcessAlive = $true
+      } catch {
+        $ProcessAlive = $false
+      }
+    }
+    $Latest = [ordered]@{
+      pid_present = $PidPresent
+      pid = $PidValue
+      process_alive = $ProcessAlive
+    }
+    if ($PidPresent -and $PidValue -gt 0 -and $ProcessAlive) {
+      return $Latest
+    }
+    Start-Sleep -Milliseconds 100
+  }
+  return $Latest
 }
 
 function Invoke-JsonScript {
@@ -272,11 +316,13 @@ function Invoke-ForegroundResidentSurfaceReadback {
   )
   $RuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-host'
   $StatePath = Join-Path $RuntimeDir 'status.json'
+  $PidPath = Join-Path $RuntimeDir 'lens-host.pid'
   $ForegroundOutputPath = Join-Path $RuntimeDir 'foreground-output.json'
   $ForegroundErrorPath = Join-Path $RuntimeDir 'foreground-error.txt'
 
   $ProofStarted = $false
   $RunningState = $null
+  $RunningPid = $null
   $SurfaceReadback = $null
   $FinalPayload = $null
   $FinalState = $null
@@ -316,6 +362,7 @@ function Invoke-ForegroundResidentSurfaceReadback {
     $ProofStarted = $ForegroundProcess.Start()
 
     $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 10
+    $RunningPid = Wait-ForForegroundPid -PidPath $PidPath -TimeoutSeconds 10
     $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
 
     $WaitTimeoutMs = [int](($RunSeconds + 10) * 1000)
@@ -357,7 +404,10 @@ function Invoke-ForegroundResidentSurfaceReadback {
   $ForegroundObserved = (
     $ProofStarted -and
     [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '') -eq 'foreground_running' -and
-    [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false)
+    [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $RunningPid -Name 'pid_present' -Default $false) -and
+    [int](Get-PropertyValue -Payload $RunningPid -Name 'pid' -Default 0) -gt 0 -and
+    [bool](Get-PropertyValue -Payload $RunningPid -Name 'process_alive' -Default $false)
   )
   $ReadbackObserved = (
     [bool](Get-PropertyValue -Payload $SurfaceReadback -Name 'ok' -Default $false) -and
@@ -389,6 +439,9 @@ function Invoke-ForegroundResidentSurfaceReadback {
     runtime = $Runtime
     runtime_blockers = $RuntimeBlockers
     running_state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '')
+    running_pid_present = [bool](Get-PropertyValue -Payload $RunningPid -Name 'pid_present' -Default $false)
+    running_pid = [int](Get-PropertyValue -Payload $RunningPid -Name 'pid' -Default 0)
+    running_pid_process_alive = [bool](Get-PropertyValue -Payload $RunningPid -Name 'process_alive' -Default $false)
     final_state_status = [string](Get-PropertyValue -Payload $FinalState -Name 'status' -Default '')
     foreground_stdout_length = if ($null -eq $ForegroundStdout) { 0 } else { $ForegroundStdout.Length }
     foreground_stderr_length = if ($null -eq $ForegroundStderr) { 0 } else { $ForegroundStderr.Length }
