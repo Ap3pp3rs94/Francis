@@ -71,6 +71,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert set(child_proof_runs) == {
         "summon_anywhere_blockers",
         "summon_authority_blocker",
+        "resident_host_runtime_boundary",
         "process_supervision_boundary",
         "resident_host_process_supervision_blocker",
         "persistent_supervision_plan",
@@ -123,6 +124,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["summon_anywhere_first_blocker_family"] == "resident_host"
     assert payload["summon_anywhere_first_blocker_family_handoff_observed"] is True
     assert payload["summon_anywhere_first_blocker_family_handoff"] == expected_first_summon_handoff
+    assert payload["summon_anywhere_first_blocker_family_runtime_boundary_observed"] is True
+    assert (
+        payload["summon_anywhere_first_blocker_family_runtime_boundary_next_smallest_truthful_gap"]
+        == "resident_host_process_not_supervised"
+    )
     assert [item["id"] for item in payload["summon_anywhere_blocker_family_handoffs"]] == expected_summon_family_ids
     expected_checkpoint_first_summon_handoff = {
         "id": "resident_host",
@@ -1239,6 +1245,59 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in process_boundary["evidence"]
 
+    runtime_boundary = payload["resident_host_runtime_boundary_proof"]
+    assert runtime_boundary["status"] == "proof_passed"
+    assert runtime_boundary["ok"] is True
+    assert runtime_boundary["exit_code"] == 0
+    assert runtime_boundary["previous_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert runtime_boundary["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert runtime_boundary["runtime_handoff_observed"] is True
+    assert runtime_boundary["bounded_runtime_observed"] is True
+    assert runtime_boundary["runtime_heartbeat_observed"] is True
+    assert runtime_boundary["heartbeat_count"] >= 1
+    assert runtime_boundary["runtime_boundary_blocked"] is True
+    assert runtime_boundary["process_supervision_handoff_observed"] is True
+    assert runtime_boundary["side_effects_bounded"] is True
+    assert runtime_boundary["resident_host_process_state"] == "foreground_observed_not_supervised"
+    assert runtime_boundary["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert runtime_boundary["resident_runtime_ready"] is False
+    assert runtime_boundary["supervision_ready"] is False
+    assert runtime_boundary["ready_for_resident_claim"] is False
+    assert runtime_boundary["resident_claim_allowed"] is False
+    assert runtime_boundary["resident_host_supervised"] is False
+    assert runtime_boundary["service_managed"] is False
+    assert runtime_boundary["tray_presence"] is False
+    assert runtime_boundary["global_hotkey"] is False
+    assert runtime_boundary["overlay_window"] is False
+    assert runtime_boundary["summon_anywhere"] is False
+    assert "resident_host_runtime_blocker_boundary_consumed" in runtime_boundary["blockers"]
+    assert "lens_host_runtime_not_implemented" in runtime_boundary["blockers"]
+    assert "resident_host_process_not_supervised" in runtime_boundary["blockers"]
+    assert "process_supervision_authority_not_granted" in runtime_boundary["blockers"]
+    assert "process_restart_authority_not_granted" in runtime_boundary["blockers"]
+    assert "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status" in runtime_boundary["evidence"]
+    runtime_governance = runtime_boundary["governance"]
+    assert runtime_governance["diagnostic_only"] is True
+    assert runtime_governance["wraps_summon_resident_host_blocker_proof"] is True
+    assert runtime_governance["wraps_host_supervision_proof"] is True
+    assert runtime_governance["bounded_local_process_launch"] is True
+    assert runtime_governance["temporary_runtime_state_write"] is True
+    assert runtime_governance["product_execution_authority"] is False
+    assert runtime_governance["execution_authority"] is False
+    assert runtime_governance["approval_decision_authority"] is False
+    assert runtime_governance["memory_write"] is False
+    assert runtime_governance["api_local_process_launch_authority"] is False
+    assert runtime_governance["process_supervision_authority"] is False
+    assert runtime_governance["process_restart_authority"] is False
+    assert runtime_governance["service_install_authority"] is False
+    assert runtime_governance["service_control_authority"] is False
+    assert runtime_governance["hotkey_registration_authority"] is False
+    assert runtime_governance["tray_registration_authority"] is False
+    assert runtime_governance["overlay_control_authority"] is False
+    assert runtime_governance["summon_authority"] is False
+    assert runtime_governance["resident_claim_authority"] is False
+    assert runtime_governance["mutation_authority_granted"] is False
+
     process_handoff = payload["resident_host_process_supervision_blocker_proof"]
     assert process_handoff["status"] == "proof_passed"
     assert process_handoff["ok"] is True
@@ -1406,6 +1465,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
     assert governance["summon_anywhere_first_blocker_family_handoff_readback"] is True
+    assert governance["resident_host_runtime_boundary_proof_readback"] is True
     assert governance["checkpoint_summon_enablement_gate_handoff_readback"] is True
     assert governance["summon_authority_blocker_proof_readback"] is True
     assert governance["process_supervision_boundary_observed"] is True

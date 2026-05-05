@@ -216,6 +216,7 @@ function New-CriterionSummary {
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
 $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
+$ResidentHostRuntimeBoundaryProofScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-boundary-proof.ps1'
 $ResidentHostProcessSupervisionBlockerProofScript = Join-Path $PSScriptRoot 'lens-resident-host-process-supervision-blocker-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
@@ -251,6 +252,32 @@ $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShe
   '-Mode', 'Status'
 )
 $SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
+$ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
+  '-Mode', 'Status',
+  '-ForegroundRunSeconds', '2',
+  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
+)
+$ResidentHostRuntimeBoundaryProof = $ResidentHostRuntimeBoundaryProofResult.payload
+$ResidentHostRuntimeBoundaryProofBlockers = ConvertTo-StringArray -Value $ResidentHostRuntimeBoundaryProof.blockers
+$ResidentHostRuntimeBoundaryProofObserved = (
+  [int]$ResidentHostRuntimeBoundaryProofResult.exit_code -eq 0 -and
+  [string]$ResidentHostRuntimeBoundaryProof.kind -eq 'lens.resident_host.runtime_blocker_boundary.proof' -and
+  [bool]$ResidentHostRuntimeBoundaryProof.ok -and
+  [string]$ResidentHostRuntimeBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentHostRuntimeBoundaryProof.previous_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
+  [bool]$ResidentHostRuntimeBoundaryProof.runtime_handoff_observed -and
+  [bool]$ResidentHostRuntimeBoundaryProof.bounded_runtime_observed -and
+  [bool]$ResidentHostRuntimeBoundaryProof.runtime_heartbeat_observed -and
+  [bool]$ResidentHostRuntimeBoundaryProof.runtime_boundary_blocked -and
+  [bool]$ResidentHostRuntimeBoundaryProof.process_supervision_handoff_observed -and
+  [bool]$ResidentHostRuntimeBoundaryProof.side_effects_bounded -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_runtime_blocker_boundary_consumed' -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'lens_host_runtime_not_implemented' -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_process_not_supervised' -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_restart_authority_not_granted'
+)
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
@@ -419,6 +446,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
 $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
+  New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
   New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessSupervisionBoundaryResult
   New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
@@ -1473,7 +1501,7 @@ $Payload = [ordered]@{
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
-    'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs. Stage 6 still cannot close because summon-anywhere is blocked by grouped resident host, global hotkey, and summon binding behavior.'
+    'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs, and the first resident-host runtime boundary is now read back as consumed. Stage 6 still cannot close because summon-anywhere is blocked by process supervision plus grouped tray, overlay, global hotkey, summon binding, and authority behavior.'
   } elseif ($NextSmallestTruthfulGap -eq 'checkpoint_summon_enablement_gate_handoff') {
     'The audit must consume the checkpoint summon-enable gate handoff before treating summon-anywhere blocker families as fully audited through the checkpoint surface.'
   } elseif ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
@@ -1535,6 +1563,8 @@ $Payload = [ordered]@{
   summon_anywhere_first_blocker_family = $SummonAnywhereFirstBlockerFamily
   summon_anywhere_first_blocker_family_handoff_observed = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
   summon_anywhere_first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+  summon_anywhere_first_blocker_family_runtime_boundary_observed = $ResidentHostRuntimeBoundaryProofObserved
+  summon_anywhere_first_blocker_family_runtime_boundary_next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
   summon_anywhere_blocker_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
   checkpoint_summon_enablement_gate_handoff_observed = $CheckpointSummonEnablementGateHandoffObserved
   checkpoint_summon_enablement_gate_handoff = [ordered]@{
@@ -2254,6 +2284,59 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  resident_host_runtime_boundary_proof = [ordered]@{
+    status = if ($ResidentHostRuntimeBoundaryProofObserved) { [string]$ResidentHostRuntimeBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentHostRuntimeBoundaryProofObserved
+    exit_code = [int]$ResidentHostRuntimeBoundaryProofResult.exit_code
+    evidence = [string[]]@(
+      'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status'
+      (ConvertTo-StringArray -Value $ResidentHostRuntimeBoundaryProof.evidence)
+    )
+    previous_next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.previous_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
+    runtime_handoff_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_handoff_observed
+    bounded_runtime_observed = [bool]$ResidentHostRuntimeBoundaryProof.bounded_runtime_observed
+    runtime_heartbeat_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_heartbeat_observed
+    heartbeat_count = [int]$ResidentHostRuntimeBoundaryProof.heartbeat_count
+    runtime_boundary_blocked = [bool]$ResidentHostRuntimeBoundaryProof.runtime_boundary_blocked
+    process_supervision_handoff_observed = [bool]$ResidentHostRuntimeBoundaryProof.process_supervision_handoff_observed
+    side_effects_bounded = [bool]$ResidentHostRuntimeBoundaryProof.side_effects_bounded
+    resident_host_process_state = [string]$ResidentHostRuntimeBoundaryProof.resident_host_process_state
+    resident_host_process_blocker = [string]$ResidentHostRuntimeBoundaryProof.resident_host_process_blocker
+    resident_runtime_ready = [bool]$ResidentHostRuntimeBoundaryProof.resident_runtime_ready
+    supervision_ready = [bool]$ResidentHostRuntimeBoundaryProof.supervision_ready
+    ready_for_resident_claim = [bool]$ResidentHostRuntimeBoundaryProof.ready_for_resident_claim
+    resident_claim_allowed = [bool]$ResidentHostRuntimeBoundaryProof.resident_claim_allowed
+    resident_host_supervised = [bool]$ResidentHostRuntimeBoundaryProof.resident_host_supervised
+    service_managed = [bool]$ResidentHostRuntimeBoundaryProof.service_managed
+    tray_presence = [bool]$ResidentHostRuntimeBoundaryProof.tray_presence
+    global_hotkey = [bool]$ResidentHostRuntimeBoundaryProof.global_hotkey
+    overlay_window = [bool]$ResidentHostRuntimeBoundaryProof.overlay_window
+    summon_anywhere = [bool]$ResidentHostRuntimeBoundaryProof.summon_anywhere
+    blockers = [string[]]@($ResidentHostRuntimeBoundaryProofBlockers)
+    governance = [ordered]@{
+      diagnostic_only = [bool]$ResidentHostRuntimeBoundaryProof.governance.diagnostic_only
+      wraps_summon_resident_host_blocker_proof = [bool]$ResidentHostRuntimeBoundaryProof.governance.wraps_summon_resident_host_blocker_proof
+      wraps_host_supervision_proof = [bool]$ResidentHostRuntimeBoundaryProof.governance.wraps_host_supervision_proof
+      bounded_local_process_launch = [bool]$ResidentHostRuntimeBoundaryProof.governance.bounded_local_process_launch
+      temporary_runtime_state_write = [bool]$ResidentHostRuntimeBoundaryProof.governance.temporary_runtime_state_write
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      api_local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      hotkey_registration_authority = $false
+      tray_registration_authority = $false
+      overlay_control_authority = $false
+      summon_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   process_supervision_authority_boundary_proof = [ordered]@{
     status = if ($ProcessSupervisionBoundaryObserved) { [string]$ProcessSupervisionBoundary.status } else { 'missing_or_failed' }
     ok = $ProcessSupervisionBoundaryObserved
@@ -2506,6 +2589,7 @@ $Payload = [ordered]@{
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
     'scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
+    'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
     'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
@@ -2578,6 +2662,7 @@ $Payload = [ordered]@{
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
     summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+    resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed

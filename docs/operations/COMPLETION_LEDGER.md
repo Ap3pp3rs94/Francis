@@ -19213,6 +19213,39 @@ summon-blocker handoff:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-05 - Stage 6/Lens completion audit resident-host runtime boundary readback
+
+The Stage 6 completion audit now consumes the existing
+`lens-resident-host-runtime-boundary-proof.ps1` child proof and exposes its
+readback in the audit payload. The audit records that the first
+summon-anywhere blocker family (`resident_host`) has consumed the
+`resident_host_runtime_blocker_boundary` diagnostic proof and that the next
+concrete resident-host blocker is `resident_host_process_not_supervised`.
+
+This is audit/proof-readback work only. It does not create a resident host,
+start a resident loop, supervise or restart a process, install or control a
+service, open tray or overlay surfaces, bind a hotkey, summon Francis anywhere,
+decide approvals, write memory, grant execution authority, or claim resident
+Lens behavior. The proof may observe one bounded diagnostic foreground host
+run, but product/API launch authority remains false. Stage 6 remains active and
+blocked on summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens completion audit
+resident-host runtime boundary readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell line-ending
+  warning for the edited Lens audit script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
