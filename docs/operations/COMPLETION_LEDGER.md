@@ -19246,6 +19246,43 @@ resident-host runtime boundary readback:
   Result: `passed before ledger update with the expected PowerShell line-ending
   warning for the edited Lens audit script`
 
+### 2026-05-05 - Stage 6/Lens summon-anywhere family-chain proof
+
+Stage 6/Lens now has a focused
+`lens-summon-anywhere-family-chain-proof.ps1` diagnostic that ties the current
+`summon_anywhere_blockers` readback into one bounded proof. It verifies the six
+blocked summon-anywhere families in order (`resident_host`, `tray_presence`,
+`overlay_window`, `global_hotkey_binding`, `summon_binding`, and `authority`),
+confirms the first resident-host handoff points to the runtime blocker, and
+confirms the final summon-authority proof has consumed all summon blocker
+families before handing back to `stage6_lens_completion_audit`.
+
+The proof intentionally does not run the long resident-host process-supervision
+handoff path; that remains covered by its existing focused proof. This keeps the
+new summon-family chain proof fast enough for targeted validation while still
+preserving the process-supervision handoff as a separate Stage 6 diagnostic.
+
+This is proof/readback-only work. It does not create a resident host, launch or
+supervise a product process, install or control a service, open tray or overlay
+surfaces, bind a hotkey, summon Francis anywhere, decide approvals, write
+memory, write receipts, grant execution authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens summon-anywhere
+family-chain proof:
+
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `failed before timing scope was narrowed, passed after`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
