@@ -4,6 +4,7 @@ param(
   [string]$Mode = 'Status',
   [string]$ApiBaseUrl = 'http://127.0.0.1:8000',
   [string]$StatusPath = '',
+  [string]$ExecutionReadinessPath = '',
   [int]$TimeoutSeconds = 5
 )
 
@@ -144,6 +145,45 @@ function Read-LensStatus {
   }
 }
 
+function Read-ExecutionReadiness {
+  param(
+    [string]$ExecutionReadinessPath,
+    [string]$ApiBaseUrl,
+    [int]$TimeoutSeconds
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($ExecutionReadinessPath)) {
+    $ResolvedExecutionReadinessPath = (Resolve-Path -LiteralPath $ExecutionReadinessPath -ErrorAction Stop).Path
+    return [ordered]@{
+      ok = $true
+      source = 'execution_readiness_path'
+      evidence = $ResolvedExecutionReadinessPath
+      payload = Get-Content -LiteralPath $ResolvedExecutionReadinessPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+      error = ''
+    }
+  }
+
+  $Base = $ApiBaseUrl.TrimEnd('/')
+  $Url = "$Base/lens/os-binding/execution/readiness?limit=5"
+  try {
+    return [ordered]@{
+      ok = $true
+      source = 'api'
+      evidence = $Url
+      payload = Invoke-RestMethod -Method Get -Uri $Url -TimeoutSec ([Math]::Max(1, $TimeoutSeconds))
+      error = ''
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      source = 'api'
+      evidence = $Url
+      payload = $null
+      error = [string]$_.Exception.Message
+    }
+  }
+}
+
 $StatusRead = Read-LensStatus -StatusPath $StatusPath -ApiBaseUrl $ApiBaseUrl -TimeoutSeconds $TimeoutSeconds
 $StatusPayload = Get-PropertyValue -Payload $StatusRead -Name 'payload'
 $Palette = Get-PropertyValue -Payload $StatusPayload -Name 'command_palette'
@@ -223,9 +263,36 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
+$ExecutionReadinessRead = Read-ExecutionReadiness -ExecutionReadinessPath $ExecutionReadinessPath -ApiBaseUrl $ApiBaseUrl -TimeoutSeconds $TimeoutSeconds
+$ExecutionReadinessPayload = Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'payload'
+$ExecutionReadinessBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'blockers' -Default @())
+$ExecutionReadinessBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'blocked_requirements' -Default @())
+
 $Payload.ok = $false
 $Payload.status = 'refused'
 $Payload.error = 'lens_command_palette_open_not_authorized'
+$Payload.execution_readiness = [ordered]@{
+  ok = [bool](Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'ok' -Default $false)
+  source = [string](Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'source' -Default '')
+  evidence = [string](Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'evidence' -Default '')
+  error = [string](Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'error' -Default '')
+  kind = [string](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'kind' -Default '')
+  status = [string](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'status' -Default '')
+  route = [string](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'route' -Default '/lens/os-binding/execution/readiness')
+  execute_route = [string](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'execute_route' -Default '/lens/os-binding/execute')
+  ready = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'ready' -Default $false)
+  execution_ready = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'execution_ready' -Default $false)
+  authority_granted = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'authority_granted' -Default $false)
+  os_level_command_palette_binding_authority = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'os_level_command_palette_binding_authority' -Default $false)
+  denial_boundary_observed = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'denial_boundary_observed' -Default $false)
+  denial_receipt_readback_ready = [bool](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'denial_receipt_readback_ready' -Default $false)
+  blocked_requirements = @($ExecutionReadinessBlockedRequirements)
+  blockers = @($ExecutionReadinessBlockers)
+  next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ExecutionReadinessPayload -Name 'next_smallest_truthful_gap' -Default '')
+}
+$Payload.refusal_blockers = @($ExecutionReadinessBlockers)
+$Payload.governance.execution_readiness_readback = [bool](Get-PropertyValue -Payload $ExecutionReadinessRead -Name 'ok' -Default $false)
+$Payload.governance.execution_readiness_route = '/lens/os-binding/execution/readiness'
 $Payload.message = 'Opening or binding an OS-level Lens command palette is not authorized by this shell bridge; use Status for read-only inspection.'
 $Payload | ConvertTo-Json -Depth 10
 exit 2

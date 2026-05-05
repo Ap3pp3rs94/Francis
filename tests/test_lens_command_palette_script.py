@@ -126,6 +126,7 @@ def test_lens_command_palette_shell_bridge_reads_status_without_os_binding(tmp_p
 
 def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
+    execution_readiness_path = tmp_path / "execution-readiness.json"
     status_path.write_text(
         json.dumps(
             {
@@ -140,8 +141,53 @@ def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> 
         ),
         encoding="utf-8",
     )
+    execution_readiness_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.os_binding.command_palette_binding.execution_readiness",
+                "status": "blocked",
+                "route": "/lens/os-binding/execution/readiness",
+                "execute_route": "/lens/os-binding/execute",
+                "ready": False,
+                "execution_ready": False,
+                "authority_granted": True,
+                "os_level_command_palette_binding_authority": True,
+                "denial_boundary_observed": True,
+                "denial_receipt_readback_ready": True,
+                "blocked_requirements": [
+                    "global_hotkey_binding",
+                    "summon_binding",
+                    "resident_host",
+                ],
+                "blockers": [
+                    "global_hotkey_binding_missing",
+                    "summon_binding_missing",
+                    "resident_host_process_missing",
+                    "os_binding_execution_boundary_not_implemented",
+                ],
+                "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
+                "governance": {
+                    "read_only_contract": True,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "summon_authority": False,
+                    "hotkey_registration_authority": False,
+                    "mutation_authority_granted": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    proc = _run_palette("-Mode", "Open", "-StatusPath", str(status_path))
+    proc = _run_palette(
+        "-Mode",
+        "Open",
+        "-StatusPath",
+        str(status_path),
+        "-ExecutionReadinessPath",
+        str(execution_readiness_path),
+    )
 
     assert proc.returncode == 2
     payload = json.loads(proc.stdout)
@@ -149,5 +195,27 @@ def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> 
     assert payload["status"] == "refused"
     assert payload["ok"] is False
     assert payload["error"] == "lens_command_palette_open_not_authorized"
+    execution_readiness = payload["execution_readiness"]
+    assert execution_readiness["source"] == "execution_readiness_path"
+    assert execution_readiness["status"] == "blocked"
+    assert execution_readiness["route"] == "/lens/os-binding/execution/readiness"
+    assert execution_readiness["execute_route"] == "/lens/os-binding/execute"
+    assert execution_readiness["ready"] is False
+    assert execution_readiness["execution_ready"] is False
+    assert execution_readiness["authority_granted"] is True
+    assert execution_readiness["os_level_command_palette_binding_authority"] is True
+    assert execution_readiness["denial_boundary_observed"] is True
+    assert execution_readiness["denial_receipt_readback_ready"] is True
+    assert execution_readiness["blocked_requirements"] == [
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+    ]
+    assert "os_binding_execution_boundary_not_implemented" in execution_readiness["blockers"]
+    assert execution_readiness["next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
+    assert payload["refusal_blockers"] == execution_readiness["blockers"]
+    assert payload["governance"]["execution_readiness_readback"] is True
+    assert payload["governance"]["execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert payload["governance"]["opens_palette"] is False
     assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["execution_authority"] is False

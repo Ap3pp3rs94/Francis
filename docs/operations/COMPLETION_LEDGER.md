@@ -19090,6 +19090,37 @@ readiness readback:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-05 - Stage 6/Lens command-palette open-refusal readiness readback
+
+`scripts/lens-command-palette.ps1 -Mode Open` now consumes the OS-binding
+execution-readiness readback contract before returning its refusal payload.
+The refusal includes the readiness route, execution route, blocked
+requirements, blockers, denial receipt posture, and next truthful gap so the
+shell bridge explains why opening or binding the command palette is still not
+authorized.
+
+This is shell bridge/readback/refusal work. It does not open a command
+palette, register hotkeys, summon Francis, launch local processes, control
+overlay/tray surfaces, decide approvals, write memory, or grant execution
+authority. `Status` mode remains the existing read-only Lens status bridge.
+Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy
+resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens command-palette
+open-refusal readiness readback:
+
+- `python -m pytest tests\test_lens_command_palette_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell
+  line-ending warning for the edited Lens shell bridge`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
