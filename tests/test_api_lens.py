@@ -860,6 +860,22 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert closure["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
     closure_criteria = {item["id"]: item for item in closure["criteria"]}
     assert closure_criteria["summon_anywhere"]["ready"] is False
+    assert closure_criteria["summon_anywhere"]["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert closure_criteria["summon_anywhere"]["handoff"] == {
+        "next_step": "resolve_os_level_command_palette_binding_before_stage6_closure",
+        "readiness_route": "/lens/os-binding/readiness",
+        "plan_route": "/lens/os-binding/plan",
+        "authority_request_route": "/lens/os-binding/authority/request",
+        "authority_requests_route": "/lens/os-binding/authority/requests",
+        "authority_grant_route": "/lens/os-binding/authority",
+        "authority_grants_route": "/lens/os-binding/authority/grants",
+        "execute_route": "/lens/os-binding/execute",
+        "denials_route": "/lens/os-binding/denials",
+        "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
+        "authority_required": "os_level_command_palette_binding_authority",
+        "next_smallest_truthful_gap": "os_level_command_palette_binding",
+        "read_only_contract": True,
+    }
     assert closure_criteria["summon_anywhere"]["evidence"] == [
         "/lens/os-binding/readiness",
         "/lens/summon",
@@ -870,6 +886,23 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert closure_criteria["mode_visibility"]["ready"] is True
     assert closure_criteria["pilot_visibility_groundwork"]["ready"] is True
     assert closure_criteria["system_resident_presence"]["ready"] is False
+    assert closure_criteria["system_resident_presence"]["next_smallest_truthful_gap"] == (
+        "resident_host_supervision_authority_readiness_blockers"
+    )
+    assert closure_criteria["system_resident_presence"]["handoff"] == {
+        "next_step": "resolve_resident_host_runtime_loop_before_system_resident_claim",
+        "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "host_route": "/lens/host",
+        "supervision_authority_readiness_route": "/lens/host/supervision/authority/readiness",
+        "persistent_supervision_route": "/lens/host/persistent-supervision",
+        "resident_runtime_plan_route": "/lens/resident-runtime/plan",
+        "tray_route": "/lens/tray",
+        "overlay_route": "/lens/overlay",
+        "authority_required": "resident_runtime_execution_authority",
+        "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers",
+        "read_only_contract": True,
+    }
     assert closure["governance"]["execution_authority"] is False
     assert closure["governance"]["resident_claim_authority"] is False
     assert body["governance"] == {

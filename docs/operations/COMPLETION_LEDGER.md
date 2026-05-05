@@ -18871,6 +18871,38 @@ timing race stabilization:
   Result: `passed with the expected PowerShell line-ending warnings for Lens
   PowerShell proof scripts`
 
+### 2026-05-04 - Stage 6/Lens closure criterion handoff readback
+
+Stage 6/Lens closure readback now gives each blocked closure criterion its own
+durable continuation handoff. `/lens/status` still reports Stage 6 as blocked,
+with `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence` not
+ready, but the blocked criterion records now name their next smallest truthful
+gap and the concrete readback, request, grant, execution-denial, proof, and
+runtime routes that should be reviewed next.
+
+This is readback-only Lens API work. It does not open a palette, register a
+hotkey, launch or supervise a process, enable persistent supervision, install or
+control a service, write memory, decide approvals, grant new execution
+authority, claim resident status, or create new UI controls. It makes the Stage
+6 closure posture more actionable without changing the blocked posture.
+
+Stage 6 remains active. Closure remains blocked on summon-anywhere, helpful/not
+noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-04` Stage 6/Lens closure criterion
+handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

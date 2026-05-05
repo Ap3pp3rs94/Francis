@@ -1067,6 +1067,8 @@ def _stage6_closure_criterion(
     evidence: list[str],
     blockers: list[str] | None = None,
     basis: str = "",
+    next_smallest_truthful_gap: str = "",
+    handoff: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": criterion_id,
@@ -1076,6 +1078,8 @@ def _stage6_closure_criterion(
         "evidence": evidence,
         "blockers": blockers or [],
         "basis": basis,
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
+        "handoff": handoff or {},
     }
 
 
@@ -1135,6 +1139,24 @@ def _stage6_closure_readback(
         overlay_enablement_gate.get("blockers"),
         resident_surface_activation.get("blockers"),
     )
+    summon_next_gap = (
+        _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
+        or _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        or "summon_anywhere_blockers"
+    )
+    helpful_next_gap = (
+        _safe_str(resident_surface_activation.get("next_smallest_truthful_gap")).strip()
+        or "resident_surface_operator_experience_proof"
+    )
+    runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
+    system_next_gap = _safe_str(runtime_loop_readiness.get("next_smallest_truthful_gap")).strip()
+    if not system_next_gap:
+        if "resident_surface_runtime_not_supervised" in system_blockers:
+            system_next_gap = "supervised_resident_runtime_boundary"
+        elif "resident_host_process_missing" in system_blockers:
+            system_next_gap = "resident_host_supervision_boundary"
+        else:
+            system_next_gap = "resident_presence_authority_boundary"
     criteria = [
         _stage6_closure_criterion(
             "summon_anywhere",
@@ -1144,6 +1166,24 @@ def _stage6_closure_readback(
             evidence=["/lens/os-binding/readiness", "/lens/summon", "/lens/status"],
             blockers=summon_blockers,
             basis="OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
+            next_smallest_truthful_gap="" if summon_ready else summon_next_gap,
+            handoff={}
+            if summon_ready
+            else {
+                "next_step": "resolve_os_level_command_palette_binding_before_stage6_closure",
+                "readiness_route": "/lens/os-binding/readiness",
+                "plan_route": "/lens/os-binding/plan",
+                "authority_request_route": "/lens/os-binding/authority/request",
+                "authority_requests_route": "/lens/os-binding/authority/requests",
+                "authority_grant_route": "/lens/os-binding/authority",
+                "authority_grants_route": "/lens/os-binding/authority/grants",
+                "execute_route": "/lens/os-binding/execute",
+                "denials_route": "/lens/os-binding/denials",
+                "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
+                "authority_required": "os_level_command_palette_binding_authority",
+                "next_smallest_truthful_gap": summon_next_gap,
+                "read_only_contract": True,
+            },
         ),
         _stage6_closure_criterion(
             "helpful_not_noisy",
@@ -1153,6 +1193,20 @@ def _stage6_closure_readback(
             evidence=["/lens/resident-surface", "/lens/resident-surface/activation", "/lens/status"],
             blockers=helpful_blockers,
             basis="A calm Lens needs a supervised resident surface and live operator proof before the claim is real.",
+            next_smallest_truthful_gap="" if helpful_ready else helpful_next_gap,
+            handoff={}
+            if helpful_ready
+            else {
+                "next_step": "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim",
+                "readiness_route": "/lens/resident-surface/activation",
+                "surface_route": "/lens/resident-surface",
+                "host_route": "/lens/host",
+                "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+                "proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+                "authority_required": "resident_runtime_execution_authority",
+                "next_smallest_truthful_gap": helpful_next_gap,
+                "read_only_contract": True,
+            },
         ),
         _stage6_closure_criterion(
             "mode_visibility",
@@ -1178,6 +1232,23 @@ def _stage6_closure_readback(
             evidence=["/lens/host", "/lens/tray", "/lens/overlay", "/lens/resident-runtime/plan", "/lens/status"],
             blockers=system_blockers,
             basis="Resident presence requires supervised host, tray, hotkey, overlay, and resident-claim authority.",
+            next_smallest_truthful_gap="" if system_resident_ready else system_next_gap,
+            handoff={}
+            if system_resident_ready
+            else {
+                "next_step": "resolve_resident_host_runtime_loop_before_system_resident_claim",
+                "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+                "runtime_loop_route": "/lens/host/runtime-loop",
+                "host_route": "/lens/host",
+                "supervision_authority_readiness_route": "/lens/host/supervision/authority/readiness",
+                "persistent_supervision_route": "/lens/host/persistent-supervision",
+                "resident_runtime_plan_route": "/lens/resident-runtime/plan",
+                "tray_route": "/lens/tray",
+                "overlay_route": "/lens/overlay",
+                "authority_required": "resident_runtime_execution_authority",
+                "next_smallest_truthful_gap": system_next_gap,
+                "read_only_contract": True,
+            },
         ),
     ]
     ready_criteria = [item for item in criteria if bool(item.get("ready"))]
@@ -1185,20 +1256,11 @@ def _stage6_closure_readback(
     next_gap = "stage6_lens_completion_audit"
     blocked_ids = {_safe_str(item.get("id")).strip() for item in blocked_criteria}
     if "summon_anywhere" in blocked_ids:
-        summon_next_gap = (
-            _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
-            or _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
-        )
-        next_gap = summon_next_gap or "summon_anywhere_blockers"
+        next_gap = summon_next_gap
     elif "helpful_not_noisy" in blocked_ids:
-        next_gap = "resident_surface_operator_experience_proof"
+        next_gap = helpful_next_gap
     elif "system_resident_presence" in blocked_ids:
-        if "resident_surface_runtime_not_supervised" in system_blockers:
-            next_gap = "supervised_resident_runtime_boundary"
-        elif "resident_host_process_missing" in system_blockers:
-            next_gap = "resident_host_supervision_boundary"
-        else:
-            next_gap = "resident_presence_authority_boundary"
+        next_gap = system_next_gap
     return {
         "kind": "lens.stage6.closure_readback",
         "status": "ready_to_close" if not blocked_criteria else "blocked",
