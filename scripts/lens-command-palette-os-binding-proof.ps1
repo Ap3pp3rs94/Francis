@@ -2,6 +2,7 @@ param(
     [ValidateSet("Status")]
     [string]$Mode = "Status",
     [string]$StatusPath = "",
+    [string]$ExecutionReadinessPath = "",
     [string]$ApiBaseUrl = "http://127.0.0.1:8000",
     [int]$TimeoutSeconds = 5
 )
@@ -81,6 +82,58 @@ function Invoke-JsonScript {
     }
 }
 
+function Read-JsonReadback {
+    param(
+        [string]$Path,
+        [string]$ApiBaseUrl,
+        [string]$Route,
+        [int]$TimeoutSeconds
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Path)) {
+        try {
+            $ResolvedPath = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+            $Payload = Get-Content -LiteralPath $ResolvedPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            return [pscustomobject]@{
+                ok = $true
+                source = "path"
+                evidence = $ResolvedPath
+                payload = $Payload
+                error = ""
+            }
+        } catch {
+            return [pscustomobject]@{
+                ok = $false
+                source = "path"
+                evidence = $Path
+                payload = $null
+                error = [string]$_.Exception.Message
+            }
+        }
+    }
+
+    $Base = $ApiBaseUrl.TrimEnd("/")
+    $Url = "$Base$Route"
+    try {
+        $Payload = Invoke-RestMethod -Method Get -Uri $Url -TimeoutSec ([Math]::Max(1, $TimeoutSeconds))
+        return [pscustomobject]@{
+            ok = $true
+            source = "api"
+            evidence = $Url
+            payload = $Payload
+            error = ""
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            source = "api"
+            evidence = $Url
+            payload = $null
+            error = [string]$_.Exception.Message
+        }
+    }
+}
+
 function Test-ContainsAll {
     param(
         [string[]]$Actual,
@@ -151,21 +204,38 @@ $CommandPalette = Invoke-JsonScript -Path (Join-Path $ScriptRoot "lens-command-p
 $SummonPreflight = Invoke-JsonScript -Path (Join-Path $ScriptRoot "lens-summon-preflight.ps1") -Arguments @("-Mode", "Status")
 $TrayPreflight = Invoke-JsonScript -Path (Join-Path $ScriptRoot "lens-tray-preflight.ps1") -Arguments @("-Mode", "Status")
 $OverlayPreflight = Invoke-JsonScript -Path (Join-Path $ScriptRoot "lens-overlay-preflight.ps1") -Arguments @("-Mode", "Status")
+$ExecutionReadinessRequired = (-not [string]::IsNullOrWhiteSpace($ExecutionReadinessPath)) -or [string]::IsNullOrWhiteSpace($StatusPath)
+$ExecutionReadiness = $null
+if ($ExecutionReadinessRequired) {
+    $ExecutionReadiness = Read-JsonReadback `
+        -Path $ExecutionReadinessPath `
+        -ApiBaseUrl $ApiBaseUrl `
+        -Route "/lens/os-binding/execution/readiness?limit=5" `
+        -TimeoutSeconds $TimeoutSeconds
+}
 
 $PaletteJson = $CommandPalette.json
 $SummonJson = $SummonPreflight.json
 $TrayJson = $TrayPreflight.json
 $OverlayJson = $OverlayPreflight.json
+$ExecutionReadinessJson = if ($null -ne $ExecutionReadiness) { $ExecutionReadiness.payload } else { $null }
 
 $PaletteGovernance = Get-PropertyValue -Object $PaletteJson -Name "governance"
 $SummonGovernance = Get-PropertyValue -Object $SummonJson -Name "governance"
 $TrayGovernance = Get-PropertyValue -Object $TrayJson -Name "governance"
 $OverlayGovernance = Get-PropertyValue -Object $OverlayJson -Name "governance"
+$ExecutionReadinessGovernance = Get-PropertyValue -Object $ExecutionReadinessJson -Name "governance"
 
 $PaletteBlockers = ConvertTo-StringArray (Get-PropertyValue -Object $PaletteJson -Name "blockers" -Default @())
 $SummonBlockers = ConvertTo-StringArray (Get-PropertyValue -Object $SummonJson -Name "blockers" -Default @())
 $TrayBlockers = ConvertTo-StringArray (Get-PropertyValue -Object $TrayJson -Name "blockers" -Default @())
 $OverlayBlockers = ConvertTo-StringArray (Get-PropertyValue -Object $OverlayJson -Name "blockers" -Default @())
+$ExecutionReadinessBlockers = ConvertTo-StringArray (
+    Get-PropertyValue -Object $ExecutionReadinessJson -Name "blockers" -Default @()
+)
+$ExecutionReadinessBlockedRequirements = ConvertTo-StringArray (
+    Get-PropertyValue -Object $ExecutionReadinessJson -Name "blocked_requirements" -Default @()
+)
 
 $PaletteBindingBlockers = Select-Blockers -Blockers $PaletteBlockers -Names @(
     "os_level_command_palette_missing",
@@ -300,6 +370,30 @@ $OsBindingCandidateObserved = (
         "local_process_launch_authority_not_granted"
     ))
 )
+$ExecutionReadinessObserved = (
+    $ExecutionReadinessRequired -and
+    $null -ne $ExecutionReadiness -and
+    $ExecutionReadiness.ok -eq $true -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "kind") -eq "lens.os_binding.command_palette_binding.execution_readiness" -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "status") -eq "blocked" -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "route") -eq "/lens/os-binding/execution/readiness" -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "execute_route") -eq "/lens/os-binding/execute" -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "denials_route") -eq "/lens/os-binding/denials" -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "ready") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "execution_ready") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "summon_anywhere") -eq $false -and
+    $ExecutionReadinessBlockedRequirements -contains "global_hotkey_binding" -and
+    $ExecutionReadinessBlockedRequirements -contains "summon_binding" -and
+    $ExecutionReadinessBlockers -contains "os_binding_execution_boundary_not_implemented" -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "read_only_contract") -eq $true -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "execution_authority") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "approval_decision_authority") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "memory_write") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "hotkey_registration_authority") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "summon_authority") -eq $false
+)
+$ExecutionReadinessSatisfied = if ($ExecutionReadinessRequired) { $ExecutionReadinessObserved } else { $true }
 
 $Checks = @(
     (New-Check -Name "command_palette_shell_bridge" -Passed $PaletteBridgeObserved -Status "blocked_readback_ready" -Evidence $PaletteBindingBlockers),
@@ -307,6 +401,7 @@ $Checks = @(
     (New-Check -Name "tray_preflight" -Passed $TrayPreflightObserved -Status "blocked_readback_ready" -Evidence $TrayPresenceBlockers),
     (New-Check -Name "overlay_preflight" -Passed $OverlayPreflightObserved -Status "blocked_readback_ready" -Evidence $OverlayWindowBlockers),
     (New-Check -Name "os_binding_candidate_boundary" -Passed $OsBindingCandidateObserved -Status "candidate_blocked_readback_ready" -Evidence $OsBindingCandidateBlockedBy),
+    (New-Check -Name "os_binding_execution_readiness" -Passed $ExecutionReadinessSatisfied -Status $(if ($ExecutionReadinessObserved) { "blocked_readback_ready" } elseif ($ExecutionReadinessRequired) { "missing_or_unexpected" } else { "not_requested" }) -Evidence $ExecutionReadinessBlockers),
     (New-Check -Name "os_binding_side_effects_denied" -Passed $SideEffectsDenied -Status "diagnostic_bounded" -Evidence $AuthorityBlockers)
 )
 
@@ -333,6 +428,7 @@ $Payload = [ordered]@{
     tray_preflight_observed = $TrayPreflightObserved
     overlay_preflight_observed = $OverlayPreflightObserved
     os_binding_candidate_observed = $OsBindingCandidateObserved
+    os_binding_execution_readiness_observed = $ExecutionReadinessObserved
     side_effects_denied = $SideEffectsDenied
     blocked_families = $BlockedFamilies
     first_blocker_family = "palette_binding"
@@ -370,6 +466,22 @@ $Payload = [ordered]@{
         would_write_memory_now = $false
         next_smallest_truthful_gap = "os_level_command_palette_binding"
     }
+    execution_readiness = [ordered]@{
+        status = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "status" -Default $(if ($ExecutionReadinessRequired) { "missing" } else { "not_requested" }))
+        source = if ($null -ne $ExecutionReadiness) { [string]$ExecutionReadiness.source } else { "not_requested" }
+        evidence = if ($null -ne $ExecutionReadiness) { [string]$ExecutionReadiness.evidence } else { "" }
+        error = if ($null -ne $ExecutionReadiness) { [string]$ExecutionReadiness.error } else { "" }
+        route = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "route" -Default "")
+        execute_route = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "execute_route" -Default "")
+        denials_route = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denials_route" -Default "")
+        ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "ready" -Default $false)
+        execution_ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "execution_ready" -Default $false)
+        denial_boundary_observed = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denial_boundary_observed" -Default $false)
+        denial_receipt_readback_ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denial_receipt_readback_ready" -Default $false)
+        blocked_requirements = $ExecutionReadinessBlockedRequirements
+        blockers = $ExecutionReadinessBlockers
+        next_smallest_truthful_gap = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "next_smallest_truthful_gap" -Default "")
+    }
     command_palette = [ordered]@{
         status = Get-PropertyValue -Object $PaletteJson -Name "status"
         availability = Get-PropertyValue -Object $PaletteJson -Name "availability"
@@ -406,6 +518,7 @@ $Payload = [ordered]@{
         wraps_tray_preflight = $true
         wraps_overlay_preflight = $true
         os_binding_candidate_boundary_readback = $OsBindingCandidateObserved
+        wraps_os_binding_execution_readiness = $ExecutionReadinessObserved
         read_only_contract = $true
         opens_palette = $false
         execution_authority = $false

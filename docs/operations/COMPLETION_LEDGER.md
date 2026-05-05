@@ -18995,6 +18995,38 @@ execution readiness typing recovery:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-05 - Stage 6/Lens command-palette OS-binding execution-readiness proof bridge
+
+Stage 6/Lens command-palette OS-binding proof now consumes the read-only
+`/lens/os-binding/execution/readiness` contract when an execution-readiness
+readback is supplied. The proof output reports whether the execution-readiness
+audit was observed, includes the blocked execution-readiness route/readback
+summary, and checks that the route remains read-only, blocked, and without
+execution, approval-decision, memory-write, hotkey-registration, or summon
+authority.
+
+This is proof-harness and test work only. It does not open an OS command
+palette, bind a global hotkey, summon Francis anywhere, launch or supervise a
+process, control tray or overlay surfaces, write memory, decide approvals, grant
+execution authority, or claim resident status. Stage 6 remains active and
+blocked on summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens command-palette
+OS-binding execution-readiness proof bridge:
+
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for the
+  edited Lens proof script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

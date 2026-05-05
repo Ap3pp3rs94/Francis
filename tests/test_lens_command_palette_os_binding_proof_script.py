@@ -67,13 +67,64 @@ def _write_lens_status(path: Path) -> None:
     )
 
 
+def _write_execution_readiness(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.os_binding.command_palette_binding.execution_readiness",
+                "status": "blocked",
+                "route": "/lens/os-binding/execution/readiness",
+                "execute_route": "/lens/os-binding/execute",
+                "denials_route": "/lens/os-binding/denials",
+                "ready": False,
+                "execution_ready": False,
+                "os_level_command_palette": False,
+                "summon_anywhere": False,
+                "denial_boundary_observed": True,
+                "denial_receipt_readback_ready": True,
+                "blocked_requirements": [
+                    "global_hotkey_binding",
+                    "summon_binding",
+                    "resident_host",
+                    "tray_presence",
+                    "overlay_window",
+                ],
+                "blockers": [
+                    "os_binding_execution_boundary_not_implemented",
+                    "global_hotkey_binding_missing",
+                    "summon_binding_missing",
+                ],
+                "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
+                "governance": {
+                    "read_only_contract": True,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "hotkey_registration_authority": False,
+                    "summon_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     tmp_path: Path,
 ) -> None:
     status_path = tmp_path / "lens-status.json"
+    execution_readiness_path = tmp_path / "execution-readiness.json"
     _write_lens_status(status_path)
+    _write_execution_readiness(execution_readiness_path)
 
-    result = _run_script("-Mode", "Status", "-StatusPath", str(status_path))
+    result = _run_script(
+        "-Mode",
+        "Status",
+        "-StatusPath",
+        str(status_path),
+        "-ExecutionReadinessPath",
+        str(execution_readiness_path),
+    )
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
@@ -89,6 +140,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert payload["tray_preflight_observed"] is True
     assert payload["overlay_preflight_observed"] is True
     assert payload["os_binding_candidate_observed"] is True
+    assert payload["os_binding_execution_readiness_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["blocked_families"] == [
         "palette_binding",
@@ -181,6 +233,31 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert os_binding_candidate["would_write_memory_now"] is False
     assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
 
+    execution_readiness = payload["execution_readiness"]
+    assert execution_readiness["status"] == "blocked"
+    assert execution_readiness["source"] == "path"
+    assert execution_readiness["evidence"] == str(execution_readiness_path)
+    assert execution_readiness["route"] == "/lens/os-binding/execution/readiness"
+    assert execution_readiness["execute_route"] == "/lens/os-binding/execute"
+    assert execution_readiness["denials_route"] == "/lens/os-binding/denials"
+    assert execution_readiness["ready"] is False
+    assert execution_readiness["execution_ready"] is False
+    assert execution_readiness["denial_boundary_observed"] is True
+    assert execution_readiness["denial_receipt_readback_ready"] is True
+    assert execution_readiness["blocked_requirements"] == [
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+    ]
+    assert execution_readiness["blockers"] == [
+        "os_binding_execution_boundary_not_implemented",
+        "global_hotkey_binding_missing",
+        "summon_binding_missing",
+    ]
+    assert execution_readiness["next_smallest_truthful_gap"] == ("os_binding_command_palette_execution_boundary")
+
     command_palette = payload["command_palette"]
     assert command_palette["status"] == "blocked"
     assert command_palette["availability"] == "chat_ui_only"
@@ -213,6 +290,8 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert checks["overlay_preflight"]["status"] == "blocked_readback_ready"
     assert checks["os_binding_candidate_boundary"]["passed"] is True
     assert checks["os_binding_candidate_boundary"]["status"] == "candidate_blocked_readback_ready"
+    assert checks["os_binding_execution_readiness"]["passed"] is True
+    assert checks["os_binding_execution_readiness"]["status"] == "blocked_readback_ready"
     assert checks["os_binding_side_effects_denied"]["passed"] is True
     assert checks["os_binding_side_effects_denied"]["status"] == "diagnostic_bounded"
 
@@ -223,6 +302,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "wraps_tray_preflight": True,
         "wraps_overlay_preflight": True,
         "os_binding_candidate_boundary_readback": True,
+        "wraps_os_binding_execution_readiness": True,
         "read_only_contract": True,
         "opens_palette": False,
         "execution_authority": False,
