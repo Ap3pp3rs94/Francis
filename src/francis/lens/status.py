@@ -1058,6 +1058,48 @@ def _stage6_blockers(*values: Any, limit: int = 8) -> list[str]:
     return blockers
 
 
+def _stage6_summon_handoff(
+    *,
+    summon_enablement_gate: dict[str, Any],
+    next_smallest_truthful_gap: str,
+) -> dict[str, Any]:
+    first_handoff = _as_dict(summon_enablement_gate.get("first_blocker_family_handoff"))
+    first_family = _safe_str(summon_enablement_gate.get("first_blocker_family")).strip()
+    if first_handoff:
+        return {
+            "next_step": "resolve_summon_anywhere_blockers_before_stage6_closure",
+            "readiness_route": "/lens/summon/readiness",
+            "summon_route": "/lens/summon",
+            "preflight_route": "/lens/preflight",
+            "status_route": "/lens/status",
+            "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+            "first_blocker_family": first_family or _safe_str(first_handoff.get("id")).strip(),
+            "first_blocker_family_handoff": first_handoff,
+            "first_blocker_family_next_smallest_truthful_gap": _safe_str(
+                first_handoff.get("next_smallest_truthful_gap")
+            ).strip(),
+            "authority_required": _safe_str(first_handoff.get("authority_required")).strip(),
+            "next_smallest_truthful_gap": next_smallest_truthful_gap,
+            "read_only_contract": True,
+        }
+    return {
+        "next_step": "resolve_os_level_command_palette_binding_before_stage6_closure",
+        "readiness_route": "/lens/os-binding/readiness",
+        "plan_route": "/lens/os-binding/plan",
+        "authority_request_route": "/lens/os-binding/authority/request",
+        "authority_requests_route": "/lens/os-binding/authority/requests",
+        "authority_grant_route": "/lens/os-binding/authority",
+        "authority_grants_route": "/lens/os-binding/authority/grants",
+        "execute_route": "/lens/os-binding/execute",
+        "denials_route": "/lens/os-binding/denials",
+        "execution_readiness_route": "/lens/os-binding/execution/readiness",
+        "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
+        "authority_required": "os_level_command_palette_binding_authority",
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
+        "read_only_contract": True,
+    }
+
+
 def _stage6_closure_criterion(
     criterion_id: str,
     *,
@@ -1140,9 +1182,13 @@ def _stage6_closure_readback(
         resident_surface_activation.get("blockers"),
     )
     summon_next_gap = (
-        _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
-        or _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()
+        or _safe_str(os_binding_readiness.get("next_smallest_truthful_gap")).strip()
         or "summon_anywhere_blockers"
+    )
+    summon_handoff = _stage6_summon_handoff(
+        summon_enablement_gate=summon_enablement_gate,
+        next_smallest_truthful_gap=summon_next_gap,
     )
     helpful_next_gap = (
         _safe_str(resident_surface_activation.get("next_smallest_truthful_gap")).strip()
@@ -1167,24 +1213,7 @@ def _stage6_closure_readback(
             blockers=summon_blockers,
             basis="OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
             next_smallest_truthful_gap="" if summon_ready else summon_next_gap,
-            handoff={}
-            if summon_ready
-            else {
-                "next_step": "resolve_os_level_command_palette_binding_before_stage6_closure",
-                "readiness_route": "/lens/os-binding/readiness",
-                "plan_route": "/lens/os-binding/plan",
-                "authority_request_route": "/lens/os-binding/authority/request",
-                "authority_requests_route": "/lens/os-binding/authority/requests",
-                "authority_grant_route": "/lens/os-binding/authority",
-                "authority_grants_route": "/lens/os-binding/authority/grants",
-                "execute_route": "/lens/os-binding/execute",
-                "denials_route": "/lens/os-binding/denials",
-                "execution_readiness_route": "/lens/os-binding/execution/readiness",
-                "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
-                "authority_required": "os_level_command_palette_binding_authority",
-                "next_smallest_truthful_gap": summon_next_gap,
-                "read_only_contract": True,
-            },
+            handoff={} if summon_ready else summon_handoff,
         ),
         _stage6_closure_criterion(
             "helpful_not_noisy",

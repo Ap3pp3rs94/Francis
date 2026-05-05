@@ -19177,6 +19177,42 @@ process-supervision handoff CI retry stabilization:
 - `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
   Result: `passed`
 
+### 2026-05-05 - Stage 6/Lens closure readback summon-blocker handoff
+
+Stage 6/Lens status readiness now aligns its closure handoff with the completion
+audit after the OS-binding proof chain has been consumed. `/lens/status`
+`stage6_readiness.next_smallest_truthful_gap` and the closure readback now
+surface `summon_anywhere_blockers`, and the `summon_anywhere` criterion includes
+the first summon blocker family handoff (`resident_host`) with its
+`resident_host_runtime_blocker_boundary` proof pointer.
+
+This is backend/API readback-only work. It does not open a command palette,
+bind a hotkey, launch or supervise a process, control tray or overlay surfaces,
+summon Francis anywhere, decide approvals, write memory, grant execution
+authority, or claim resident Lens behavior. Stage 6 remains active and blocked
+on summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens closure readback
+summon-blocker handoff:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; audit reported `status: blocked`,
+  `next_smallest_truthful_gap: summon_anywhere_blockers`, first blocker family
+  `resident_host`, and `ready_to_close: false`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

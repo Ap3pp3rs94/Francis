@@ -859,7 +859,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "helpful_not_noisy",
         "system_resident_presence",
     ]
-    assert stage6_readiness["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert stage6_readiness["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     closure = body["stage6_readiness"]["closure_readback"]
     assert closure["kind"] == "lens.stage6.closure_readback"
     assert closure["status"] == "blocked"
@@ -873,24 +873,43 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "helpful_not_noisy",
         "system_resident_presence",
     ]
-    assert closure["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert closure["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     closure_criteria = {item["id"]: item for item in closure["criteria"]}
     assert closure_criteria["summon_anywhere"]["ready"] is False
-    assert closure_criteria["summon_anywhere"]["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert closure_criteria["summon_anywhere"]["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    expected_first_stage6_summon_handoff = {
+        "id": "resident_host",
+        "label": "Resident host",
+        "status": "blocked",
+        "blockers": [
+            "resident_host_process_missing",
+            "lens_host_runtime_not_implemented",
+            "local_process_launch_authority_not_granted",
+        ],
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "next_step": "run_resident_host_blocker_proof",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
     assert closure_criteria["summon_anywhere"]["handoff"] == {
-        "next_step": "resolve_os_level_command_palette_binding_before_stage6_closure",
-        "readiness_route": "/lens/os-binding/readiness",
-        "plan_route": "/lens/os-binding/plan",
-        "authority_request_route": "/lens/os-binding/authority/request",
-        "authority_requests_route": "/lens/os-binding/authority/requests",
-        "authority_grant_route": "/lens/os-binding/authority",
-        "authority_grants_route": "/lens/os-binding/authority/grants",
-        "execute_route": "/lens/os-binding/execute",
-        "denials_route": "/lens/os-binding/denials",
-        "execution_readiness_route": "/lens/os-binding/execution/readiness",
-        "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
-        "authority_required": "os_level_command_palette_binding_authority",
-        "next_smallest_truthful_gap": "os_level_command_palette_binding",
+        "next_step": "resolve_summon_anywhere_blockers_before_stage6_closure",
+        "readiness_route": "/lens/summon/readiness",
+        "summon_route": "/lens/summon",
+        "preflight_route": "/lens/preflight",
+        "status_route": "/lens/status",
+        "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+        "first_blocker_family": "resident_host",
+        "first_blocker_family_handoff": expected_first_stage6_summon_handoff,
+        "first_blocker_family_next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "authority_required": "resident_runtime_execution_authority",
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "read_only_contract": True,
     }
     assert closure_criteria["summon_anywhere"]["evidence"] == [
