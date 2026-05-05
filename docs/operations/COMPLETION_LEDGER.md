@@ -18968,6 +18968,33 @@ execution readiness audit:
 - `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-05 - Stage 6/Lens OS-binding execution readiness typing recovery
+
+CI run `25356350383` for
+`0aa9d83 feat(lens): audit os binding execution readiness` failed in mypy on
+`src/francis/lens/os_binding_authority.py` because the denial receipt total
+normalizer called `int()` on a value typed as possibly `None`. The conversion
+now branches by concrete input type before parsing, preserving the existing
+read-only execution readiness behavior while satisfying mypy.
+
+This is typing/CI recovery for the same backend/API readback surface. It does
+not change execution, approval, memory-write, hotkey, tray, overlay, summon,
+resident-claim, process, service, or UI authority.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens OS-binding
+execution readiness typing recovery:
+
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

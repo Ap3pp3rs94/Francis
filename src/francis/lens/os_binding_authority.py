@@ -1248,9 +1248,17 @@ def lens_os_binding_execution_readiness_audit(
     denial_receipt_readback_ready = _safe_str(denial_readback.get("kind")).strip() == (
         "lens.os_binding.command_palette_binding.denial_receipts"
     ) and _safe_str(denial_readback.get("status")).strip() in {"empty", "readback_ready"}
-    try:
-        denial_receipt_total = int(denial_readback.get("total"))
-    except (TypeError, ValueError):
+    raw_denial_receipt_total = denial_readback.get("total")
+    if isinstance(raw_denial_receipt_total, bool):
+        denial_receipt_total = len(_as_list(denial_readback.get("items")))
+    elif isinstance(raw_denial_receipt_total, int):
+        denial_receipt_total = raw_denial_receipt_total
+    elif isinstance(raw_denial_receipt_total, str) and raw_denial_receipt_total.strip():
+        try:
+            denial_receipt_total = int(raw_denial_receipt_total)
+        except ValueError:
+            denial_receipt_total = len(_as_list(denial_readback.get("items")))
+    else:
         denial_receipt_total = len(_as_list(denial_readback.get("items")))
     denial_receipt_total = max(0, denial_receipt_total)
     requirements = [
