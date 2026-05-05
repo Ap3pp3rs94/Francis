@@ -69,6 +69,18 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["foreground_run_seconds"] == 2
     assert payload["host_launch_run_seconds"] == 3
     assert payload["supervisor_run_seconds"] == 20
+    assert payload["child_proof_timeout_seconds"] == 240
+    assert payload["child_proof_timeouts"] == []
+    child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
+    assert set(child_proof_runs) == {
+        "resident_host_runtime_boundary",
+        "process_supervision_boundary",
+    }
+    for run in child_proof_runs.values():
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 240
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
     assert payload["resident_host_process_state"] == "foreground_observed_not_supervised"
     assert payload["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert payload["supervision_ready"] is False

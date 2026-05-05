@@ -288,7 +288,8 @@ $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShel
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
 )
 $ProcessSupervisionBoundary = $ProcessSupervisionBoundaryResult.payload
 $ProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value $ProcessSupervisionBoundary.blockers
@@ -304,7 +305,8 @@ $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShel
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
 )
 $ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
 $ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers

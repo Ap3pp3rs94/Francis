@@ -57,6 +57,15 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["mode"] == "status"
+    assert payload["child_proof_timeout_seconds"] == 240
+    assert payload["child_proof_timeouts"] == []
+    child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
+    assert set(child_proof_runs) == {"stage6_checkpoint", "host_supervision"}
+    for run in child_proof_runs.values():
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 240
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
     assert payload["stage6_checkpoint_observed"] is True
     assert payload["host_supervision_boundary_observed"] is True
     assert payload["process_supervision_boundary_observed"] is True

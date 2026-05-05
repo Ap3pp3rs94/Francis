@@ -19423,6 +19423,53 @@ previous-binding handoff readback:
   Result: `passed before ledger update with the expected PowerShell line-ending
   warning for the edited Lens proof script`
 
+### 2026-05-05 - Stage 6/Lens completion-audit nested proof timeout stabilization
+
+Stage 6/Lens completion-audit proof execution now propagates the audit child
+proof timeout into the nested resident-host process-supervision blocker and
+process-supervision authority boundary proofs. Those nested proofs now launch
+their child scripts through bounded process wrappers, kill the child process
+tree on timeout, stop retrying after a timeout, and expose
+`child_proof_timeout_seconds`, `child_proof_timeouts`, and `child_proof_runs`
+readback in their JSON payloads.
+
+This stabilizes the completion-audit harness after a local audit run exceeded
+the prior slow-proof window inside the resident-host process-supervision proof
+chain. After the change, the Stage 6 completion audit returned `status:
+blocked`, `audit_status: complete`, `next_smallest_truthful_gap:
+summon_anywhere_blockers`, and `child_proof_timeouts: []` while still preserving
+the same Stage 6 blockers.
+
+This is diagnostic/proof-harness and readback work only. It does not create a
+resident host, launch or supervise a product process beyond the existing
+bounded diagnostic proofs, install or control a service, open tray or overlay
+surfaces, bind a hotkey, summon Francis anywhere, decide approvals, write
+memory, write receipts, grant execution authority, grant process-supervision
+authority, or claim resident Lens behavior. Stage 6 remains active and blocked
+on summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens completion-audit
+nested proof timeout stabilization:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed after the nested timeout propagation`; audit remained
+  `blocked`, reported `next_smallest_truthful_gap:
+  summon_anywhere_blockers`, and had `child_proof_timeouts: []`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell line-ending
+  warnings for the edited Lens proof scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
