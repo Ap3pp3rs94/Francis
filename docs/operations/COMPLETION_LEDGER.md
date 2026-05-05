@@ -18903,6 +18903,42 @@ handoff readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-05 - Stage 6/Lens process-supervision proof retry stabilization
+
+CI run `25352763121` for
+`a0f4e0f feat(lens): surface stage6 closure handoffs` failed only on
+`windows-latest, Python 3.12` in
+`tests/test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff`.
+The composed resident-host process-supervision blocker proof observed the
+runtime handoff, but its child process-supervision boundary proof returned
+`proof_failed` after a transient host-supervision child proof mismatch.
+
+`scripts/lens-process-supervision-authority-boundary-proof.ps1` now uses a
+bounded two-attempt proof retry for the child
+`scripts/lens-host-supervision-proof.ps1 -Mode Status` readback. The retry only
+accepts the child proof when it returns exit code `0`, the expected proof kind,
+and `status=proof_passed`; all existing process-supervision, service,
+governance, blocker, and authority-denial predicates remain unchanged.
+
+This is proof-harness stabilization only. It does not grant execution,
+approval, memory-write, process-supervision, restart, service, hotkey, tray,
+overlay, summon, capture, sensing, receipt-write, resident-claim, mutation, UI,
+or promotion authority.
+
+Stage 6 remains active. Closure remains blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens
+process-supervision proof retry stabilization:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_blocks_supervision_and_service_activation -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for the
+  edited Lens proof script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

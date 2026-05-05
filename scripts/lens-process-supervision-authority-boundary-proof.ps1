@@ -124,6 +124,46 @@ function Invoke-JsonScript {
   }
 }
 
+function Invoke-JsonScriptWithProofRetry {
+  param(
+    [string]$PowerShellPath,
+    [string]$ScriptPath,
+    [string[]]$ScriptArgs = @(),
+    [string]$ExpectedKind,
+    [int]$Attempts = 2
+  )
+
+  $LastProof = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $Result = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ScriptArgs $ScriptArgs)
+    $Proof = if ($Result.Count -gt 0) { $Result[-1] } else { $null }
+    $LastProof = $Proof
+
+    $ExitCode = -1
+    $Payload = $null
+    if ($Proof -is [System.Collections.IDictionary]) {
+      if ($Proof.Contains('exit_code') -and $null -ne $Proof['exit_code']) {
+        $ExitCode = [int]$Proof['exit_code']
+      }
+      if ($Proof.Contains('payload') -and $null -ne $Proof['payload']) {
+        $Payload = $Proof['payload']
+      }
+    }
+
+    if (
+      $ExitCode -eq 0 -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+    ) {
+      return $Proof
+    }
+    if ($Attempt -lt $Attempts) {
+      Start-Sleep -Milliseconds 750
+    }
+  }
+  return $LastProof
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -166,11 +206,11 @@ $CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPat
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
 )
-$HostSupervisionResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
+$HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
-)
+) -ExpectedKind 'lens.host.supervision_readiness_proof'
 
 $CheckpointPayload = Get-PropertyValue -Payload $CheckpointResult -Name 'payload'
 $HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
