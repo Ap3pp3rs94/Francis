@@ -5596,7 +5596,7 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert denial["would_write_receipt"] is False
     assert denial["would_write_memory"] is False
     assert denial["would_decide_approval"] is False
-    assert denial["denial_receipt_written"] is False
+    assert denial["denial_receipt_written"] is True
 
     proof = body["proof"]
     assert proof["loop_readback_ready"] is True
@@ -5609,15 +5609,33 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert "resident_loop_process_supervision" in proof["blocked_requirements"]
     assert body["runtime_loop_contract"]["kind"] == "lens.host.runtime_loop_contract"
     assert body["runtime_loop_contract"]["loop_contract"]["would_start_loop"] is False
-    assert body["receipt_written"] is False
+    assert body["receipt_written"] is True
     assert body["receipt_route"] == "/lens/host/runtime-loop/denials"
-    assert body["receipt"] == {}
+    receipt = body["receipt"]
+    assert receipt["kind"] == "lens.host.runtime_loop.denial.receipt"
+    assert receipt["status"] == "denied_no_resident_runtime_authority"
+    assert receipt["route"] == "/lens/host/runtime-loop/execute"
+    assert receipt["source_kind"] == "lens.host.runtime_loop.execution_denial"
+    assert receipt["approval_id"] == "approval-runtime-loop"
+    assert receipt["actor"] == "test.system.write"
+    assert receipt["execution"]["loop_started"] is False
+    assert receipt["execution"]["would_start_loop"] is False
+    assert receipt["execution"]["would_supervise_process"] is False
+    assert receipt["execution"]["would_write_memory"] is False
+    assert receipt["governance"]["gate"] == "lens_host_runtime_loop_denial_receipt"
+    assert receipt["governance"]["denial_receipt_write_authority"] is True
+    assert receipt["governance"]["execution_authority"] is False
+    assert receipt["governance"]["resident_runtime_execution_authority"] is False
+    assert receipt["governance"]["memory_write"] is False
+    receipt_path = data_root / "lens" / "host_runtime_loop_denials" / f"{receipt['receipt_id']}.json"
+    assert receipt_path.exists()
 
     governance = body["governance"]
     assert governance["gate"] == "lens_host_runtime_loop_execution_denial_boundary"
     assert governance["execution_boundary"] is True
     assert governance["denial_boundary"] is True
     assert governance["read_only_contract"] is True
+    assert governance["denial_receipt_write_authority"] is True
     for key in [
         "execution_authority",
         "resident_runtime_execution_authority",
@@ -5630,7 +5648,6 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
         "service_install_authority",
         "service_control_authority",
         "receipt_write_authority",
-        "denial_receipt_write_authority",
         "resident_claim_authority",
         "overlay_control_authority",
         "summon_authority",
@@ -5648,7 +5665,7 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert denials_response.status_code == 200
     denials = denials_response.json()
     assert denials["kind"] == "lens.host.runtime_loop.denial_receipts"
-    assert denials["status"] == "empty"
+    assert denials["status"] == "readback_ready"
     assert denials["route"] == "/lens/host/runtime-loop/denials"
     assert denials["execute_route"] == "/lens/host/runtime-loop/execute"
     assert denials["runtime_loop_route"] == "/lens/host/runtime-loop"
@@ -5657,9 +5674,9 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert denials["limit"] == 10
     assert denials["approval_id"] == "approval-runtime-loop"
     assert denials["filter_status"] == "denied_no_resident_runtime_authority"
-    assert denials["total"] == 0
-    assert denials["latest"] is None
-    assert denials["items"] == []
+    assert denials["total"] == 1
+    assert denials["latest"]["receipt_id"] == receipt["receipt_id"]
+    assert denials["items"] == [receipt]
     assert denials["receipt_readback_ready"] is True
     assert denials["denial_receipt_readback_ready"] is True
     assert denials["next_smallest_truthful_gap"] == "resident_host_runtime_loop_readiness_audit"
@@ -5697,13 +5714,16 @@ def test_lens_host_runtime_loop_execution_denial_stays_non_mutating(
     assert resident_host["runtime_loop_execution_denial"]["governance"]["receipt_write_authority"] is False
     assert resident_host["runtime_loop_denial_receipts_route"] == "/lens/host/runtime-loop/denials"
     assert resident_host["runtime_loop_denial_receipts"]["kind"] == "lens.host.runtime_loop.denial_receipts"
-    assert resident_host["runtime_loop_denial_receipts"]["total"] == 0
+    assert resident_host["runtime_loop_denial_receipts"]["status"] == "readback_ready"
+    assert resident_host["runtime_loop_denial_receipts"]["total"] == 1
+    assert resident_host["runtime_loop_denial_receipts"]["latest"]["receipt_id"] == receipt["receipt_id"]
     assert status_body["runtime_loop_denial_receipts"]["route"] == "/lens/host/runtime-loop/denials"
+    assert status_body["runtime_loop_denial_receipts"]["latest"]["receipt_id"] == receipt["receipt_id"]
     assert status_body["receipts"]["lens_host_runtime_loop_denials_route"] == "/lens/host/runtime-loop/denials"
     criterion = _criterion(status_body, "resident_host_runtime_loop_denial_receipt_readback")
-    assert criterion["status"] == "empty"
-    assert criterion["receipt_count"] == 0
-    assert criterion["latest_receipt_id"] == ""
+    assert criterion["status"] == "readback_ready"
+    assert criterion["receipt_count"] == 1
+    assert criterion["latest_receipt_id"] == receipt["receipt_id"]
     assert criterion["evidence"] == [
         "/lens/host/runtime-loop/denials",
         "/lens/host/runtime-loop/execute",
@@ -6140,11 +6160,31 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert runtime_loop_execution["denial"]["would_start_loop"] is False
     assert runtime_loop_execution["denial"]["would_supervise_process"] is False
     assert runtime_loop_execution["denial"]["would_write_receipt"] is False
-    assert runtime_loop_execution["receipt_written"] is False
+    assert runtime_loop_execution["denial"]["denial_receipt_written"] is True
+    assert runtime_loop_execution["receipt_written"] is True
+    runtime_loop_receipt = runtime_loop_execution["receipt"]
+    assert runtime_loop_receipt["kind"] == "lens.host.runtime_loop.denial.receipt"
+    assert runtime_loop_receipt["approval_id"] == "approval-live-runtime-loop"
+    assert runtime_loop_receipt["execution"]["foreground_process_observed"] is True
+    assert runtime_loop_receipt["execution"]["would_supervise_process"] is False
     assert runtime_loop_execution["governance"]["execution_authority"] is False
     assert runtime_loop_execution["governance"]["process_supervision_authority"] is False
     assert runtime_loop_execution["governance"]["receipt_write_authority"] is False
+    assert runtime_loop_execution["governance"]["denial_receipt_write_authority"] is True
     assert runtime_loop_execution["governance"]["resident_claim_authority"] is False
+
+    runtime_loop_denials_response = client.get(
+        "/lens/host/runtime-loop/denials",
+        params={"limit": 10, "approval_id": "approval-live-runtime-loop"},
+    )
+    assert runtime_loop_denials_response.status_code == 200
+    runtime_loop_denials = runtime_loop_denials_response.json()
+    assert runtime_loop_denials["status"] == "readback_ready"
+    assert runtime_loop_denials["total"] == 1
+    assert runtime_loop_denials["latest"]["receipt_id"] == runtime_loop_receipt["receipt_id"]
+    assert runtime_loop_denials["latest"]["execution"]["would_supervise_process"] is False
+    assert runtime_loop_denials["latest"]["governance"]["execution_authority"] is False
+    assert runtime_loop_denials["latest"]["governance"]["denial_receipt_write_authority"] is True
 
 
 def test_lens_api_surfaces_host_supervisor_readback_without_authority(monkeypatch, tmp_path: Path) -> None:

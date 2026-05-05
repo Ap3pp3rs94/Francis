@@ -19513,6 +19513,42 @@ nested proof timeout budget:
   Result: `passed before ledger update with the expected PowerShell line-ending
   warnings for the edited Lens proof scripts`
 
+### 2026-05-05 - Stage 6/Lens runtime-loop denial receipt persistence
+
+Stage 6/Lens resident-host runtime-loop execution denials now persist durable
+denial receipts when the operator POSTs `/lens/host/runtime-loop/execute`.
+The existing `/lens/host/runtime-loop/denials` readback now lists those receipts
+with filtering by approval id and status, and `/lens/status` reflects the
+receipt count/latest receipt through the resident-host and top-level Lens
+readback surfaces.
+
+This closes a trace/readback gap in the resident-host runtime-loop blocker
+chain: an attempted loop execution can now be denied and later inspected as a
+receipt, instead of disappearing into a static empty readback contract.
+
+This is receipt persistence and readback work only. It does not create a
+resident host, start a runtime loop, launch or supervise a product process,
+install or control a service, open tray or overlay surfaces, bind a hotkey,
+summon Francis anywhere, decide approvals, write memory, grant execution
+authority, grant process-supervision authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens runtime-loop
+denial receipt persistence:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_loop_execution_denial_stays_non_mutating tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback -q`
+  Result: `failed before route wiring, then passed after the route recorded
+  denial receipts`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

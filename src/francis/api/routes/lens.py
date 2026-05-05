@@ -345,6 +345,7 @@ def host_runtime_loop_execute(request: Request, payload: LensHostRuntimeLoopExec
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+        record_receipt=True,
     )
 
 

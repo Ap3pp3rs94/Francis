@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_display_value
+from francis.kernel.paths import data_dir
 from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_runtime_boundary
 
 
@@ -38,6 +45,178 @@ def _safe_limit(value: Any, *, default: int = 5) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(50, parsed))
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _record_ts(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _filtered_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in record.items() if value not in ("", {}, [], None)}
+
+
+def _display(record: dict[str, Any]) -> dict[str, Any]:
+    redacted = redact_governed_display_value(record)
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _runtime_loop_denial_receipt_root() -> Path:
+    return data_dir() / "lens" / "host_runtime_loop_denials"
+
+
+def _runtime_loop_denial_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"lhrld_{ts}_{digest}"
+
+
+def _runtime_loop_denial_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = str(receipt_id or "").strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _runtime_loop_denial_receipt_root() / f"{cleaned}.json"
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _runtime_loop_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = str(denial.get("approval_id") or "").strip()
+    actor = str(denial.get("actor") or "").strip()
+    route = str(denial.get("route") or "").strip() or "/lens/host/runtime-loop/execute"
+    receipt_id = _runtime_loop_denial_receipt_id(approval_id=approval_id, actor=actor, route=route, ts=ts)
+    return _filtered_record(
+        {
+            "kind": "lens.host.runtime_loop.denial.receipt",
+            "receipt_id": receipt_id,
+            "id": receipt_id,
+            "status": str(denial.get("status") or "").strip(),
+            "route": route,
+            "method": str(denial.get("method") or "POST").strip() or "POST",
+            "source_kind": str(denial.get("kind") or "").strip(),
+            "source_route": route,
+            "runtime_loop_route": "/lens/host/runtime-loop",
+            "runtime_plan_route": "/lens/host/runtime-plan",
+            "runtime_boundary_route": "/lens/host/runtime-boundary",
+            "supervision_route": "/lens/host/supervision",
+            "approval_id": approval_id,
+            "actor": actor,
+            "reason": str(denial.get("reason") or "").strip(),
+            "created_ts": ts,
+            "execution": {
+                "applied": bool(denial.get("applied")),
+                "executed": bool(denial.get("executed")),
+                "loop_started": bool(denial.get("loop_started")),
+                "resident_runtime_loop": bool(denial.get("resident_runtime_loop")),
+                "resident_runtime_ready": bool(denial.get("resident_runtime_ready")),
+                "resident_claim_allowed": bool(denial.get("resident_claim_allowed")),
+                "foreground_process_observed": bool(denial.get("foreground_process_observed")),
+                "would_start_loop": False,
+                "would_launch_process": False,
+                "would_supervise_process": False,
+                "would_restart_process": False,
+                "would_install_service": False,
+                "would_start_service": False,
+                "would_register_tray": False,
+                "would_register_hotkey": False,
+                "would_open_overlay": False,
+                "would_claim_resident": False,
+                "would_write_receipt": False,
+                "would_write_memory": False,
+                "would_decide_approval": False,
+            },
+            "resident_host_process_state": str(denial.get("resident_host_process_state") or "").strip(),
+            "resident_host_process_blocker": str(denial.get("resident_host_process_blocker") or "").strip(),
+            "denial": _as_dict(denial.get("denial")),
+            "proof": _as_dict(denial.get("proof")),
+            "blockers": _as_str_list(denial.get("blockers")),
+            "governance": {
+                "gate": "lens_host_runtime_loop_denial_receipt",
+                "denial_receipt_write_authority": True,
+                "execution_authority": False,
+                "resident_runtime_execution_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "local_process_launch_authority": False,
+                "diagnostic_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "receipt_write_authority": False,
+                "resident_claim_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "tray_registration_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+    )
+
+
+def _record_runtime_loop_denial_receipt(denial: dict[str, Any]) -> dict[str, Any]:
+    receipt = _runtime_loop_denial_receipt(denial)
+    path = _runtime_loop_denial_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    receipt["path"] = str(path)
+    display = _display(receipt)
+    _atomic_write_json(path, display)
+    return display
+
+
+def _read_runtime_loop_denial_receipt(path: Path) -> dict[str, Any] | None:
+    raw = _read_json(path)
+    return _display(raw) if raw is not None else None
+
+
+def _list_runtime_loop_denial_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    root = _runtime_loop_denial_receipt_root()
+    if not root.exists():
+        return [], 0
+    items: list[dict[str, Any]] = []
+    for path in root.glob("*.json"):
+        item = _read_runtime_loop_denial_receipt(path)
+        if not item:
+            continue
+        if approval_id and str(item.get("approval_id") or "").strip() != approval_id:
+            continue
+        if status and str(item.get("status") or "").strip() != status:
+            continue
+        items.append(item)
+    items.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), str(item.get("receipt_id") or "")),
+        reverse=True,
+    )
+    return items[:limit], len(items)
 
 
 def _plan_step(
@@ -831,6 +1010,7 @@ def deny_lens_host_runtime_loop_execution(
     manifest: dict[str, Any] | None = None,
     runtime_plan: dict[str, Any] | None = None,
     runtime_loop: dict[str, Any] | None = None,
+    record_receipt: bool = False,
 ) -> dict[str, Any]:
     loop_contract = (
         runtime_loop
@@ -851,7 +1031,7 @@ def deny_lens_host_runtime_loop_execution(
     )
     status, next_step = _runtime_loop_execution_denial_status(blockers)
 
-    return {
+    response: dict[str, Any] = {
         "ok": True,
         "kind": "lens.host.runtime_loop.execution_denial",
         "status": status,
@@ -932,7 +1112,7 @@ def deny_lens_host_runtime_loop_execution(
             "service_install_authority": False,
             "service_control_authority": False,
             "receipt_write_authority": False,
-            "denial_receipt_write_authority": False,
+            "denial_receipt_write_authority": bool(record_receipt),
             "resident_claim_authority": False,
             "overlay_control_authority": False,
             "summon_authority": False,
@@ -944,9 +1124,16 @@ def deny_lens_host_runtime_loop_execution(
         "message": (
             "Lens can deny resident host runtime loop execution attempts, but this boundary does not start "
             "a loop, launch or supervise a process, control services or surfaces, claim residency, decide "
-            "approvals, write receipts, or write memory."
+            "approvals, grant execution, or write memory; it may record a denial receipt for traceability."
         ),
     }
+    if record_receipt:
+        receipt = _record_runtime_loop_denial_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["denial"]["denial_receipt_written"] = True
+    return response
 
 
 def lens_host_runtime_loop_denial_receipts(
@@ -955,24 +1142,31 @@ def lens_host_runtime_loop_denial_receipts(
     approval_id: Any = "",
     status: Any = "",
 ) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
     approval_id_value = str(approval_id or "").strip()
     status_value = str(status or "").strip()
+    items, total = _list_runtime_loop_denial_receipts(
+        limit=safe_limit,
+        approval_id=approval_id_value,
+        status=status_value,
+    )
+    latest = items[0] if items else None
 
     return {
         "ok": True,
         "kind": "lens.host.runtime_loop.denial_receipts",
-        "status": "empty",
+        "status": "readback_ready" if items else "empty",
         "route": "/lens/host/runtime-loop/denials",
         "execute_route": "/lens/host/runtime-loop/execute",
         "runtime_loop_route": "/lens/host/runtime-loop",
         "runtime_plan_route": "/lens/host/runtime-plan",
         "runtime_boundary_route": "/lens/host/runtime-boundary",
-        "limit": _safe_limit(limit),
+        "limit": safe_limit,
         "approval_id": approval_id_value,
         "filter_status": status_value,
-        "total": 0,
-        "latest": None,
-        "items": [],
+        "total": total,
+        "latest": latest,
+        "items": items,
         "receipt_readback_ready": True,
         "denial_receipt_readback_ready": True,
         "governance": {
