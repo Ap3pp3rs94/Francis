@@ -19351,6 +19351,44 @@ audit-handoff readback:
   `scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status
   -ConsumeProcessSupervisionHandoff`
 
+### 2026-05-05 - Stage 6/Lens helpful-not-noisy checkpoint handoff readback
+
+Stage 6/Lens `/lens/status` closure readback now gives the blocked
+`helpful_not_noisy` criterion its own checkpoint proof handoff. The existing
+resident-surface handoff still points at
+`scripts/lens-resident-surface-proof.ps1 -Mode Status`, but now also names the
+Stage 6 checkpoint bridge that consumes that child proof and narrows the
+operator-experience blocker from missing foreground surface runtime to
+`resident_surface_runtime_not_supervised`.
+
+This is backend/API readback-only work. It does not create a resident host,
+launch or supervise a product process, install or control a service, open tray
+or overlay surfaces, bind a hotkey, summon Francis anywhere, decide approvals,
+write memory, write receipts, grant execution authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens
+helpful-not-noisy checkpoint handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -c "import json; from francis.lens.status import lens_status; closure=lens_status(limit=3)['stage6_readiness']['closure_readback']; item={c['id']: c for c in closure['criteria']}['helpful_not_noisy']; print(json.dumps({'next_smallest_truthful_gap': item['next_smallest_truthful_gap'], 'handoff': item['handoff']}, indent=2, sort_keys=True))"`
+  Result: `passed`; `/lens/status` reports the
+  `helpful_not_noisy` handoff with a read-only checkpoint proof handoff to
+  `scripts/lens-stage6-checkpoint.ps1 -Mode Status` and child proof
+  `scripts/lens-resident-surface-proof.ps1 -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed`; audit remained `blocked`, reported
+  `next_smallest_truthful_gap: summon_anywhere_blockers`, and had no child proof
+  timeouts
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

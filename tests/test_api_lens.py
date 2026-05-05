@@ -932,6 +932,33 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     ]
     assert "summon_anywhere_missing" in closure_criteria["summon_anywhere"]["blockers"]
     assert "os_level_command_palette_missing" in closure_criteria["summon_anywhere"]["blockers"]
+    assert closure_criteria["helpful_not_noisy"]["ready"] is False
+    assert closure_criteria["helpful_not_noisy"]["next_smallest_truthful_gap"] == (
+        "approve_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert closure_criteria["helpful_not_noisy"]["handoff"] == {
+        "next_step": "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim",
+        "readiness_route": "/lens/resident-surface/activation",
+        "surface_route": "/lens/resident-surface",
+        "host_route": "/lens/host",
+        "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+        "proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+        "checkpoint_proof_handoff": {
+            "next_step": "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim",
+            "proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+            "child_proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+            "previous_next_smallest_truthful_gap": "resident_surface_runtime_missing",
+            "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+            "authority_required": "process_supervision_authority",
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        },
+        "authority_required": "resident_runtime_execution_authority",
+        "next_smallest_truthful_gap": "approve_resident_runtime_execution_authority_grant_receipt",
+        "read_only_contract": True,
+    }
     assert closure_criteria["mode_visibility"]["ready"] is True
     assert closure_criteria["pilot_visibility_groundwork"]["ready"] is True
     assert closure_criteria["system_resident_presence"]["ready"] is False
