@@ -19389,6 +19389,40 @@ helpful-not-noisy checkpoint handoff readback:
   `next_smallest_truthful_gap: summon_anywhere_blockers`, and had no child proof
   timeouts
 
+### 2026-05-05 - Stage 6/Lens summon authority previous-binding handoff readback
+
+Stage 6/Lens summon-authority proof readback now exposes the previous binding
+handoff that the authority proof already consumes. The
+`scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status` payload still
+names `authority` as the sixth summon-anywhere blocker family and still hands
+back to the Stage 6 completion audit, but it now includes
+`previous_binding_handoff` with the binding proof status, previous and next
+family names, next truthful gap, handoff alignment, side-effect denial, and the
+binding blockers.
+
+This is proof/readback-only work. It does not create a resident host, launch or
+supervise a product process, install or control a service, open tray or overlay
+surfaces, bind a hotkey, summon Francis anywhere, decide approvals, write
+memory, write receipts, grant execution authority, grant approval authority, or
+claim resident Lens behavior. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens summon authority
+previous-binding handoff readback:
+
+- `python -m pytest tests\test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell line-ending
+  warning for the edited Lens proof script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

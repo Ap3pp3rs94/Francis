@@ -144,6 +144,9 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
 $SummonBindingBridgeResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBindingBridgeScript -ScriptArgs $SummonBindingBridgeArgs
 $SummonBindingBridgePayload = $SummonBindingBridgeResult.payload
 $SummonBindingBridgeGovernance = Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'governance'
+$SummonBindingBridgeBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'summon_binding_blockers' -Default @()
+)
 
 $SummonPreflightResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonPreflightScript -ScriptArgs @('-Mode', 'Status')
 $SummonPreflightPayload = $SummonPreflightResult.payload
@@ -290,6 +293,16 @@ $Payload = [ordered]@{
   summon_authority_blockers = [string[]]@($SummonAuthorityBlockers)
   direct_summon_preflight_authority_blockers = [string[]]@($SummonPreflightAuthorityBlockers)
   direct_summon_preflight_binding_blockers = [string[]]@($SummonPreflightBindingBlockers)
+  previous_binding_handoff = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'status' -Default 'missing')
+    previous_summon_blocker_family = [string](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'previous_summon_blocker_family' -Default '')
+    summon_binding_blocker_family = [string](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'summon_binding_blocker_family' -Default '')
+    next_summon_blocker_family = [string](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'next_summon_blocker_family' -Default '')
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'next_smallest_truthful_gap' -Default '')
+    handoff_aligned = [bool](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'handoff_aligned' -Default $false)
+    side_effects_denied = [bool](Get-PropertyValue -Payload $SummonBindingBridgePayload -Name 'side_effects_denied' -Default $false)
+    blockers = [string[]]@($SummonBindingBridgeBlockers)
+  }
   summon_authority_boundary = [ordered]@{
     status = [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'status' -Default 'missing')
     ready = [bool](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'ready' -Default $false)

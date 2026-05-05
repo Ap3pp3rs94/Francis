@@ -74,6 +74,21 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
         "summon_authority_not_granted",
     ]
 
+    previous_binding = payload["previous_binding_handoff"]
+    assert previous_binding == {
+        "status": "proof_passed",
+        "previous_summon_blocker_family": "global_hotkey_binding",
+        "summon_binding_blocker_family": "summon_binding",
+        "next_summon_blocker_family": "authority",
+        "next_smallest_truthful_gap": "summon_authority_blocker_boundary",
+        "handoff_aligned": True,
+        "side_effects_denied": True,
+        "blockers": [
+            "lens_summon_binding_not_implemented",
+            "summon_authority_not_granted",
+        ],
+    }
+
     boundary = payload["summon_authority_boundary"]
     assert boundary["status"] == "blocked"
     assert boundary["ready"] is False
