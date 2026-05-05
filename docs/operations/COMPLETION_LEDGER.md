@@ -19470,6 +19470,49 @@ nested proof timeout stabilization:
   Result: `passed before ledger update with the expected PowerShell line-ending
   warnings for the edited Lens proof scripts`
 
+### 2026-05-05 - Stage 6/Lens Windows 3.12 nested proof timeout budget
+
+Stage 6/Lens completion-audit proof execution now has a wider default timeout
+budget for the nested process-supervision authority boundary proofs that can be
+run directly or through the resident-host process-supervision blocker. The
+parent Stage 6 completion audit already passes its own explicit 420-second
+child-proof timeout; this slice widens the direct nested proof default from 240
+seconds to 360 seconds after CI proved the default was too tight on
+`windows-latest` Python 3.12.
+
+The failed GitHub Actions run was `25397355382` for commit `de26766`; only
+`test (windows-latest, 3.12)` failed, and the failure payload showed
+`process_supervision_boundary` timing out at 240 seconds while the other matrix
+jobs and lint/format/mypy steps passed. The local recovery validation now passes
+the direct process-supervision proof, the resident-host wrapper proof, and the
+Stage 6 completion-audit contract with the widened default.
+
+This is proof-harness and readback stabilization only. It does not create a
+resident host, launch or supervise a product process beyond the existing
+bounded diagnostic proofs, install or control a service, open tray or overlay
+surfaces, bind a hotkey, summon Francis anywhere, decide approvals, write
+memory, write receipts, grant execution authority, grant process-supervision
+authority, or claim resident Lens behavior. Stage 6 remains active and blocked
+on summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens Windows 3.12
+nested proof timeout budget:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell line-ending
+  warnings for the edited Lens proof scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

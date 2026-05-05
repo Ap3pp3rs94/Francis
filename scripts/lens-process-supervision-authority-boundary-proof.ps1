@@ -16,7 +16,7 @@ param(
   [int]$SupervisorRunSeconds = 20,
 
   [ValidateRange(30, 600)]
-  [int]$ChildProofTimeoutSeconds = 240
+  [int]$ChildProofTimeoutSeconds = 360
 )
 
 Set-StrictMode -Version 2
