@@ -224,6 +224,7 @@ $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'l
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
+$SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -252,6 +253,10 @@ $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShe
   '-Mode', 'Status'
 )
 $SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
+$SummonAnywhereFamilyChainProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereFamilyChainProofScript -ScriptArgs @(
+  '-Mode', 'Status'
+)
+$SummonAnywhereFamilyChainProof = $SummonAnywhereFamilyChainProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -446,6 +451,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
 $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
+  New-ChildProofRunSummary -Name 'summon_anywhere_family_chain' -Result $SummonAnywhereFamilyChainProofResult
   New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
   New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessSupervisionBoundaryResult
   New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
@@ -1306,6 +1312,88 @@ $SummonAuthorityBlockerProofObserved = (
   -not [bool]$SummonAuthorityBlockerProofGovernance.resident_claim_authority -and
   -not [bool]$SummonAuthorityBlockerProofGovernance.mutation_authority_granted
 )
+$SummonAnywhereFamilyChainProofGovernance = $SummonAnywhereFamilyChainProof.governance
+$SummonAnywhereFamilyChainProofResidentHost = $SummonAnywhereFamilyChainProof.resident_host
+$SummonAnywhereFamilyChainProofFinalAuthority = $SummonAnywhereFamilyChainProof.final_authority
+$SummonAnywhereFamilyChainProofBlockedFamilies = ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.blocked_families
+$SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofResidentHost.runtime_blockers
+)
+$SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofResidentHost.surface_blockers
+)
+$SummonAnywhereFamilyChainProofFinalAuthorityBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofFinalAuthority.blockers
+)
+$ExpectedSummonAnywhereFamilyChain = @(
+  'resident_host',
+  'tray_presence',
+  'overlay_window',
+  'global_hotkey_binding',
+  'summon_binding',
+  'authority'
+)
+$SummonAnywhereFamilyChainBlockedFamiliesAligned = (
+  @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -eq @($ExpectedSummonAnywhereFamilyChain).Count
+)
+for ($Index = 0; $Index -lt @($ExpectedSummonAnywhereFamilyChain).Count; $Index += 1) {
+  if (
+    @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -le $Index -or
+    [string]$SummonAnywhereFamilyChainProofBlockedFamilies[$Index] -ne [string]$ExpectedSummonAnywhereFamilyChain[$Index]
+  ) {
+    $SummonAnywhereFamilyChainBlockedFamiliesAligned = $false
+  }
+}
+$SummonAnywhereFamilyChainProofObserved = (
+  [int]$SummonAnywhereFamilyChainProofResult.exit_code -eq 0 -and
+  [bool]$SummonAnywhereFamilyChainProof.ok -and
+  [string]$SummonAnywhereFamilyChainProof.kind -eq 'lens.summon_anywhere_family_chain.proof' -and
+  [string]$SummonAnywhereFamilyChainProof.status -eq 'proof_passed' -and
+  [string]$SummonAnywhereFamilyChainProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonAnywhereFamilyChainProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonAnywhereFamilyChainProof.family_chain_observed -and
+  [bool]$SummonAnywhereFamilyChainProof.resident_host_family_handoff_observed -and
+  [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_observed -and
+  [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed -and
+  [bool]$SummonAnywhereFamilyChainProof.handoff_aligned -and
+  [bool]$SummonAnywhereFamilyChainProof.side_effects_denied -and
+  [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq 'resident_host' -and
+  $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -and
+  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
+  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
+  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and
+  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'summon_binding_missing' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'summon_binding' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family -eq 'authority' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_resident_host_blocker_proof -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.bounded_local_process_launch -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.temporary_runtime_state_write -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.product_execution_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.execution_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.process_supervision_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.service_control_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.hotkey_registration_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.overlay_control_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.summon_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.memory_write -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.receipt_write_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.mutation_authority_granted
+)
 $Stage6CompletionReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
@@ -1316,7 +1404,8 @@ $Stage6CompletionReviewed = (
   $OsBindingAuthorityRequestReadbackObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
-  $SummonAuthorityBlockerProofObserved
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -1436,6 +1525,21 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $CommandPaletteShellBridgeObserved -and
+  $CommandPaletteOsBindingObserved -and
+  $OsBindingAuthorityRequestReadbackObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  -not $SummonAnywhereFamilyChainProofObserved
+) {
+  'summon_anywhere_family_chain_proof_readback'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved
 ) {
   $Stage6AcceptanceNextGap
@@ -1502,6 +1606,8 @@ $Payload = [ordered]@{
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
     'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs, and the first resident-host runtime boundary is now read back as consumed. Stage 6 still cannot close because summon-anywhere is blocked by process supervision plus grouped tray, overlay, global hotkey, summon binding, and authority behavior.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
+    'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'checkpoint_summon_enablement_gate_handoff') {
     'The audit must consume the checkpoint summon-enable gate handoff before treating summon-anywhere blocker families as fully audited through the checkpoint surface.'
   } elseif ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
@@ -2284,6 +2390,63 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  summon_anywhere_family_chain_proof = [ordered]@{
+    status = if ($SummonAnywhereFamilyChainProofObserved) { [string]$SummonAnywhereFamilyChainProof.status } else { 'missing_or_failed' }
+    ok = $SummonAnywhereFamilyChainProofObserved
+    exit_code = [int]$SummonAnywhereFamilyChainProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.evidence)
+    acceptance_criterion = [string]$SummonAnywhereFamilyChainProof.acceptance_criterion
+    summon_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.summon_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    family_chain_observed = [bool]$SummonAnywhereFamilyChainProof.family_chain_observed
+    resident_host_family_handoff_observed = [bool]$SummonAnywhereFamilyChainProof.resident_host_family_handoff_observed
+    final_summon_authority_handoff_observed = [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_observed
+    all_summon_blocker_families_consumed = [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed
+    handoff_aligned = [bool]$SummonAnywhereFamilyChainProof.handoff_aligned
+    side_effects_denied = [bool]$SummonAnywhereFamilyChainProof.side_effects_denied
+    blocked_families = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
+    blocked_family_handoffs = @($SummonAnywhereFamilyChainProof.blocked_family_handoffs)
+    first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereFamilyChainProof.first_blocker_family_handoff
+    resident_host = [ordered]@{
+      next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap
+      lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap
+      runtime_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers)
+      surface_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers)
+    }
+    final_authority = [ordered]@{
+      previous_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family
+      summon_authority_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family
+      next_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family
+      next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_smallest_truthful_gap
+      all_summon_blocker_families_consumed = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed
+      blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityBlockers)
+    }
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only
+      wraps_summon_anywhere_blockers_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof
+      wraps_summon_resident_host_blocker_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_resident_host_blocker_proof
+      wraps_summon_authority_blocker_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof
+      read_only_contract = [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract
+      bounded_local_process_launch = $false
+      temporary_runtime_state_write = $false
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      summon_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   resident_host_runtime_boundary_proof = [ordered]@{
     status = if ($ResidentHostRuntimeBoundaryProofObserved) { [string]$ResidentHostRuntimeBoundaryProof.status } else { 'missing_or_failed' }
     ok = $ResidentHostRuntimeBoundaryProofObserved
@@ -2665,6 +2828,7 @@ $Payload = [ordered]@{
     resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
+    summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false

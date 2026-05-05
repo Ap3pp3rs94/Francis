@@ -19283,6 +19283,38 @@ family-chain proof:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-05 - Stage 6/Lens completion audit summon-family chain readback
+
+The Stage 6 completion audit now consumes the existing
+`lens-summon-anywhere-family-chain-proof.ps1` child proof and exposes its
+readback in the audit payload. The audit requires the family-chain proof before
+`stage6_completion_reviewed` can become true, so the grouped resident-host,
+tray, overlay, global-hotkey, summon-binding, and final authority blockers are
+not treated as an audited handoff until the family-chain diagnostic is present
+and aligned.
+
+This is audit/proof-readback work only. It does not create a resident host,
+launch or supervise a product process, install or control a service, open tray
+or overlay surfaces, bind a hotkey, summon Francis anywhere, decide approvals,
+write memory, write receipts, grant execution authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens completion audit
+summon-family chain readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed after formatting the Stage 6 completion audit test`
+- `git diff --check`
+  Result: `passed before ledger update with the expected PowerShell line-ending
+  warning for the edited Lens audit script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
