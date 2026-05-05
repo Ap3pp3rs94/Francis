@@ -1351,21 +1351,33 @@ def _stage6_readiness(
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     os_binding_authority_requests = _as_dict(os_binding_readiness.get("authority_request_readback"))
+    closure_readback = _stage6_closure_readback(
+        mode=mode,
+        hud=hud,
+        resident_host=resident_host,
+        command_palette=command_palette,
+        pilot_indicator=pilot_indicator,
+        os_binding_readiness=os_binding_readiness,
+        summon_enablement_gate=summon_enablement_gate,
+        tray_enablement_gate=tray_enablement_gate,
+        overlay_enablement_gate=overlay_enablement_gate,
+        resident_surface_activation=resident_surface_activation,
+    )
+    ready_to_close = bool(closure_readback.get("ready_to_close"))
     return {
         "stage": "Stage 6 / Lens MVP",
+        "stage_state": "ready_to_close" if ready_to_close else "active",
+        "status": _safe_str(closure_readback.get("status")).strip() or "blocked",
+        "ready_to_close": ready_to_close,
+        "criteria_total": _safe_int(closure_readback.get("criteria_total")),
+        "ready_total": _safe_int(closure_readback.get("ready_total")),
+        "blocked_total": _safe_int(closure_readback.get("blocked_total")),
+        "ready_criteria": _as_list(closure_readback.get("ready_criteria")),
+        "blocked_criteria": _as_list(closure_readback.get("blocked_criteria")),
+        "next_smallest_truthful_gap": _safe_str(closure_readback.get("next_smallest_truthful_gap")).strip()
+        or "stage6_lens_completion_audit",
         "claim": "backend_readback_contract_only",
-        "closure_readback": _stage6_closure_readback(
-            mode=mode,
-            hud=hud,
-            resident_host=resident_host,
-            command_palette=command_palette,
-            pilot_indicator=pilot_indicator,
-            os_binding_readiness=os_binding_readiness,
-            summon_enablement_gate=summon_enablement_gate,
-            tray_enablement_gate=tray_enablement_gate,
-            overlay_enablement_gate=overlay_enablement_gate,
-            resident_surface_activation=resident_surface_activation,
-        ),
+        "closure_readback": closure_readback,
         "criteria": [
             {
                 "id": "resident_host_runtime",

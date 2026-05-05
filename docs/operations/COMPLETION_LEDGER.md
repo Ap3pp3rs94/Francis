@@ -19059,6 +19059,37 @@ CI observation-window recovery:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-05 - Stage 6/Lens stage-state readiness readback
+
+Stage 6/Lens `stage6_readiness` now exposes its closure posture directly at
+the top level: `stage_state`, `status`, `ready_to_close`, criterion totals,
+ready criteria, blocked criteria, and `next_smallest_truthful_gap`. These
+fields are derived from the existing `closure_readback`, so operator surfaces
+and continuation sessions can read the current stage state without shallow
+parsing drift or duplicating closure logic.
+
+This is backend/API readback-only work. It does not change the Stage 6 closure
+decision, does not create a resident host, does not bind a global hotkey, does
+not open a command palette or overlay, does not register tray presence, does
+not grant execution or approval authority, does not write memory, and does not
+claim resident Lens behavior. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens stage-state
+readiness readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

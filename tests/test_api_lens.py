@@ -845,6 +845,21 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["ok"] is True
     assert body["kind"] == "lens.status"
     assert body["read_only"] is True
+    stage6_readiness = body["stage6_readiness"]
+    assert stage6_readiness["stage"] == "Stage 6 / Lens MVP"
+    assert stage6_readiness["stage_state"] == "active"
+    assert stage6_readiness["status"] == "blocked"
+    assert stage6_readiness["ready_to_close"] is False
+    assert stage6_readiness["criteria_total"] == 5
+    assert stage6_readiness["ready_total"] == 2
+    assert stage6_readiness["blocked_total"] == 3
+    assert stage6_readiness["ready_criteria"] == ["mode_visibility", "pilot_visibility_groundwork"]
+    assert stage6_readiness["blocked_criteria"] == [
+        "summon_anywhere",
+        "helpful_not_noisy",
+        "system_resident_presence",
+    ]
+    assert stage6_readiness["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
     closure = body["stage6_readiness"]["closure_readback"]
     assert closure["kind"] == "lens.stage6.closure_readback"
     assert closure["status"] == "blocked"
