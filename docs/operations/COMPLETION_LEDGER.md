@@ -19549,6 +19549,44 @@ denial receipt persistence:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-05 - Stage 6/Lens supervision authority request readiness snapshot
+
+Stage 6/Lens host supervision authority approval requests now embed the current
+read-only supervision authority readiness audit snapshot. When an operator
+POSTs `/lens/host/supervision/authority/request`, the approval payload carries
+the exact readiness state, first blocked requirement, handoff route, blocker
+counts, grant receipt count, and next smallest truthful gap from
+`/lens/host/supervision/authority/readiness`.
+
+This tightens the first blocked requirement in the resident-host supervision
+chain: the exact approval request now preserves the blocker context that would
+be needed before any future grant can be considered. It keeps the existing
+request approval-only and non-mutating.
+
+This is route/API readback and approval-payload truth work only. It does not
+create a resident host, launch or supervise a product process, install or
+control a service, open tray or overlay surfaces, bind a hotkey, summon Francis
+anywhere, decide approvals, write memory, grant execution authority, grant
+process-supervision authority, grant resident-supervision authority, or claim
+resident Lens behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens supervision
+authority request readiness snapshot:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_request_requires_system_write_without_grant tests\test_api_lens.py::test_lens_host_supervision_authority_request_creates_approval_only_receipt tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `failed before formatting the Lens API test file, then passed`
+- `git diff --check`
+  Result: `passed after ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

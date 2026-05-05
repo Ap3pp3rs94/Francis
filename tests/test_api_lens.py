@@ -3268,8 +3268,37 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         },
     )
     assert supervision_authority_request.status_code == 200
-    supervision_authority_approval_id = str(supervision_authority_request.json()["approval_id"])
+    supervision_authority_request_body = supervision_authority_request.json()
+    supervision_authority_approval_id = str(supervision_authority_request_body["approval_id"])
     assert supervision_authority_approval_id
+    supervision_authority_request_payload = supervision_authority_request_body["supervision_authority"]
+    assert supervision_authority_request_payload["request_kind"] == "lens.host.supervision_authority.request"
+    supervision_authority_request_readiness = supervision_authority_request_payload["readiness"]
+    assert supervision_authority_request_readiness["kind"] == "lens.host.supervision_authority.readiness_audit"
+    assert supervision_authority_request_readiness["status"] == "blocked"
+    assert supervision_authority_request_readiness["audit_status"] == "complete"
+    assert supervision_authority_request_readiness["route"] == "/lens/host/supervision/authority/readiness"
+    assert supervision_authority_request_readiness["ready"] is False
+    assert supervision_authority_request_readiness["preflight_ready"] is True
+    assert supervision_authority_request_readiness["authority_ready"] is False
+    assert supervision_authority_request_readiness["supervision_ready"] is False
+    assert supervision_authority_request_readiness["resident_claim_allowed"] is False
+    assert supervision_authority_request_readiness["operator_surface_readback_ready"] is True
+    assert (
+        supervision_authority_request_readiness["first_blocked_requirement"] == "exact_supervision_authority_approval"
+    )
+    assert (
+        supervision_authority_request_readiness["first_blocked_requirement_handoff"]["request_route"]
+        == "/lens/host/supervision/authority/request"
+    )
+    assert supervision_authority_request_readiness["first_blocked_requirement_handoff"]["would_execute"] is False
+    assert supervision_authority_request_readiness["first_blocked_requirement_handoff"]["would_mutate"] is False
+    assert "exact_supervision_authority_approval" in supervision_authority_request_readiness["blocked_requirements"]
+    assert supervision_authority_request_readiness["grant_receipt_count"] == 0
+    assert (
+        supervision_authority_request_readiness["next_smallest_truthful_gap"]
+        == "host_supervision_authority_exact_approval_request"
+    )
     supervision_authority_decision = client.post(
         "/approvals/decision",
         json={

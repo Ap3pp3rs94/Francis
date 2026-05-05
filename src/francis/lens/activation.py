@@ -7879,6 +7879,7 @@ def _supervision_authority_request_payload(*, actor: Any, route: str) -> dict[st
     manifest = lens_host_launch_manifest()
     supervision_gate = lens_host_supervision_gate(manifest=manifest)
     preflight = lens_host_supervision_authority_preflight(manifest=manifest)
+    readiness = lens_host_supervision_authority_readiness_audit(actor=actor, limit=5)
     governance = _supervision_authority_governance(route=route)
     return {
         "request_kind": "lens.host.supervision_authority.request",
@@ -7909,6 +7910,28 @@ def _supervision_authority_request_payload(*, actor: Any, route: str) -> dict[st
             "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")),
             "blocked_requirements": _as_list(preflight.get("blocked_requirements")),
             "blockers": _as_list(preflight.get("blockers")),
+        },
+        "readiness": {
+            "kind": _safe_str(readiness.get("kind")).strip(),
+            "status": _safe_str(readiness.get("status")).strip(),
+            "audit_status": _safe_str(readiness.get("audit_status")).strip(),
+            "route": _safe_str(readiness.get("route")).strip(),
+            "ready": bool(readiness.get("ready")),
+            "preflight_ready": bool(readiness.get("preflight_ready")),
+            "authority_ready": bool(readiness.get("authority_ready")),
+            "supervision_ready": bool(readiness.get("supervision_ready")),
+            "resident_claim_allowed": bool(readiness.get("resident_claim_allowed")),
+            "operator_surface_readback_ready": bool(readiness.get("operator_surface_readback_ready")),
+            "first_blocked_requirement": _safe_str(readiness.get("first_blocked_requirement")).strip(),
+            "first_blocked_requirement_handoff": _as_dict(readiness.get("first_blocked_requirement_handoff")),
+            "blocked_requirements": _as_list(readiness.get("blocked_requirements")),
+            "requirements_total": int(readiness.get("requirements_total") or 0),
+            "requirements_ready_total": int(readiness.get("requirements_ready_total") or 0),
+            "requirements_blocked_total": int(readiness.get("requirements_blocked_total") or 0),
+            "receipt_count": int(readiness.get("receipt_count") or 0),
+            "grant_receipt_count": int(readiness.get("grant_receipt_count") or 0),
+            "next_smallest_truthful_gap": _safe_str(readiness.get("next_smallest_truthful_gap")).strip(),
+            "blockers": _as_list(readiness.get("blockers")),
         },
         "blockers": _as_list(preflight.get("blockers")),
         "governance": governance,
