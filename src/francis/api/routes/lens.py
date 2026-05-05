@@ -48,6 +48,7 @@ from francis.lens import (
     lens_os_binding_authority_request_contract,
     lens_os_binding_authority_request_readback,
     lens_os_binding_execution_denial_receipts,
+    lens_os_binding_execution_readiness_audit,
     lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
@@ -240,6 +241,14 @@ def os_binding_denials(
     status: str = "",
 ) -> dict[str, Any]:
     return lens_os_binding_execution_denial_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
+@router.get("/os-binding/execution/readiness")
+def os_binding_execution_readiness(
+    limit: int = Query(5, ge=1, le=50),
+    actor: str = "",
+) -> dict[str, Any]:
+    return lens_os_binding_execution_readiness_audit(actor=actor, limit=limit)
 
 
 @router.post("/os-binding/authority/request")

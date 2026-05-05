@@ -675,6 +675,7 @@ def test_lens_os_binding_authority_request_creates_approval_only_readback(
     assert contract_body["readback_route"] == "/lens/os-binding/authority/requests"
     assert contract_body["readiness_route"] == "/lens/os-binding/readiness"
     assert contract_body["plan_route"] == "/lens/os-binding/plan"
+    assert contract_body["execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert contract_body["creates_approval_request"] is True
     assert contract_body["grants_authority"] is False
     assert contract_body["opens_palette"] is False
@@ -871,6 +872,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "authority_grants_route": "/lens/os-binding/authority/grants",
         "execute_route": "/lens/os-binding/execute",
         "denials_route": "/lens/os-binding/denials",
+        "execution_readiness_route": "/lens/os-binding/execution/readiness",
         "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
         "authority_required": "os_level_command_palette_binding_authority",
         "next_smallest_truthful_gap": "os_level_command_palette_binding",
@@ -2404,6 +2406,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["receipts"]["lens_os_binding_authority_route"] == "/lens/os-binding/authority"
     assert body["receipts"]["lens_os_binding_authority_request_route"] == "/lens/os-binding/authority/request"
     assert body["receipts"]["lens_os_binding_authority_requests_route"] == "/lens/os-binding/authority/requests"
+    assert body["receipts"]["lens_os_binding_execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert body["receipts"]["lens_resident_surface_route"] == "/lens/resident-surface"
     assert body["receipts"]["lens_resident_surface_activation_route"] == "/lens/resident-surface/activation"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"

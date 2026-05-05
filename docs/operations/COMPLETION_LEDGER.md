@@ -18939,6 +18939,35 @@ process-supervision proof retry stabilization:
   Result: `passed with the expected PowerShell line-ending warning for the
   edited Lens proof script`
 
+### 2026-05-05 - Stage 6/Lens OS-binding execution readiness audit
+
+Stage 6/Lens summon-anywhere handoff now includes a read-only OS-binding
+execution readiness audit at `/lens/os-binding/execution/readiness`. The audit
+ties together the existing OS-binding authority request/readback, authority
+grant receipt, implementation plan, denied execution boundary, and denial
+receipt readback so an operator can see why OS-level command palette execution
+is still blocked after authority is granted.
+
+This is backend/API readback work. It does not open a command palette, register
+a hotkey, launch or supervise a process, control an overlay or tray, write
+memory, decide approvals, grant execution authority, claim resident status, or
+create UI controls. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens OS-binding
+execution readiness audit:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_os_binding_authority_request_creates_approval_only_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\status.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

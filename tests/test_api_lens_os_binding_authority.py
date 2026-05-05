@@ -295,6 +295,7 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert body["status"] == "denied_no_os_binding_execution_boundary"
     assert body["route"] == "/lens/os-binding/execute"
     assert body["receipt_route"] == "/lens/os-binding/denials"
+    assert body["execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert body["plan"]["execute_route"] == "/lens/os-binding/execute"
     assert body["plan"]["denials_route"] == "/lens/os-binding/denials"
     assert body["readiness"]["execute_route"] == "/lens/os-binding/execute"
@@ -356,6 +357,7 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert denials_body["readiness_route"] == "/lens/os-binding/readiness"
     assert denials_body["authority_route"] == "/lens/os-binding/authority"
     assert denials_body["grants_route"] == "/lens/os-binding/authority/grants"
+    assert denials_body["execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert denials_body["approval_id"] == approval_id
     assert denials_body["total"] == 1
     assert denials_body["latest"]["receipt_id"] == receipt["receipt_id"]
@@ -365,5 +367,55 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert denials_body["governance"]["execution_authority"] is False
     assert denials_body["governance"]["approval_decision_authority"] is False
     assert denials_body["governance"]["memory_write"] is False
+
+    readiness_response = client.get(
+        "/lens/os-binding/execution/readiness?limit=10&actor=test.system.write",
+    )
+    assert readiness_response.status_code == 200
+    readiness = readiness_response.json()
+    assert readiness["kind"] == "lens.os_binding.command_palette_binding.execution_readiness"
+    assert readiness["status"] == "blocked"
+    assert readiness["route"] == "/lens/os-binding/execution/readiness"
+    assert readiness["execute_route"] == "/lens/os-binding/execute"
+    assert readiness["denials_route"] == "/lens/os-binding/denials"
+    assert readiness["plan_route"] == "/lens/os-binding/plan"
+    assert readiness["readiness_route"] == "/lens/os-binding/readiness"
+    assert readiness["authority_route"] == "/lens/os-binding/authority"
+    assert readiness["authority_grants_route"] == "/lens/os-binding/authority/grants"
+    assert readiness["ready"] is False
+    assert readiness["execution_ready"] is False
+    assert readiness["permission_allowed"] is True
+    assert readiness["authority_granted"] is True
+    assert readiness["os_level_command_palette_binding_authority"] is True
+    assert readiness["active_grant_receipt_id"] == grant_receipt_id
+    assert readiness["denial_boundary_observed"] is True
+    assert readiness["denial_status"] == "denied_no_os_binding_execution_boundary"
+    assert readiness["denial_receipt_readback_ready"] is True
+    assert readiness["denial_receipt_total"] == 1
+    assert readiness["latest_denial_receipt_id"] == receipt["receipt_id"]
+    requirements = {item["id"]: item for item in readiness["requirements"]}
+    assert requirements["system_write_permission"]["ready"] is True
+    assert requirements["os_binding_authority_grant"]["ready"] is True
+    assert requirements["os_binding_execution_denial_boundary"]["ready"] is True
+    assert requirements["os_binding_denial_receipts"]["ready"] is True
+    assert requirements["global_hotkey_binding"]["ready"] is False
+    assert requirements["summon_binding"]["ready"] is False
+    assert requirements["resident_host"]["ready"] is False
+    assert requirements["tray_presence"]["ready"] is False
+    assert requirements["overlay_window"]["ready"] is False
+    assert "global_hotkey_binding" in readiness["blocked_requirements"]
+    assert "summon_binding" in readiness["blocked_requirements"]
+    assert "os_binding_execution_boundary_not_implemented" in readiness["blockers"]
+    assert readiness["execution_denial"]["receipt_written"] is False
+    assert readiness["denial_receipts"]["total"] == 1
+    assert readiness["governance"]["gate"] == "lens_os_binding_command_palette_execution_readiness_audit"
+    assert readiness["governance"]["read_only_contract"] is True
+    assert readiness["governance"]["execution_authority"] is False
+    assert readiness["governance"]["approval_decision_authority"] is False
+    assert readiness["governance"]["memory_write"] is False
+    assert readiness["governance"]["hotkey_registration_authority"] is False
+    assert readiness["governance"]["summon_authority"] is False
+    assert readiness["governance"]["denial_receipt_write_authority"] is False
+    assert readiness["governance"]["mutation_authority_granted"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
