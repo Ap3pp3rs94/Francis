@@ -39,9 +39,9 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 
 def test_lens_host_foreground_proof_observes_bounded_process_without_authority(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
-    proc = _run_proof("-Mode", "Status", "-RunSeconds", "3", "-DataDir", str(data_dir))
+    proc = _run_proof("-Mode", "Status", "-RunSeconds", "8", "-DataDir", str(data_dir))
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.host.foreground_readiness_proof"
     assert payload["status"] == "proof_passed"

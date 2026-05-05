@@ -19027,6 +19027,38 @@ OS-binding execution-readiness proof bridge:
   Result: `passed with the expected PowerShell line-ending warning for the
   edited Lens proof script`
 
+### 2026-05-05 - Stage 6/Lens foreground proof CI observation-window recovery
+
+CI run `25357986860` for
+`80738d0 feat(lens): bridge os binding execution readiness proof` failed only
+on `windows-latest` / Python `3.13` in
+`tests/test_lens_host_foreground_proof_script.py::test_lens_host_foreground_proof_observes_bounded_process_without_authority`.
+The failure path showed the bounded foreground proof returning exit code `1`
+with no stderr after the three-second observation window, while the other
+matrix jobs passed. The test now gives the nested PowerShell status readback an
+eight-second bounded foreground window and includes stdout in the assertion so
+future CI failures expose the proof payload.
+
+This is test/CI stabilization only. It does not change the Lens host proof
+script, runtime behavior, execution authority, approval authority,
+memory-write behavior, service/process supervision, hotkey, tray, overlay,
+summon, resident-claim, UI, telemetry, or promotion authority.
+
+Stage 6 remains active. Closure remains blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens foreground proof
+CI observation-window recovery:
+
+- `python -m pytest tests\test_lens_host_foreground_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_foreground_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_foreground_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
