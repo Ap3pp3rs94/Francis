@@ -2995,6 +2995,99 @@ def _supervision_authority_operator_handoff(requirement: dict[str, Any]) -> dict
     )
 
 
+def _resident_runtime_authority_operator_handoff(requirement: dict[str, Any]) -> dict[str, Any]:
+    requirement_id = _safe_str(requirement.get("id")).strip()
+    route_handoffs = {
+        "exact_resident_runtime_execution_authority_approval": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "request_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+            "requests_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+            "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            "grants_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_GRANTS_ROUTE,
+            "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+            "approval_action": LENS_RESIDENT_RUNTIME_EXECUTION_AUTHORITY_REQUEST_ACTION,
+            "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+        },
+        "actor_scope": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "authority_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            "required_scope": LENS_HOST_ACTIVATION_SCOPE,
+            "next_step": "provide_system_write_scope_before_resident_runtime_authority_boundary",
+        },
+        "operator_posture": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "next_step": "switch_operator_posture_to_write_review_before_resident_runtime_authority_boundary",
+        },
+        "resident_supervision_gate": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "host_route": "/lens/host",
+            "manifest_route": "/lens/host/manifest",
+            "supervision_route": "/lens/host/supervision",
+            "next_step": "resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use",
+        },
+        "resident_host_supervision_authority_preflight": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "supervision_authority_readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "grants_route": LENS_HOST_SUPERVISION_AUTHORITY_GRANTS_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "grant_host_supervision_authority_before_resident_runtime_authority_use",
+        },
+        "resident_host_supervision_authority_denial_boundary": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "supervision_authority_readiness_route": LENS_HOST_SUPERVISION_AUTHORITY_READINESS_ROUTE,
+            "authority_route": LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
+            "denials_route": LENS_HOST_SUPERVISION_AUTHORITY_DENIALS_ROUTE,
+            "next_step": "observe_host_supervision_authority_boundary_before_resident_runtime_authority_use",
+        },
+        "summon_gate": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "summon_route": "/lens/summon",
+            "summon_readiness_route": "/lens/summon/readiness",
+            "next_step": "resolve_summon_and_hotkey_gate_blockers_before_resident_runtime_authority_use",
+        },
+        "tray_gate": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "tray_route": "/lens/tray",
+            "tray_readiness_route": "/lens/tray/readiness",
+            "next_step": "resolve_tray_presence_gate_blockers_before_resident_runtime_authority_use",
+        },
+        "overlay_gate": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "overlay_route": "/lens/overlay",
+            "overlay_readiness_route": "/lens/overlay/readiness",
+            "next_step": "resolve_overlay_window_gate_blockers_before_resident_runtime_authority_use",
+        },
+        "runtime_activation_plan": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
+            "execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+            "next_step": "resolve_resident_runtime_activation_plan_blockers_before_execution",
+        },
+        "resident_runtime_execution_authority": {
+            "readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            "grants_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_GRANTS_ROUTE,
+            "denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+            "next_step": "grant_exact_approved_resident_runtime_execution_authority_request",
+        },
+    }
+    return _filtered_record(
+        {
+            "id": requirement_id,
+            "label": _safe_str(requirement.get("label")).strip(),
+            "status": _safe_str(requirement.get("status")).strip(),
+            "route": _safe_str(requirement.get("route")).strip(),
+            **route_handoffs.get(requirement_id, {}),
+            "authority_required": _safe_str(requirement.get("authority_required")).strip(),
+            "authority_granted": bool(requirement.get("authority_granted")),
+            "blockers": _str_list(requirement.get("blockers")),
+            "would_execute": False,
+            "would_mutate": False,
+        }
+    )
+
+
 def lens_resident_runtime_authority_grant_readiness_audit(
     *,
     approval_id: Any = "",
@@ -3241,7 +3334,24 @@ def lens_resident_runtime_authority_grant_readiness_audit(
     ]
     blocked_requirements = [item for item in requirements if not bool(item.get("ready"))]
     ready_requirements = [item for item in requirements if bool(item.get("ready"))]
+    blocked_requirement_handoffs = [_resident_runtime_authority_operator_handoff(item) for item in blocked_requirements]
+    first_blocked_requirement = (
+        _safe_str(_as_dict(blocked_requirements[0]).get("id")).strip() if blocked_requirements else ""
+    )
+    first_blocked_requirement_handoff = blocked_requirement_handoffs[0] if blocked_requirement_handoffs else {}
     ready = not blocked_requirements and not blockers
+    next_smallest_truthful_gap = (
+        "review_resident_runtime_activation_boundary_before_execution"
+        if ready
+        else (
+            "approve_resident_runtime_execution_authority_grant_receipt"
+            if first_blocked_requirement == "exact_resident_runtime_execution_authority_approval"
+            else (
+                _safe_str(first_blocked_requirement_handoff.get("next_step")).strip()
+                or "resident_runtime_authority_grant_readiness_blockers"
+            )
+        )
+    )
     return {
         "ok": True,
         "kind": "lens.resident_runtime.execution_authority_grant.readiness_audit",
@@ -3276,7 +3386,12 @@ def lens_resident_runtime_authority_grant_readiness_audit(
         "requirements_blocked_total": len(blocked_requirements),
         "requirements": requirements,
         "blocked_requirements": [item.get("id") for item in blocked_requirements],
+        "operator_surface_readback_ready": True,
+        "first_blocked_requirement": first_blocked_requirement,
+        "first_blocked_requirement_handoff": first_blocked_requirement_handoff,
+        "blocked_requirement_handoffs": blocked_requirement_handoffs,
         "blockers": blockers,
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
         "source_readbacks": {
             "preflight_status": _safe_str(runtime_preflight.get("status")).strip(),
             "policy_status": _safe_str(runtime_policy.get("status")).strip(),
@@ -3320,11 +3435,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             "resident_claim_authority": False,
             "runtime_mutation_authority_granted": False,
             "authority_granted": authority_granted,
-            "next_step": (
-                "resolve_resident_runtime_runtime_blockers_before_activation"
-                if authority_granted
-                else "grant_resident_runtime_execution_authority_before_activation"
-            ),
+            "next_step": next_smallest_truthful_gap,
         },
     }
 
@@ -7464,6 +7575,17 @@ def lens_resident_surface_activation_boundary(
     runtime_policy = lens_resident_runtime_execution_policy_contract(approval_id=safe_approval_id, actor=actor)
     runtime_authority_grants = lens_resident_runtime_execution_authority_grant_receipts(limit=1, active_only=True)
     active_runtime_authority_grant = _as_dict(runtime_authority_grants.get("active_latest"))
+    runtime_authority_readiness_approval_id = (
+        _safe_str(active_runtime_authority_grant.get("approval_id")).strip() or safe_approval_id
+    )
+    runtime_authority_grant_readiness = lens_resident_runtime_authority_grant_readiness_audit(
+        approval_id=runtime_authority_readiness_approval_id,
+        actor=actor,
+        limit=safe_limit,
+    )
+    runtime_authority_grant_handoff = _as_dict(
+        runtime_authority_grant_readiness.get("first_blocked_requirement_handoff")
+    )
     if active_runtime_authority_grant:
         runtime_authority_grant = {
             "ok": True,
@@ -7542,6 +7664,7 @@ def lens_resident_surface_activation_boundary(
             *_str_list(execution_plan.get("blockers")),
             *_str_list(runtime_preflight.get("blockers")),
             *_str_list(runtime_policy.get("blockers")),
+            *_str_list(runtime_authority_grant_readiness.get("blockers")),
             *_str_list(runtime_authority_grant.get("blockers")),
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
@@ -7681,6 +7804,11 @@ def lens_resident_surface_activation_boundary(
             "runtime_preflight_route": LENS_RESIDENT_RUNTIME_PREFLIGHT_ROUTE,
             "runtime_policy_route": LENS_RESIDENT_RUNTIME_POLICY_ROUTE,
             "runtime_authority_grant_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
+            "runtime_authority_grant_readiness_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_READINESS_ROUTE,
+            "runtime_authority_grant_request_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUEST_ROUTE,
+            "runtime_authority_grant_requests_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
+            "runtime_authority_grants_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_GRANTS_ROUTE,
+            "runtime_authority_grant_denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
             "runtime_plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
             "runtime_execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
             "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
@@ -7689,6 +7817,9 @@ def lens_resident_surface_activation_boundary(
             "runtime_preflight_status": _safe_str(runtime_preflight.get("status")).strip(),
             "runtime_policy_status": _safe_str(runtime_policy.get("status")).strip(),
             "runtime_authority_grant_status": _safe_str(runtime_authority_grant.get("status")).strip(),
+            "runtime_authority_grant_readiness_status": _safe_str(
+                runtime_authority_grant_readiness.get("status")
+            ).strip(),
             "runtime_plan_status": _safe_str(runtime_plan.get("status")).strip(),
             "runtime_denial_status": _safe_str(runtime_denial.get("status")).strip(),
             "denial_status": _safe_str(execution_denial.get("status")).strip(),
@@ -7719,6 +7850,9 @@ def lens_resident_surface_activation_boundary(
         },
         "resident_runtime_preflight": runtime_preflight,
         "resident_runtime_policy": runtime_policy,
+        "resident_runtime_authority_grant_readiness": runtime_authority_grant_readiness,
+        "resident_runtime_authority_grant_handoff_observed": bool(runtime_authority_grant_handoff),
+        "resident_runtime_authority_grant_handoff": runtime_authority_grant_handoff,
         "resident_runtime_authority_grant": runtime_authority_grant,
         "resident_runtime_plan": runtime_plan,
         "resident_runtime_denial": runtime_denial,
@@ -7749,6 +7883,8 @@ def lens_resident_surface_activation_boundary(
             "memory_write": False,
             "receipt_write_authority": False,
             "denial_receipt_write_authority": False,
+            "resident_runtime_authority_grant_readiness_readback": True,
+            "resident_runtime_authority_grant_handoff_readback": bool(runtime_authority_grant_handoff),
             "runtime_mutation_authority_granted": False,
             "next_step": next_gap,
         },

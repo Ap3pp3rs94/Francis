@@ -3136,6 +3136,27 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         == "/lens/resident-runtime/authority-grant"
     )
     assert resident_surface_activation["execution"]["runtime_authority_grant_status"] == "blocked"
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grant_readiness_route"]
+        == "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface_activation["execution"]["runtime_authority_grant_readiness_status"] == "blocked"
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grant_request_route"]
+        == "/lens/resident-runtime/authority-grant/request"
+    )
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grant_requests_route"]
+        == "/lens/resident-runtime/authority-grant/requests"
+    )
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grants_route"]
+        == "/lens/resident-runtime/authority-grant/grants"
+    )
+    assert (
+        resident_surface_activation["execution"]["runtime_authority_grant_denials_route"]
+        == "/lens/resident-runtime/authority-grant/denials"
+    )
     assert resident_surface_activation["execution"]["runtime_execute_route"] == "/lens/resident-runtime/execute"
     assert resident_surface_activation["execution"]["runtime_denial_status"] == "blocked"
     assert resident_surface_activation["execution"]["would_launch_process"] is False
@@ -3173,6 +3194,42 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     )
     assert resident_surface_activation["resident_runtime_policy"]["policy_contract_ready"] is True
     assert resident_surface_activation["resident_runtime_policy"]["grant_ready"] is False
+    resident_runtime_authority_grant_readiness = resident_surface_activation[
+        "resident_runtime_authority_grant_readiness"
+    ]
+    assert resident_runtime_authority_grant_readiness["kind"] == (
+        "lens.resident_runtime.execution_authority_grant.readiness_audit"
+    )
+    assert resident_runtime_authority_grant_readiness["status"] == "blocked"
+    assert resident_runtime_authority_grant_readiness["operator_surface_readback_ready"] is True
+    assert (
+        resident_runtime_authority_grant_readiness["first_blocked_requirement"]
+        == "exact_resident_runtime_execution_authority_approval"
+    )
+    assert (
+        resident_runtime_authority_grant_readiness["next_smallest_truthful_gap"]
+        == "approve_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert resident_surface_activation["resident_runtime_authority_grant_handoff_observed"] is True
+    assert resident_surface_activation["resident_runtime_authority_grant_handoff"] == {
+        "id": "exact_resident_runtime_execution_authority_approval",
+        "label": "Exact approved resident runtime execution authority request",
+        "status": "blocked",
+        "route": "/lens/resident-runtime/authority-grant/requests",
+        "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "request_route": "/lens/resident-runtime/authority-grant/request",
+        "requests_route": "/lens/resident-runtime/authority-grant/requests",
+        "grant_route": "/lens/resident-runtime/authority-grant",
+        "grants_route": "/lens/resident-runtime/authority-grant/grants",
+        "denials_route": "/lens/resident-runtime/authority-grant/denials",
+        "approval_action": "lens.resident_runtime.execution_authority",
+        "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
     assert (
         resident_surface_activation["resident_runtime_authority_grant"]["kind"]
         == "lens.resident_runtime.execution_authority_grant.denial"
@@ -3196,6 +3253,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["governance"]["overlay_control_authority"] is False
     assert resident_surface_activation["governance"]["summon_authority"] is False
     assert resident_surface_activation["governance"]["memory_write"] is False
+    assert resident_surface_activation["governance"]["resident_runtime_authority_grant_readiness_readback"] is True
+    assert resident_surface_activation["governance"]["resident_runtime_authority_grant_handoff_readback"] is True
     surface_activation_criterion = _criterion(body, "resident_surface_activation_boundary")
     assert surface_activation_criterion == {
         "id": "resident_surface_activation_boundary",
@@ -3853,6 +3912,34 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_authority_grant_readiness_body["grant_receipt_readback_ready"] is True
     assert runtime_authority_grant_readiness_body["denial_receipt_readback_ready"] is True
     assert runtime_authority_grant_readiness_body["receipt_count"] == 0
+    assert runtime_authority_grant_readiness_body["operator_surface_readback_ready"] is True
+    assert (
+        runtime_authority_grant_readiness_body["first_blocked_requirement"]
+        == "exact_resident_runtime_execution_authority_approval"
+    )
+    assert (
+        runtime_authority_grant_readiness_body["next_smallest_truthful_gap"]
+        == "approve_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert runtime_authority_grant_readiness_body["first_blocked_requirement_handoff"] == {
+        "id": "exact_resident_runtime_execution_authority_approval",
+        "label": "Exact approved resident runtime execution authority request",
+        "status": "blocked",
+        "route": "/lens/resident-runtime/authority-grant/requests",
+        "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "request_route": "/lens/resident-runtime/authority-grant/request",
+        "requests_route": "/lens/resident-runtime/authority-grant/requests",
+        "grant_route": "/lens/resident-runtime/authority-grant",
+        "grants_route": "/lens/resident-runtime/authority-grant/grants",
+        "denials_route": "/lens/resident-runtime/authority-grant/denials",
+        "approval_action": "lens.resident_runtime.execution_authority",
+        "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
     readiness_requirements = {item["id"]: item for item in runtime_authority_grant_readiness_body["requirements"]}
     assert readiness_requirements["actor_scope"]["ready"] is True
     assert readiness_requirements["execution_policy_contract"]["ready"] is True
@@ -7739,6 +7826,28 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert authority_grant_readiness_body["denial_receipt_readback_ready"] is True
     assert authority_grant_readiness_body["receipt_count"] == 1
     assert authority_grant_readiness_body["latest_receipt_id"] == authority_grant_receipt["receipt_id"]
+    assert authority_grant_readiness_body["operator_surface_readback_ready"] is True
+    assert authority_grant_readiness_body["first_blocked_requirement"] == "resident_supervision_gate"
+    readiness_handoff = authority_grant_readiness_body["first_blocked_requirement_handoff"]
+    assert readiness_handoff["id"] == "resident_supervision_gate"
+    assert readiness_handoff["route"] == "/lens/host/supervision"
+    assert readiness_handoff["host_route"] == "/lens/host"
+    assert readiness_handoff["manifest_route"] == "/lens/host/manifest"
+    assert readiness_handoff["supervision_route"] == "/lens/host/supervision"
+    assert readiness_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
+    assert (
+        readiness_handoff["next_step"] == "resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use"
+    )
+    assert readiness_handoff["authority_required"] == "process_supervision_and_service_control"
+    assert readiness_handoff["authority_granted"] is False
+    assert readiness_handoff["would_execute"] is False
+    assert readiness_handoff["would_mutate"] is False
+    assert "resident_host_process_missing" in readiness_handoff["blockers"]
+    assert "summon_binding_missing" in readiness_handoff["blockers"]
+    assert (
+        authority_grant_readiness_body["next_smallest_truthful_gap"]
+        == "resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use"
+    )
     readiness_requirements = {item["id"]: item for item in authority_grant_readiness_body["requirements"]}
     assert readiness_requirements["exact_resident_runtime_execution_authority_approval"]["ready"] is True
     assert readiness_requirements["actor_scope"]["ready"] is True
@@ -7843,6 +7952,11 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_policy_status"] == "readback_ready"
     assert resident_surface_activation_body["execution"]["runtime_authority_grant_status"] == "authority_granted"
+    assert (
+        resident_surface_activation_body["execution"]["runtime_authority_grant_readiness_route"]
+        == "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface_activation_body["execution"]["runtime_authority_grant_readiness_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_denial_status"] == (
         "denied_no_resident_runtime_execution_boundary"
@@ -7883,6 +7997,16 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert surface_components["summon_preflight"]["status"] == "blocked"
     assert surface_components["tray_preflight"]["status"] == "blocked"
     assert surface_components["overlay_preflight"]["status"] == "blocked"
+    surface_authority_readiness = resident_surface_activation_body["resident_runtime_authority_grant_readiness"]
+    assert surface_authority_readiness["status"] == "blocked"
+    assert surface_authority_readiness["operator_surface_readback_ready"] is True
+    assert surface_authority_readiness["authority_granted"] is True
+    assert surface_authority_readiness["first_blocked_requirement"] == "resident_supervision_gate"
+    assert resident_surface_activation_body["resident_runtime_authority_grant_handoff_observed"] is True
+    assert (
+        resident_surface_activation_body["resident_runtime_authority_grant_handoff"]["next_step"]
+        == "resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use"
+    )
     assert "activation_approval_not_approved" not in resident_surface_activation_body["blockers"]
     assert "system_write_scope_not_ready" not in resident_surface_activation_body["blockers"]
     assert "local_process_launch_authority_not_granted" in resident_surface_activation_body["blockers"]
@@ -7901,6 +8025,8 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["governance"]["overlay_control_authority"] is False
     assert resident_surface_activation_body["governance"]["summon_authority"] is False
     assert resident_surface_activation_body["governance"]["memory_write"] is False
+    assert resident_surface_activation_body["governance"]["resident_runtime_authority_grant_readiness_readback"] is True
+    assert resident_surface_activation_body["governance"]["resident_runtime_authority_grant_handoff_readback"] is True
 
     denied_runtime_execution = client.post(
         "/lens/resident-runtime/execute",

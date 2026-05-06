@@ -19906,6 +19906,47 @@ family-chain audit handoff:
 - `$env:PYTHONPATH='src'; python -c "... client.get('/lens/summon/readiness') ..."`
   Result: `passed; observed family-chain audit handoff with next_smallest_truthful_gap=stage6_lens_completion_audit`
 
+### 2026-05-06 - Stage 6/Lens resident activation authority handoff
+
+Stage 6/Lens `/lens/resident-runtime/authority-grant/readiness` now exposes an
+operator handoff for its first blocked requirement, including the exact route
+set for requesting, reading, granting, and auditing resident runtime execution
+authority. `/lens/resident-surface/activation` now carries that readiness audit
+and handoff directly, so the activation boundary can point operators at the
+resident runtime authority-grant gap without implying that resident execution,
+host supervision, tray, overlay, summon, or hotkey behavior is active.
+
+The resident surface activation boundary also now uses an active resident
+runtime authority grant receipt when selecting the authority-readiness approval
+id. This prevents a host activation approval id from hiding an already-active
+resident runtime authority grant in readback while still keeping the activation
+boundary blocked until the remaining resident host, supervision, summon, tray,
+overlay, and runtime blockers are resolved.
+
+This is backend/API readback work only. It does not create execution authority,
+approval decision authority, memory-write behavior, process-supervision
+authority, service-control authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, or a UI claim. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens resident activation
+authority handoff:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_readback_tracks_decision_without_execution -q`
+  Result: `failed before active authority-grant approval-id correction, then passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `failed before formatting, then passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
