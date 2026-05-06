@@ -20113,6 +20113,50 @@ alignment:
 - `python -m ruff format --check tests\test_api_lens.py tests\test_lens_host_preflight_script.py tests\test_service_install_plan_script.py`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens resident candidate supervision gap proof
+
+Stage 6/Lens host supervisor observation now explicitly reports the current
+resident candidate supervision gap. The proof still observes only one bounded
+foreground supervisor-owned host lifecycle, but it also reads the disabled
+`Francis-LensHost` service plan and records that the planned runtime mode is
+`Resident`, the manual resident runtime candidate is available, and that the
+resident candidate is not supervised.
+
+This keeps the resident-host proof chain truthful after the service plan moved
+from `-Mode Foreground` to `-Mode Resident`: the proof can show the candidate is
+planned without implying resident process supervision, service management, tray,
+hotkey, overlay, summon, memory-write, approval, or execution authority.
+
+This is diagnostic/readback proof work only. It does not create execution
+authority, approval decision authority, memory-write behavior,
+process-supervision authority, service-control authority,
+hotkey-registration authority, tray-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, or a UI claim. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest validation for the `2026-05-06` Stage 6/Lens resident candidate
+supervision gap proof:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor-observation-proof.ps1 -Mode Status -RunSeconds 12`
+  Result: `passed; status=proof_passed; service_plan_runtime_mode=Resident; resident_runtime_candidate_supervised=false`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed with non-fatal Ruff cache write warning`
+- `python -m ruff format --check tests\test_lens_host_supervisor_observation_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with non-fatal PowerShell line-ending warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

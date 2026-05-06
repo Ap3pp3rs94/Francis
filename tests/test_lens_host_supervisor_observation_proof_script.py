@@ -50,6 +50,12 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["run_seconds"] == 25
+    assert payload["supervisor_observation_mode"] == "foreground_bounded_session"
+    assert payload["service_plan_runtime_mode"] == "Resident"
+    assert payload["resident_runtime_candidate_available"] is True
+    assert payload["resident_runtime_candidate_script"] == "scripts/lens-host.ps1 -Mode Resident"
+    assert payload["resident_runtime_candidate_supervised"] is False
+    assert payload["resident_candidate_supervision_gap"] == "resident_candidate_not_supervised"
     assert payload["bounded_supervisor_observed"] is True
     assert payload["supervision_observation_ready"] is True
     assert payload["supervisor_observed_running_state"] is True
@@ -67,6 +73,7 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert payload["summon_anywhere"] is False
     assert payload["next_smallest_truthful_gap"] == ("resident_host_process_supervision_or_resident_overlay_runtime")
     assert "resident_host_process_not_supervised" in payload["blockers"]
+    assert "resident_candidate_not_supervised" in payload["blockers"]
     assert "resident_supervision_disabled" in payload["blockers"]
     assert "service_control_authority_false" in payload["blockers"]
 
@@ -74,6 +81,8 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert checks["powershell_runtime"]["passed"] is True
     assert checks["host_status_runner"]["passed"] is True
     assert checks["host_supervisor_runner"]["passed"] is True
+    assert checks["resident_candidate_service_plan"]["status"] == "resident_candidate_planned"
+    assert checks["resident_candidate_service_plan"]["passed"] is True
     assert checks["bounded_launch_started"]["status"] == "launch_started_observed"
     assert checks["supervisor_runner_consumed"]["status"] == "supervised_session_completed"
     assert checks["supervisor_observed_running_state"]["status"] == "foreground_running_observed"
@@ -89,6 +98,12 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert proof["launch_authority"] is False
     assert proof["diagnostic_launch_authority"] is True
     assert proof["supervisor_runner"] == "scripts/lens-host-supervisor.ps1"
+    assert proof["service_config"] == "config/runtime/services/lens-host.json"
+    assert proof["service_plan_runtime_mode"] == "Resident"
+    assert proof["service_plan_process_supervision_enabled"] is False
+    assert proof["service_plan_service_control_authority"] is False
+    assert proof["resident_runtime_candidate_available"] is True
+    assert proof["resident_runtime_candidate_supervised"] is False
     assert proof["supervisor_runner_exit_code"] == 0
     assert proof["supervisor_runner_status"] == "supervised_session_completed"
     assert proof["running_state_source"] == "supervisor_runner_observe"
@@ -107,6 +122,8 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
         "bounded_host_launch": True,
         "bounded_process_launch": True,
         "bounded_supervisor_observation": True,
+        "resident_runtime_candidate_available": True,
+        "resident_runtime_candidate_supervised": False,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
@@ -120,6 +137,7 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
         "api_local_process_launch_authority": False,
         "process_restart_authority": False,
         "process_supervision_authority": False,
+        "resident_candidate_supervision_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
         "hotkey_registration_authority": False,

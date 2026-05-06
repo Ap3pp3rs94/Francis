@@ -116,6 +116,17 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Get-ModeArgument {
+  param([string[]]$Arguments)
+
+  for ($Index = 0; $Index -lt $Arguments.Count; $Index++) {
+    if ($Arguments[$Index] -eq '-Mode' -and ($Index + 1) -lt $Arguments.Count) {
+      return [string]$Arguments[$Index + 1]
+    }
+  }
+  return ''
+}
+
 function Test-ProcessAlive {
   param([int]$ProcessId)
 
@@ -255,8 +266,19 @@ function Quote-ProcessArgument {
 $PowerShellPath = Get-PowerShellPath
 $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
 $SupervisorScriptPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
+$ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
 $HostScriptExists = Test-Path -LiteralPath $HostScriptPath -PathType Leaf
 $SupervisorScriptExists = Test-Path -LiteralPath $SupervisorScriptPath -PathType Leaf
+$ServiceConfig = Read-JsonFile -Path $ServiceConfigPath
+$ServiceArguments = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ServiceConfig -Name 'service_arguments' -Default @())
+$ServicePlanRuntimeMode = Get-ModeArgument -Arguments $ServiceArguments
+$ResidentRuntimeCandidateAvailable = (
+  [string](Get-PropertyValue -Payload $ServiceConfig -Name 'entrypoint' -Default '') -eq 'scripts/lens-host.ps1' -and
+  $ServicePlanRuntimeMode -eq [string](Get-PropertyValue -Payload $ServiceConfig -Name 'resident_mode' -Default 'Resident') -and
+  [bool](Get-PropertyValue -Payload $ServiceConfig -Name 'resident_session_enabled' -Default $false)
+)
+$ServicePlanProcessSupervisionEnabled = [bool](Get-PropertyValue -Payload $ServiceConfig -Name 'process_supervision_enabled' -Default $true)
+$ServicePlanServiceControlAuthority = [bool](Get-PropertyValue -Payload $ServiceConfig -Name 'service_control_authority' -Default $true)
 
 if ([string]::IsNullOrWhiteSpace($DataDir)) {
   $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-host-supervisor-proof\" + [guid]::NewGuid().ToString('N') + "\data")
@@ -270,6 +292,7 @@ $Checks = [System.Collections.ArrayList]::new()
 [void]$Checks.Add((New-Check -Id 'powershell_runtime' -Status $(if ($PowerShellPath) { 'present' } else { 'missing' }) -Passed (-not [string]::IsNullOrWhiteSpace($PowerShellPath)) -Evidence $PowerShellPath -Reason 'PowerShell is required for bounded supervisor observation.'))
 [void]$Checks.Add((New-Check -Id 'host_status_runner' -Status $(if ($HostScriptExists) { 'present' } else { 'missing' }) -Passed $HostScriptExists -Evidence 'scripts/lens-host.ps1' -Reason 'The proof observes the existing bounded Lens host runner.'))
 [void]$Checks.Add((New-Check -Id 'host_supervisor_runner' -Status $(if ($SupervisorScriptExists) { 'present' } else { 'missing' }) -Passed $SupervisorScriptExists -Evidence 'scripts/lens-host-supervisor.ps1' -Reason 'The proof consumes the reusable bounded host supervisor runner.'))
+[void]$Checks.Add((New-Check -Id 'resident_candidate_service_plan' -Status $(if ($ResidentRuntimeCandidateAvailable) { 'resident_candidate_planned' } else { 'not_planned' }) -Passed $ResidentRuntimeCandidateAvailable -Evidence 'config/runtime/services/lens-host.json' -Reason 'The disabled service plan points at the manual resident runtime candidate, while this proof still observes only a bounded foreground supervisor session.'))
 
 $SupervisorResult = $null
 $SupervisorPayload = $null
@@ -358,6 +381,7 @@ if ($PowerShellPath -and $HostScriptExists -and $SupervisorScriptExists) {
 $ProofPassed = $LaunchObserved -and $SupervisorObserved -and $RunningObserved -and $StoppedObserved -and $FinalStatusObserved -and $AuthorityBounded
 $Blockers = @(
   'resident_host_process_not_supervised',
+  'resident_candidate_not_supervised',
   'resident_supervision_disabled',
   'lens_host_runtime_not_implemented',
   'service_control_authority_false',
@@ -375,6 +399,12 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   data_root = $ProofDataRoot
   run_seconds = $RunSeconds
+  supervisor_observation_mode = 'foreground_bounded_session'
+  service_plan_runtime_mode = $ServicePlanRuntimeMode
+  resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+  resident_runtime_candidate_script = 'scripts/lens-host.ps1 -Mode Resident'
+  resident_runtime_candidate_supervised = $false
+  resident_candidate_supervision_gap = 'resident_candidate_not_supervised'
   bounded_supervisor_observed = $ProofPassed
   supervision_observation_ready = $ProofPassed
   supervisor_observed_running_state = $RunningObserved
@@ -395,6 +425,12 @@ $Payload = [ordered]@{
   proof = [ordered]@{
     status_runner = 'scripts/lens-host.ps1'
     supervisor_runner = 'scripts/lens-host-supervisor.ps1'
+    service_config = 'config/runtime/services/lens-host.json'
+    service_plan_runtime_mode = $ServicePlanRuntimeMode
+    service_plan_process_supervision_enabled = $ServicePlanProcessSupervisionEnabled
+    service_plan_service_control_authority = $ServicePlanServiceControlAuthority
+    resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+    resident_runtime_candidate_supervised = $false
     runtime_state_path = 'runtime/lens-host/status.json'
     pid_path = 'runtime/lens-host/lens-host.pid'
     launch_exit_code = [int](Get-PropertyValue -Payload $SupervisorResult -Name 'exit_code' -Default -1)
@@ -423,6 +459,8 @@ $Payload = [ordered]@{
     bounded_host_launch = $ProofPassed
     bounded_process_launch = $ProofPassed
     bounded_supervisor_observation = $ProofPassed
+    resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+    resident_runtime_candidate_supervised = $false
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false
@@ -436,13 +474,14 @@ $Payload = [ordered]@{
     api_local_process_launch_authority = $false
     process_restart_authority = $false
     process_supervision_authority = $false
+    resident_candidate_supervision_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     hotkey_registration_authority = $false
     tray_registration_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Bounded Lens host supervisor observation watched one diagnostic host process through running and stopped states; this proves observation only, not resident supervision or service management.'
+  message = 'Bounded Lens host supervisor observation watched one diagnostic foreground process through running and stopped states, while confirming the planned resident runtime candidate is still not supervised; this proves observation only, not resident supervision or service management.'
 }
 
 $Payload | ConvertTo-Json -Depth 10
