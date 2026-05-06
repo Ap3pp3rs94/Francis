@@ -20157,6 +20157,46 @@ supervision gap proof:
 - `git diff --check`
   Result: `passed with non-fatal PowerShell line-ending warning`
 
+### 2026-05-06 - Stage 6/Lens resident candidate summon handoff
+
+The Stage 6 summon resident-host blocker proof now carries the disabled
+`Francis-LensHost` service-plan readback forward into the summon-anywhere
+handoff chain. The proof reports that the planned runtime mode is `Resident`,
+that a manual resident runtime candidate is available, and that the candidate
+is still not supervised, service-controlled, service-installable, or
+resident-claim capable.
+
+This keeps the Stage 6 closure chain from flattening two different truths into
+one blocker: Francis now distinguishes "a resident runtime candidate exists"
+from "a resident host is supervised and safe to claim." The next truthful gap
+remains `resident_host_process_not_supervised`; Stage 6 is still active and
+blocked on summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+This is diagnostic/readback proof-chain work only. It does not create
+execution authority, approval decision authority, memory-write behavior,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens resident candidate summon
+handoff:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3`
+  Result: `passed; status=proof_passed; service_plan_runtime_mode=Resident; resident_runtime_candidate_supervised=false; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -67,6 +67,27 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Read-JsonFile {
+  param(
+    [string]$Path
+  )
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+
+  $Raw = Get-Content -LiteralPath $Path -Raw
+  if ([string]::IsNullOrWhiteSpace($Raw)) {
+    return $null
+  }
+
+  try {
+    return $Raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
 function Invoke-JsonScript {
   param(
     [Parameter(Mandatory = $true)]
@@ -123,6 +144,48 @@ function New-Check {
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
+
+$ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
+$ServiceConfig = Read-JsonFile -Path $ServiceConfigPath
+$ServiceArguments = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $ServiceConfig -Name 'service_arguments' -Default @()
+)
+$ServicePlanRuntimeMode = ''
+$ModeIndex = [array]::IndexOf($ServiceArguments, '-Mode')
+if ($ModeIndex -ge 0 -and $ModeIndex -lt ($ServiceArguments.Count - 1)) {
+  $ServicePlanRuntimeMode = [string]$ServiceArguments[$ModeIndex + 1]
+}
+$ResidentMode = [string](Get-PropertyValue -Payload $ServiceConfig -Name 'resident_mode' -Default 'Resident')
+if ([string]::IsNullOrWhiteSpace($ServicePlanRuntimeMode)) {
+  $ServicePlanRuntimeMode = $ResidentMode
+}
+$ServiceEntrypoint = [string](Get-PropertyValue -Payload $ServiceConfig -Name 'entrypoint' -Default '')
+$ServiceName = [string](Get-PropertyValue -Payload $ServiceConfig -Name 'service_name' -Default '')
+$RuntimeStatePath = [string](Get-PropertyValue -Payload $ServiceConfig -Name 'runtime_state_path' -Default '')
+$ResidentRuntimeCandidateAvailable = (
+  $ServiceEntrypoint -eq 'scripts/lens-host.ps1' -and
+  $ServicePlanRuntimeMode -eq $ResidentMode -and
+  [bool](Get-PropertyValue -Payload $ServiceConfig -Name 'resident_session_enabled' -Default $false)
+)
+$ResidentRuntimeCandidateSupervised = [bool](
+  Get-PropertyValue -Payload $ServiceConfig -Name 'process_supervision_enabled' -Default $true
+)
+$ResidentRuntimeServiceControlAuthority = [bool](
+  Get-PropertyValue -Payload $ServiceConfig -Name 'service_control_authority' -Default $true
+)
+$ResidentRuntimeServiceInstallAuthority = [bool](
+  Get-PropertyValue -Payload $ServiceConfig -Name 'service_install_authority' -Default $true
+)
+$ResidentRuntimeCandidateClaimAuthority = [bool](
+  Get-PropertyValue -Payload $ServiceConfig -Name 'resident_claim_authority' -Default $true
+)
+$ResidentCandidateServicePlanObserved = (
+  $ResidentRuntimeCandidateAvailable -and
+  -not $ResidentRuntimeCandidateSupervised -and
+  -not $ResidentRuntimeServiceControlAuthority -and
+  -not $ResidentRuntimeServiceInstallAuthority -and
+  -not $ResidentRuntimeCandidateClaimAuthority
+)
 
 $SummonBlockersScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 if (-not (Test-Path -LiteralPath $SummonBlockersScript -PathType Leaf)) {
@@ -294,6 +357,10 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'process_supervision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_control_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'resident_claim_authority' -Default $true) -and
+  -not $ResidentRuntimeCandidateSupervised -and
+  -not $ResidentRuntimeServiceControlAuthority -and
+  -not $ResidentRuntimeServiceInstallAuthority -and
+  -not $ResidentRuntimeCandidateClaimAuthority -and
   -not [bool](Get-PropertyValue -Payload $SummonGovernance -Name 'mutation_authority_granted' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'mutation_authority_granted' -Default $true) -and
   $ProcessHandoffSideEffectsDenied
@@ -302,6 +369,7 @@ $SideEffectsDenied = (
 $Checks = @(
   (New-Check -Id 'summon_first_family' -Status $(if ($SummonFirstFamilyObserved) { 'resident_host_first' } else { 'missing_or_unexpected' }) -Passed $SummonFirstFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must name resident_host as the first blocked acceptance family.'),
   (New-Check -Id 'summon_os_binding_authority_readback' -Status $(if ($SummonAuthorityReadbackObserved) { 'authority_readback_consumed' } else { 'missing_or_unexpected' }) -Passed $SummonAuthorityReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1:/lens/os-binding/authority/requests' -Reason 'The resident-host bridge must preserve the summon blocker proof authority-request readback before handing off the first blocker family.'),
+  (New-Check -Id 'resident_candidate_service_plan' -Status $(if ($ResidentCandidateServicePlanObserved) { 'resident_candidate_planned_not_supervised' } else { 'missing_or_unexpected' }) -Passed $ResidentCandidateServicePlanObserved -Evidence 'config/runtime/services/lens-host.json' -Reason 'The resident-host bridge must preserve that the manual resident candidate is planned, but not supervised or service-controlled.'),
   (New-Check -Id 'resident_host_lifecycle_proof' -Status $(if ($HostLifecycleObserved) { 'runtime_blocked' } else { 'missing_or_unexpected' }) -Passed $HostLifecycleObserved -Evidence 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status' -Reason 'The resident-host lifecycle proof must consume the first family and point to the runtime blocker boundary.')
 )
 if ($ConsumeProcessSupervisionHandoff) {
@@ -348,6 +416,27 @@ $Payload = [ordered]@{
   stage = 'Stage 6 / Lens MVP'
   stage_state = 'active'
   acceptance_criterion = 'summon_anywhere'
+  service_plan_runtime_mode = $ServicePlanRuntimeMode
+  resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+  resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised
+  resident_candidate_supervision_gap = if ($ResidentRuntimeCandidateAvailable -and -not $ResidentRuntimeCandidateSupervised) { 'resident_candidate_not_supervised' } else { 'resident_candidate_missing_or_supervised' }
+  resident_runtime_candidate_script = if ($ResidentRuntimeCandidateAvailable) { "$ServiceEntrypoint -Mode $ServicePlanRuntimeMode" } else { '' }
+  resident_runtime_candidate_handoff = [ordered]@{
+    status = if ($ResidentCandidateServicePlanObserved) { 'available_not_supervised' } elseif ($ResidentRuntimeCandidateAvailable) { 'available' } else { 'missing' }
+    service_config = 'config/runtime/services/lens-host.json'
+    service_name = $ServiceName
+    service_plan_runtime_mode = $ServicePlanRuntimeMode
+    runtime_state_path = $RuntimeStatePath
+    host_script = if ($ResidentRuntimeCandidateAvailable) { "$ServiceEntrypoint -Mode $ServicePlanRuntimeMode" } else { '' }
+    resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+    resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised
+    process_supervision_enabled = $ResidentRuntimeCandidateSupervised
+    service_control_authority = $ResidentRuntimeServiceControlAuthority
+    service_install_authority = $ResidentRuntimeServiceInstallAuthority
+    resident_claim_authority = $ResidentRuntimeCandidateClaimAuthority
+    authority_granted = $false
+    next_smallest_truthful_gap = 'resident_host_process_not_supervised'
+  }
   first_summon_blocker_family = 'resident_host'
   summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
   summon_os_binding_authority_request_readback_observed = $SummonAuthorityReadbackObserved
@@ -416,6 +505,12 @@ $Payload = [ordered]@{
     wraps_resident_host_lifecycle_blockers_proof = $true
     wraps_resident_host_process_supervision_blocker_proof = [bool]$ConsumeProcessSupervisionHandoff
     read_only_contract = $true
+    resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
+    resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised
+    resident_runtime_candidate_process_supervision_enabled = $ResidentRuntimeCandidateSupervised
+    resident_candidate_service_control_authority = $ResidentRuntimeServiceControlAuthority
+    resident_candidate_service_install_authority = $ResidentRuntimeServiceInstallAuthority
+    resident_candidate_supervision_authority = $false
     bounded_local_process_launch = [bool]$ConsumeProcessSupervisionHandoff
     temporary_runtime_state_write = [bool]$ConsumeProcessSupervisionHandoff
     api_local_process_launch_authority = $false

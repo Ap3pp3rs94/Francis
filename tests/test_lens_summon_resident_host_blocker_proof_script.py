@@ -60,6 +60,11 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["stage"] == "Stage 6 / Lens MVP"
     assert payload["stage_state"] == "active"
     assert payload["acceptance_criterion"] == "summon_anywhere"
+    assert payload["service_plan_runtime_mode"] == "Resident"
+    assert payload["resident_runtime_candidate_available"] is True
+    assert payload["resident_runtime_candidate_supervised"] is False
+    assert payload["resident_candidate_supervision_gap"] == "resident_candidate_not_supervised"
+    assert payload["resident_runtime_candidate_script"] == "scripts/lens-host.ps1 -Mode Resident"
     assert payload["first_summon_blocker_family"] == "resident_host"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["summon_os_binding_authority_request_readback_observed"] is True
@@ -104,6 +109,21 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert "resident_host_process_not_supervised" in payload["resident_host_process_supervision_blockers"]
     assert "process_supervision_authority_not_granted" in payload["resident_host_process_supervision_blockers"]
     assert "process_restart_authority_not_granted" in payload["resident_host_process_supervision_blockers"]
+    candidate_handoff = payload["resident_runtime_candidate_handoff"]
+    assert candidate_handoff["status"] == "available_not_supervised"
+    assert candidate_handoff["service_config"] == "config/runtime/services/lens-host.json"
+    assert candidate_handoff["service_name"] == "Francis-LensHost"
+    assert candidate_handoff["service_plan_runtime_mode"] == "Resident"
+    assert candidate_handoff["runtime_state_path"] == "data/runtime/lens-host/status.json"
+    assert candidate_handoff["host_script"] == "scripts/lens-host.ps1 -Mode Resident"
+    assert candidate_handoff["resident_runtime_candidate_available"] is True
+    assert candidate_handoff["resident_runtime_candidate_supervised"] is False
+    assert candidate_handoff["process_supervision_enabled"] is False
+    assert candidate_handoff["service_control_authority"] is False
+    assert candidate_handoff["service_install_authority"] is False
+    assert candidate_handoff["resident_claim_authority"] is False
+    assert candidate_handoff["authority_granted"] is False
+    assert candidate_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     process_handoff = payload["resident_host_process_supervision_handoff"]
     assert process_handoff["status"] == "proof_passed"
     assert process_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
@@ -124,6 +144,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_first_family"]["status"] == "resident_host_first"
     assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
+    assert checks["resident_candidate_service_plan"]["status"] == "resident_candidate_planned_not_supervised"
     assert checks["resident_host_lifecycle_proof"]["status"] == "runtime_blocked"
     assert checks["resident_host_process_supervision_handoff"]["status"] == "process_handoff_consumed"
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"
@@ -141,6 +162,12 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
         "wraps_resident_host_lifecycle_blockers_proof": True,
         "wraps_resident_host_process_supervision_blocker_proof": True,
         "read_only_contract": True,
+        "resident_runtime_candidate_available": True,
+        "resident_runtime_candidate_supervised": False,
+        "resident_runtime_candidate_process_supervision_enabled": False,
+        "resident_candidate_service_control_authority": False,
+        "resident_candidate_service_install_authority": False,
+        "resident_candidate_supervision_authority": False,
         "bounded_local_process_launch": True,
         "temporary_runtime_state_write": True,
         "api_local_process_launch_authority": False,
@@ -170,6 +197,10 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff()
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
+    assert payload["service_plan_runtime_mode"] == "Resident"
+    assert payload["resident_runtime_candidate_available"] is True
+    assert payload["resident_runtime_candidate_supervised"] is False
+    assert payload["resident_candidate_supervision_gap"] == "resident_candidate_not_supervised"
     assert payload["consume_process_supervision_handoff"] is False
     assert payload["resident_host_process_supervision_handoff_observed"] is False
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == ""
@@ -181,9 +212,13 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff()
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
+    assert checks["resident_candidate_service_plan"]["status"] == "resident_candidate_planned_not_supervised"
     assert "resident_host_process_supervision_handoff" not in checks
     assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" not in payload["evidence"]
     assert payload["governance"]["summon_os_binding_authority_request_readback"] is True
     assert payload["governance"]["wraps_resident_host_process_supervision_blocker_proof"] is False
+    assert payload["governance"]["resident_runtime_candidate_available"] is True
+    assert payload["governance"]["resident_runtime_candidate_supervised"] is False
+    assert payload["governance"]["resident_runtime_candidate_process_supervision_enabled"] is False
     assert payload["governance"]["bounded_local_process_launch"] is False
     assert payload["governance"]["temporary_runtime_state_write"] is False
