@@ -1087,6 +1087,25 @@ def _stage6_summon_handoff(
             if family_id == "resident_host"
             else {}
         )
+        family_chain_handoff = {
+            "next_step": "consume_summon_anywhere_family_chain_proof_before_stage6_closure",
+            "proof_script": "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+            "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+            "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+            "blocked_families": [
+                "resident_host",
+                "tray_presence",
+                "overlay_window",
+                "global_hotkey_binding",
+                "summon_binding",
+                "authority",
+            ],
+            "authority_required": "resident_runtime_execution_authority",
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        }
         return {
             "next_step": "resolve_summon_anywhere_blockers_before_stage6_closure",
             "readiness_route": "/lens/summon/readiness",
@@ -1100,6 +1119,7 @@ def _stage6_summon_handoff(
                 first_handoff.get("next_smallest_truthful_gap")
             ).strip(),
             "first_blocker_family_completion_audit_handoff": audit_handoff,
+            "summon_anywhere_family_chain_completion_audit_handoff": family_chain_handoff,
             "authority_required": _safe_str(first_handoff.get("authority_required")).strip(),
             "next_smallest_truthful_gap": next_smallest_truthful_gap,
             "read_only_contract": True,

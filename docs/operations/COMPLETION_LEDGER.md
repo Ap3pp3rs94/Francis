@@ -19088,7 +19088,7 @@ readiness readback:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 - `git diff --check`
-  Result: `passed before ledger update`
+  Result: `passed after ledger update`
 
 ### 2026-05-05 - Stage 6/Lens command-palette open-refusal readiness readback
 
@@ -19751,6 +19751,54 @@ launch-proof consumption:
   Result: `passed`
 - `git diff --check`
   Result: `passed before ledger update`
+
+### 2026-05-06 - Stage 6/Lens summon-anywhere family-chain status handoff
+
+Stage 6/Lens `/lens/status` closure readback now exposes the existing
+summon-anywhere family-chain completion-audit handoff directly on the
+`summon_anywhere` criterion. The handoff points to
+`scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status`, names the
+already-audited blocked family order (`resident_host`, `tray_presence`,
+`overlay_window`, `global_hotkey_binding`, `summon_binding`, and `authority`),
+and keeps the next bounded audit step as `stage6_lens_completion_audit`.
+
+This makes the main operator status surface line up with the completion-audit
+proof chain: `/lens/status` no longer stops at only the first resident-host
+handoff when the family-chain proof already exists as the grouped
+summon-anywhere audit handoff. It does not remove the summon-anywhere blocker,
+does not mark Stage 6 ready to close, and does not implement tray presence,
+overlay windows, global hotkeys, summon binding, process supervision, resident
+claim, or OS-level command-palette execution.
+
+This is backend/API readback work only. It does not create execution authority,
+approval decision authority, memory-write behavior, process-supervision
+authority, service-control authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority, telemetry
+behavior, or a UI claim. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens summon-anywhere
+family-chain status handoff:
+
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,next_smallest_truthful_gap_basis,checkpoint_next_smallest_truthful_gap,blocking_criteria,ready_criteria | ConvertTo-Json -Depth 8`
+  Result: `passed; reported next_smallest_truthful_gap=summon_anywhere_blockers`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,next_smallest_truthful_gap,summon_next_smallest_truthful_gap,observed_families,missing_families,blocked_families | ConvertTo-Json -Depth 8`
+  Result: `passed; reported next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed with non-fatal .ruff_cache access warnings`
+- `git diff --check`
+  Result: `passed after ledger update`
 
 ## 6. Update rule
 
