@@ -19838,6 +19838,30 @@ execution prerequisite handoff:
 - `git diff --check`
   Result: `passed before ledger update with non-fatal PowerShell line-ending warning`
 
+### 2026-05-06 - Stage 6/Lens closure handoff operator readback
+
+Stage 6/Lens operator readback now preserves the existing closure-criterion
+handoff fields from `/lens/status` in the chat UI Lens client and renders them
+in the Lens Readback panel. Blocked closure criteria can now show the backend
+next gap, handoff next step, route, proof script, and required authority instead
+of only the blocker list.
+
+This consumes existing backend truth from the Stage 6 closure readback. It does
+not change the closure algorithm, create a resident host, open tray or overlay
+surfaces, bind a hotkey, summon Francis anywhere, decide approvals, write
+memory, grant execution authority, grant approval authority, grant
+hotkey-registration authority, grant summon authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens closure handoff
+operator readback:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -5695,6 +5695,26 @@ function SystemPanel(props: {
                   const criterionStatus = safeString(criterion.status).trim() || "unknown";
                   const criterionLabel = safeString(criterion.label).trim() || criterionId;
                   const firstBlocker = criterion.blockers[0] || "";
+                  const handoff = criterion.handoff;
+                  const familyChainHandoff = isRecord(handoff?.summon_anywhere_family_chain_completion_audit_handoff)
+                    ? handoff?.summon_anywhere_family_chain_completion_audit_handoff
+                    : {};
+                  const handoffNextStep = safeString(handoff?.next_step).trim();
+                  const handoffNextGap =
+                    safeString(criterion.next_smallest_truthful_gap).trim() ||
+                    safeString(handoff?.next_smallest_truthful_gap).trim() ||
+                    safeString(familyChainHandoff.next_smallest_truthful_gap).trim();
+                  const handoffRoute =
+                    safeString(handoff?.readiness_route).trim() ||
+                    safeString(handoff?.surface_route).trim() ||
+                    safeString(handoff?.runtime_loop_readiness_route).trim() ||
+                    safeString(handoff?.status_route).trim() ||
+                    safeString(handoff?.route).trim();
+                  const proofScript =
+                    safeString(handoff?.proof_script).trim() ||
+                    safeString(familyChainHandoff.proof_script).trim() ||
+                    safeString(handoff?.child_proof_script).trim();
+                  const authorityRequired = safeString(handoff?.authority_required).trim();
                   return (
                     <div key={`lens-stage6-closure-${criterionId}`} style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -5706,6 +5726,31 @@ function SystemPanel(props: {
                       {firstBlocker ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
                           blocker <code>{firstBlocker}</code>
+                        </div>
+                      ) : null}
+                      {handoffNextGap ? (
+                        <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 3 }}>
+                          next gap <code>{handoffNextGap}</code>
+                        </div>
+                      ) : null}
+                      {handoffNextStep ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                          handoff <code>{handoffNextStep}</code>
+                        </div>
+                      ) : null}
+                      {handoffRoute ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                          route <code>{handoffRoute}</code>
+                        </div>
+                      ) : null}
+                      {proofScript ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                          proof <code>{proofScript}</code>
+                        </div>
+                      ) : null}
+                      {authorityRequired ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 3 }}>
+                          authority <code>{authorityRequired}</code>
                         </div>
                       ) : null}
                     </div>

@@ -275,6 +275,37 @@ export type LensStage6Criterion = {
   blockers: string[];
 };
 
+export type LensStage6ClosureHandoff = {
+  next_step?: string;
+  route?: string;
+  readiness_route?: string;
+  summon_route?: string;
+  preflight_route?: string;
+  status_route?: string;
+  surface_route?: string;
+  host_route?: string;
+  runtime_loop_readiness_route?: string;
+  runtime_loop_route?: string;
+  resident_runtime_plan_route?: string;
+  tray_route?: string;
+  overlay_route?: string;
+  proof_script?: string;
+  child_proof_script?: string;
+  authority_required?: string;
+  next_smallest_truthful_gap?: string;
+  first_blocker_family?: string;
+  first_blocker_family_next_smallest_truthful_gap?: string;
+  blocked_families: string[];
+  read_only_contract?: boolean;
+  diagnostic_only?: boolean;
+  would_execute?: boolean;
+  would_mutate?: boolean;
+  first_blocker_family_handoff: Record<string, unknown>;
+  first_blocker_family_completion_audit_handoff: Record<string, unknown>;
+  summon_anywhere_family_chain_completion_audit_handoff: Record<string, unknown>;
+  checkpoint_proof_handoff: Record<string, unknown>;
+};
+
 export type LensStage6ClosureCriterion = {
   id?: string;
   label?: string;
@@ -283,6 +314,8 @@ export type LensStage6ClosureCriterion = {
   evidence: string[];
   blockers: string[];
   basis?: string;
+  next_smallest_truthful_gap?: string;
+  handoff?: LensStage6ClosureHandoff;
 };
 
 export type LensStage6ClosureReadback = {
@@ -839,6 +872,82 @@ function parseStage6Criterion(value: unknown): LensStage6Criterion | null {
   };
 }
 
+function parseStage6ClosureHandoff(value: unknown): LensStage6ClosureHandoff | undefined {
+  if (!isRecord(value)) return undefined;
+  const fields = [
+    "next_step",
+    "route",
+    "readiness_route",
+    "summon_route",
+    "preflight_route",
+    "status_route",
+    "surface_route",
+    "host_route",
+    "runtime_loop_readiness_route",
+    "runtime_loop_route",
+    "resident_runtime_plan_route",
+    "tray_route",
+    "overlay_route",
+    "proof_script",
+    "child_proof_script",
+    "authority_required",
+    "next_smallest_truthful_gap",
+    "first_blocker_family",
+    "first_blocker_family_next_smallest_truthful_gap",
+  ];
+  const hasStringField = fields.some((field) => Boolean(safeString(value[field]).trim()));
+  const hasNestedHandoff =
+    isRecord(value.first_blocker_family_handoff) ||
+    isRecord(value.first_blocker_family_completion_audit_handoff) ||
+    isRecord(value.summon_anywhere_family_chain_completion_audit_handoff) ||
+    isRecord(value.checkpoint_proof_handoff);
+  const hasBooleanField =
+    typeof value.read_only_contract === "boolean" ||
+    typeof value.diagnostic_only === "boolean" ||
+    typeof value.would_execute === "boolean" ||
+    typeof value.would_mutate === "boolean";
+  const blockedFamilies = safeStringList(value.blocked_families);
+
+  if (!hasStringField && !hasNestedHandoff && !hasBooleanField && blockedFamilies.length === 0) {
+    return undefined;
+  }
+
+  return {
+    next_step: safeString(value.next_step).trim() || undefined,
+    route: safeString(value.route).trim() || undefined,
+    readiness_route: safeString(value.readiness_route).trim() || undefined,
+    summon_route: safeString(value.summon_route).trim() || undefined,
+    preflight_route: safeString(value.preflight_route).trim() || undefined,
+    status_route: safeString(value.status_route).trim() || undefined,
+    surface_route: safeString(value.surface_route).trim() || undefined,
+    host_route: safeString(value.host_route).trim() || undefined,
+    runtime_loop_readiness_route: safeString(value.runtime_loop_readiness_route).trim() || undefined,
+    runtime_loop_route: safeString(value.runtime_loop_route).trim() || undefined,
+    resident_runtime_plan_route: safeString(value.resident_runtime_plan_route).trim() || undefined,
+    tray_route: safeString(value.tray_route).trim() || undefined,
+    overlay_route: safeString(value.overlay_route).trim() || undefined,
+    proof_script: safeString(value.proof_script).trim() || undefined,
+    child_proof_script: safeString(value.child_proof_script).trim() || undefined,
+    authority_required: safeString(value.authority_required).trim() || undefined,
+    next_smallest_truthful_gap: safeString(value.next_smallest_truthful_gap).trim() || undefined,
+    first_blocker_family: safeString(value.first_blocker_family).trim() || undefined,
+    first_blocker_family_next_smallest_truthful_gap:
+      safeString(value.first_blocker_family_next_smallest_truthful_gap).trim() || undefined,
+    blocked_families: blockedFamilies,
+    read_only_contract:
+      typeof value.read_only_contract === "boolean" ? safeBoolean(value.read_only_contract, false) : undefined,
+    diagnostic_only: typeof value.diagnostic_only === "boolean" ? safeBoolean(value.diagnostic_only, false) : undefined,
+    would_execute: typeof value.would_execute === "boolean" ? safeBoolean(value.would_execute, false) : undefined,
+    would_mutate: typeof value.would_mutate === "boolean" ? safeBoolean(value.would_mutate, false) : undefined,
+    first_blocker_family_handoff: safeRecord(value.first_blocker_family_handoff),
+    first_blocker_family_completion_audit_handoff: safeRecord(value.first_blocker_family_completion_audit_handoff),
+    summon_anywhere_family_chain_completion_audit_handoff: safeRecord(
+      value.summon_anywhere_family_chain_completion_audit_handoff,
+    ),
+    checkpoint_proof_handoff: safeRecord(value.checkpoint_proof_handoff),
+  };
+}
+
 function parseStage6ClosureCriterion(value: unknown): LensStage6ClosureCriterion | null {
   if (!isRecord(value)) return null;
   const id = safeString(value.id).trim();
@@ -851,6 +960,8 @@ function parseStage6ClosureCriterion(value: unknown): LensStage6ClosureCriterion
     evidence: safeStringList(value.evidence),
     blockers: safeStringList(value.blockers),
     basis: safeString(value.basis).trim() || undefined,
+    next_smallest_truthful_gap: safeString(value.next_smallest_truthful_gap).trim() || undefined,
+    handoff: parseStage6ClosureHandoff(value.handoff),
   };
 }
 

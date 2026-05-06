@@ -438,6 +438,36 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
               evidence: ["/lens/summon", "/lens/status"],
               blockers: ["summon_anywhere_missing"],
               basis: "OS-wide summon requires a resident host plus explicit hotkey/summon authority.",
+              next_smallest_truthful_gap: "summon_anywhere_blockers",
+              handoff: {
+                next_step: "resolve_summon_anywhere_blockers_before_stage6_closure",
+                readiness_route: "/lens/summon/readiness",
+                summon_route: "/lens/summon",
+                status_route: "/lens/status",
+                proof_script: "scripts/lens-summon-preflight.ps1 -Mode Status",
+                first_blocker_family: "resident_host",
+                first_blocker_family_next_smallest_truthful_gap: "resident_host_runtime_blocker_boundary",
+                summon_anywhere_family_chain_completion_audit_handoff: {
+                  proof_script: "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+                  next_smallest_truthful_gap: "stage6_lens_completion_audit",
+                  blocked_families: [
+                    "resident_host",
+                    "tray_presence",
+                    "overlay_window",
+                    "global_hotkey_binding",
+                    "summon_binding",
+                    "authority",
+                  ],
+                  would_execute: false,
+                  would_mutate: false,
+                },
+                authority_required: "resident_runtime_execution_authority",
+                next_smallest_truthful_gap: "summon_anywhere_blockers",
+                read_only_contract: true,
+                diagnostic_only: true,
+                would_execute: false,
+                would_mutate: false,
+              },
             },
             {
               id: "mode_visibility",
@@ -672,6 +702,29 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.id, "summon_anywhere");
     assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.ready, false);
     assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.blockers[0], "summon_anywhere_missing");
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.criteria[0]?.next_smallest_truthful_gap,
+      "summon_anywhere_blockers",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff?.next_step,
+      "resolve_summon_anywhere_blockers_before_stage6_closure",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff?.readiness_route,
+      "/lens/summon/readiness",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff?.proof_script,
+      "scripts/lens-summon-preflight.ps1 -Mode Status",
+    );
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff?.would_execute, false);
+    assert.equal(snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff?.read_only_contract, true);
+    assert.equal(
+      snapshot.stage6_readiness.closure_readback.criteria[0]?.handoff
+        ?.summon_anywhere_family_chain_completion_audit_handoff.proof_script,
+      "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+    );
     assert.equal(snapshot.stage6_readiness.closure_readback.governance.execution_authority, false);
     assert.equal(snapshot.stage6_readiness.closure_readback.governance.resident_claim_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
