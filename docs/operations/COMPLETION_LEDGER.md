@@ -20427,6 +20427,47 @@ execution proof stabilization:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens bounded resident candidate supervision
+
+The Lens host supervisor now has a bounded resident-candidate supervision proof:
+`scripts/lens-host-supervisor.ps1 -Mode SuperviseResidentOnce`. The proof starts
+the existing `scripts/lens-host.ps1 -Mode Resident` candidate for a finite
+window, observes `resident_running` and `resident_stopped`, writes supervisor
+state with `host_mode=resident`, and reports the next truthful gap as
+`resident_supervision_not_persistent`.
+
+This proves the resident-mode host candidate can be supervised for one bounded
+lifecycle. It does not claim system-resident presence, summon-anywhere behavior,
+helpful/not-noisy resident behavior, service management, restart management,
+global hotkey binding, overlay presence, tray presence, or a durable resident
+host. Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy
+resident behavior, and system-resident presence.
+
+This is diagnostic/local-script proof work only. It does not create API
+execution authority, approval decision authority, approval request writes,
+product memory-write behavior, process-restart authority, service-install
+authority, service-control authority, tray-registration authority,
+hotkey-registration authority, overlay-control authority, summon authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, or a UI claim. The script uses bounded local
+process launch authority only inside the diagnostic proof path.
+
+Latest validation for the `2026-05-06` Stage 6/Lens bounded resident candidate
+supervision:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor.ps1 -Mode SuperviseResidentOnce -RunSeconds 5 -DataDir data\test_runs\manual-supervise-resident-once`
+  Result: `passed; status=supervised_session_completed; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
