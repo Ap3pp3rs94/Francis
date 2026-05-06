@@ -1411,6 +1411,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
     bounded_foreground_session_available = bool(foreground_session.get("supported")) and bool(
         candidate_command.get("executable")
     )
+    bounded_launch_proof_available = bool(declared_entrypoint.get("exists")) and bounded_foreground_session_available
     runtime_state_write_configured = bool(foreground_session.get("runtime_state_write"))
 
     return {
@@ -1427,6 +1428,8 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
         "diagnostic_status_runner_ready": diagnostic_status_runner_ready,
         "bounded_foreground_session_available": bounded_foreground_session_available,
         "bounded_launch_available": bounded_foreground_session_available,
+        "bounded_launch_proof_available": bounded_launch_proof_available,
+        "bounded_launch_proof_script": "scripts/lens-host-launch-proof.ps1 -Mode Status",
         "runtime_state_write_configured": runtime_state_write_configured,
         "foreground_process_observed": process_alive,
         "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
@@ -1465,6 +1468,20 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
                 "would_launch": False,
                 "authority_granted": False,
             },
+            "bounded_launch_proof": {
+                "status": "available" if bounded_launch_proof_available else "blocked",
+                "ready": bounded_launch_proof_available,
+                "scope": "readback_to_existing_bounded_diagnostic_launch_proof",
+                "proof_script": "scripts/lens-host-launch-proof.ps1 -Mode Status",
+                "host_script": "scripts/lens-host.ps1 -Mode Launch",
+                "resident_runtime": False,
+                "would_launch_from_api": False,
+                "would_launch_from_status_route": False,
+                "authority_granted": False,
+                "product_execution_authority": False,
+                "api_local_process_launch_authority": False,
+                "resident_claim_allowed": False,
+            },
             "resident_runtime": {
                 "status": "blocked",
                 "ready": False,
@@ -1479,6 +1496,8 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
             "/lens/host/manifest",
             "/lens/host",
             "scripts/lens-host.ps1 -Mode Status",
+            "scripts/lens-host.ps1 -Mode Launch",
+            "scripts/lens-host-launch-proof.ps1 -Mode Status",
         ],
         "governance": {
             "read_only_contract": True,
