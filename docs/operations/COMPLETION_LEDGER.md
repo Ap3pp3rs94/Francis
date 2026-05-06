@@ -19862,6 +19862,50 @@ operator readback:
 - `cd apps\chat_ui; npm run build`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens summon readiness family-chain audit handoff
+
+Stage 6/Lens `/lens/summon` and `/lens/summon/readiness` now expose the
+summon-anywhere family-chain completion-audit handoff directly from the summon
+enablement gate. The direct readiness payload reports
+`summon_anywhere_family_chain_completion_audit_handoff_observed` and a bounded
+`summon_anywhere_family_chain_completion_audit_handoff` pointing to
+`scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status`, preserving
+the blocked family order and the next audit gap
+`stage6_lens_completion_audit`.
+
+This keeps the direct summon readiness route aligned with the existing
+`/lens/status` closure handoff and the family-chain proof script. It does not
+remove the summon-anywhere blocker, does not mark Stage 6 ready to close, and
+does not implement tray presence, overlay windows, global hotkeys, summon
+binding, resident host runtime, resident claim, process supervision, or
+OS-level command-palette execution.
+
+This is backend/API readback work only. It does not create execution authority,
+approval decision authority, memory-write behavior, process-supervision
+authority, service-control authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, or a UI claim. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens summon readiness
+family-chain audit handoff:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\preflight.py`
+- `git diff --check`
+  Result: `passed before ledger update`
+- `$env:PYTHONPATH='src'; python -c "... client.get('/lens/summon/readiness') ..."`
+  Result: `passed; observed family-chain audit handoff with next_smallest_truthful_gap=stage6_lens_completion_audit`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

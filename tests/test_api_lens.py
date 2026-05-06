@@ -2356,6 +2356,19 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert all(handoff["authority_granted"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
     assert all(handoff["would_execute"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
     assert all(handoff["would_mutate"] is False for handoff in summon_enablement_gate["blocked_family_handoffs"])
+    assert summon_enablement_gate["summon_anywhere_family_chain_completion_audit_handoff_observed"] is True
+    assert summon_enablement_gate["summon_anywhere_family_chain_completion_audit_handoff"] == {
+        "next_step": "consume_summon_anywhere_family_chain_proof_before_stage6_closure",
+        "proof_script": "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+        "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "blocked_families": expected_summon_blocked_families,
+        "authority_required": "resident_runtime_execution_authority",
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
     assert summon_enablement_gate["summon_preflight"] == preflight_surfaces["summon"]
     assert summon_enablement_gate["surface_dependencies"]["host"]["ready"] is False
     assert summon_enablement_gate["surface_dependencies"]["tray"]["status"] == "blocked"
@@ -2374,6 +2387,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
         "first_blocker_family_handoff_readback": True,
+        "summon_anywhere_family_chain_completion_audit_handoff_readback": True,
     }
     tray_enablement_gate = body["tray_enablement_gate"]
     assert tray_enablement_gate["kind"] == "lens.tray.enablement_gate"

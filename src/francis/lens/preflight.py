@@ -247,6 +247,30 @@ def _summon_blocker_family_handoffs(blocker_family_readback: list[dict[str, Any]
     return handoffs
 
 
+def _summon_anywhere_family_chain_completion_audit_handoff(
+    *,
+    blocked_families: list[str],
+    first_blocker_family_handoff: dict[str, Any],
+) -> dict[str, Any]:
+    if not blocked_families or not first_blocker_family_handoff:
+        return {}
+    return {
+        "next_step": "consume_summon_anywhere_family_chain_proof_before_stage6_closure",
+        "proof_script": "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+        "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "blocked_families": blocked_families,
+        "authority_required": _safe_str(
+            first_blocker_family_handoff.get("authority_required"),
+            "summon_hotkey_overlay_and_process_authority",
+        ),
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+
 def _base_governance(**extra: bool) -> dict[str, bool]:
     governance = {
         "read_only_contract": True,
@@ -867,6 +891,10 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
     first_blocker_family = blocked_families[0] if blocked_families else ""
     blocked_family_handoffs = _summon_blocker_family_handoffs(blocker_family_readback)
     first_blocker_family_handoff = blocked_family_handoffs[0] if blocked_family_handoffs else {}
+    family_chain_completion_audit_handoff = _summon_anywhere_family_chain_completion_audit_handoff(
+        blocked_families=blocked_families,
+        first_blocker_family_handoff=first_blocker_family_handoff,
+    )
     return {
         "ok": True,
         "kind": "lens.summon.enablement_gate",
@@ -884,6 +912,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "first_blocker_family_handoff_observed": bool(first_blocker_family_handoff),
         "first_blocker_family_handoff": first_blocker_family_handoff,
         "blocked_family_handoffs": blocked_family_handoffs,
+        "summon_anywhere_family_chain_completion_audit_handoff_observed": bool(family_chain_completion_audit_handoff),
+        "summon_anywhere_family_chain_completion_audit_handoff": family_chain_completion_audit_handoff,
         "operator_surface_readback_ready": True,
         "summon_binding_ready": summon_ready,
         "resident_host_ready": resident_host_ready,
@@ -920,6 +950,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             tray_registration_authority=False,
             overlay_control_authority=False,
             first_blocker_family_handoff_readback=bool(first_blocker_family_handoff),
+            summon_anywhere_family_chain_completion_audit_handoff_readback=bool(family_chain_completion_audit_handoff),
         ),
         "message": "Lens summon enablement is read-only; global hotkey binding and summon-anywhere remain blocked.",
     }
