@@ -19800,6 +19800,44 @@ family-chain status handoff:
 - `git diff --check`
   Result: `passed after ledger update`
 
+### 2026-05-06 - Stage 6/Lens OS-binding execution prerequisite handoff
+
+Stage 6/Lens OS-binding execution readiness now separates missing execution
+prerequisites from the later command-palette execution boundary. The
+`/lens/os-binding/execution/readiness` readback reports
+`required_before_execution_boundary`, `blocked_execution_prerequisites`,
+`blocked_surface_prerequisites`, `execution_prerequisites_ready`, and an
+`execution_boundary_handoff` that names the next truthful gap as
+`os_binding_execution_prerequisites` while hotkey, summon, resident host, tray,
+and overlay prerequisites are still blocked.
+
+The command-palette shell bridge refusal summary now preserves those fields
+when `-Mode Open` is attempted, so operators can see why opening/binding the OS
+palette is refused without the script granting any authority or performing any
+OS action. This replaces a less precise handoff that pointed directly at the
+execution-boundary implementation even when required prerequisites were still
+missing.
+
+This is backend/API readback plus shell refusal-summary work only. It does not
+open an OS palette, register a hotkey, summon Francis, launch or supervise a
+process, control tray or overlay surfaces, decide approvals, write memory,
+grant execution authority, grant approval authority, grant hotkey authority,
+grant summon authority, or claim resident Lens behavior. Stage 6 remains active
+and blocked on summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens OS-binding
+execution prerequisite handoff:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py tests\test_lens_command_palette_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `failed before test expectation correction, then passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py tests\test_api_lens.py tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update with non-fatal PowerShell line-ending warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

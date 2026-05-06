@@ -2567,9 +2567,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding_criterion["execution_denial_receipt_total"] == 0
     assert os_binding_criterion["latest_execution_denial_receipt_id"] == ""
     assert "system_write_permission" in os_binding_criterion["execution_blocked_requirements"]
-    assert (
-        os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
-    )
+    assert os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
     assert os_binding_criterion["execution_denial"]["kind"] == (
         "lens.os_binding.command_palette_binding.execution_denial"
     )

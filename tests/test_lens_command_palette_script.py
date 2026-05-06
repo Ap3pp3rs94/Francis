@@ -154,7 +154,26 @@ def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> 
                 "os_level_command_palette_binding_authority": True,
                 "denial_boundary_observed": True,
                 "denial_receipt_readback_ready": True,
+                "execution_prerequisites_ready": False,
+                "required_before_execution_boundary": [
+                    "system_write_permission",
+                    "os_binding_readiness_readback",
+                    "os_binding_implementation_plan",
+                    "os_binding_authority_grant",
+                    "os_binding_execution_denial_boundary",
+                    "os_binding_denial_receipts",
+                    "global_hotkey_binding",
+                    "summon_binding",
+                    "resident_host",
+                    "tray_presence",
+                    "overlay_window",
+                ],
                 "blocked_requirements": [
+                    "global_hotkey_binding",
+                    "summon_binding",
+                    "resident_host",
+                ],
+                "blocked_execution_prerequisites": [
                     "global_hotkey_binding",
                     "summon_binding",
                     "resident_host",
@@ -165,7 +184,45 @@ def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> 
                     "resident_host_process_missing",
                     "os_binding_execution_boundary_not_implemented",
                 ],
-                "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
+                "next_smallest_truthful_gap": "os_binding_execution_prerequisites",
+                "execution_boundary_handoff": {
+                    "status": "blocked_by_prerequisites",
+                    "route": "/lens/os-binding/execute",
+                    "readiness_route": "/lens/os-binding/execution/readiness",
+                    "next_step": "resolve_os_binding_execution_prerequisites_before_execution_boundary",
+                    "next_smallest_truthful_gap": "os_binding_execution_prerequisites",
+                    "required_before_execution_boundary": [
+                        "system_write_permission",
+                        "os_binding_readiness_readback",
+                        "os_binding_implementation_plan",
+                        "os_binding_authority_grant",
+                        "os_binding_execution_denial_boundary",
+                        "os_binding_denial_receipts",
+                        "global_hotkey_binding",
+                        "summon_binding",
+                        "resident_host",
+                        "tray_presence",
+                        "overlay_window",
+                    ],
+                    "blocked_requirements": [
+                        "global_hotkey_binding",
+                        "summon_binding",
+                        "resident_host",
+                    ],
+                    "blocked_surface_prerequisites": [
+                        "global_hotkey_binding",
+                        "summon_binding",
+                        "resident_host",
+                    ],
+                    "read_only_contract": True,
+                    "would_execute": False,
+                    "would_open_palette": False,
+                    "would_register_hotkey": False,
+                    "would_summon": False,
+                    "would_control_overlay": False,
+                    "would_launch_process": False,
+                    "would_write_memory": False,
+                },
                 "governance": {
                     "read_only_contract": True,
                     "execution_authority": False,
@@ -206,13 +263,32 @@ def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> 
     assert execution_readiness["os_level_command_palette_binding_authority"] is True
     assert execution_readiness["denial_boundary_observed"] is True
     assert execution_readiness["denial_receipt_readback_ready"] is True
+    assert execution_readiness["execution_prerequisites_ready"] is False
     assert execution_readiness["blocked_requirements"] == [
         "global_hotkey_binding",
         "summon_binding",
         "resident_host",
     ]
+    assert execution_readiness["blocked_execution_prerequisites"] == [
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+    ]
     assert "os_binding_execution_boundary_not_implemented" in execution_readiness["blockers"]
-    assert execution_readiness["next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
+    assert execution_readiness["next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
+    handoff = execution_readiness["execution_boundary_handoff"]
+    assert handoff["status"] == "blocked_by_prerequisites"
+    assert handoff["next_step"] == "resolve_os_binding_execution_prerequisites_before_execution_boundary"
+    assert handoff["next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
+    assert handoff["blocked_requirements"] == execution_readiness["blocked_execution_prerequisites"]
+    assert handoff["read_only_contract"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_open_palette"] is False
+    assert handoff["would_register_hotkey"] is False
+    assert handoff["would_summon"] is False
+    assert handoff["would_control_overlay"] is False
+    assert handoff["would_launch_process"] is False
+    assert handoff["would_write_memory"] is False
     assert payload["refusal_blockers"] == execution_readiness["blockers"]
     assert payload["governance"]["execution_readiness_readback"] is True
     assert payload["governance"]["execution_readiness_route"] == "/lens/os-binding/execution/readiness"

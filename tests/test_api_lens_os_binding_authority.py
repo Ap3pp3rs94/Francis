@@ -240,9 +240,7 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert os_binding_criterion["execution_boundary_observed"] is True
     assert os_binding_criterion["execution_denial_receipt_readback_ready"] is True
     assert os_binding_criterion["execution_denial_receipt_total"] == 0
-    assert (
-        os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
-    )
+    assert os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
     status_execution_readiness = status["os_binding_execution_readiness"]
     assert status_execution_readiness["route"] == "/lens/os-binding/execution/readiness"
     assert status_execution_readiness["authority_granted"] is True
@@ -250,6 +248,15 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert status_execution_readiness["active_grant_receipt_id"] == receipt["receipt_id"]
     assert status_execution_readiness["denial_boundary_observed"] is True
     assert status_execution_readiness["denial_receipt_readback_ready"] is True
+    assert status_execution_readiness["execution_prerequisites_ready"] is False
+    assert status_execution_readiness["blocked_execution_prerequisites"] == [
+        "system_write_permission",
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+    ]
 
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
@@ -408,6 +415,45 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert readiness["denial_receipt_readback_ready"] is True
     assert readiness["denial_receipt_total"] == 1
     assert readiness["latest_denial_receipt_id"] == receipt["receipt_id"]
+    assert readiness["execution_prerequisites_ready"] is False
+    assert readiness["required_before_execution_boundary"] == [
+        "system_write_permission",
+        "os_binding_readiness_readback",
+        "os_binding_implementation_plan",
+        "os_binding_authority_grant",
+        "os_binding_execution_denial_boundary",
+        "os_binding_denial_receipts",
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+    ]
+    assert readiness["blocked_execution_prerequisites"] == [
+        "global_hotkey_binding",
+        "summon_binding",
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+    ]
+    assert readiness["blocked_surface_prerequisites"] == readiness["blocked_execution_prerequisites"]
+    assert readiness["next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
+    handoff = readiness["execution_boundary_handoff"]
+    assert handoff["status"] == "blocked_by_prerequisites"
+    assert handoff["route"] == "/lens/os-binding/execute"
+    assert handoff["readiness_route"] == "/lens/os-binding/execution/readiness"
+    assert handoff["next_step"] == "resolve_os_binding_execution_prerequisites_before_execution_boundary"
+    assert handoff["next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
+    assert handoff["blocked_requirements"] == readiness["blocked_execution_prerequisites"]
+    assert handoff["blocked_surface_prerequisites"] == readiness["blocked_surface_prerequisites"]
+    assert handoff["read_only_contract"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_open_palette"] is False
+    assert handoff["would_register_hotkey"] is False
+    assert handoff["would_summon"] is False
+    assert handoff["would_control_overlay"] is False
+    assert handoff["would_launch_process"] is False
+    assert handoff["would_write_memory"] is False
     requirements = {item["id"]: item for item in readiness["requirements"]}
     assert requirements["system_write_permission"]["ready"] is True
     assert requirements["os_binding_authority_grant"]["ready"] is True

@@ -1178,6 +1178,29 @@ def _execution_readiness_requirement(
     }
 
 
+_OS_BINDING_EXECUTION_BOUNDARY_PREREQUISITES = [
+    "system_write_permission",
+    "os_binding_readiness_readback",
+    "os_binding_implementation_plan",
+    "os_binding_authority_grant",
+    "os_binding_execution_denial_boundary",
+    "os_binding_denial_receipts",
+    "global_hotkey_binding",
+    "summon_binding",
+    "resident_host",
+    "tray_presence",
+    "overlay_window",
+]
+
+_OS_BINDING_EXECUTION_SURFACE_PREREQUISITES = [
+    "global_hotkey_binding",
+    "summon_binding",
+    "resident_host",
+    "tray_presence",
+    "overlay_window",
+]
+
+
 def _readiness_blocker_group(readiness: dict[str, Any], group: str) -> list[str]:
     return _str_list(_as_dict(readiness.get("blocker_groups")).get(group))
 
@@ -1377,6 +1400,44 @@ def lens_os_binding_execution_readiness_audit(
         ),
     ]
     blocked_requirements = [_safe_str(item.get("id")).strip() for item in requirements if not bool(item.get("ready"))]
+    blocked_execution_prerequisites = [
+        item for item in _OS_BINDING_EXECUTION_BOUNDARY_PREREQUISITES if item in blocked_requirements
+    ]
+    blocked_surface_prerequisites = [
+        item for item in _OS_BINDING_EXECUTION_SURFACE_PREREQUISITES if item in blocked_requirements
+    ]
+    execution_prerequisites_ready = not blocked_execution_prerequisites
+    execution_boundary_next_gap = (
+        "os_binding_command_palette_execution_boundary"
+        if execution_prerequisites_ready
+        else "os_binding_execution_prerequisites"
+    )
+    execution_boundary_next_step = (
+        "implement_os_binding_command_palette_execution_boundary_after_prerequisites"
+        if execution_prerequisites_ready
+        else "resolve_os_binding_execution_prerequisites_before_execution_boundary"
+    )
+    execution_boundary_handoff = {
+        "status": "blocked_by_execution_boundary" if execution_prerequisites_ready else "blocked_by_prerequisites",
+        "route": LENS_OS_BINDING_EXECUTE_ROUTE,
+        "readiness_route": LENS_OS_BINDING_EXECUTION_READINESS_ROUTE,
+        "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
+        "denials_route": LENS_OS_BINDING_DENIALS_ROUTE,
+        "next_step": execution_boundary_next_step,
+        "next_smallest_truthful_gap": execution_boundary_next_gap,
+        "required_before_execution_boundary": list(_OS_BINDING_EXECUTION_BOUNDARY_PREREQUISITES),
+        "blocked_requirements": blocked_execution_prerequisites,
+        "blocked_surface_prerequisites": blocked_surface_prerequisites,
+        "authority_required": "os_level_command_palette_binding_authority",
+        "read_only_contract": True,
+        "would_execute": False,
+        "would_open_palette": False,
+        "would_register_hotkey": False,
+        "would_summon": False,
+        "would_control_overlay": False,
+        "would_launch_process": False,
+        "would_write_memory": False,
+    }
     blockers = _dedupe_strs(
         [
             *_str_list(readiness_payload.get("blockers")),
@@ -1418,9 +1479,14 @@ def lens_os_binding_execution_readiness_audit(
         "requirements_ready_total": len(requirements) - len(blocked_requirements),
         "requirements_blocked_total": len(blocked_requirements),
         "blocked_requirements": blocked_requirements,
+        "required_before_execution_boundary": list(_OS_BINDING_EXECUTION_BOUNDARY_PREREQUISITES),
+        "blocked_execution_prerequisites": blocked_execution_prerequisites,
+        "blocked_surface_prerequisites": blocked_surface_prerequisites,
+        "execution_prerequisites_ready": execution_prerequisites_ready,
+        "execution_boundary_handoff": execution_boundary_handoff,
         "requirements": requirements,
         "blockers": blockers,
-        "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
+        "next_smallest_truthful_gap": execution_boundary_next_gap,
         "authority_request_readback": authority_readback,
         "readiness": readiness_payload,
         "plan": plan_payload,
@@ -1461,7 +1527,7 @@ def lens_os_binding_execution_readiness_audit(
             "receipt_write_authority": False,
             "denial_receipt_write_authority": False,
             "mutation_authority_granted": False,
-            "next_step": "implement_os_binding_command_palette_execution_boundary_after_prerequisites",
+            "next_step": execution_boundary_next_step,
         },
         "message": (
             "Lens OS-binding execution readiness is read-only. Authority grants and denial receipts are visible, "
