@@ -20274,6 +20274,45 @@ authority handoff readback:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens helpful authority handoff proof-chain readback
+
+Stage 6/Lens checkpoint and completion-audit scripts now carry the existing
+resident runtime execution-authority readiness handoff through the proof chain.
+`scripts/lens-stage6-checkpoint.ps1` projects the
+`exact_resident_runtime_execution_authority_approval` first blocked
+requirement, its read-only request handoff, blocked requirement handoffs, and
+next smallest truthful gap into
+`resident_runtime_authority_grant_readiness_audit`. The completion audit then
+surfaces that same truth as
+`helpful_not_noisy_runtime_authority_readiness_handoff`.
+
+This aligns the Stage 6 script/audit receipt with the already-verified
+`/lens/status` readback and keeps the helpful/not-noisy blocker actionable
+without changing the authority boundary. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+This is diagnostic/readback proof-chain work only. It does not create
+execution authority, approval decision authority, approval request writes,
+memory-write behavior, local-process-launch authority, process-supervision
+authority, process-restart authority, service-install authority,
+service-control authority, tray-registration authority, hotkey-registration
+authority, overlay-control authority, summon authority, resident-claim
+authority, telemetry behavior, a resident host, a tray process, an overlay
+window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens helpful authority handoff
+proof-chain readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warnings only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

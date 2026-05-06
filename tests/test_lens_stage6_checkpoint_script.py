@@ -414,8 +414,44 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         not in (payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirements"])
     )
     assert (
+        "exact_resident_runtime_execution_authority_approval"
+        in (payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirements"])
+    )
+    assert (
         "resident_runtime_execution_authority"
         in (payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirements"])
+    )
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["operator_surface_readback_ready"] is True
+    assert (
+        payload["resident_runtime_authority_grant_readiness_audit"]["first_blocked_requirement"]
+        == "exact_resident_runtime_execution_authority_approval"
+    )
+    assert [
+        item["id"]
+        for item in payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirement_handoffs"]
+    ] == payload["resident_runtime_authority_grant_readiness_audit"]["blocked_requirements"]
+    assert payload["resident_runtime_authority_grant_readiness_audit"]["first_blocked_requirement_handoff"] == {
+        "id": "exact_resident_runtime_execution_authority_approval",
+        "label": "Exact approved resident runtime execution authority request",
+        "status": "blocked",
+        "route": "/lens/resident-runtime/authority-grant/requests",
+        "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "request_route": "/lens/resident-runtime/authority-grant/request",
+        "requests_route": "/lens/resident-runtime/authority-grant/requests",
+        "grant_route": "/lens/resident-runtime/authority-grant",
+        "grants_route": "/lens/resident-runtime/authority-grant/grants",
+        "denials_route": "/lens/resident-runtime/authority-grant/denials",
+        "approval_action": "lens.resident_runtime.execution_authority",
+        "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert (
+        payload["resident_runtime_authority_grant_readiness_audit"]["next_smallest_truthful_gap"]
+        == "approve_resident_runtime_execution_authority_grant_receipt"
     )
     assert (
         "resident_runtime_authority_grant_not_implemented"

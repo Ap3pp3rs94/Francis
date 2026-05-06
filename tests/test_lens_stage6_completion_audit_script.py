@@ -308,6 +308,60 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "exact_supervision_authority_approval"
         in (payload["closure_blockers"]["host_supervision_authority_readiness_handoff"])
     )
+    helpful_authority_handoff = payload["helpful_not_noisy_runtime_authority_readiness_handoff"]
+    assert helpful_authority_handoff["status"] == "blocked"
+    assert helpful_authority_handoff["audit_status"] == "complete"
+    assert helpful_authority_handoff["ok"] is True
+    assert helpful_authority_handoff["ready"] is False
+    assert helpful_authority_handoff["readback_ready"] is True
+    assert helpful_authority_handoff["handoff_observed"] is True
+    assert (
+        helpful_authority_handoff["first_blocked_requirement"] == "exact_resident_runtime_execution_authority_approval"
+    )
+    assert [item["id"] for item in helpful_authority_handoff["blocked_requirement_handoffs"]] == (
+        helpful_authority_handoff["blocked_requirements"]
+    )
+    assert helpful_authority_handoff["first_blocked_requirement_handoff"] == {
+        "id": "exact_resident_runtime_execution_authority_approval",
+        "label": "Exact approved resident runtime execution authority request",
+        "status": "blocked",
+        "route": "/lens/resident-runtime/authority-grant/requests",
+        "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "request_route": "/lens/resident-runtime/authority-grant/request",
+        "requests_route": "/lens/resident-runtime/authority-grant/requests",
+        "grant_route": "/lens/resident-runtime/authority-grant",
+        "grants_route": "/lens/resident-runtime/authority-grant/grants",
+        "denials_route": "/lens/resident-runtime/authority-grant/denials",
+        "approval_action": "lens.resident_runtime.execution_authority",
+        "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    assert (
+        helpful_authority_handoff["next_smallest_truthful_gap"]
+        == "approve_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert helpful_authority_handoff["execution_authority"] is False
+    assert helpful_authority_handoff["approval_decision_authority"] is False
+    assert helpful_authority_handoff["local_process_launch_authority"] is False
+    assert helpful_authority_handoff["process_supervision_authority"] is False
+    assert helpful_authority_handoff["service_control_authority"] is False
+    assert helpful_authority_handoff["tray_registration_authority"] is False
+    assert helpful_authority_handoff["hotkey_registration_authority"] is False
+    assert helpful_authority_handoff["overlay_control_authority"] is False
+    assert helpful_authority_handoff["memory_write"] is False
+    assert helpful_authority_handoff["resident_claim_authority"] is False
+    assert (
+        "exact_resident_runtime_execution_authority_approval"
+        in (payload["closure_blockers"]["helpful_not_noisy_runtime_authority_readiness_handoff"])
+    )
+    assert (
+        "resident_runtime_execution_authority"
+        in (payload["closure_blockers"]["helpful_not_noisy_runtime_authority_readiness_handoff"])
+    )
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
     assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
@@ -1510,6 +1564,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
     assert governance["resident_host_process_handoff_consumed"] is True
     assert governance["resident_host_supervision_authority_readiness_handoff_readback"] is True
+    assert governance["helpful_not_noisy_runtime_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True

@@ -635,6 +635,7 @@ $RuntimeAuthorityGrantDenialReceiptsObserved = (
   ($RuntimeAuthorityGrantDenialReceiptsStatus -eq 'empty' -or $RuntimeAuthorityGrantDenialReceiptsStatus -eq 'readback_ready') -and
   $RuntimeAuthorityGrantDenialReceiptsEvidence -contains '/lens/resident-runtime/authority-grant/denials'
 )
+$RuntimeAuthorityGrantReadinessReadback = Get-PropertyValue -Payload $LensStatus -Name 'resident_runtime_authority_grant_readiness' -Default $RuntimeAuthorityGrantReadinessCriterion
 $RuntimeAuthorityGrantReadinessStatus = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'status' -Default 'missing')
 $RuntimeAuthorityGrantReadinessAuditStatus = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'audit_status' -Default 'missing')
 $RuntimeAuthorityGrantReadinessReady = [bool](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'ready' -Default $true)
@@ -652,6 +653,11 @@ $RuntimeAuthorityGrantReadinessRequirementsBlockedTotal = [int](Get-PropertyValu
 $RuntimeAuthorityGrantReadinessBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'blocked_requirements' -Default @())
 $RuntimeAuthorityGrantReadinessEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'evidence' -Default @())
 $RuntimeAuthorityGrantReadinessBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessCriterion -Name 'blockers' -Default @())
+$RuntimeAuthorityGrantReadinessOperatorSurfaceReadbackReady = [bool](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessReadback -Name 'operator_surface_readback_ready' -Default $false)
+$RuntimeAuthorityGrantReadinessFirstBlockedRequirement = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessReadback -Name 'first_blocked_requirement' -Default '')
+$RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff = Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessReadback -Name 'first_blocked_requirement_handoff' -Default ([ordered]@{})
+$RuntimeAuthorityGrantReadinessBlockedRequirementHandoffs = Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessReadback -Name 'blocked_requirement_handoffs' -Default @()
+$RuntimeAuthorityGrantReadinessNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessReadback -Name 'next_smallest_truthful_gap' -Default '')
 $RuntimeAuthorityGrantReadinessObserved = (
   $RuntimeAuthorityGrantReadinessStatus -ne 'missing' -and
   $RuntimeAuthorityGrantReadinessAuditStatus -eq 'complete' -and
@@ -662,8 +668,15 @@ $RuntimeAuthorityGrantReadinessObserved = (
   $RuntimeAuthorityGrantReadinessBoundaryObserved -and
   $RuntimeAuthorityGrantReadinessGrantReceiptReadbackReady -and
   $RuntimeAuthorityGrantReadinessDenialReceiptReadbackReady -and
+  $RuntimeAuthorityGrantReadinessOperatorSurfaceReadbackReady -and
   $RuntimeAuthorityGrantReadinessEvidence -contains '/lens/resident-runtime/authority-grant/readiness' -and
   $RuntimeAuthorityGrantReadinessBlockedRequirements -contains 'resident_runtime_execution_authority' -and
+  $RuntimeAuthorityGrantReadinessFirstBlockedRequirement -eq 'exact_resident_runtime_execution_authority_approval' -and
+  [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff -Name 'route' -Default '') -eq '/lens/resident-runtime/authority-grant/requests' -and
+  [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff -Name 'request_route' -Default '') -eq '/lens/resident-runtime/authority-grant/request' -and
+  [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff -Name 'requests_route' -Default '') -eq '/lens/resident-runtime/authority-grant/requests' -and
+  [string](Get-PropertyValue -Payload $RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff -Name 'approval_action' -Default '') -eq 'lens.resident_runtime.execution_authority' -and
+  $RuntimeAuthorityGrantReadinessNextSmallestTruthfulGap -eq 'approve_resident_runtime_execution_authority_grant_receipt' -and
   $RuntimeAuthorityGrantReadinessBlockers -contains 'resident_runtime_execution_authority_not_granted'
 )
 $RuntimeBoundaryStatus = [string](Get-PropertyValue -Payload $RuntimeBoundaryCriterion -Name 'status' -Default 'missing')
@@ -2010,6 +2023,11 @@ $Payload = [ordered]@{
     requirements_ready_total = $RuntimeAuthorityGrantReadinessRequirementsReadyTotal
     requirements_blocked_total = $RuntimeAuthorityGrantReadinessRequirementsBlockedTotal
     blocked_requirements = $RuntimeAuthorityGrantReadinessBlockedRequirements
+    operator_surface_readback_ready = $RuntimeAuthorityGrantReadinessOperatorSurfaceReadbackReady
+    first_blocked_requirement = $RuntimeAuthorityGrantReadinessFirstBlockedRequirement
+    first_blocked_requirement_handoff = $RuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+    blocked_requirement_handoffs = $RuntimeAuthorityGrantReadinessBlockedRequirementHandoffs
+    next_smallest_truthful_gap = $RuntimeAuthorityGrantReadinessNextSmallestTruthfulGap
     execution_authority = $false
     approval_decision_authority = $false
     local_process_launch_authority = $false

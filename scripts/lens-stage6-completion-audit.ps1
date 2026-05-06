@@ -672,6 +672,38 @@ $HostSupervisionAuthorityReadinessHandoffObserved = (
   -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.would_mutate -and
   [string]$HostSupervisionAuthorityReadiness.next_smallest_truthful_gap -eq 'host_supervision_authority_exact_approval_request'
 )
+$ResidentRuntimeAuthorityGrantReadiness = $Checkpoint.resident_runtime_authority_grant_readiness_audit
+$ResidentRuntimeAuthorityGrantReadinessBlockedRequirements = ConvertTo-StringArray -Value $ResidentRuntimeAuthorityGrantReadiness.blocked_requirements
+$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement = [string]$ResidentRuntimeAuthorityGrantReadiness.first_blocked_requirement
+$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff = $ResidentRuntimeAuthorityGrantReadiness.first_blocked_requirement_handoff
+$ResidentRuntimeAuthorityGrantReadinessBlockedRequirementHandoffs = @(
+  $ResidentRuntimeAuthorityGrantReadiness.blocked_requirement_handoffs
+)
+$ResidentRuntimeAuthorityGrantReadinessHandoffObserved = (
+  [bool]$ResidentRuntimeAuthorityGrantReadiness.ok -and
+  [string]$ResidentRuntimeAuthorityGrantReadiness.status -eq 'blocked' -and
+  [string]$ResidentRuntimeAuthorityGrantReadiness.audit_status -eq 'complete' -and
+  -not [bool]$ResidentRuntimeAuthorityGrantReadiness.ready -and
+  [bool]$ResidentRuntimeAuthorityGrantReadiness.operator_surface_readback_ready -and
+  $ResidentRuntimeAuthorityGrantReadinessBlockedRequirements -contains 'exact_resident_runtime_execution_authority_approval' -and
+  $ResidentRuntimeAuthorityGrantReadinessBlockedRequirements -contains 'resident_runtime_execution_authority' -and
+  $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement -eq 'exact_resident_runtime_execution_authority_approval' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.id -eq 'exact_resident_runtime_execution_authority_approval' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.route -eq '/lens/resident-runtime/authority-grant/requests' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.readiness_route -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.request_route -eq '/lens/resident-runtime/authority-grant/request' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.requests_route -eq '/lens/resident-runtime/authority-grant/requests' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.grant_route -eq '/lens/resident-runtime/authority-grant' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.grants_route -eq '/lens/resident-runtime/authority-grant/grants' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.denials_route -eq '/lens/resident-runtime/authority-grant/denials' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.approval_action -eq 'lens.resident_runtime.execution_authority' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.next_step -eq 'create_or_select_exact_approved_resident_runtime_execution_authority_request' -and
+  [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.authority_required -eq 'operator_approval' -and
+  -not [bool]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.authority_granted -and
+  -not [bool]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.would_execute -and
+  -not [bool]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.would_mutate -and
+  [string]$ResidentRuntimeAuthorityGrantReadiness.next_smallest_truthful_gap -eq 'approve_resident_runtime_execution_authority_grant_receipt'
+)
 $ResidentRuntimeBoundary = $Checkpoint.resident_runtime_authority_boundary
 $ResidentRuntimeBoundaryBlockers = ConvertTo-StringArray -Value $ResidentRuntimeBoundary.blockers
 $ResidentRuntimeBoundaryObserved = (
@@ -1755,6 +1787,11 @@ $Payload = [ordered]@{
         $_ -match 'approval|authority|supervision'
       } | Sort-Object -Unique
     )
+    helpful_not_noisy_runtime_authority_readiness_handoff = [string[]]@(
+      $ResidentRuntimeAuthorityGrantReadinessBlockedRequirements | Where-Object {
+        $_ -match 'approval|authority|runtime|resident|summon|tray|overlay|supervision|scope|posture'
+      } | Sort-Object -Unique
+    )
     service_activation = [string[]]@(
       $ProcessSupervisionBoundaryBlockers | Where-Object { $_ -match 'service_' } | Sort-Object -Unique
     )
@@ -2802,6 +2839,31 @@ $Payload = [ordered]@{
     memory_write = $false
     resident_claim_authority = $false
   }
+  helpful_not_noisy_runtime_authority_readiness_handoff = [ordered]@{
+    status = [string]$ResidentRuntimeAuthorityGrantReadiness.status
+    audit_status = [string]$ResidentRuntimeAuthorityGrantReadiness.audit_status
+    ok = [bool]$ResidentRuntimeAuthorityGrantReadiness.ok
+    ready = [bool]$ResidentRuntimeAuthorityGrantReadiness.ready
+    readback_ready = [bool]$ResidentRuntimeAuthorityGrantReadiness.operator_surface_readback_ready
+    handoff_observed = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+    first_blocked_requirement = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
+    first_blocked_requirement_handoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+    blocked_requirements = $ResidentRuntimeAuthorityGrantReadinessBlockedRequirements
+    blocked_requirement_handoffs = $ResidentRuntimeAuthorityGrantReadinessBlockedRequirementHandoffs
+    next_smallest_truthful_gap = [string]$ResidentRuntimeAuthorityGrantReadiness.next_smallest_truthful_gap
+    execution_authority = $false
+    approval_decision_authority = $false
+    local_process_launch_authority = $false
+    process_supervision_authority = $false
+    process_restart_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    tray_registration_authority = $false
+    hotkey_registration_authority = $false
+    overlay_control_authority = $false
+    memory_write = $false
+    resident_claim_authority = $false
+  }
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
@@ -2811,6 +2873,7 @@ $Payload = [ordered]@{
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
     resident_host_supervision_authority_readiness_handoff_readback = $HostSupervisionAuthorityReadinessHandoffObserved
+    helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
