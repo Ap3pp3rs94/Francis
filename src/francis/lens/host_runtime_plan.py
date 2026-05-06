@@ -340,10 +340,13 @@ def lens_host_runtime_implementation_plan(
     service_install = _as_dict(launch_manifest.get("service_install"))
     process_readback = _as_dict(runtime_boundary.get("process_readback"))
     blocker_groups = _as_dict(runtime_boundary.get("blocker_groups"))
+    runtime_boundary_boundaries = _as_dict(runtime_boundary.get("boundaries"))
+    bounded_launch_proof = _as_dict(runtime_boundary_boundaries.get("bounded_launch_proof"))
 
     entrypoint_ready = bool(declared_entrypoint.get("exists"))
     diagnostic_runner_ready = bool(runtime_boundary.get("diagnostic_status_runner_ready"))
     bounded_foreground_ready = bool(runtime_boundary.get("bounded_foreground_session_available"))
+    bounded_launch_proof_available = bool(runtime_boundary.get("bounded_launch_proof_available"))
     runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or ["lens_host_runtime_not_implemented"]
     process_blockers = _as_str_list(blocker_groups.get("process_readback")) or [
         str(runtime_boundary.get("resident_host_process_blocker") or "resident_host_process_missing")
@@ -493,6 +496,9 @@ def lens_host_runtime_implementation_plan(
         "foreground_process_observed": bool(runtime_boundary.get("foreground_process_observed")),
         "resident_host_process_state": str(runtime_boundary.get("resident_host_process_state") or ""),
         "resident_host_process_blocker": str(runtime_boundary.get("resident_host_process_blocker") or ""),
+        "bounded_launch_proof_available": bounded_launch_proof_available,
+        "bounded_launch_proof_script": str(runtime_boundary.get("bounded_launch_proof_script") or ""),
+        "bounded_launch_proof": bounded_launch_proof,
         "requirements_total": len(steps),
         "requirements_ready_total": len(ready_steps),
         "blocked_requirements": blocked_steps,
@@ -527,6 +533,8 @@ def lens_host_runtime_implementation_plan(
             "/lens/host/runtime-boundary",
             "/lens/host/manifest",
             "/lens/host/supervision",
+            "scripts/lens-host.ps1 -Mode Launch",
+            "scripts/lens-host-launch-proof.ps1 -Mode Status",
         ],
         "governance": {
             "gate": "lens_host_runtime_implementation_plan",

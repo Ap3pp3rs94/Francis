@@ -19713,6 +19713,45 @@ runtime-boundary launch-proof handoff:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-06 - Stage 6/Lens host runtime-plan launch-proof consumption
+
+Stage 6/Lens `/lens/host/runtime-plan` now consumes the bounded host-launch
+proof handoff exposed by `/lens/host/runtime-boundary`. The runtime plan now
+surfaces `bounded_launch_proof_available`, `bounded_launch_proof_script`, and
+the `bounded_launch_proof` handoff object at the plan level, and its evidence
+now names both `scripts/lens-host.ps1 -Mode Launch` and
+`scripts/lens-host-launch-proof.ps1 -Mode Status`.
+
+This keeps the runtime-plan contract aligned with the resident-host blocker
+chain: the plan can now show that a bounded diagnostic launch proof exists while
+still preserving the actual blocker, which is resident runtime/process
+supervision rather than a missing proof pointer. It does not change the plan
+requirements count or mark the resident runtime ready.
+
+This is backend readback work only. It does not create a resident host, launch
+or supervise a product process, install or control a service, open tray or
+overlay surfaces, bind a hotkey, summon Francis anywhere, decide approvals,
+write memory, write receipts, grant execution authority, grant local process
+launch authority, grant process-supervision authority, or claim resident Lens
+behavior. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens host runtime-plan
+launch-proof consumption:
+
+- `python -m pytest tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py::test_lens_host_runtime_implementation_plan_stays_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_runtime_boundary_readback.py tests\test_lens_host_runtime_plan_readback.py tests\test_lens_host_launch_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py tests\test_lens_host_runtime_plan_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py tests\test_lens_host_runtime_plan_readback.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
