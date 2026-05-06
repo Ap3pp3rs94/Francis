@@ -19947,6 +19947,40 @@ authority handoff:
 - `git diff --check`
   Result: `passed before ledger update`
 
+### 2026-05-06 - Stage 6/Lens completion audit checkpoint
+
+Stage 6/Lens was re-audited after the resident activation authority handoff
+landed on `main`. The completion audit completed successfully and confirmed
+that Stage 6 is still active, blocked, and not ready to transition to Stage 7.
+The current stage claim remains `backend_readback_contract_only`.
+
+The audit consumed the current resident-host runtime, process-supervision,
+resident-host process-supervision, persistent-supervision, summon-anywhere,
+summon-authority, and family-chain proof set with no child proof timeouts. The
+next smallest truthful gap remains `summon_anywhere_blockers`; the remaining
+Stage 6 acceptance blockers are `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`. The first blocker family is still `resident_host`,
+with grouped tray, overlay, global-hotkey, summon-binding, and authority
+blockers behind it.
+
+This is an audit/ledger checkpoint only. It does not create execution
+authority, approval decision authority, memory-write behavior,
+process-supervision authority, service-control authority,
+hotkey-registration authority, tray-registration authority, overlay-control
+authority, summon authority, resident-claim authority, telemetry behavior, a
+resident host, a tray process, an overlay window, a global hotkey, or a UI
+claim. Stage 6 remains active.
+
+Latest validation for the `2026-05-06` Stage 6/Lens completion audit
+checkpoint:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; child_proof_timeouts=[]; next_smallest_truthful_gap=summon_anywhere_blockers`
+- `gh run view 25424089094 --repo Ap3pp3rs94/Francis`
+  Result: `passed for bfcf299 feat(lens): surface resident activation authority handoff`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
