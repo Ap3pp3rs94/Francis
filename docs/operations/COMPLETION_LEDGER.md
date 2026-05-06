@@ -20016,6 +20016,58 @@ proof timing stabilization:
 - `git diff --check`
   Result: `passed with non-fatal PowerShell line-ending warning`
 
+### 2026-05-06 - Stage 6/Lens resident host runtime candidate
+
+Stage 6/Lens now has a real resident-host runtime candidate mode on the local
+host runner. `scripts/lens-host.ps1 -Mode Resident` writes live runtime state,
+keeps a heartbeat while the resident candidate is running, and can run either
+bounded for proof (`-RunSeconds N`) or continuously when explicitly invoked
+with the default unbounded resident mode. The runtime state distinguishes
+`resident_running` / `resident_stopped` from the existing bounded foreground
+status session and preserves the PID, heartbeat, and stopped-state readback.
+
+`/lens/host/manifest` and `/lens/host/runtime-boundary` now expose this as a
+manual resident runtime candidate only. The route readback does not treat the
+candidate as a supervised resident host, does not mark Stage 6 ready, and does
+not imply that service supervision, tray presence, global hotkey registration,
+overlay control, summon binding, memory writes, receipt writes, or resident
+claim authority exist.
+
+This is a local host-runner/backend readback capability slice. It does not
+create API execution authority, approval decision authority, memory-write
+behavior, process-supervision authority, service-control authority,
+hotkey-registration authority, tray-registration authority, overlay-control
+authority, summon authority, resident-claim authority, telemetry behavior, a UI
+claim, or Stage 7 readiness. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest validation for the `2026-05-06` Stage 6/Lens resident host runtime
+candidate:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_runtime_boundary_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_resident_runtime -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Resident -RunSeconds 2`
+  Result: `passed; status=resident_completed; heartbeat_count=4; resident_claim_allowed=false`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py tests\test_lens_host_launch_proof_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_runtime_boundary_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py tests\test_lens_host_runtime_boundary_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_host_foreground_script.py tests\test_lens_host_runtime_boundary_readback.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with non-fatal PowerShell line-ending warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

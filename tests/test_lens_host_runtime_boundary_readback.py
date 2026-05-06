@@ -15,6 +15,7 @@ def test_lens_host_runtime_boundary_surfaces_bounded_launch_proof_handoff() -> N
                 "max_seconds": 30,
             },
             "process_readback": {"process_alive": False},
+            "resident_command": {"executable": True},
             "blocker_groups": {
                 "runtime": ["lens_host_runtime_not_implemented"],
                 "surface_dependencies": [
@@ -30,9 +31,19 @@ def test_lens_host_runtime_boundary_surfaces_bounded_launch_proof_handoff() -> N
     assert body["kind"] == "lens.host.runtime_boundary"
     assert body["status"] == "blocked"
     assert body["bounded_launch_proof_available"] is True
+    assert body["resident_runtime_candidate_available"] is True
     assert body["bounded_launch_proof_script"] == "scripts/lens-host-launch-proof.ps1 -Mode Status"
     assert "scripts/lens-host.ps1 -Mode Launch" in body["evidence"]
+    assert "scripts/lens-host.ps1 -Mode Resident" in body["evidence"]
     assert "scripts/lens-host-launch-proof.ps1 -Mode Status" in body["evidence"]
+
+    resident_candidate = body["boundaries"]["resident_runtime_candidate"]
+    assert resident_candidate["status"] == "available"
+    assert resident_candidate["ready"] is True
+    assert resident_candidate["host_script"] == "scripts/lens-host.ps1 -Mode Resident"
+    assert resident_candidate["resident_runtime"] is False
+    assert resident_candidate["authority_granted"] is False
+    assert resident_candidate["resident_claim_allowed"] is False
 
     proof_handoff = body["boundaries"]["bounded_launch_proof"]
     assert proof_handoff == {

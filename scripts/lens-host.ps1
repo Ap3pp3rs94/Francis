@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Status', 'Foreground', 'Launch')]
+  [ValidateSet('Status', 'Foreground', 'Launch', 'Resident')]
   [string]$Mode = 'Status',
 
   [ValidateRange(0, 60)]
@@ -204,6 +204,8 @@ $ProcessAlive = $false
 if ($PidValue -gt 0) {
   if ($ProcessStateStatus -eq 'foreground_stopped' -and -not $PidPresent) {
     $ProcessAlive = $false
+  } elseif ($ProcessStateStatus -eq 'resident_stopped' -and -not $PidPresent) {
+    $ProcessAlive = $false
   } else {
     try {
       Get-Process -Id $PidValue -ErrorAction Stop | Out-Null
@@ -213,6 +215,8 @@ if ($PidValue -gt 0) {
     }
   }
 }
+$ForegroundSessionActive = $ProcessAlive -and $ProcessStateStatus -eq 'foreground_running'
+$ResidentSessionActive = $ProcessAlive -and $ProcessStateStatus -eq 'resident_running'
 $ProcessReadbackStatus = if ($ProcessAlive) { 'process_observed' } elseif ($PidPresent -or $ProcessStateExists) { 'state_present_process_not_running' } else { 'missing' }
 $ProcessBlockedReason = if ($ProcessAlive) { 'resident_host_not_supervised' } else { 'resident_host_process_missing' }
 $Blockers = @(
@@ -223,6 +227,8 @@ $Blockers = @(
 )
 if (-not $ProcessAlive) {
   $Blockers = @('resident_host_process_missing') + $Blockers
+} elseif ($ResidentSessionActive) {
+  $Blockers = @('resident_host_process_not_supervised', 'resident_supervision_disabled') + $Blockers
 }
 $Blockers = @('lens_host_runtime_not_implemented') + $Blockers
 if (-not $ServiceConfigExists) {
@@ -316,9 +322,13 @@ $payload = [ordered]@{
   manifest_route = '/lens/host/manifest'
   launch_supported = $false
   foreground_supported = $true
-  foreground_session = $ProcessAlive
+  foreground_session = $ForegroundSessionActive
+  resident_supported = $true
+  resident_session = $ResidentSessionActive
+  resident_runtime_candidate = $ResidentSessionActive
   foreground_run_seconds = $RunSeconds
-  resident = $false
+  resident = $ResidentSessionActive
+  resident_claim_allowed = $false
   process_supervision = $false
   tray_presence = $false
   global_hotkey = $false
@@ -339,13 +349,136 @@ $payload = [ordered]@{
     local_process_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
-    runtime_state_write = $Mode -eq 'Foreground'
+    runtime_state_write = $Mode -eq 'Foreground' -or $Mode -eq 'Resident'
     foreground_session_authority = $Mode -eq 'Foreground'
+    resident_runtime_candidate = $Mode -eq 'Resident'
+    resident_claim_authority = $false
     mutation_authority_granted = $false
   }
 }
 
 if ($Mode -eq 'Status') {
+  $payload | ConvertTo-Json -Depth 8
+  exit 0
+}
+
+if ($Mode -eq 'Resident') {
+  $StartedAt = (Get-Date).ToUniversalTime().ToString('o')
+  $RunningGovernance = [ordered]@{
+    execution_authority = $false
+    approval_decision_authority = $false
+    memory_write = $false
+    overlay_control_authority = $false
+    summon_authority = $false
+    capture_authority = $false
+    new_sensing_authority = $false
+    local_process_launch_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    runtime_state_write = $true
+    foreground_session_authority = $false
+    resident_runtime_candidate = $true
+    resident_claim_authority = $false
+    mutation_authority_granted = $false
+  }
+  $RunningState = [ordered]@{
+    kind = 'lens.host.runtime_state'
+    status = 'resident_running'
+    mode = 'resident'
+    pid = $PID
+    process_alive = $true
+    resident = $true
+    resident_claim_allowed = $false
+    service_managed = $false
+    tray_presence = $false
+    global_hotkey = $false
+    overlay_window = $false
+    summon_anywhere = $false
+    started_at = $StartedAt
+    updated_at = $StartedAt
+    heartbeat_interval_ms = 500
+    heartbeat_count = 0
+    last_heartbeat_at = $StartedAt
+    bounded_run_seconds = $RunSeconds
+    governance = $RunningGovernance
+  }
+  New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+  Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding ASCII
+  Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
+
+  $HeartbeatCount = 0
+  $LastHeartbeatAt = $StartedAt
+  try {
+    if ($RunSeconds -gt 0) {
+      $HeartbeatDeadline = (Get-Date).AddSeconds($RunSeconds)
+      while ((Get-Date) -lt $HeartbeatDeadline) {
+        Start-Sleep -Milliseconds 500
+        $HeartbeatCount += 1
+        $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
+        $RunningState['updated_at'] = $LastHeartbeatAt
+        $RunningState['heartbeat_count'] = $HeartbeatCount
+        $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
+        Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
+      }
+    } else {
+      while ($true) {
+        Start-Sleep -Milliseconds 500
+        $HeartbeatCount += 1
+        $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
+        $RunningState['updated_at'] = $LastHeartbeatAt
+        $RunningState['heartbeat_count'] = $HeartbeatCount
+        $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
+        Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
+      }
+    }
+  } finally {
+    $StoppedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $StoppedState = [ordered]@{
+      kind = 'lens.host.runtime_state'
+      status = 'resident_stopped'
+      mode = 'resident'
+      pid = $PID
+      process_alive = $false
+      resident = $false
+      resident_claim_allowed = $false
+      service_managed = $false
+      tray_presence = $false
+      global_hotkey = $false
+      overlay_window = $false
+      summon_anywhere = $false
+      started_at = $StartedAt
+      updated_at = $StoppedAt
+      heartbeat_interval_ms = 500
+      heartbeat_count = $HeartbeatCount
+      last_heartbeat_at = $LastHeartbeatAt
+      bounded_run_seconds = $RunSeconds
+      stop_reason = 'resident_runtime_candidate_stopped'
+      governance = $RunningGovernance
+    }
+    Write-JsonFile -Path $ProcessStatePath -Payload $StoppedState
+    Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+  }
+
+  $payload.status = 'resident_completed'
+  $payload.ok = $true
+  $payload.process_readback.status = 'state_present_process_not_running'
+  $payload.process_readback.state_exists = $true
+  $payload.process_readback.state_status = 'resident_stopped'
+  $payload.process_readback.state_updated_at = $StoppedAt
+  $payload.process_readback.heartbeat_count = $HeartbeatCount
+  $payload.process_readback.last_heartbeat_at = $LastHeartbeatAt
+  $payload.process_readback.pid_present = $false
+  $payload.process_readback.pid = 0
+  $payload.process_readback.process_alive = $false
+  $payload.foreground_supported = $true
+  $payload.foreground_session = $false
+  $payload.resident_supported = $true
+  $payload.resident_session = $false
+  $payload.resident_runtime_candidate = $true
+  $payload.resident = $false
+  $payload.resident_claim_allowed = $false
+  $payload.foreground_run_seconds = $RunSeconds
+  $payload.message = 'Lens host resident runtime candidate completed; service supervision, tray, summon, overlay, and resident claim remain unimplemented.'
   $payload | ConvertTo-Json -Depth 8
   exit 0
 }

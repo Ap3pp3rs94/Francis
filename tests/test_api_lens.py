@@ -2105,6 +2105,26 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "executable": True,
         "reason": "Manual bounded foreground status session is available; resident service, tray, summon, and overlay remain blocked.",
     }
+    assert launch_manifest["resident_command"] == {
+        "shell": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/lens-host.ps1",
+            "-Mode",
+            "Resident",
+        ],
+        "working_directory": ".",
+        "executable": True,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+        "reason": (
+            "Manual resident runtime candidate is available; service supervision, tray, summon, "
+            "overlay, and resident claim remain blocked."
+        ),
+    }
     assert launch_manifest["service_install"] == {
         "manager": "scripts/service-install.ps1",
         "manager_exists": True,
@@ -5386,6 +5406,7 @@ def test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_residen
     assert body["diagnostic_status_runner_ready"] is True
     assert body["bounded_foreground_session_available"] is True
     assert body["bounded_launch_available"] is True
+    assert body["resident_runtime_candidate_available"] is True
     assert body["runtime_state_write_configured"] is True
     assert body["foreground_process_observed"] is False
     assert body["resident_host_process_state"] == "missing"
@@ -5407,6 +5428,19 @@ def test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_residen
     assert body["boundaries"]["diagnostic_status_runner"]["resident_runtime"] is False
     assert body["boundaries"]["bounded_foreground_session"]["ready"] is True
     assert body["boundaries"]["bounded_foreground_session"]["resident_runtime"] is False
+    assert body["boundaries"]["resident_runtime_candidate"] == {
+        "status": "available",
+        "ready": True,
+        "scope": "manual_process_runtime_candidate_only",
+        "host_script": "scripts/lens-host.ps1 -Mode Resident",
+        "resident_runtime": False,
+        "service_managed": False,
+        "process_supervision": False,
+        "would_launch_from_api": False,
+        "would_install_service": False,
+        "authority_granted": False,
+        "resident_claim_allowed": False,
+    }
     assert body["boundaries"]["resident_runtime"] == {
         "status": "blocked",
         "ready": False,

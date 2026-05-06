@@ -1287,6 +1287,28 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 else "Foreground Lens host runtime is not implemented."
             ),
         },
+        "resident_command": {
+            "shell": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                entrypoint,
+                "-Mode",
+                "Resident",
+            ],
+            "working_directory": ".",
+            "executable": entrypoint_exists,
+            "authority_granted": False,
+            "resident_claim_allowed": False,
+            "reason": (
+                "Manual resident runtime candidate is available; service supervision, tray, summon, "
+                "overlay, and resident claim remain blocked."
+                if entrypoint_exists
+                else "Resident Lens host runtime candidate entrypoint is missing."
+            ),
+        },
         "service_install": {
             "manager": service_manager,
             "manager_exists": service_manager_exists,
@@ -1398,6 +1420,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
     declared_entrypoint = _as_dict(launch_manifest.get("declared_entrypoint"))
     status_command = _as_dict(launch_manifest.get("status_command"))
     candidate_command = _as_dict(launch_manifest.get("candidate_command"))
+    resident_command = _as_dict(launch_manifest.get("resident_command"))
     foreground_session = _as_dict(launch_manifest.get("foreground_session"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     blocker_groups = _as_dict(launch_manifest.get("blocker_groups"))
@@ -1411,6 +1434,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
     bounded_foreground_session_available = bool(foreground_session.get("supported")) and bool(
         candidate_command.get("executable")
     )
+    resident_runtime_candidate_available = bool(resident_command.get("executable"))
     bounded_launch_proof_available = bool(declared_entrypoint.get("exists")) and bounded_foreground_session_available
     runtime_state_write_configured = bool(foreground_session.get("runtime_state_write"))
 
@@ -1428,6 +1452,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
         "diagnostic_status_runner_ready": diagnostic_status_runner_ready,
         "bounded_foreground_session_available": bounded_foreground_session_available,
         "bounded_launch_available": bounded_foreground_session_available,
+        "resident_runtime_candidate_available": resident_runtime_candidate_available,
         "bounded_launch_proof_available": bounded_launch_proof_available,
         "bounded_launch_proof_script": "scripts/lens-host-launch-proof.ps1 -Mode Status",
         "runtime_state_write_configured": runtime_state_write_configured,
@@ -1468,6 +1493,19 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
                 "would_launch": False,
                 "authority_granted": False,
             },
+            "resident_runtime_candidate": {
+                "status": "available" if resident_runtime_candidate_available else "blocked",
+                "ready": resident_runtime_candidate_available,
+                "scope": "manual_process_runtime_candidate_only",
+                "host_script": "scripts/lens-host.ps1 -Mode Resident",
+                "resident_runtime": False,
+                "service_managed": False,
+                "process_supervision": False,
+                "would_launch_from_api": False,
+                "would_install_service": False,
+                "authority_granted": False,
+                "resident_claim_allowed": False,
+            },
             "bounded_launch_proof": {
                 "status": "available" if bounded_launch_proof_available else "blocked",
                 "ready": bounded_launch_proof_available,
@@ -1497,6 +1535,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
             "/lens/host",
             "scripts/lens-host.ps1 -Mode Status",
             "scripts/lens-host.ps1 -Mode Launch",
+            "scripts/lens-host.ps1 -Mode Resident",
             "scripts/lens-host-launch-proof.ps1 -Mode Status",
         ],
         "governance": {
@@ -1520,7 +1559,8 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
         },
         "next_smallest_truthful_gap": "resident_host_runtime_implementation_plan",
         "message": (
-            "Lens has a diagnostic host runner and bounded foreground session readback, but no resident host "
-            "runtime, supervision, tray, hotkey, overlay, summon, or resident-claim authority."
+            "Lens has a diagnostic host runner, bounded foreground session readback, and a manual resident "
+            "runtime candidate, but no supervised resident host, tray, hotkey, overlay, summon, or "
+            "resident-claim authority."
         ),
     }

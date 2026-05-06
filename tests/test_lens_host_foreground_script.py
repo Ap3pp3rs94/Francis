@@ -63,7 +63,12 @@ def _wait_for_state(data_dir: Path, status: str, timeout_seconds: float = 5.0) -
     return _read_state(data_dir)
 
 
-def _wait_for_heartbeat(data_dir: Path, min_count: int = 1, timeout_seconds: float = 5.0) -> dict[str, object]:
+def _wait_for_heartbeat(
+    data_dir: Path,
+    min_count: int = 1,
+    timeout_seconds: float = 5.0,
+    status: str = "foreground_running",
+) -> dict[str, object]:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         payload = _read_state(data_dir)
@@ -71,7 +76,7 @@ def _wait_for_heartbeat(data_dir: Path, min_count: int = 1, timeout_seconds: flo
             heartbeat_count = int(payload.get("heartbeat_count", 0))
         except (TypeError, ValueError):
             heartbeat_count = 0
-        if payload.get("status") == "foreground_running" and heartbeat_count >= min_count:
+        if payload.get("status") == status and heartbeat_count >= min_count:
             return payload
         time.sleep(0.05)
     return _read_state(data_dir)
@@ -173,6 +178,77 @@ def test_lens_host_status_observes_live_foreground_session(tmp_path: Path) -> No
         assert final_payload["status"] == "foreground_completed"
         assert final_payload["process_readback"]["state_status"] == "foreground_stopped"
         assert int(final_payload["process_readback"]["heartbeat_count"]) >= 1
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+
+def test_lens_host_resident_mode_writes_runtime_candidate_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    env = os.environ.copy()
+    env["FRANCIS_DATA_DIR"] = str(data_dir)
+    proc = subprocess.Popen(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "lens-host.ps1"),
+            "-Mode",
+            "Resident",
+            "-RunSeconds",
+            "3",
+        ],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        running_state = _wait_for_state(data_dir, "resident_running")
+        assert running_state["process_alive"] is True
+        assert running_state["resident"] is True
+        assert running_state["resident_claim_allowed"] is False
+        assert running_state["service_managed"] is False
+
+        heartbeat_state = _wait_for_heartbeat(data_dir, min_count=1, status="resident_running")
+        assert heartbeat_state["status"] == "resident_running"
+        assert int(heartbeat_state["heartbeat_count"]) >= 1
+
+        status = _run_host("-Mode", "Status", data_dir=data_dir)
+        assert status.returncode == 0, status.stderr
+        status_payload = json.loads(status.stdout)
+        assert status_payload["process_readback"]["status"] == "process_observed"
+        assert status_payload["process_readback"]["state_status"] == "resident_running"
+        assert status_payload["process_readback"]["pid_present"] is True
+        assert status_payload["process_readback"]["pid"] == running_state["pid"]
+        assert status_payload["process_readback"]["process_alive"] is True
+        assert status_payload["foreground_session"] is False
+        assert status_payload["resident_supported"] is True
+        assert status_payload["resident_session"] is True
+        assert status_payload["resident_runtime_candidate"] is True
+        assert status_payload["resident"] is True
+        assert status_payload["resident_claim_allowed"] is False
+        assert "resident_host_process_not_supervised" in status_payload["blockers"]
+        assert "resident_supervision_disabled" in status_payload["blockers"]
+        assert "tray_host_missing" in status_payload["blockers"]
+        assert status_payload["governance"]["execution_authority"] is False
+        assert status_payload["governance"]["memory_write"] is False
+        assert status_payload["governance"]["resident_claim_authority"] is False
+
+        stdout, stderr = proc.communicate(timeout=10)
+        assert proc.returncode == 0, stderr
+        final_payload = json.loads(stdout)
+        assert final_payload["status"] == "resident_completed"
+        assert final_payload["resident_runtime_candidate"] is True
+        assert final_payload["resident"] is False
+        assert final_payload["resident_claim_allowed"] is False
+        assert final_payload["process_readback"]["state_status"] == "resident_stopped"
+        assert int(final_payload["process_readback"]["heartbeat_count"]) >= 1
+        assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
     finally:
         if proc.poll() is None:
             proc.terminate()
