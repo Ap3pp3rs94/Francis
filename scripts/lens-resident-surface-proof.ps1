@@ -361,11 +361,11 @@ function Invoke-ForegroundResidentSurfaceReadback {
     $ForegroundProcess.StartInfo = $StartInfo
     $ProofStarted = $ForegroundProcess.Start()
 
-    $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 10
-    $RunningPid = Wait-ForForegroundPid -PidPath $PidPath -TimeoutSeconds 10
+    $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 20
+    $RunningPid = Wait-ForForegroundPid -PidPath $PidPath -TimeoutSeconds 20
     $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
 
-    $WaitTimeoutMs = [int](($RunSeconds + 10) * 1000)
+    $WaitTimeoutMs = [int](($RunSeconds + 30) * 1000)
     $Completed = $ForegroundProcess.WaitForExit($WaitTimeoutMs)
     if (-not $Completed) {
       try {

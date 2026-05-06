@@ -19981,6 +19981,41 @@ checkpoint:
 - `gh run view 25424089094 --repo Ap3pp3rs94/Francis`
   Result: `passed for bfcf299 feat(lens): surface resident activation authority handoff`
 
+### 2026-05-06 - Stage 6/Lens resident surface proof timing stabilization
+
+The Stage 6/Lens resident-surface proof now gives its bounded foreground host
+runtime a wider observation window before declaring the proof failed. The proof
+waits longer for the foreground runtime state and PID to appear, and allows a
+larger settle window for the foreground child to exit cleanly after its bounded
+run.
+
+This fixes the Windows Python 3.12 CI failure in
+`tests/test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority`,
+where the proof emitted valid blocked readback JSON but exited `1` because the
+foreground runtime completion window was too tight on a slow runner.
+
+This is proof timing stabilization only. It does not create execution
+authority, approval decision authority, memory-write behavior,
+process-supervision authority, service-control authority,
+hotkey-registration authority, tray-registration authority, overlay-control
+authority, summon authority, resident-claim authority, telemetry behavior, a
+resident host, a tray process, an overlay window, a global hotkey, or a UI
+claim. Stage 6 remains active and blocked.
+
+Latest targeted validation for the `2026-05-06` Stage 6/Lens resident surface
+proof timing stabilization:
+
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority -q`
+  Result: `passed 5 consecutive local runs`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; resident_surface_foreground_runtime_readback=true; next_smallest_truthful_gap=resident_surface_runtime_not_supervised`
+- `git diff --check`
+  Result: `passed with non-fatal PowerShell line-ending warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
