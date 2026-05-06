@@ -1068,6 +1068,29 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["implementation_plan"]["plan_available"] is True
     assert os_binding["implementation_plan"]["implementation_ready"] is False
     assert os_binding["implementation_plan"]["command_palette_contract"]["readback_ready"] is True
+    os_binding_execution_response = client.get("/lens/os-binding/execution/readiness")
+    assert os_binding_execution_response.status_code == 200
+    os_binding_execution = body["os_binding_execution_readiness"]
+    direct_os_binding_execution = os_binding_execution_response.json()
+    assert os_binding_execution["kind"] == direct_os_binding_execution["kind"]
+    assert os_binding_execution["route"] == direct_os_binding_execution["route"]
+    assert os_binding_execution["execute_route"] == direct_os_binding_execution["execute_route"]
+    assert os_binding_execution["denials_route"] == direct_os_binding_execution["denials_route"]
+    assert os_binding_execution["kind"] == "lens.os_binding.command_palette_binding.execution_readiness"
+    assert os_binding_execution["status"] == "blocked"
+    assert os_binding_execution["route"] == "/lens/os-binding/execution/readiness"
+    assert os_binding_execution["ready"] is False
+    assert os_binding_execution["execution_ready"] is False
+    assert os_binding_execution["denial_boundary_observed"] is True
+    assert os_binding_execution["denial_status"] == "blocked"
+    assert os_binding_execution["denial_receipt_readback_ready"] is True
+    assert os_binding_execution["denial_receipt_total"] == 0
+    assert "os_binding_execution_boundary_not_implemented" in os_binding_execution["blockers"]
+    assert "system_write_permission" in os_binding_execution["blocked_requirements"]
+    assert os_binding_execution["governance"]["execution_authority"] is False
+    assert os_binding_execution["governance"]["approval_decision_authority"] is False
+    assert os_binding_execution["governance"]["memory_write"] is False
+    assert os_binding_execution["governance"]["denial_receipt_write_authority"] is False
     assert body["receipts"]["lens_os_binding_readiness_route"] == "/lens/os-binding/readiness"
     assert body["hud"]["readback_ready"] is True
     assert body["hud"]["runtime_status"] == "readback_only"
@@ -2506,8 +2529,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding_criterion["audit_status"] == "complete"
     assert os_binding_criterion["evidence"] == [
         "/lens/os-binding/readiness",
+        "/lens/os-binding/execution/readiness",
         "/lens/os-binding/authority/requests",
         "/lens/os-binding/authority/request",
+        "/lens/os-binding/denials",
         "/lens/summon",
         "/lens/status",
     ]
@@ -2515,6 +2540,21 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding_criterion["os_binding_ready"] is False
     assert os_binding_criterion["os_level_command_palette"] is False
     assert os_binding_criterion["summon_anywhere"] is False
+    assert os_binding_criterion["execution_readiness_status"] == "blocked"
+    assert os_binding_criterion["execution_readiness_ready"] is False
+    assert os_binding_criterion["execution_boundary_observed"] is True
+    assert os_binding_criterion["execution_denial_status"] == "blocked"
+    assert os_binding_criterion["execution_denial_receipt_readback_ready"] is True
+    assert os_binding_criterion["execution_denial_receipt_total"] == 0
+    assert os_binding_criterion["latest_execution_denial_receipt_id"] == ""
+    assert "system_write_permission" in os_binding_criterion["execution_blocked_requirements"]
+    assert (
+        os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
+    )
+    assert os_binding_criterion["execution_denial"]["kind"] == (
+        "lens.os_binding.command_palette_binding.execution_denial"
+    )
+    assert os_binding_criterion["execution_denial"]["executed"] is False
     assert os_binding_criterion["authority_request_readback_status"] == "none"
     assert os_binding_criterion["authority_request_readback_ready"] is True
     assert os_binding_criterion["authority_route"] == "/lens/os-binding/authority"

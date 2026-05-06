@@ -235,6 +235,21 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert os_binding_criterion["authority_grant_consumed"] is True
     assert os_binding_criterion["os_level_command_palette"] is False
     assert os_binding_criterion["summon_anywhere"] is False
+    assert os_binding_criterion["execution_readiness_status"] == "blocked"
+    assert os_binding_criterion["execution_readiness_ready"] is False
+    assert os_binding_criterion["execution_boundary_observed"] is True
+    assert os_binding_criterion["execution_denial_receipt_readback_ready"] is True
+    assert os_binding_criterion["execution_denial_receipt_total"] == 0
+    assert (
+        os_binding_criterion["execution_next_smallest_truthful_gap"] == "os_binding_command_palette_execution_boundary"
+    )
+    status_execution_readiness = status["os_binding_execution_readiness"]
+    assert status_execution_readiness["route"] == "/lens/os-binding/execution/readiness"
+    assert status_execution_readiness["authority_granted"] is True
+    assert status_execution_readiness["os_level_command_palette_binding_authority"] is True
+    assert status_execution_readiness["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert status_execution_readiness["denial_boundary_observed"] is True
+    assert status_execution_readiness["denial_receipt_readback_ready"] is True
 
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

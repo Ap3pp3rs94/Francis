@@ -59,7 +59,10 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_loop_denial_receipts,
     lens_host_runtime_loop_readiness_audit,
 )
-from francis.lens.os_binding_authority import lens_os_binding_authority_request_readback
+from francis.lens.os_binding_authority import (
+    lens_os_binding_authority_request_readback,
+    lens_os_binding_execution_readiness_audit,
+)
 from francis.lens.preflight import (
     lens_os_binding_readiness,
     lens_overlay_enablement_gate,
@@ -1358,6 +1361,7 @@ def _stage6_readiness(
     command_palette: dict[str, Any],
     preflight: dict[str, Any],
     os_binding_readiness: dict[str, Any],
+    os_binding_execution_readiness: dict[str, Any],
     summon_enablement_gate: dict[str, Any],
     tray_enablement_gate: dict[str, Any],
     overlay_enablement_gate: dict[str, Any],
@@ -1411,6 +1415,7 @@ def _stage6_readiness(
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     os_binding_authority_requests = _as_dict(os_binding_readiness.get("authority_request_readback"))
+    os_binding_execution_denial = _as_dict(os_binding_execution_readiness.get("execution_denial"))
     closure_readback = _stage6_closure_readback(
         mode=mode,
         hud=hud,
@@ -1465,8 +1470,10 @@ def _stage6_readiness(
                 "audit_status": _safe_str(os_binding_readiness.get("audit_status")).strip(),
                 "evidence": [
                     "/lens/os-binding/readiness",
+                    "/lens/os-binding/execution/readiness",
                     "/lens/os-binding/authority/requests",
                     "/lens/os-binding/authority/request",
+                    "/lens/os-binding/denials",
                     "/lens/summon",
                     "/lens/status",
                 ],
@@ -1474,6 +1481,24 @@ def _stage6_readiness(
                 "os_binding_ready": bool(os_binding_readiness.get("os_binding_ready")),
                 "os_level_command_palette": bool(os_binding_readiness.get("os_level_command_palette")),
                 "summon_anywhere": bool(os_binding_readiness.get("summon_anywhere")),
+                "execution_readiness_status": _safe_str(os_binding_execution_readiness.get("status")).strip()
+                or "missing",
+                "execution_readiness_ready": bool(os_binding_execution_readiness.get("ready")),
+                "execution_boundary_observed": bool(os_binding_execution_readiness.get("denial_boundary_observed")),
+                "execution_denial_status": _safe_str(os_binding_execution_readiness.get("denial_status")).strip(),
+                "execution_denial_receipt_readback_ready": bool(
+                    os_binding_execution_readiness.get("denial_receipt_readback_ready")
+                ),
+                "execution_denial_receipt_total": _safe_int(os_binding_execution_readiness.get("denial_receipt_total")),
+                "latest_execution_denial_receipt_id": _safe_str(
+                    os_binding_execution_readiness.get("latest_denial_receipt_id")
+                ).strip(),
+                "execution_blocked_requirements": _as_list(os_binding_execution_readiness.get("blocked_requirements")),
+                "execution_next_smallest_truthful_gap": _safe_str(
+                    os_binding_execution_readiness.get("next_smallest_truthful_gap")
+                ).strip()
+                or "os_binding_command_palette_execution_boundary",
+                "execution_denial": os_binding_execution_denial,
                 "authority_request_readback_status": _safe_str(os_binding_authority_requests.get("status")).strip()
                 or "missing",
                 "authority_request_readback_ready": bool(os_binding_authority_requests.get("readback_ready")),
@@ -3067,6 +3092,11 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         preflight=preflight,
         authority_request_readback=os_binding_authority_requests,
     )
+    os_binding_execution_readiness = lens_os_binding_execution_readiness_audit(
+        limit=safe_limit,
+        authority_request_readback=os_binding_authority_requests,
+        readiness=os_binding_readiness,
+    )
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
@@ -3104,6 +3134,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_host": resident_host,
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,
+        "os_binding_execution_readiness": os_binding_execution_readiness,
         "os_binding_authority_requests": os_binding_authority_requests,
         "summon_enablement_gate": summon_enablement_gate,
         "tray_enablement_gate": tray_enablement_gate,
@@ -3214,6 +3245,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             command_palette=command_palette,
             preflight=preflight,
             os_binding_readiness=os_binding_readiness,
+            os_binding_execution_readiness=os_binding_execution_readiness,
             summon_enablement_gate=summon_enablement_gate,
             tray_enablement_gate=tray_enablement_gate,
             overlay_enablement_gate=overlay_enablement_gate,

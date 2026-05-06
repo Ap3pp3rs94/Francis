@@ -19630,6 +19630,47 @@ request-readback readiness spine:
   Result: `passed on the updated diff with expected PowerShell line-ending
   warnings for the edited Stage 6 proof scripts`
 
+### 2026-05-05 - Stage 6/Lens OS-binding execution readiness status projection
+
+Stage 6/Lens `/lens/status` now projects the existing
+`/lens/os-binding/execution/readiness` audit as first-class status readback and
+threads its denial-boundary fields into the `os_binding_readiness` Stage 6
+criterion. The status payload now exposes the OS-binding execution-readiness
+route, execution-denial route, denial-boundary observation, denial receipt
+readback state, blocked execution requirements, latest denial receipt id, and
+the next concrete OS-binding execution gap.
+
+This advances the summon-anywhere path by making the OS-level command-palette
+binding blocker more explicit from the main operator readback, instead of
+requiring a separate route call to discover whether the execution boundary and
+denial receipt surface are visible. It does not implement the OS command
+palette, register a global hotkey, open a palette, launch a resident host,
+control overlay/tray surfaces, or grant summon authority.
+
+This is backend/API readback work only. It does not create execution authority,
+approval decision authority, memory-write behavior, process supervision
+authority, service control authority, hotkey registration authority,
+overlay-control authority, summon authority, resident-claim authority, or a UI
+claim. Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy
+resident behavior, and system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens OS-binding
+execution readiness status projection:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_os_binding_authority_request_creates_approval_only_readback -q`
+  Result: `failed before narrowing an unstable whole-object comparison, then
+  passed`
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `failed before formatting three files, then passed`
+- `git diff --check`
+  Result: `passed after ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
