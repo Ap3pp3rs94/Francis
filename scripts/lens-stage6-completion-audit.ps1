@@ -234,6 +234,7 @@ $PowerShell = (Get-Command pwsh -ErrorAction SilentlyContinue)
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 
 $CheckpointJson = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $CheckpointScript -Mode Status `
   -StartupTimeoutSeconds $StartupTimeoutSeconds `
@@ -260,7 +261,7 @@ $SummonAnywhereFamilyChainProof = $SummonAnywhereFamilyChainProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
+  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds
 )
 $ResidentHostRuntimeBoundaryProof = $ResidentHostRuntimeBoundaryProofResult.payload
 $ResidentHostRuntimeBoundaryProofBlockers = ConvertTo-StringArray -Value $ResidentHostRuntimeBoundaryProof.blockers
@@ -287,7 +288,7 @@ $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShel
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
   '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
 )
@@ -304,7 +305,7 @@ $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShel
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
   '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
 )
@@ -1635,6 +1636,8 @@ $Payload = [ordered]@{
   transition_allowed = $ReadyToClose
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
+  requested_child_host_launch_run_seconds = $HostLaunchRunSeconds
+  child_host_launch_run_seconds = $ChildHostLaunchRunSeconds
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)

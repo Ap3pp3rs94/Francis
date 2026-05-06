@@ -20313,6 +20313,41 @@ proof-chain readback:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warnings only`
 
+### 2026-05-06 - Stage 6/Lens completion-audit child window stabilization
+
+Stage 6/Lens completion audit now normalizes the child host-launch proof window
+to at least 5 seconds before invoking nested resident-host runtime and process
+supervision boundary proofs. The audit receipt preserves both the requested
+child host-launch window and the effective window so the proof remains
+truthful.
+
+This recovers the CI failure on run `25454650145`, where ubuntu Python 3.13
+missed `summon_anywhere_first_blocker_family_runtime_boundary_observed` during
+the long completion-audit pytest path. The fix does not change Stage 6
+acceptance posture: Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+This is diagnostic/proof-window stabilization only. It does not create
+execution authority, approval decision authority, approval request writes,
+memory-write behavior, local-process-launch authority,
+process-supervision authority, process-restart authority,
+service-install authority, service-control authority, tray-registration
+authority, hotkey-registration authority, overlay-control authority, summon
+authority, resident-claim authority, telemetry behavior, a resident host, a
+tray process, an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens completion-audit child
+window stabilization:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
