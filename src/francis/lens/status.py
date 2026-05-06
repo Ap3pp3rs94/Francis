@@ -2594,6 +2594,7 @@ def _stage6_readiness(
                 "audit_status": _safe_str(supervision_authority_readiness.get("audit_status")).strip(),
                 "evidence": [
                     "/lens/host/supervision/authority/readiness",
+                    "/lens/host/supervision/authority/requests",
                     "/lens/host/supervision/authority/grants",
                     "/lens/host/supervision/authority/denials",
                     "/lens/host/supervision/authority",
@@ -2607,6 +2608,13 @@ def _stage6_readiness(
                 "supervision_ready": bool(supervision_authority_readiness.get("supervision_ready")),
                 "resident_claim_allowed": bool(supervision_authority_readiness.get("resident_claim_allowed")),
                 "boundary_observed": bool(supervision_authority_readiness.get("boundary_observed")),
+                "request_readback_ready": bool(supervision_authority_readiness.get("request_readback_ready")),
+                "request_pending_count": _safe_int(supervision_authority_readiness.get("request_pending_count")),
+                "request_approved_count": _safe_int(supervision_authority_readiness.get("request_approved_count")),
+                "request_total_count": _safe_int(supervision_authority_readiness.get("request_total_count")),
+                "latest_request_approval_id": _safe_str(
+                    supervision_authority_readiness.get("latest_request_approval_id")
+                ).strip(),
                 "denial_receipt_readback_ready": bool(
                     supervision_authority_readiness.get("denial_receipt_readback_ready")
                 ),

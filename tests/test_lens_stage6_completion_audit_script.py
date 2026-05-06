@@ -269,6 +269,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert host_authority_handoff["ok"] is True
     assert host_authority_handoff["ready"] is False
     assert host_authority_handoff["readback_ready"] is True
+    assert host_authority_handoff["request_readback_ready"] is True
     assert host_authority_handoff["handoff_observed"] is True
     assert host_authority_handoff["first_blocked_requirement"] == "exact_supervision_authority_approval"
     assert [item["id"] for item in host_authority_handoff["blocked_requirement_handoffs"]] == (

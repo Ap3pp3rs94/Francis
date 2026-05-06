@@ -530,12 +530,21 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "/lens/host/supervision/authority/readiness"
         in payload["resident_host_supervision_authority_readiness_audit"]["evidence"]
     )
+    assert (
+        "/lens/host/supervision/authority/requests"
+        in payload["resident_host_supervision_authority_readiness_audit"]["evidence"]
+    )
     assert payload["resident_host_supervision_authority_readiness_audit"]["ready"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["preflight_ready"] is True
     assert payload["resident_host_supervision_authority_readiness_audit"]["authority_ready"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["supervision_ready"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["resident_claim_allowed"] is False
     assert payload["resident_host_supervision_authority_readiness_audit"]["boundary_observed"] is True
+    assert payload["resident_host_supervision_authority_readiness_audit"]["request_readback_ready"] is True
+    assert payload["resident_host_supervision_authority_readiness_audit"]["request_pending_count"] == 0
+    assert payload["resident_host_supervision_authority_readiness_audit"]["request_approved_count"] == 0
+    assert payload["resident_host_supervision_authority_readiness_audit"]["request_total_count"] == 0
+    assert payload["resident_host_supervision_authority_readiness_audit"]["latest_request_approval_id"] == ""
     assert payload["resident_host_supervision_authority_readiness_audit"]["denial_receipt_readback_ready"] is True
     assert payload["resident_host_supervision_authority_readiness_audit"]["grant_receipt_readback_ready"] is True
     assert payload["resident_host_supervision_authority_readiness_audit"]["receipt_count"] == 0
@@ -547,6 +556,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_readiness_audit"]["requirements_blocked_total"] >= 6
     assert (
         "authority_grant_implementation"
+        not in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
+    )
+    assert (
+        "host_supervision_authority_request_readback"
         not in payload["resident_host_supervision_authority_readiness_audit"]["blocked_requirements"]
     )
     assert payload["resident_host_supervision_authority_readiness_audit"]["operator_surface_readback_ready"] is True

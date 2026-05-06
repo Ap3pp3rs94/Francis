@@ -643,6 +643,7 @@ $HostSupervisionAuthorityReadiness = $Checkpoint.resident_host_supervision_autho
 $HostSupervisionAuthorityReadinessBlockedRequirements = ConvertTo-StringArray -Value $HostSupervisionAuthorityReadiness.blocked_requirements
 $HostSupervisionAuthorityReadinessFirstBlockedRequirement = [string]$HostSupervisionAuthorityReadiness.first_blocked_requirement
 $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff = $HostSupervisionAuthorityReadiness.first_blocked_requirement_handoff
+$HostSupervisionAuthorityReadinessRequestReadbackReady = [bool]$HostSupervisionAuthorityReadiness.request_readback_ready
 $HostSupervisionAuthorityReadinessBlockedRequirementHandoffs = @(
   $HostSupervisionAuthorityReadiness.blocked_requirement_handoffs
 )
@@ -651,6 +652,8 @@ $HostSupervisionAuthorityReadinessHandoffObserved = (
   [string]$HostSupervisionAuthorityReadiness.status -eq 'blocked' -and
   -not [bool]$HostSupervisionAuthorityReadiness.ready -and
   [bool]$HostSupervisionAuthorityReadiness.operator_surface_readback_ready -and
+  $HostSupervisionAuthorityReadinessRequestReadbackReady -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -notcontains 'host_supervision_authority_request_readback' -and
   $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'exact_supervision_authority_approval' -and
   $HostSupervisionAuthorityReadinessFirstBlockedRequirement -eq 'exact_supervision_authority_approval' -and
   [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.id -eq 'exact_supervision_authority_approval' -and
@@ -2782,6 +2785,7 @@ $Payload = [ordered]@{
     ok = [bool]$HostSupervisionAuthorityReadiness.ok
     ready = [bool]$HostSupervisionAuthorityReadiness.ready
     readback_ready = [bool]$HostSupervisionAuthorityReadiness.operator_surface_readback_ready
+    request_readback_ready = $HostSupervisionAuthorityReadinessRequestReadbackReady
     handoff_observed = $HostSupervisionAuthorityReadinessHandoffObserved
     first_blocked_requirement = $HostSupervisionAuthorityReadinessFirstBlockedRequirement
     first_blocked_requirement_handoff = $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff

@@ -19587,6 +19587,49 @@ authority request readiness snapshot:
 - `git diff --check`
   Result: `passed after ledger update`
 
+### 2026-05-05 - Stage 6/Lens host supervision request-readback readiness spine
+
+Stage 6/Lens host supervision authority readiness now treats the existing
+`/lens/host/supervision/authority/requests` readback as part of the authority
+readiness spine. The `/lens/host/supervision/authority/readiness` payload now
+reports `request_readback_ready`, request counts, the latest request approval
+id, a ready `host_supervision_authority_request_readback` requirement, and a
+`request_readback_status` source readback. `/lens/status` projects those fields
+into the `resident_host_supervision_authority_readiness_audit` criterion, and
+the Stage 6 checkpoint and completion-audit proof scripts now require that
+readback before marking the host-supervision readiness handoff observed.
+
+This makes the current first blocker, `exact_supervision_authority_approval`,
+more inspectable: the operator-facing readiness proof now shows both the route
+for creating/selecting the exact approved request and the current readback state
+of those requests. It does not create or decide an approval.
+
+This is backend/API readback and diagnostic proof consumption work only. It
+does not create a resident host, launch or supervise a product process, install
+or control a service, open tray or overlay surfaces, bind a hotkey, summon
+Francis anywhere, decide approvals, write memory, grant execution authority,
+grant approval authority, grant process-supervision authority, grant
+resident-supervision authority, or claim resident Lens behavior. Stage 6 remains
+active and blocked on summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+Latest targeted validation for the `2026-05-05` Stage 6/Lens host supervision
+request-readback readiness spine:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed after formatting`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting two Python files, then passed`
+- `git diff --check`
+  Result: `passed on the updated diff with expected PowerShell line-ending
+  warnings for the edited Stage 6 proof scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1496,6 +1496,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness["supervision_ready"] is False
     assert supervision_authority_readiness["resident_claim_allowed"] is False
     assert supervision_authority_readiness["boundary_observed"] is True
+    assert supervision_authority_readiness["request_readback_ready"] is True
+    assert supervision_authority_readiness["request_pending_count"] == 0
+    assert supervision_authority_readiness["request_approved_count"] == 0
+    assert supervision_authority_readiness["request_total_count"] == 0
+    assert supervision_authority_readiness["latest_request_approval_id"] == ""
     assert supervision_authority_readiness["denial_receipt_readback_ready"] is True
     assert supervision_authority_readiness["grant_receipt_readback_ready"] is True
     assert supervision_authority_readiness["receipt_count"] == 0
@@ -1509,11 +1514,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         item["id"]: item for item in supervision_authority_readiness["requirements"]
     }
     assert supervision_authority_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
+    assert supervision_authority_readiness_requirements["host_supervision_authority_request_readback"]["ready"] is True
     assert supervision_authority_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
     assert supervision_authority_readiness_requirements["host_supervision_authority_denial_receipts"]["ready"] is True
     assert supervision_authority_readiness_requirements["host_supervision_authority_grant_receipts"]["ready"] is True
     assert supervision_authority_readiness_requirements["authority_grant_implementation"]["ready"] is True
     assert "actor_scope" in supervision_authority_readiness["blocked_requirements"]
+    assert "host_supervision_authority_request_readback" not in supervision_authority_readiness["blocked_requirements"]
     assert "process_supervision_authority" in supervision_authority_readiness["blocked_requirements"]
     assert "service_control_authority" in supervision_authority_readiness["blocked_requirements"]
     assert "resident_claim_authority" in supervision_authority_readiness["blocked_requirements"]
@@ -2869,6 +2876,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_readiness_criterion["audit_status"] == "complete"
     assert host_supervision_readiness_criterion["evidence"] == [
         "/lens/host/supervision/authority/readiness",
+        "/lens/host/supervision/authority/requests",
         "/lens/host/supervision/authority/grants",
         "/lens/host/supervision/authority/denials",
         "/lens/host/supervision/authority",
@@ -2882,6 +2890,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_readiness_criterion["supervision_ready"] is False
     assert host_supervision_readiness_criterion["resident_claim_allowed"] is False
     assert host_supervision_readiness_criterion["boundary_observed"] is True
+    assert host_supervision_readiness_criterion["request_readback_ready"] is True
+    assert host_supervision_readiness_criterion["request_pending_count"] == 0
+    assert host_supervision_readiness_criterion["request_approved_count"] == 0
+    assert host_supervision_readiness_criterion["request_total_count"] == 0
+    assert host_supervision_readiness_criterion["latest_request_approval_id"] == ""
     assert host_supervision_readiness_criterion["denial_receipt_readback_ready"] is True
     assert host_supervision_readiness_criterion["grant_receipt_readback_ready"] is True
     assert host_supervision_readiness_criterion["receipt_count"] == 0
@@ -2891,6 +2904,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert host_supervision_readiness_criterion["active_grant_receipt_id"] == ""
     assert host_supervision_readiness_criterion["requirements_total"] >= 11
     assert host_supervision_readiness_criterion["requirements_blocked_total"] >= 6
+    assert (
+        "host_supervision_authority_request_readback"
+        not in host_supervision_readiness_criterion["blocked_requirements"]
+    )
     assert "authority_grant_implementation" not in host_supervision_readiness_criterion["blocked_requirements"]
     assert host_supervision_readiness_criterion["operator_surface_readback_ready"] is True
     assert host_supervision_readiness_criterion["first_blocked_requirement"] == "exact_supervision_authority_approval"
@@ -3456,6 +3473,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert supervision_authority_readiness_body["supervision_ready"] is False
     assert supervision_authority_readiness_body["resident_claim_allowed"] is False
     assert supervision_authority_readiness_body["boundary_observed"] is True
+    assert supervision_authority_readiness_body["request_readback_ready"] is True
+    assert supervision_authority_readiness_body["request_pending_count"] == 0
+    assert supervision_authority_readiness_body["request_approved_count"] == 1
+    assert supervision_authority_readiness_body["request_total_count"] == 1
+    assert supervision_authority_readiness_body["latest_request_approval_id"] == supervision_authority_approval_id
     assert supervision_authority_readiness_body["denial_receipt_readback_ready"] is True
     assert supervision_authority_readiness_body["grant_receipt_readback_ready"] is True
     assert supervision_authority_readiness_body["receipt_count"] == 0
@@ -3471,6 +3493,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     )
     direct_readiness_requirements = {item["id"]: item for item in supervision_authority_readiness_body["requirements"]}
     assert direct_readiness_requirements["exact_supervision_authority_approval"]["ready"] is True
+    assert direct_readiness_requirements["host_supervision_authority_request_readback"]["ready"] is True
     assert direct_readiness_requirements["actor_scope"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_preflight"]["ready"] is True
     assert direct_readiness_requirements["host_supervision_authority_denial_boundary"]["ready"] is True
@@ -3484,6 +3507,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert direct_readiness_requirements["resident_claim_authority"]["ready"] is True
     assert "actor_scope" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "exact_supervision_authority_approval" not in supervision_authority_readiness_body["blocked_requirements"]
+    assert (
+        "host_supervision_authority_request_readback"
+        not in supervision_authority_readiness_body["blocked_requirements"]
+    )
     assert "process_supervision_authority" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "service_control_authority" not in supervision_authority_readiness_body["blocked_requirements"]
     assert "resident_claim_authority" not in supervision_authority_readiness_body["blocked_requirements"]

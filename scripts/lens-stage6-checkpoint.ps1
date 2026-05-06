@@ -404,6 +404,11 @@ $HostSupervisionAuthorityReadinessAuthorityReady = [bool](Get-PropertyValue -Pay
 $HostSupervisionAuthorityReadinessSupervisionReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'supervision_ready' -Default $true)
 $HostSupervisionAuthorityReadinessResidentClaimAllowed = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'resident_claim_allowed' -Default $true)
 $HostSupervisionAuthorityReadinessBoundaryObserved = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'boundary_observed' -Default $false)
+$HostSupervisionAuthorityReadinessRequestReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'request_readback_ready' -Default $false)
+$HostSupervisionAuthorityReadinessRequestPendingCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'request_pending_count' -Default 0)
+$HostSupervisionAuthorityReadinessRequestApprovedCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'request_approved_count' -Default 0)
+$HostSupervisionAuthorityReadinessRequestTotalCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'request_total_count' -Default 0)
+$HostSupervisionAuthorityReadinessLatestRequestApprovalId = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'latest_request_approval_id' -Default '')
 $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'denial_receipt_readback_ready' -Default $false)
 $HostSupervisionAuthorityReadinessGrantReceiptReadbackReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'grant_receipt_readback_ready' -Default $false)
 $HostSupervisionAuthorityReadinessReceiptCount = [int](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'receipt_count' -Default 0)
@@ -435,10 +440,13 @@ $HostSupervisionAuthorityReadinessObserved = (
   -not $HostSupervisionAuthorityReadinessSupervisionReady -and
   -not $HostSupervisionAuthorityReadinessResidentClaimAllowed -and
   $HostSupervisionAuthorityReadinessBoundaryObserved -and
+  $HostSupervisionAuthorityReadinessRequestReadbackReady -and
   $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady -and
   $HostSupervisionAuthorityReadinessGrantReceiptReadbackReady -and
   $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/readiness' -and
+  $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/requests' -and
   $HostSupervisionAuthorityReadinessEvidence -contains '/lens/host/supervision/authority/grants' -and
+  $HostSupervisionAuthorityReadinessBlockedRequirements -notcontains 'host_supervision_authority_request_readback' -and
   $HostSupervisionAuthorityReadinessBlockedRequirements -notcontains 'authority_grant_implementation' -and
   $HostSupervisionAuthorityReadinessOperatorSurfaceReadbackReady -and
   $HostSupervisionAuthorityReadinessFirstBlockedRequirement -eq 'exact_supervision_authority_approval' -and
@@ -1733,6 +1741,11 @@ $Payload = [ordered]@{
     supervision_ready = $HostSupervisionAuthorityReadinessSupervisionReady
     resident_claim_allowed = $HostSupervisionAuthorityReadinessResidentClaimAllowed
     boundary_observed = $HostSupervisionAuthorityReadinessBoundaryObserved
+    request_readback_ready = $HostSupervisionAuthorityReadinessRequestReadbackReady
+    request_pending_count = $HostSupervisionAuthorityReadinessRequestPendingCount
+    request_approved_count = $HostSupervisionAuthorityReadinessRequestApprovedCount
+    request_total_count = $HostSupervisionAuthorityReadinessRequestTotalCount
+    latest_request_approval_id = $HostSupervisionAuthorityReadinessLatestRequestApprovalId
     denial_receipt_readback_ready = $HostSupervisionAuthorityReadinessDenialReceiptReadbackReady
     grant_receipt_readback_ready = $HostSupervisionAuthorityReadinessGrantReceiptReadbackReady
     receipt_count = $HostSupervisionAuthorityReadinessReceiptCount

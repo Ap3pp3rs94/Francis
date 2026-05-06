@@ -3356,6 +3356,7 @@ def lens_host_supervision_authority_readiness_audit(
         limit=safe_limit,
         approval_id=safe_approval_id,
     )
+    requests = lens_host_supervision_authority_request_readback(limit=safe_limit)
     active_grant = _as_dict(grant_receipts.get("active_latest"))
     authority_granted = bool(active_grant)
     approval = _as_dict(authority_grant.get("approval"))
@@ -3374,6 +3375,9 @@ def lens_host_supervision_authority_readiness_audit(
         "empty",
         "readback_ready",
     }
+    request_readback_ready = (
+        _safe_str(requests.get("kind")).strip() == "lens.host.supervision_authority.request_readback"
+    )
     blockers = _dedupe_strs(
         [
             *_str_list(supervision_gate.get("blockers")),
@@ -3412,6 +3416,13 @@ def lens_host_supervision_authority_readiness_audit(
             ],
             authority_required="operator_approval",
             authority_granted=bool(approval.get("approved")),
+        ),
+        _readiness_requirement(
+            "host_supervision_authority_request_readback",
+            label="Host supervision authority request readback",
+            route=LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
+            ready=request_readback_ready,
+            status=requests.get("status"),
         ),
         _readiness_requirement(
             "actor_scope",
@@ -3599,6 +3610,11 @@ def lens_host_supervision_authority_readiness_audit(
         "supervision_ready": bool(preflight.get("supervision_ready")) and ready,
         "resident_claim_allowed": bool(preflight.get("resident_claim_allowed")) and ready,
         "boundary_observed": boundary_observed,
+        "request_readback_ready": request_readback_ready,
+        "request_pending_count": int(requests.get("pending_count") or 0),
+        "request_approved_count": int(requests.get("approved_count") or 0),
+        "request_total_count": int(requests.get("total_count") or 0),
+        "latest_request_approval_id": _safe_str(_as_dict(requests.get("latest")).get("id")).strip(),
         "denial_receipt_readback_ready": denial_receipt_readback_ready,
         "grant_receipt_readback_ready": grant_receipt_readback_ready,
         "receipt_count": int(denial_receipts.get("total") or 0),
@@ -3620,6 +3636,7 @@ def lens_host_supervision_authority_readiness_audit(
         "source_readbacks": {
             "supervision_gate_status": _safe_str(supervision_gate.get("status")).strip(),
             "preflight_status": _safe_str(preflight.get("status")).strip(),
+            "request_readback_status": _safe_str(requests.get("status")).strip(),
             "approval_status": _safe_str(approval.get("status")).strip(),
             "authority_grant_status": _safe_str(authority_grant.get("status")).strip(),
             "denial_receipts_status": _safe_str(denial_receipts.get("status")).strip(),
