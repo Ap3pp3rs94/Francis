@@ -20348,6 +20348,47 @@ window stabilization:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-06 - Stage 6/Lens next-handoff proof
+
+Stage 6/Lens now has a read-only next-handoff proof script:
+`scripts/lens-stage6-next-handoff.ps1`. The script reads the existing
+`/lens/status` Stage 6 closure payload and distills the current first blocked
+acceptance criterion into the concrete next handoff. Current verified output
+keeps Stage 6 active and blocked, with `summon_anywhere` as the first blocked
+criterion, but points the next concrete slice at
+`resident_host_runtime_blocker_boundary` through
+`scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status`,
+`/lens/host`, and `/lens/host/runtime-loop/readiness`.
+
+The proof also carries forward the existing process-supervision audit handoff
+and summon-anywhere family-chain audit handoff, so future builders can see
+that process supervision is already present as diagnostic readback while the
+next product gap remains a resident-host runtime boundary. Stage 6 remains
+active and blocked on summon-anywhere, helpful/not-noisy resident behavior,
+and system-resident presence.
+
+This is diagnostic/readback-only work. It does not create execution authority,
+approval decision authority, approval request writes, memory-write behavior,
+local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, tray-registration authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens next-handoff proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_runtime_blocker_boundary`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
