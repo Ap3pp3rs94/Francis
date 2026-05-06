@@ -1236,6 +1236,12 @@ def _stage6_closure_readback(
         _safe_str(resident_surface_activation.get("next_smallest_truthful_gap")).strip()
         or "resident_surface_operator_experience_proof"
     )
+    resident_runtime_authority_grant_readiness = _as_dict(
+        resident_surface_activation.get("resident_runtime_authority_grant_readiness")
+    )
+    resident_runtime_authority_grant_handoff = _as_dict(
+        resident_surface_activation.get("resident_runtime_authority_grant_handoff")
+    )
     runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
     supervision_authority_governance = _as_dict(supervision_authority_readiness.get("governance"))
@@ -1290,8 +1296,42 @@ def _stage6_closure_readback(
                     "would_mutate": False,
                 },
                 "authority_required": "resident_runtime_execution_authority",
+                "resident_runtime_authority_grant_readiness_route": (
+                    "/lens/resident-runtime/authority-grant/readiness"
+                ),
+                "resident_runtime_authority_grant_next_smallest_truthful_gap": _safe_str(
+                    resident_runtime_authority_grant_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
+                "resident_runtime_authority_grant_first_blocked_requirement": _safe_str(
+                    resident_runtime_authority_grant_readiness.get("first_blocked_requirement")
+                ).strip(),
+                "resident_runtime_authority_grant_first_blocked_requirement_handoff": (
+                    resident_runtime_authority_grant_handoff
+                ),
+                "resident_runtime_authority_grant_blocked_requirements": _as_list(
+                    resident_runtime_authority_grant_readiness.get("blocked_requirements")
+                ),
+                "resident_runtime_authority_grant_requirements_total": _safe_int(
+                    resident_runtime_authority_grant_readiness.get("requirements_total")
+                ),
+                "resident_runtime_authority_grant_requirements_ready_total": _safe_int(
+                    resident_runtime_authority_grant_readiness.get("requirements_ready_total")
+                ),
+                "resident_runtime_authority_grant_requirements_blocked_total": _safe_int(
+                    resident_runtime_authority_grant_readiness.get("requirements_blocked_total")
+                ),
+                "resident_runtime_authority_grant_ready": bool(resident_runtime_authority_grant_readiness.get("ready")),
+                "resident_runtime_execution_authority": bool(
+                    resident_runtime_authority_grant_readiness.get("resident_runtime_execution_authority")
+                ),
+                "resident_claim_allowed": bool(
+                    resident_runtime_authority_grant_readiness.get("resident_claim_allowed")
+                ),
                 "next_smallest_truthful_gap": helpful_next_gap,
                 "read_only_contract": True,
+                "diagnostic_only": True,
+                "would_execute": False,
+                "would_mutate": False,
             },
         ),
         _stage6_closure_criterion(

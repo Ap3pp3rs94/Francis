@@ -20235,6 +20235,45 @@ supervision handoff readback:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens helpful-not-noisy runtime authority handoff readback
+
+Stage 6/Lens `/lens/status` closure readback now carries the existing resident
+runtime execution-authority readiness details into the blocked
+`helpful_not_noisy` criterion handoff. The criterion still points at
+`approve_resident_runtime_execution_authority_grant_receipt`, but it now also
+names the exact first blocked requirement,
+`exact_resident_runtime_execution_authority_approval`, and includes that
+requirement's read-only handoff to
+`/lens/resident-runtime/authority-grant/requests`.
+
+This makes the helpful/not-noisy blocker actionable without claiming operator
+experience proof or resident runtime readiness. The readback exposes the
+existing blocked requirements, requirement counts, and false authority state so
+the next builder can distinguish "request/approval still missing" from broader
+resident-surface work. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+This is backend readback/API contract work only. It does not create execution
+authority, approval decision authority, approval request writes,
+memory-write behavior, local-process-launch authority, process-supervision
+authority, process-restart authority, service-install authority,
+service-control authority, tray-registration authority, hotkey-registration
+authority, overlay-control authority, summon authority, resident-claim
+authority, telemetry behavior, a resident host, a tray process, an overlay
+window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens helpful-not-noisy runtime
+authority handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
