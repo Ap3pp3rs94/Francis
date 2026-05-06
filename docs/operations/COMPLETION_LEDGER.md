@@ -20197,6 +20197,44 @@ handoff:
 - `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens system-resident supervision handoff readback
+
+Stage 6/Lens `/lens/status` closure readback now carries the existing host
+supervision authority readiness details into the blocked
+`system_resident_presence` criterion handoff. The handoff still points at
+`resident_host_supervision_authority_readiness_blockers`, but it now also names
+the exact first blocked requirement,
+`exact_supervision_authority_approval`, and includes that requirement's
+read-only handoff to `/lens/host/supervision/authority/requests`.
+
+This makes the Stage 6 closure readback more actionable without changing the
+underlying authority boundary: the operator or next builder can see that the
+resident-presence blocker is not just "resident host work" broadly, but the
+first missing supervision-authority proof is an exact approved host supervision
+authority request. Stage 6 remains active and blocked on summon-anywhere,
+helpful/not-noisy resident behavior, and system-resident presence.
+
+This is backend readback/API contract work only. It does not create execution
+authority, approval decision authority, approval request writes,
+memory-write behavior, process-supervision authority, process-restart
+authority, service-install authority, service-control authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens system-resident
+supervision handoff readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -c "import json; from francis.lens.status import lens_status; closure=lens_status(limit=3)['stage6_readiness']['closure_readback']; item={c['id']: c for c in closure['criteria']}['system_resident_presence']; print(json.dumps({'next_smallest_truthful_gap': item['next_smallest_truthful_gap'], 'supervision_authority_first_blocked_requirement': item['handoff'].get('supervision_authority_first_blocked_requirement'), 'supervision_authority_next_smallest_truthful_gap': item['handoff'].get('supervision_authority_next_smallest_truthful_gap'), 'would_execute': item['handoff'].get('would_execute'), 'would_mutate': item['handoff'].get('would_mutate')}, indent=2, sort_keys=True))"`
+  Result: `passed; first blocked requirement=exact_supervision_authority_approval; would_execute=false; would_mutate=false`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

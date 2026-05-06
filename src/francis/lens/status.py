@@ -1237,6 +1237,8 @@ def _stage6_closure_readback(
         or "resident_surface_operator_experience_proof"
     )
     runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
+    supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
+    supervision_authority_governance = _as_dict(supervision_authority_readiness.get("governance"))
     system_next_gap = _safe_str(runtime_loop_readiness.get("next_smallest_truthful_gap")).strip()
     if not system_next_gap:
         if "resident_surface_runtime_not_supervised" in system_blockers:
@@ -1330,8 +1332,39 @@ def _stage6_closure_readback(
                 "tray_route": "/lens/tray",
                 "overlay_route": "/lens/overlay",
                 "authority_required": "resident_runtime_execution_authority",
+                "supervision_authority_next_smallest_truthful_gap": _safe_str(
+                    supervision_authority_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
+                "supervision_authority_first_blocked_requirement": _safe_str(
+                    supervision_authority_readiness.get("first_blocked_requirement")
+                ).strip(),
+                "supervision_authority_first_blocked_requirement_handoff": _as_dict(
+                    supervision_authority_readiness.get("first_blocked_requirement_handoff")
+                ),
+                "supervision_authority_blocked_requirements": _as_list(
+                    supervision_authority_readiness.get("blocked_requirements")
+                ),
+                "supervision_authority_requirements_total": _safe_int(
+                    supervision_authority_readiness.get("requirements_total")
+                ),
+                "supervision_authority_requirements_ready_total": _safe_int(
+                    supervision_authority_readiness.get("requirements_ready_total")
+                ),
+                "supervision_authority_requirements_blocked_total": _safe_int(
+                    supervision_authority_readiness.get("requirements_blocked_total")
+                ),
+                "supervision_authority_ready": bool(supervision_authority_readiness.get("ready")),
+                "supervision_authority_granted": bool(supervision_authority_readiness.get("authority_ready")),
+                "process_supervision_authority": bool(
+                    supervision_authority_governance.get("process_supervision_authority")
+                ),
+                "service_control_authority": bool(supervision_authority_governance.get("service_control_authority")),
+                "resident_claim_authority": bool(supervision_authority_governance.get("resident_claim_authority")),
                 "next_smallest_truthful_gap": system_next_gap,
                 "read_only_contract": True,
+                "diagnostic_only": True,
+                "would_execute": False,
+                "would_mutate": False,
             },
         ),
     ]
