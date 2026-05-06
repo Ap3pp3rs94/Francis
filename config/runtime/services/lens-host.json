@@ -15,7 +15,7 @@
     "-File",
     "scripts/lens-host.ps1",
     "-Mode",
-    "Foreground"
+    "Resident"
   ],
   "working_dir": ".",
   "use_wrapper": true,
@@ -28,6 +28,9 @@
   "foreground_session_enabled": true,
   "foreground_session_default_seconds": 0,
   "foreground_session_max_seconds": 30,
+  "resident_mode": "Resident",
+  "resident_session_enabled": true,
+  "resident_session_default_seconds": 0,
   "runtime_state_write": true,
   "start_type": "Manual",
   "auto_start": false,

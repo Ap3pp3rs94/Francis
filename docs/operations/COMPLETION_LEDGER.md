@@ -20068,6 +20068,51 @@ candidate:
 - `git diff --check`
   Result: `passed with non-fatal PowerShell line-ending warning`
 
+### 2026-05-06 - Stage 6/Lens resident service plan alignment
+
+Stage 6/Lens now aligns the disabled future `Francis-LensHost` service plan with
+the resident host runtime candidate. `config/runtime/services/lens-host.json`
+now plans `scripts/lens-host.ps1 -Mode Resident` instead of the older bounded
+foreground mode, and declares the resident mode metadata used by readback. The
+service manager dry-run plan and lifecycle preflight both continue to report
+the service plan as blocked, with install, start, wrapper-write, and
+service-control authority still false.
+
+The Lens host lifecycle preflight wording was also tightened so startup remains
+blocked on resident host supervision and surface prerequisites rather than the
+now-existing manual runtime candidate itself.
+
+This is disabled service-plan/readback alignment only. It does not install,
+start, stop, restart, or supervise a service; does not launch a resident
+process from the API; does not register tray, hotkey, overlay, or summon
+surfaces; does not write memory or receipts; does not grant execution,
+approval, service-control, service-install, local-process-launch, supervision,
+resident-claim, or UI authority. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+Latest validation for the `2026-05-06` Stage 6/Lens resident service plan
+alignment:
+
+- `python -m json.tool config\runtime\services\lens-host.json`
+  Result: `passed`
+- `python -m pytest tests\test_service_install_plan_script.py tests\test_lens_host_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_host_runtime_boundary_distinguishes_diagnostic_runner_from_resident_runtime -q`
+  Result: `passed`
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\service-install.ps1 -Mode Plan -Root D:\Francis -ConfigPath config\runtime\services\lens-host.json`
+  Result: `passed; status=blocked; would_install=false; planned command uses -Mode Resident`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-preflight.ps1 -Mode Status`
+  Result: `passed; status=blocked; planned_command uses -Mode Resident`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_api_lens.py tests\test_lens_host_preflight_script.py tests\test_service_install_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_api_lens.py tests\test_lens_host_preflight_script.py tests\test_service_install_plan_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

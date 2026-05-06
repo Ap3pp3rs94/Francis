@@ -49,7 +49,7 @@ def test_service_install_plan_accepts_lens_host_config_without_mutation(tmp_path
                     "-File",
                     "scripts/lens-host.ps1",
                     "-Mode",
-                    "Foreground",
+                    "Resident",
                 ],
                 "working_dir": str(root),
                 "use_wrapper": True,
@@ -100,7 +100,7 @@ def test_service_install_plan_accepts_lens_host_config_without_mutation(tmp_path
     assert plan["would_install"] is False
     assert plan["would_start"] is False
     assert plan["executable"]["exists"] is True
-    assert "-Mode Foreground" in plan["service_command"]
+    assert "-Mode Resident" in plan["service_command"]
     assert plan["wrapper"]["enabled"] is True
     assert plan["wrapper"]["would_write"] is False
     assert "installable_false" in plan["blocked_by"]
@@ -182,7 +182,7 @@ def test_service_install_mutating_modes_fail_closed_when_config_denies_authority
                     "-File",
                     "scripts/lens-host.ps1",
                     "-Mode",
-                    "Foreground",
+                    "Resident",
                 ],
                 "working_dir": str(root),
                 "use_wrapper": True,

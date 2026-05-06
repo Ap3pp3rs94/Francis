@@ -81,7 +81,7 @@ def test_lens_host_preflight_reports_blockers_without_authority() -> None:
     assert service_plan["would_install"] is False
     assert service_plan["would_start"] is False
     assert service_plan["wrapper_would_write"] is False
-    assert "-Mode Foreground" in service_plan["planned_command"]
+    assert "-Mode Resident" in service_plan["planned_command"]
     assert "installable_false" in service_plan["blocked_by"]
     assert "service_install_authority_false" in service_plan["blocked_by"]
     assert "service_control_authority_false" in service_plan["blocked_by"]

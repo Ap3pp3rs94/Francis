@@ -211,7 +211,7 @@ Add-Check -Target $Checks -Id 'service_plan' -Status $(if ($ServicePlanReady) { 
 Add-Check -Target $Checks -Id 'windows_service' -Status $ServiceStatus -Reason $(if ($ServiceInstalled) { 'declared service is installed' } else { 'declared service is not installed or cannot be queried here' }) -Evidence $ServiceName
 Add-Check -Target $Checks -Id 'install_authority' -Status $(if ($Installable -and $InstallAuthority -and $ServiceInstallAuthority) { 'allowed' } else { 'blocked' }) -Reason 'service install authority is not granted by this Stage 6 preflight' -Evidence 'installable/install_authority/service_install_authority'
 Add-Check -Target $Checks -Id 'service_control_authority' -Status $(if ($ServiceControlAuthority) { 'allowed' } else { 'blocked' }) -Reason 'service start/stop/restart authority is not granted by this Stage 6 preflight' -Evidence 'service_control_authority'
-Add-Check -Target $Checks -Id 'startup_policy' -Status $(if ($AutoStart -or $StartAfterInstall) { 'would_start' } else { 'disabled' }) -Reason 'startup remains disabled until resident host runtime exists' -Evidence 'auto_start/start_after_install'
+Add-Check -Target $Checks -Id 'startup_policy' -Status $(if ($AutoStart -or $StartAfterInstall) { 'would_start' } else { 'disabled' }) -Reason 'startup remains disabled until resident host supervision and surface prerequisites exist' -Evidence 'auto_start/start_after_install'
 Add-Check -Target $Checks -Id 'process_supervision' -Status $(if ($ProcessSupervisionEnabled) { 'enabled' } else { 'blocked' }) -Reason 'process supervision remains disabled' -Evidence 'process_supervision_enabled'
 Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($RuntimeStateExists -or $PidPresent) { 'state_present' } else { 'missing' }) -Reason 'resident host runtime state is not present' -Evidence 'data/runtime/lens-host'
 Add-Check -Target $Checks -Id 'tray_presence' -Status 'missing' -Reason 'tray or equivalent presence host is not implemented' -Evidence 'required_before_enable'
@@ -360,7 +360,7 @@ $Payload = [ordered]@{
     service_control_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Lens host lifecycle preflight is read-only; install/start/launch remain blocked until resident host runtime prerequisites exist.'
+  message = 'Lens host lifecycle preflight is read-only; install/start/launch remain blocked until resident host supervision and surface prerequisites exist.'
 }
 
 if ($Mode -eq 'Status') {
