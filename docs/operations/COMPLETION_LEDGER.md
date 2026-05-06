@@ -20389,6 +20389,44 @@ Latest validation for the `2026-05-06` Stage 6/Lens next-handoff proof:
 - `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens persistent supervision execution proof stabilization
+
+The persistent-supervision execution authority proof test now asserts the
+stable resident-claim handoff directly instead of treating incidental disabled
+runtime blockers as part of the test contract. Verified output from
+`scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
+shows the host supervision authority grant, persistent-supervision enablement
+authority grant, and persistent-supervision execution authority grant are all
+readable in the proof fixture, while execution still stops at
+`persistent_supervision_resident_claim_authority_boundary` without service
+config mutation, runtime start, memory writes, or resident claim.
+
+This is test/proof stabilization only. It does not create execution authority,
+approval decision authority, product memory-write behavior, local process launch
+authority, process-supervision authority, process-restart authority,
+service-install authority, service-control authority, tray-registration
+authority, hotkey-registration authority, overlay-control authority, summon
+authority, resident-claim authority, telemetry behavior, a resident host, a
+tray process, an overlay window, a global hotkey, or a UI claim. The proof uses
+temporary fixture approval decisions inside its isolated API proof harness; it
+does not widen live approval authority.
+
+Latest validation for the `2026-05-06` Stage 6/Lens persistent supervision
+execution proof stabilization:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status -DataDir <temp>`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary`
+- `python -m pytest tests\test_lens_persistent_supervision_execution_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_execution_authority_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_execution_authority_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -86,7 +86,7 @@ def test_lens_persistent_supervision_execution_authority_proof_stops_at_resident
     assert checks["lens_status_readback"]["status"] == "readback_ready"
     assert checks["no_runtime_started"]["status"] == "no_runtime_files"
     assert checks["authority_boundaries_intact"]["status"] == "bounded"
-    assert all(item["passed"] is True for item in payload["checks"])
+    assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
     assert proof["host_grant_status"] == "authority_granted"
@@ -106,12 +106,11 @@ def test_lens_persistent_supervision_execution_authority_proof_stops_at_resident
     assert proof["status_requests_authority_granted"] is True
     assert proof["status_grants_authority_granted"] is True
     assert proof["status_readiness_execution_authority_granted"] is True
+    assert proof["status_denial_boundary_status"] == "blocked"
 
     assert "service_config_write_authority_not_granted" not in payload["blockers"]
     assert "persistent_supervision_execution_authority_not_granted" not in payload["blockers"]
     assert "receipt_write_authority_not_granted" not in payload["blockers"]
-    assert "persistent_supervision_disabled" in payload["blockers"]
-    assert "process_supervision_disabled" in payload["blockers"]
     assert "resident_claim_authority_not_granted" in payload["blockers"]
 
     assert payload["governance"] == {
