@@ -20738,6 +20738,43 @@ basis correction:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision enablement prerequisite readback
+
+The Lens host persistent-supervision plan and enablement preflight now surface
+the service-config `required_before_enable` prerequisites, the currently
+missing prerequisites, and per-prerequisite route/blocker readback for:
+
+- resident host process
+- tray presence
+- global hotkey binding
+- overlay window
+- summon binding
+
+This keeps the Stage 6 handoff on `persistent_supervision_enablement_disabled`,
+but makes the product enablement blockers inspectable from the backend contract
+instead of leaving them implicit in `config/runtime/services/lens-host.json`.
+
+This is backend/API readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+enablement prerequisite readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `failed before narrowing nested service_install field placement; passed after fix`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

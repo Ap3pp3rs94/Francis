@@ -244,7 +244,14 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
   "resident_claim_authority": false,
   "install_authority": false,
   "service_install_authority": false,
-  "blocked_reason": "lens_host_runtime_not_implemented"
+  "blocked_reason": "lens_host_runtime_not_implemented",
+  "required_before_enable": [
+    "resident_host_process",
+    "tray_presence",
+    "global_hotkey_binding",
+    "overlay_window",
+    "summon_binding"
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -4202,6 +4209,15 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "receipt_write_authority",
         "resident_claim_authority",
     ]
+    expected_enablement_prerequisites = [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert body["required_before_enable"] == expected_enablement_prerequisites
+    assert body["missing_required_before_enable"] == expected_enablement_prerequisites
     assert "process_supervision_disabled" in body["blockers"]
     assert "persistent_supervision_disabled" in body["blockers"]
     assert "process_restart_authority_not_granted" in body["blockers"]
@@ -4258,6 +4274,22 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
         "process_supervision_enabled",
         "persistent_supervision_enabled",
     ]
+    assert enablement_body["required_before_enable"] == expected_enablement_prerequisites
+    assert enablement_body["missing_required_before_enable"] == expected_enablement_prerequisites
+    dependency_readback = enablement_body["enablement_dependency_readback"]
+    assert [item["id"] for item in dependency_readback] == expected_enablement_prerequisites
+    dependencies_by_id = {item["id"]: item for item in dependency_readback}
+    assert dependencies_by_id["resident_host_process"]["route"] == "/lens/host"
+    assert dependencies_by_id["resident_host_process"]["status"] == "blocked"
+    assert dependencies_by_id["resident_host_process"]["blocker"] == "resident_host_process_missing"
+    assert dependencies_by_id["tray_presence"]["route"] == "/lens/tray"
+    assert dependencies_by_id["tray_presence"]["blocker"] == "tray_host_missing"
+    assert dependencies_by_id["global_hotkey_binding"]["route"] == "/lens/summon"
+    assert dependencies_by_id["global_hotkey_binding"]["blocker"] == "global_hotkey_binding_missing"
+    assert dependencies_by_id["overlay_window"]["route"] == "/lens/overlay"
+    assert dependencies_by_id["overlay_window"]["blocker"] == "overlay_window_missing"
+    assert dependencies_by_id["summon_binding"]["route"] == "/lens/summon"
+    assert dependencies_by_id["summon_binding"]["blocker"] == "summon_binding_missing"
     assert "host_supervision_authority_grant_not_active" in enablement_body["blockers"]
     assert "process_supervision_disabled" in enablement_body["blockers"]
     assert "persistent_supervision_disabled" in enablement_body["blockers"]
@@ -4317,6 +4349,8 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert enablement_denial_body["authority_grant_active"] is False
     assert enablement_denial_body["active_grant_receipt_id"] == ""
     assert enablement_denial_body["service_config_updated"] is False
+    assert enablement_denial_body["preflight"]["required_before_enable"] == expected_enablement_prerequisites
+    assert enablement_denial_body["preflight"]["missing_required_before_enable"] == expected_enablement_prerequisites
     assert "host_supervision_authority_grant_not_active" in enablement_denial_body["blockers"]
     assert "persistent_supervision_enablement_authority_not_granted" in enablement_denial_body["blockers"]
     assert "service_config_write_authority_not_granted" in enablement_denial_body["blockers"]
@@ -4356,6 +4390,12 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert resident_host["persistent_supervision_enablement_route"] == ("/lens/host/persistent-supervision/enablement")
     assert resident_host["persistent_supervision_enablement"]["next_smallest_truthful_gap"] == (
         "persistent_supervision_authority_not_granted"
+    )
+    assert resident_host["persistent_supervision_enablement"]["required_before_enable"] == (
+        expected_enablement_prerequisites
+    )
+    assert resident_host["persistent_supervision_enablement"]["missing_required_before_enable"] == (
+        expected_enablement_prerequisites
     )
     assert resident_host["persistent_supervision_enablement"]["plan"]["would_update_service_config"] is False
     assert resident_host["persistent_supervision_enablement_denial_route"] == (

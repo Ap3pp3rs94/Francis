@@ -194,6 +194,65 @@ def _ordered_unique(values: list[str]) -> list[str]:
     return result
 
 
+def _lens_host_required_before_enable(service_config_payload: dict[str, Any]) -> list[str]:
+    return _ordered_unique(_as_str_list(service_config_payload.get("required_before_enable")))
+
+
+def _lens_host_missing_required_before_enable(
+    required_before_enable: list[str],
+    *,
+    launch_manifest: dict[str, Any],
+) -> list[str]:
+    blocker_groups = _as_dict(launch_manifest.get("blocker_groups"))
+    process_blockers = set(_as_str_list(blocker_groups.get("process_readback")))
+    surface_blockers = set(_as_str_list(blocker_groups.get("surface_dependencies")))
+    process_readback = _as_dict(launch_manifest.get("process_readback"))
+    missing_by_requirement = {
+        "resident_host_process": (
+            "resident_host_process_missing" in process_blockers
+            or "resident_host_not_supervised" in process_blockers
+            or not bool(process_readback.get("process_alive"))
+        ),
+        "tray_presence": "tray_host_missing" in surface_blockers,
+        "global_hotkey_binding": "global_hotkey_binding_missing" in surface_blockers,
+        "overlay_window": "overlay_window_missing" in surface_blockers,
+        "summon_binding": "summon_binding_missing" in surface_blockers,
+    }
+    return [item for item in required_before_enable if missing_by_requirement.get(item, False)]
+
+
+def _lens_host_enablement_dependency_readback(
+    required_before_enable: list[str],
+    *,
+    launch_manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    missing = set(_lens_host_missing_required_before_enable(required_before_enable, launch_manifest=launch_manifest))
+    routes = {
+        "resident_host_process": "/lens/host",
+        "tray_presence": "/lens/tray",
+        "global_hotkey_binding": "/lens/summon",
+        "overlay_window": "/lens/overlay",
+        "summon_binding": "/lens/summon",
+    }
+    blockers = {
+        "resident_host_process": "resident_host_process_missing",
+        "tray_presence": "tray_host_missing",
+        "global_hotkey_binding": "global_hotkey_binding_missing",
+        "overlay_window": "overlay_window_missing",
+        "summon_binding": "summon_binding_missing",
+    }
+    return [
+        {
+            "id": item,
+            "route": routes.get(item, "/lens/status"),
+            "ready": item not in missing,
+            "status": "blocked" if item in missing else "ready",
+            "blocker": blockers.get(item, f"{item}_missing") if item in missing else "",
+        }
+        for item in required_before_enable
+    ]
+
+
 def _record_ts(value: Any) -> float:
     if isinstance(value, bool):
         return 0.0
@@ -711,6 +770,11 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
 
 def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    required_before_enable = _as_str_list(launch_manifest.get("required_before_enable"))
+    missing_required_before_enable = _lens_host_missing_required_before_enable(
+        required_before_enable,
+        launch_manifest=launch_manifest,
+    )
     service_install = launch_manifest.get("service_install")
     service_install = service_install if isinstance(service_install, dict) else {}
     declared_entrypoint = launch_manifest.get("declared_entrypoint")
@@ -844,6 +908,12 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         "requirements_ready_total": len(requirements) - len(blocked_requirements),
         "requirements_blocked_total": len(blocked_requirements),
         "blocked_requirements": blocked_requirements,
+        "required_before_enable": required_before_enable,
+        "missing_required_before_enable": missing_required_before_enable,
+        "enablement_dependency_readback": _lens_host_enablement_dependency_readback(
+            required_before_enable,
+            launch_manifest=launch_manifest,
+        ),
         "blockers": blockers,
         "plan": {
             "mode": "persistent_supervised_resident_host",
@@ -895,6 +965,11 @@ def lens_host_persistent_supervision_enablement_preflight(
     manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     launch_manifest = manifest if isinstance(manifest, dict) else lens_host_launch_manifest()
+    required_before_enable = _as_str_list(launch_manifest.get("required_before_enable"))
+    missing_required_before_enable = _lens_host_missing_required_before_enable(
+        required_before_enable,
+        launch_manifest=launch_manifest,
+    )
     persistent_plan = lens_host_persistent_supervision_plan(manifest=launch_manifest)
     source_readbacks = _as_dict(persistent_plan.get("source_readbacks"))
     supervision_readiness = _as_dict(source_readbacks.get("supervision_readiness"))
@@ -963,6 +1038,12 @@ def lens_host_persistent_supervision_enablement_preflight(
         "active_grant_receipt_id": receipt_id,
         "process_supervision_enabled": process_supervision_enabled,
         "persistent_supervision_enabled": persistent_supervision_enabled,
+        "required_before_enable": required_before_enable,
+        "missing_required_before_enable": missing_required_before_enable,
+        "enablement_dependency_readback": _lens_host_enablement_dependency_readback(
+            required_before_enable,
+            launch_manifest=launch_manifest,
+        ),
         "requirements": requirements,
         "requirements_total": len(requirements),
         "requirements_ready_total": len(requirements) - len(blocked_requirements),
@@ -1176,6 +1257,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     service_config = "config/runtime/services/lens-host.json"
     entrypoint_exists = _runtime_file_exists(entrypoint)
     service_config_payload = _runtime_json_dict(service_config)
+    required_before_enable = _lens_host_required_before_enable(service_config_payload)
     service_config_exists = bool(service_config_payload)
     service_manager = str(service_config_payload.get("manager") or "scripts/service-install.ps1")
     service_manager_exists = _runtime_file_exists(service_manager)
@@ -1333,6 +1415,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "start_after_install": False,
             "auto_start": False,
         },
+        "required_before_enable": required_before_enable,
         "service_plan": service_plan,
         "foreground_session": {
             "supported": foreground_supported,
