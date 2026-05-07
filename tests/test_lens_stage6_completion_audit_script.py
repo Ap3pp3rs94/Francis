@@ -80,6 +80,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "host_supervision_authority_request",
         "persistent_supervision_plan",
         "persistent_supervision_prerequisites",
+        "persistent_supervision_service_install_plan",
         "persistent_supervision_enablement_authority",
         "persistent_supervision_execution_authority",
         "persistent_supervision_resident_claim_boundary",
@@ -97,6 +98,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["stage6_completion_reviewed"] is True
     assert "host-supervision approval proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision prerequisite proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "service-install plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
     assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent supervision enablement is still disabled" in (payload["next_smallest_truthful_gap_basis"])
@@ -411,6 +413,12 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
     assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
+    assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == [
+        "install_authority_false",
+        "installable_false",
+        "service_control_authority_false",
+        "service_install_authority_false",
+    ]
     assert (
         "persistent_supervision_enablement_authority_not_granted"
         in (payload["closure_blockers"]["persistent_supervision_enablement"])
@@ -1582,6 +1590,59 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_governance["resident_claim_authority"] is False
     assert prerequisites_governance["mutation_authority_granted"] is False
 
+    service_install_plan = payload["persistent_supervision_service_install_plan_proof"]
+    assert service_install_plan["status"] == "proof_passed"
+    assert service_install_plan["ok"] is True
+    assert service_install_plan["exit_code"] == 0
+    assert (
+        "scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status"
+        in (service_install_plan["evidence"])
+    )
+    assert (
+        "scripts/service-install.ps1 -Mode Plan -ConfigPath config/runtime/services/lens-host.json"
+        in service_install_plan["evidence"]
+    )
+    assert service_install_plan["service_config"] == "config/runtime/services/lens-host.json"
+    assert service_install_plan["service_install_script"] == "scripts/service-install.ps1"
+    assert service_install_plan["service_install_report"]
+    assert service_install_plan["service_name"] == "Francis-LensHost"
+    assert service_install_plan["service_plan_status"] == "blocked"
+    assert service_install_plan["service_plan_ready"] is False
+    assert service_install_plan["service_plan_would_install"] is False
+    assert service_install_plan["service_plan_would_start"] is False
+    assert service_install_plan["process_supervision_enabled"] is False
+    assert service_install_plan["persistent_supervision_enabled"] is False
+    assert service_install_plan["persistent_supervision_enablement_disabled"] is True
+    assert service_install_plan["installable"] is False
+    assert service_install_plan["install_authority"] is False
+    assert service_install_plan["service_install_authority"] is False
+    assert service_install_plan["service_control_authority"] is False
+    assert service_install_plan["wrapper_created_by_proof"] is False
+    assert service_install_plan["required_before_enable"] == expected_persistent_prerequisites
+    assert set(service_install_plan["blocked_by"]) == {
+        "installable_false",
+        "install_authority_false",
+        "service_install_authority_false",
+        "service_control_authority_false",
+    }
+    assert all(item["passed"] for item in service_install_plan["checks"])
+    assert service_install_plan["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    service_install_governance = service_install_plan["governance"]
+    assert service_install_governance["diagnostic_only"] is True
+    assert service_install_governance["read_only_contract"] is True
+    assert service_install_governance["wraps_service_install_plan"] is True
+    assert service_install_governance["service_config_readback"] is True
+    assert service_install_governance["execution_authority"] is False
+    assert service_install_governance["approval_decision_authority"] is False
+    assert service_install_governance["local_process_launch_authority"] is False
+    assert service_install_governance["process_supervision_authority"] is False
+    assert service_install_governance["service_install_authority"] is False
+    assert service_install_governance["service_control_authority"] is False
+    assert service_install_governance["service_config_write_authority"] is False
+    assert service_install_governance["memory_write"] is False
+    assert service_install_governance["resident_claim_authority"] is False
+    assert service_install_governance["mutation_authority_granted"] is False
+
     enablement_denial = payload["persistent_supervision_enablement_denial_boundary"]
     assert enablement_denial["status"] == "blocked"
     assert enablement_denial["ok"] is True
@@ -1652,6 +1713,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert (
@@ -1679,6 +1741,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["helpful_not_noisy_runtime_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_prerequisites_proof_readback"] is True
+    assert governance["persistent_supervision_service_install_plan_proof_readback"] is True
+    assert governance["persistent_supervision_enablement_authority_proof_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True

@@ -20863,6 +20863,54 @@ persistent-supervision prerequisite proof consumption:
 - `git diff --check`
   Result: `passed before and after ledger update; PowerShell CRLF normalization warning only`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision service-install plan proof
+
+A new read-only diagnostic proof now ties the
+`persistent_supervision_enablement_disabled` handoff to the actual disabled
+Windows service plan for the Lens host:
+
+- `scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status`
+
+The proof reads `config/runtime/services/lens-host.json`, runs
+`scripts/service-install.ps1 -Mode Plan` through `pwsh`, and verifies that the
+`Francis-LensHost` plan remains blocked by:
+
+- `installable_false`
+- `install_authority_false`
+- `service_install_authority_false`
+- `service_control_authority_false`
+
+The Stage 6/Lens completion audit now consumes this proof as
+`persistent_supervision_service_install_plan_proof` and reports
+`persistent_supervision_service_install_plan_proof_readback=true` while keeping
+the top-level handoff on:
+
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+
+This is diagnostic/readback work only. It does not install or start a Windows
+service, write a service wrapper, mutate service config, grant production
+execution authority, approval decision authority, product memory-write
+behavior, local process launch authority, process supervision authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, resident-claim authority, telemetry
+behavior, a tray process, an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+service-install plan proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; persistent_supervision_service_install_plan_proof_readback=true`
+- `python -m pytest tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting; passed after running ruff format`
+- `git diff --check`
+  Result: `passed after ledger update; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

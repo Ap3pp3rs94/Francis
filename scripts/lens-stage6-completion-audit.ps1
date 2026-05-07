@@ -221,6 +221,7 @@ $ResidentHostProcessSupervisionBlockerProofScript = Join-Path $PSScriptRoot 'len
 $HostSupervisionAuthorityRequestProofScript = Join-Path $PSScriptRoot 'lens-host-supervision-authority-request-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 $PersistentSupervisionPrerequisitesProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-prerequisites-proof.ps1'
+$PersistentSupervisionServiceInstallPlanProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-service-install-plan-proof.ps1'
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
@@ -449,6 +450,63 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.resident_claim_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.mutation_authority_granted
 )
+$PersistentSupervisionServiceInstallPlanProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $PersistentSupervisionServiceInstallPlanProofScript `
+  -ScriptArgs @('-Mode', 'Status')
+$PersistentSupervisionServiceInstallPlanProof = $PersistentSupervisionServiceInstallPlanProofResult.payload
+$PersistentSupervisionServiceInstallPlanProofGovernance = $PersistentSupervisionServiceInstallPlanProof.governance
+$PersistentSupervisionServiceInstallPlanProofBlockedBy = ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.blocked_by
+$PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.required_before_enable
+$PersistentSupervisionServiceInstallPlanProofObserved = (
+  [int]$PersistentSupervisionServiceInstallPlanProofResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.kind -eq 'lens.host.persistent_supervision_service_install_plan.proof' -and
+  [bool]$PersistentSupervisionServiceInstallPlanProof.ok -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.status -eq 'proof_passed' -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_config -eq 'config/runtime/services/lens-host.json' -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_install_script -eq 'scripts/service-install.ps1' -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_name -eq 'Francis-LensHost' -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status -eq 'blocked' -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_ready -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_install -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_start -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled -and
+  [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.installable -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'installable_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'install_authority_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_install_authority_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_control_authority_false' -and
+  $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'resident_host_process' -and
+  $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'tray_presence' -and
+  $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'overlay_window' -and
+  $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'summon_binding' -and
+  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.diagnostic_only -and
+  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.read_only_contract -and
+  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.wraps_service_install_plan -and
+  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.service_config_readback -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.execution_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.approval_decision_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.process_supervision_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.process_restart_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.service_install_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.service_control_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.persistent_supervision_enablement_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.persistent_supervision_execution_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.service_config_write_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.memory_write -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.receipt_write_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.resident_claim_authority -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.mutation_authority_granted
+)
 $PersistentSupervisionEnablementAuthorityProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionEnablementAuthorityProofScript `
@@ -571,6 +629,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'host_supervision_authority_request' -Result $HostSupervisionAuthorityRequestProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
   New-ChildProofRunSummary -Name 'persistent_supervision_prerequisites' -Result $PersistentSupervisionPrerequisitesProofResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_service_install_plan' -Result $PersistentSupervisionServiceInstallPlanProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_authority' -Result $PersistentSupervisionEnablementAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_execution_authority' -Result $PersistentSupervisionExecutionAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
@@ -1717,6 +1776,18 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
+  -not $PersistentSupervisionServiceInstallPlanProofObserved
+) {
+  'persistent_supervision_service_install_plan_proof_readback'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $PersistentSupervisionServiceInstallPlanProofObserved -and
   $PersistentSupervisionEnablementAuthorityProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
@@ -1830,8 +1901,10 @@ $Payload = [ordered]@{
     'The completion audit has consumed the resident-host process-supervision handoff and now reads back the exact host-supervision authority approval request as the first concrete blocker for summon-anywhere resident-host supervision.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_prerequisites_proof_readback') {
     'The audit must consume the persistent-supervision prerequisite proof before treating persistent supervision enablement blockers as fully mapped to the Stage 6 summon-anywhere blocker family chain.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_service_install_plan_proof_readback') {
+    'The audit must consume the persistent-supervision service-install plan proof before treating disabled Lens host service configuration as audited Stage 6 enablement evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
-    'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, and the persistent-supervision authority proof chain: prerequisites, enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
+    'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, and the persistent-supervision authority proof chain: prerequisites, disabled service plan, enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
@@ -1959,6 +2032,9 @@ $Payload = [ordered]@{
     )
     persistent_supervision = [string[]]@(
       $PersistentSupervisionPlanBlockers | Where-Object { $_ -match 'persistent_supervision|process_supervision|process_restart|service_|receipt_write|resident_claim' } | Sort-Object -Unique
+    )
+    persistent_supervision_service_install_plan = [string[]]@(
+      $PersistentSupervisionServiceInstallPlanProofBlockedBy | Where-Object { $_ -match 'install|service_control|authority' } | Sort-Object -Unique
     )
     persistent_supervision_enablement = [string[]]@(
       $PersistentSupervisionEnablementDenialBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|host_supervision' } | Sort-Object -Unique
@@ -2845,6 +2921,33 @@ $Payload = [ordered]@{
     checks = @($PersistentSupervisionPrerequisitesProof.checks)
     governance = $PersistentSupervisionPrerequisitesProofGovernance
   }
+  persistent_supervision_service_install_plan_proof = [ordered]@{
+    status = if ($PersistentSupervisionServiceInstallPlanProofObserved) { [string]$PersistentSupervisionServiceInstallPlanProof.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionServiceInstallPlanProofObserved
+    exit_code = [int]$PersistentSupervisionServiceInstallPlanProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.evidence)
+    service_config = [string]$PersistentSupervisionServiceInstallPlanProof.service_config
+    service_install_script = [string]$PersistentSupervisionServiceInstallPlanProof.service_install_script
+    service_install_report = [string]$PersistentSupervisionServiceInstallPlanProof.service_install_report
+    service_name = [string]$PersistentSupervisionServiceInstallPlanProof.service_name
+    service_plan_status = [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status
+    service_plan_ready = [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_ready
+    service_plan_would_install = [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_install
+    service_plan_would_start = [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_start
+    process_supervision_enabled = [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled
+    persistent_supervision_enabled = [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled
+    persistent_supervision_enablement_disabled = [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled
+    installable = [bool]$PersistentSupervisionServiceInstallPlanProof.installable
+    install_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority
+    service_install_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_authority
+    service_control_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority
+    wrapper_created_by_proof = [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof
+    blocked_by = [string[]]@($PersistentSupervisionServiceInstallPlanProofBlockedBy)
+    required_before_enable = [string[]]@($PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable)
+    checks = @($PersistentSupervisionServiceInstallPlanProof.checks)
+    governance = $PersistentSupervisionServiceInstallPlanProofGovernance
+    next_smallest_truthful_gap = [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap
+  }
   persistent_supervision_enablement_denial_boundary = [ordered]@{
     status = if ($PersistentSupervisionEnablementDenialObserved) { [string]$PersistentSupervisionEnablementDenial.status } else { 'missing_or_failed' }
     ok = $PersistentSupervisionEnablementDenialObserved
@@ -3021,6 +3124,7 @@ $Payload = [ordered]@{
     'scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
@@ -3100,6 +3204,7 @@ $Payload = [ordered]@{
     helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_prerequisites_proof_readback = $PersistentSupervisionPrerequisitesProofObserved
+    persistent_supervision_service_install_plan_proof_readback = $PersistentSupervisionServiceInstallPlanProofObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
     persistent_supervision_resident_claim_boundary_proof_readback = $PersistentSupervisionResidentClaimBoundaryObserved
