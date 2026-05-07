@@ -20934,6 +20934,61 @@ service-install plan proof:
 - `git diff --check`
   Result: `passed after non-Windows closure-blocker test correction`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision enablement transition-plan proof
+
+A new standalone diagnostic proof now composes the persistent-supervision
+enablement handoff into one operator-readable transition plan:
+
+- `scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status`
+
+The proof consumes the existing prerequisite proof, service-install plan proof,
+resident-claim boundary proof, and persistent-supervision plan readback. It
+verifies that the transition toward resident persistent supervision is readable
+without claiming enablement:
+
+- prerequisite readback is present for resident host process, tray presence,
+  global hotkey binding, overlay window, and summon binding
+- Windows service-install plan truth is preserved, with non-Windows runners
+  treated as an explicit unsupported-platform boundary
+- the bounded persistent-supervision authority chain reaches the resident-claim
+  boundary
+- `process_supervision_enabled=false` and
+  `persistent_supervision_enabled=false` remain the disabled service-config
+  toggles
+- no service config is mutated, no runtime is started, no receipt or memory is
+  written, and no resident claim is made
+
+The proof reports:
+
+- `transition_plan_observed=true`
+- `transition_plan_ready=false`
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, process supervision authority, process restart
+authority, persistent-supervision enablement authority, persistent-supervision
+execution authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+enablement transition-plan proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status`
+  Result: `failed before contract correction due to prerequisite proof kind mismatch; passed after correction; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests\test_lens_persistent_supervision_service_install_plan_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed; Ruff cache write warning only`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
