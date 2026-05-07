@@ -19211,7 +19211,7 @@ summon-blocker handoff:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 - `git diff --check`
-  Result: `passed before ledger update`
+  Result: `passed after ledger update`
 
 ### 2026-05-05 - Stage 6/Lens completion audit resident-host runtime boundary readback
 
@@ -20774,6 +20774,49 @@ enablement prerequisite readback:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+### 2026-05-07 - Stage 6/Lens persistent-supervision prerequisite proof handoff
+
+A new read-only diagnostic proof now consumes the persistent-supervision plan,
+the enablement preflight, the resident-host operator status readback, and the
+existing summon-anywhere family-chain proof. It verifies that the
+`required_before_enable` and `missing_required_before_enable` prerequisites for
+persistent-supervision enablement are route-bound and mapped to the Stage 6
+summon-anywhere blocker families:
+
+- resident host process -> resident host
+- tray presence -> tray presence
+- global hotkey binding -> global hotkey binding
+- overlay window -> overlay window
+- summon binding -> summon binding
+
+This keeps the Stage 6 handoff on
+`next_smallest_truthful_gap=persistent_supervision_enablement_disabled`, while
+making the prerequisite readback durable as a standalone proof instead of only
+an API contract assertion.
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+prerequisite proof handoff:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  Result: `failed before fix due to strict field-name mismatch; passed after matching the route contract; status=proof_passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed before ledger update`
 
 ## 6. Update rule
 
