@@ -422,7 +422,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
             "service_install_authority_false",
         ]
     else:
-        assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == ["unsupported_platform"]
+        assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == []
     assert (
         "persistent_supervision_enablement_authority_not_granted"
         in (payload["closure_blockers"]["persistent_supervision_enablement"])

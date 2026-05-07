@@ -20886,6 +20886,15 @@ failing the Stage 6 audit. The Windows service plan remains strictly asserted
 on Windows; Linux CI receives a read-only platform-boundary readback and does
 not claim that a Windows service plan was produced.
 
+Follow-up CI recovery note: GitHub Actions run `25503857039` proved that the
+standalone non-Windows proof now passes, but the Stage 6 audit test still
+expected `unsupported_platform` inside `closure_blockers`. The audit contract
+keeps that platform boundary in
+`persistent_supervision_service_install_plan_proof.blocked_by` and leaves
+`closure_blockers.persistent_supervision_service_install_plan` empty on
+non-Windows, because no Windows install/service authority blocker was observed
+there. The test now asserts that split without changing product authority.
+
 The Stage 6/Lens completion audit now consumes this proof as
 `persistent_supervision_service_install_plan_proof` and reports
 `persistent_supervision_service_install_plan_proof_readback=true` while keeping
@@ -20910,12 +20919,20 @@ service-install plan proof:
   Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; persistent_supervision_service_install_plan_proof_readback=true`
 - `python -m pytest tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
   Result: `passed after platform-boundary recovery`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed after non-Windows closure-blocker test correction`
+- `python -m pytest tests\test_lens_persistent_supervision_service_install_plan_proof_script.py -q`
+  Result: `passed after non-Windows closure-blocker test correction`
 - `python -m ruff check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after non-Windows closure-blocker test correction`
 - `python -m ruff format --check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed after platform-boundary recovery`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after non-Windows closure-blocker test correction`
 - `git diff --check`
-  Result: `passed after platform-boundary recovery; PowerShell CRLF normalization warning only`
+  Result: `passed after non-Windows closure-blocker test correction`
 
 ## 6. Update rule
 
