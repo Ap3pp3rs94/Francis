@@ -20597,6 +20597,63 @@ handoff:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-06 - Stage 6/Lens host supervision exact approval request proof
+
+The host-supervision authority handoff now has a standalone proof script for the
+exact approval-request path called out by the Stage 6 completion audit:
+
+- `scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+
+The proof runs against a temporary data root and drives the existing governed API
+flow:
+
+1. read `/lens/host/supervision/authority/readiness`
+2. create `/lens/host/supervision/authority/request`
+3. verify the pending request cannot grant authority
+4. approve through the local test-fixture `/approvals/decision`
+5. grant `/lens/host/supervision/authority`
+6. read back grant receipts, denials, readiness, `/lens/status`, and the next
+   persistent-supervision boundary
+
+Verified proof result:
+
+- `status=proof_passed`
+- `kind=lens.host.supervision_authority_exact_approval_request.proof`
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `authority_granted=true`
+- `executed=false`
+- `resident_claim_allowed=false`
+- no Lens host runtime status, PID, or supervisor status files are created
+
+This removes the ambiguity from the previous
+`host_supervision_authority_exact_approval_request` handoff. It proves that the
+exact request can be created, approved, converted into a bounded grant receipt,
+and read back by operator-facing routes, while the build remains blocked at the
+persistent-supervision enablement boundary.
+
+This is a diagnostic/proof artifact over existing backend routes. It does not
+add production execution authority, approval-decision authority, product
+memory-write behavior, local process launch authority, persistent-supervision
+enablement authority, persistent-supervision execution authority,
+service-config write authority, telemetry behavior, a resident host, a tray
+process, an overlay window, a global hotkey, or a UI claim. The proof grants a
+bounded host-supervision authority lease only inside a temporary TestClient
+fixture after an explicit approval decision.
+
+Latest validation for the `2026-05-06` Stage 6/Lens host supervision exact
+approval request proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `python -m pytest tests\test_lens_host_supervision_authority_request_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_request_requires_system_write_without_grant tests\test_api_lens.py::test_lens_host_supervision_authority_request_creates_approval_only_receipt tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
