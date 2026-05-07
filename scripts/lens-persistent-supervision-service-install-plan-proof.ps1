@@ -177,6 +177,9 @@ $ServiceInstallScript = Join-Path $PSScriptRoot 'service-install.ps1'
 $ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
 $WrapperPath = Join-Path $RepoRoot 'data\runtime\services\Francis-LensHost\run.cmd'
 $WrapperExistedBefore = Test-Path -LiteralPath $WrapperPath -PathType Leaf
+$WindowsServiceSupported = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+  [System.Runtime.InteropServices.OSPlatform]::Windows
+)
 
 $Config = $null
 try {
@@ -185,14 +188,25 @@ try {
   $Config = $null
 }
 
-$PlanResult = Invoke-JsonReportProcess -PowerShellPath $PowerShell.Source -ScriptPath $ServiceInstallScript -ScriptArgs @(
-  '-Mode',
-  'Plan',
-  '-Root',
-  $RepoRoot,
-  '-ConfigPath',
-  $ServiceConfigPath
-)
+if ($WindowsServiceSupported) {
+  $PlanResult = Invoke-JsonReportProcess -PowerShellPath $PowerShell.Source -ScriptPath $ServiceInstallScript -ScriptArgs @(
+    '-Mode',
+    'Plan',
+    '-Root',
+    $RepoRoot,
+    '-ConfigPath',
+    $ServiceConfigPath
+  )
+} else {
+  $PlanResult = [ordered]@{
+    exit_code = 0
+    output = ''
+    error = ''
+    report_path = ''
+    report = $null
+    duration_ms = 0
+  }
+}
 $WrapperExistsAfter = Test-Path -LiteralPath $WrapperPath -PathType Leaf
 $WrapperCreated = (-not $WrapperExistedBefore) -and $WrapperExistsAfter
 
@@ -255,8 +269,11 @@ foreach ($Item in $ExpectedServiceBlockers) {
     $PlanBlocked = $false
   }
 }
+if (-not $WindowsServiceSupported) {
+  $BlockedBy = @('unsupported_platform')
+}
 
-$PlanGovernanceObserved = (
+$PlanGovernanceObserved = (-not $WindowsServiceSupported) -or (
   [bool](Get-PropertyValue -Payload $PlanGovernance -Name 'read_only_contract' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PlanGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $PlanGovernance -Name 'approval_decision_authority' -Default $true) -and
@@ -268,15 +285,18 @@ $PlanGovernanceObserved = (
 )
 
 $WrapperDenied = (
-  $null -ne $Plan -and
+  (-not $WindowsServiceSupported -or $null -ne $Plan) -and
   -not $WrapperCreated -and
-  -not [bool](Get-PropertyValue -Payload (Get-PropertyValue -Payload $Plan -Name 'wrapper') -Name 'would_write' -Default $true)
+  (
+    -not $WindowsServiceSupported -or
+    -not [bool](Get-PropertyValue -Payload (Get-PropertyValue -Payload $Plan -Name 'wrapper') -Name 'would_write' -Default $true)
+  )
 )
 
 $Checks = @(
   (New-Check -Id 'lens_host_service_config_disabled' -Status $(if ($ConfigObserved) { 'disabled' } else { 'missing_or_unexpected' }) -Passed $ConfigObserved -Evidence 'config/runtime/services/lens-host.json' -Reason 'Persistent supervision cannot be enabled until the service config explicitly allows the resident host and supervision path.')
-  (New-Check -Id 'service_install_plan_blocked' -Status $(if ($PlanBlocked) { 'blocked' } else { 'missing_or_unexpected' }) -Passed $PlanBlocked -Evidence 'scripts/service-install.ps1 -Mode Plan -ConfigPath config/runtime/services/lens-host.json' -Reason 'The Windows service manager plan must remain blocked while install/control authority is false.')
-  (New-Check -Id 'service_install_plan_governance' -Status $(if ($PlanGovernanceObserved) { 'read_only_bounded' } else { 'unexpected_authority' }) -Passed $PlanGovernanceObserved -Evidence 'service_install.plan.governance' -Reason 'The plan proof must not grant execution, service-install, service-control, memory, or approval-decision authority.')
+  (New-Check -Id 'service_install_plan_blocked' -Status $(if ($PlanBlocked) { 'blocked' } elseif (-not $WindowsServiceSupported) { 'unsupported_platform' } else { 'missing_or_unexpected' }) -Passed ($PlanBlocked -or -not $WindowsServiceSupported) -Evidence 'scripts/service-install.ps1 -Mode Plan -ConfigPath config/runtime/services/lens-host.json' -Reason 'The Windows service manager plan must remain blocked while install/control authority is false.')
+  (New-Check -Id 'service_install_plan_governance' -Status $(if ($PlanGovernanceObserved -and $WindowsServiceSupported) { 'read_only_bounded' } elseif ($PlanGovernanceObserved) { 'unsupported_platform' } else { 'unexpected_authority' }) -Passed $PlanGovernanceObserved -Evidence 'service_install.plan.governance' -Reason 'The plan proof must not grant execution, service-install, service-control, memory, or approval-decision authority.')
   (New-Check -Id 'service_wrapper_not_created' -Status $(if ($WrapperDenied) { 'not_created' } else { 'unexpected_wrapper_write' }) -Passed $WrapperDenied -Evidence 'data/runtime/services/Francis-LensHost/run.cmd' -Reason 'Plan mode must not create the service wrapper or mutate runtime state.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
@@ -289,15 +309,17 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   repo_root = $RepoRoot
   service_config = 'config/runtime/services/lens-host.json'
   service_install_script = 'scripts/service-install.ps1'
+  windows_service_supported = $WindowsServiceSupported
+  service_install_plan_supported = $WindowsServiceSupported
   service_install_report = [string](Get-PropertyValue -Payload $PlanResult -Name 'report_path' -Default '')
   service_name = [string](Get-PropertyValue -Payload $Config -Name 'service_name' -Default '')
-  service_plan_status = [string](Get-PropertyValue -Payload $Plan -Name 'status' -Default '')
+  service_plan_status = if ($WindowsServiceSupported) { [string](Get-PropertyValue -Payload $Plan -Name 'status' -Default '') } else { 'unsupported_platform' }
   service_plan_ready = [bool](Get-PropertyValue -Payload $Plan -Name 'ready' -Default $false)
   service_plan_would_install = [bool](Get-PropertyValue -Payload $Plan -Name 'would_install' -Default $false)
   service_plan_would_start = [bool](Get-PropertyValue -Payload $Plan -Name 'would_start' -Default $false)
   process_supervision_enabled = [bool](Get-PropertyValue -Payload $Config -Name 'process_supervision_enabled' -Default $false)
   persistent_supervision_enabled = [bool](Get-PropertyValue -Payload $Config -Name 'persistent_supervision_enabled' -Default $false)
-  persistent_supervision_enablement_disabled = $ConfigObserved -and $PlanBlocked
+  persistent_supervision_enablement_disabled = $ConfigObserved -and ($PlanBlocked -or -not $WindowsServiceSupported)
   installable = [bool](Get-PropertyValue -Payload $Config -Name 'installable' -Default $false)
   install_authority = [bool](Get-PropertyValue -Payload $Config -Name 'install_authority' -Default $false)
   service_install_authority = [bool](Get-PropertyValue -Payload $Config -Name 'service_install_authority' -Default $false)
@@ -317,7 +339,9 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   governance = [ordered]@{
     diagnostic_only = $true
     read_only_contract = $true
-    wraps_service_install_plan = $true
+    wraps_service_install_plan = $WindowsServiceSupported
+    windows_service_supported = $WindowsServiceSupported
+    service_install_plan_supported = $WindowsServiceSupported
     service_config_readback = $ConfigObserved
     execution_authority = $false
     approval_decision_authority = $false

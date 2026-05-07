@@ -458,6 +458,25 @@ $PersistentSupervisionServiceInstallPlanProof = $PersistentSupervisionServiceIns
 $PersistentSupervisionServiceInstallPlanProofGovernance = $PersistentSupervisionServiceInstallPlanProof.governance
 $PersistentSupervisionServiceInstallPlanProofBlockedBy = ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.blocked_by
 $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.required_before_enable
+$PersistentSupervisionServiceInstallPlanProofWindowsServiceSupported = [bool]$PersistentSupervisionServiceInstallPlanProof.windows_service_supported
+$PersistentSupervisionServiceInstallPlanProofWindowsPlanObserved = (
+  $PersistentSupervisionServiceInstallPlanProofWindowsServiceSupported -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status -eq 'blocked' -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_ready -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_install -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_start -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'installable_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'install_authority_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_install_authority_false' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_control_authority_false' -and
+  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.wraps_service_install_plan
+)
+$PersistentSupervisionServiceInstallPlanProofUnsupportedPlatformObserved = (
+  -not $PersistentSupervisionServiceInstallPlanProofWindowsServiceSupported -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status -eq 'unsupported_platform' -and
+  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'unsupported_platform' -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.wraps_service_install_plan
+)
 $PersistentSupervisionServiceInstallPlanProofObserved = (
   [int]$PersistentSupervisionServiceInstallPlanProofResult.exit_code -eq 0 -and
   [string]$PersistentSupervisionServiceInstallPlanProof.kind -eq 'lens.host.persistent_supervision_service_install_plan.proof' -and
@@ -466,10 +485,10 @@ $PersistentSupervisionServiceInstallPlanProofObserved = (
   [string]$PersistentSupervisionServiceInstallPlanProof.service_config -eq 'config/runtime/services/lens-host.json' -and
   [string]$PersistentSupervisionServiceInstallPlanProof.service_install_script -eq 'scripts/service-install.ps1' -and
   [string]$PersistentSupervisionServiceInstallPlanProof.service_name -eq 'Francis-LensHost' -and
-  [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status -eq 'blocked' -and
-  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_ready -and
-  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_install -and
-  -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_start -and
+  (
+    $PersistentSupervisionServiceInstallPlanProofWindowsPlanObserved -or
+    $PersistentSupervisionServiceInstallPlanProofUnsupportedPlatformObserved
+  ) -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled -and
   [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled -and
@@ -479,10 +498,6 @@ $PersistentSupervisionServiceInstallPlanProofObserved = (
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof -and
   [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
-  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'installable_false' -and
-  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'install_authority_false' -and
-  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_install_authority_false' -and
-  $PersistentSupervisionServiceInstallPlanProofBlockedBy -contains 'service_control_authority_false' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'resident_host_process' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'tray_presence' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
@@ -490,7 +505,6 @@ $PersistentSupervisionServiceInstallPlanProofObserved = (
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'summon_binding' -and
   [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.diagnostic_only -and
   [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.read_only_contract -and
-  [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.wraps_service_install_plan -and
   [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.service_config_readback -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.execution_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProofGovernance.approval_decision_authority -and
@@ -2928,6 +2942,8 @@ $Payload = [ordered]@{
     evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionServiceInstallPlanProof.evidence)
     service_config = [string]$PersistentSupervisionServiceInstallPlanProof.service_config
     service_install_script = [string]$PersistentSupervisionServiceInstallPlanProof.service_install_script
+    windows_service_supported = [bool]$PersistentSupervisionServiceInstallPlanProof.windows_service_supported
+    service_install_plan_supported = [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_plan_supported
     service_install_report = [string]$PersistentSupervisionServiceInstallPlanProof.service_install_report
     service_name = [string]$PersistentSupervisionServiceInstallPlanProof.service_name
     service_plan_status = [string]$PersistentSupervisionServiceInstallPlanProof.service_plan_status

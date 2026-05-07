@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -413,12 +414,15 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
     assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
-    assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == [
-        "install_authority_false",
-        "installable_false",
-        "service_control_authority_false",
-        "service_install_authority_false",
-    ]
+    if os.name == "nt":
+        assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == [
+            "install_authority_false",
+            "installable_false",
+            "service_control_authority_false",
+            "service_install_authority_false",
+        ]
+    else:
+        assert payload["closure_blockers"]["persistent_supervision_service_install_plan"] == ["unsupported_platform"]
     assert (
         "persistent_supervision_enablement_authority_not_granted"
         in (payload["closure_blockers"]["persistent_supervision_enablement"])
@@ -1604,9 +1608,15 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     )
     assert service_install_plan["service_config"] == "config/runtime/services/lens-host.json"
     assert service_install_plan["service_install_script"] == "scripts/service-install.ps1"
-    assert service_install_plan["service_install_report"]
+    assert service_install_plan["windows_service_supported"] is (os.name == "nt")
+    assert service_install_plan["service_install_plan_supported"] is (os.name == "nt")
+    if os.name == "nt":
+        assert service_install_plan["service_install_report"]
+    else:
+        assert service_install_plan["service_install_report"] == ""
     assert service_install_plan["service_name"] == "Francis-LensHost"
-    assert service_install_plan["service_plan_status"] == "blocked"
+    expected_service_plan_status = "blocked" if os.name == "nt" else "unsupported_platform"
+    assert service_install_plan["service_plan_status"] == expected_service_plan_status
     assert service_install_plan["service_plan_ready"] is False
     assert service_install_plan["service_plan_would_install"] is False
     assert service_install_plan["service_plan_would_start"] is False
@@ -1619,18 +1629,23 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert service_install_plan["service_control_authority"] is False
     assert service_install_plan["wrapper_created_by_proof"] is False
     assert service_install_plan["required_before_enable"] == expected_persistent_prerequisites
-    assert set(service_install_plan["blocked_by"]) == {
-        "installable_false",
-        "install_authority_false",
-        "service_install_authority_false",
-        "service_control_authority_false",
-    }
+    if os.name == "nt":
+        assert set(service_install_plan["blocked_by"]) == {
+            "installable_false",
+            "install_authority_false",
+            "service_install_authority_false",
+            "service_control_authority_false",
+        }
+    else:
+        assert service_install_plan["blocked_by"] == ["unsupported_platform"]
     assert all(item["passed"] for item in service_install_plan["checks"])
     assert service_install_plan["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
     service_install_governance = service_install_plan["governance"]
     assert service_install_governance["diagnostic_only"] is True
     assert service_install_governance["read_only_contract"] is True
-    assert service_install_governance["wraps_service_install_plan"] is True
+    assert service_install_governance["wraps_service_install_plan"] is (os.name == "nt")
+    assert service_install_governance["windows_service_supported"] is (os.name == "nt")
+    assert service_install_governance["service_install_plan_supported"] is (os.name == "nt")
     assert service_install_governance["service_config_readback"] is True
     assert service_install_governance["execution_authority"] is False
     assert service_install_governance["approval_decision_authority"] is False

@@ -20880,6 +20880,12 @@ The proof reads `config/runtime/services/lens-host.json`, runs
 - `service_install_authority_false`
 - `service_control_authority_false`
 
+CI recovery note: the proof now reports `windows_service_supported=false` and
+`service_plan_status=unsupported_platform` on non-Windows runners instead of
+failing the Stage 6 audit. The Windows service plan remains strictly asserted
+on Windows; Linux CI receives a read-only platform-boundary readback and does
+not claim that a Windows service plan was produced.
+
 The Stage 6/Lens completion audit now consumes this proof as
 `persistent_supervision_service_install_plan_proof` and reports
 `persistent_supervision_service_install_plan_proof_readback=true` while keeping
@@ -20903,13 +20909,13 @@ service-install plan proof:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
   Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; persistent_supervision_service_install_plan_proof_readback=true`
 - `python -m pytest tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
-  Result: `passed`
+  Result: `passed after platform-boundary recovery`
 - `python -m ruff check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 - `python -m ruff format --check tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
-  Result: `failed before formatting; passed after running ruff format`
+  Result: `passed after platform-boundary recovery`
 - `git diff --check`
-  Result: `passed after ledger update; PowerShell CRLF normalization warning only`
+  Result: `passed after platform-boundary recovery; PowerShell CRLF normalization warning only`
 
 ## 6. Update rule
 
