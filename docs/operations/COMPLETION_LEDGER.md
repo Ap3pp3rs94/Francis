@@ -20700,6 +20700,44 @@ consumption:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision audit basis correction
+
+The Stage 6/Lens completion audit now guards the
+`persistent_supervision_enablement_disabled` top-level handoff behind the full
+persistent-supervision proof chain:
+
+- persistent-supervision enablement authority proof
+- persistent-supervision execution authority proof
+- persistent-supervision resident-claim boundary proof
+
+The audit still reports `status=blocked`, `transition_allowed=false`, and
+`next_smallest_truthful_gap=persistent_supervision_enablement_disabled`. The
+difference is that the handoff basis now explicitly says the proof chain is
+already consumed and the remaining gap is product enablement: persistent
+supervision remains disabled without runtime launch, service-config mutation,
+memory write, or resident claim.
+
+This is diagnostic/readback correction only. It does not create production
+execution authority, approval decision authority, product memory-write behavior,
+local process launch authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision audit
+basis correction:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; basis names consumed persistent-supervision proof chain`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

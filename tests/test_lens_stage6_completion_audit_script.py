@@ -91,8 +91,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
     assert payload["stage6_completion_reviewed"] is True
-    assert "host-supervision authority approval request proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent-supervision enablement boundary" in (payload["next_smallest_truthful_gap_basis"])
+    assert "host-supervision approval proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
+    assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent supervision enablement is still disabled" in (payload["next_smallest_truthful_gap_basis"])
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

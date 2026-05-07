@@ -1639,6 +1639,9 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $ResidentHostProcessSupervisionBlockerProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionEnablementAuthorityProofObserved -and
+  $PersistentSupervisionExecutionAuthorityProofObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
   [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled'
 ) {
   'persistent_supervision_enablement_disabled'
@@ -1748,7 +1751,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'host_supervision_authority_exact_approval_request') {
     'The completion audit has consumed the resident-host process-supervision handoff and now reads back the exact host-supervision authority approval request as the first concrete blocker for summon-anywhere resident-host supervision.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
-    'The completion audit consumes the exact host-supervision authority approval request proof: an explicit request, approval, bounded grant receipt, and readback now reach the persistent-supervision enablement boundary without launching runtime, mutating service config, writing memory, or claiming residency.'
+    'The completion audit consumes the host-supervision approval proof and the persistent-supervision authority proof chain: enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
