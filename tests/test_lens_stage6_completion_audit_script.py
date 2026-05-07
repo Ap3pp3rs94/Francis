@@ -85,6 +85,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "persistent_supervision_enablement_authority",
         "persistent_supervision_execution_authority",
         "persistent_supervision_resident_claim_boundary",
+        "persistent_supervision_enablement_transition_plan",
     }
     expected_child_proof_timeouts = {name: 420 for name in child_proof_runs} | {
         "persistent_supervision_prerequisites": 240
@@ -101,6 +102,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "persistent-supervision prerequisite proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "service-install plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent-supervision enablement transition-plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent supervision enablement is still disabled" in (payload["next_smallest_truthful_gap_basis"])
     assert payload["remaining_stage6_acceptance_blockers"] == [
@@ -682,6 +684,100 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "resident_claim_authority_not_granted" in persistent_resident_claim_boundary["blockers"]
     assert persistent_resident_claim_boundary["remaining_authority_families_after_this_boundary"] == []
     assert persistent_resident_claim_boundary["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+
+    transition_plan = payload["persistent_supervision_enablement_transition_plan_proof"]
+    assert transition_plan["status"] == "proof_passed"
+    assert transition_plan["ok"] is True
+    assert transition_plan["exit_code"] == 0
+    assert (
+        "scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status"
+        in transition_plan["evidence"]
+    )
+    assert transition_plan["transition_plan_observed"] is True
+    assert transition_plan["transition_plan_ready"] is False
+    assert transition_plan["persistent_supervision_enablement_disabled"] is True
+    assert transition_plan["persistent_supervision_prerequisites_proof_observed"] is True
+    assert transition_plan["persistent_supervision_service_install_plan_proof_observed"] is True
+    assert transition_plan["persistent_supervision_resident_claim_boundary_observed"] is True
+    assert transition_plan["persistent_supervision_plan_observed"] is True
+    assert transition_plan["windows_service_supported"] is (os.name == "nt")
+    assert transition_plan["service_install_plan_supported"] is (os.name == "nt")
+    assert transition_plan["service_plan_status"] == ("blocked" if os.name == "nt" else "unsupported_platform")
+    if os.name == "nt":
+        assert set(transition_plan["service_plan_blocked_by"]) == {
+            "installable_false",
+            "install_authority_false",
+            "service_install_authority_false",
+            "service_control_authority_false",
+        }
+    else:
+        assert transition_plan["service_plan_blocked_by"] == ["unsupported_platform"]
+    assert transition_plan["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert transition_plan["disabled_config_toggles"] == [
+        "process_supervision_enabled",
+        "persistent_supervision_enabled",
+    ]
+    transition_authority_chain = transition_plan["authority_chain"]
+    assert transition_authority_chain["host_supervision_authority"] is True
+    assert transition_authority_chain["persistent_supervision_enablement_authority"] is True
+    assert transition_authority_chain["service_config_write_authority"] is True
+    assert transition_authority_chain["persistent_supervision_execution_authority"] is True
+    assert transition_authority_chain["receipt_write_authority"] is True
+    assert transition_authority_chain["resident_claim_authority"] is False
+    assert transition_authority_chain["final_authority_family_consumed"] is True
+    assert transition_plan["side_effects_denied"] is True
+    assert transition_plan["applied"] is False
+    assert transition_plan["executed"] is False
+    assert transition_plan["service_config_updated"] is False
+    assert transition_plan["would_update_service_config"] is False
+    assert transition_plan["would_enable_process_supervision"] is False
+    assert transition_plan["would_enable_persistent_supervision"] is False
+    assert transition_plan["would_install_service"] is False
+    assert transition_plan["would_start_service"] is False
+    assert transition_plan["would_supervise_process"] is False
+    assert transition_plan["would_restart_process"] is False
+    assert transition_plan["would_write_receipt"] is False
+    assert transition_plan["would_write_memory"] is False
+    assert transition_plan["would_claim_resident"] is False
+    assert [item["id"] for item in transition_plan["transition_plan"]] == [
+        "read_required_prerequisites",
+        "verify_service_install_plan_boundary",
+        "consume_persistent_supervision_authority_chain",
+        "verify_disabled_enablement_config",
+        "keep_runtime_mutation_denied",
+    ]
+    assert all(item["passed"] for item in transition_plan["checks"])
+    assert "process_supervision_disabled" in transition_plan["blockers"]
+    assert "persistent_supervision_disabled" in transition_plan["blockers"]
+    assert "resident_claim_authority_not_granted" in transition_plan["blockers"]
+    assert transition_plan["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    transition_governance = transition_plan["governance"]
+    assert transition_governance["diagnostic_only"] is True
+    assert transition_governance["read_only_transition_plan"] is True
+    assert transition_governance["wraps_existing_prerequisite_proof"] is True
+    assert transition_governance["wraps_existing_service_install_plan_proof"] is True
+    assert transition_governance["wraps_existing_resident_claim_boundary_proof"] is True
+    assert transition_governance["product_execution_authority"] is False
+    assert transition_governance["execution_authority"] is False
+    assert transition_governance["approval_decision_authority"] is False
+    assert transition_governance["local_process_launch_authority"] is False
+    assert transition_governance["process_supervision_authority"] is False
+    assert transition_governance["process_restart_authority"] is False
+    assert transition_governance["service_install_authority"] is False
+    assert transition_governance["service_control_authority"] is False
+    assert transition_governance["persistent_supervision_enablement_authority"] is False
+    assert transition_governance["persistent_supervision_execution_authority"] is False
+    assert transition_governance["service_config_write_authority"] is False
+    assert transition_governance["receipt_write_authority"] is False
+    assert transition_governance["memory_write"] is False
+    assert transition_governance["resident_claim_authority"] is False
+    assert transition_governance["mutation_authority_granted"] is False
 
     granted_boundary = payload["resident_runtime_granted_boundary_proof"]
     assert granted_boundary["status"] == "proof_passed"
@@ -1732,6 +1828,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert (
+        "scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status" in payload["evidence"]
+    )
+    assert (
         "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>"
         in (payload["evidence"])
     )
@@ -1760,6 +1859,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["persistent_supervision_enablement_authority_proof_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True
+    assert governance["persistent_supervision_enablement_transition_plan_proof_readback"] is True
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True
     assert governance["persistent_supervision_enablement_execution_denial_boundary_readback"] is True
     assert governance["resident_runtime_granted_boundary_proof_readback"] is True

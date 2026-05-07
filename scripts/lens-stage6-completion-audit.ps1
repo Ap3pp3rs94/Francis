@@ -225,6 +225,7 @@ $PersistentSupervisionServiceInstallPlanProofScript = Join-Path $PSScriptRoot 'l
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
+$PersistentSupervisionEnablementTransitionPlanProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-transition-plan-proof.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
@@ -633,6 +634,78 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$PersistentSupervisionEnablementTransitionPlanProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $PersistentSupervisionEnablementTransitionPlanProofScript `
+  -ScriptArgs @('-Mode', 'Status') `
+  -TimeoutSeconds $ChildProofTimeoutSeconds
+$PersistentSupervisionEnablementTransitionPlanProof = $PersistentSupervisionEnablementTransitionPlanProofResult.payload
+$PersistentSupervisionEnablementTransitionPlanProofBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementTransitionPlanProof.blockers
+$PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  $PersistentSupervisionEnablementTransitionPlanProof.required_before_enable
+)
+$PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles = ConvertTo-StringArray -Value (
+  $PersistentSupervisionEnablementTransitionPlanProof.disabled_config_toggles
+)
+$PersistentSupervisionEnablementTransitionPlanProofServicePlanBlockedBy = ConvertTo-StringArray -Value (
+  $PersistentSupervisionEnablementTransitionPlanProof.service_plan_blocked_by
+)
+$PersistentSupervisionEnablementTransitionPlanProofGovernance = $PersistentSupervisionEnablementTransitionPlanProof.governance
+$PersistentSupervisionEnablementTransitionPlanProofObserved = (
+  [int]$PersistentSupervisionEnablementTransitionPlanProofResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionEnablementTransitionPlanProof.kind -eq 'lens.host.persistent_supervision_enablement_transition_plan.proof' -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.ok -and
+  [string]$PersistentSupervisionEnablementTransitionPlanProof.status -eq 'proof_passed' -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_observed -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_service_install_plan_proof_observed -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_resident_claim_boundary_observed -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_plan_observed -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.side_effects_denied -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.applied -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.executed -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.service_config_updated -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_update_service_config -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_enable_process_supervision -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_enable_persistent_supervision -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_install_service -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_start_service -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_supervise_process -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_restart_process -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_write_receipt -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_write_memory -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_claim_resident -and
+  $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'resident_host_process' -and
+  $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'tray_presence' -and
+  $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'overlay_window' -and
+  $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'summon_binding' -and
+  $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'process_supervision_enabled' -and
+  $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'persistent_supervision_enabled' -and
+  [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.diagnostic_only -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.read_only_transition_plan -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.wraps_existing_prerequisite_proof -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.wraps_existing_service_install_plan_proof -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.wraps_existing_resident_claim_boundary_proof -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.product_execution_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.execution_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.approval_decision_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.process_supervision_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.process_restart_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.service_install_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.service_control_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.persistent_supervision_enablement_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.persistent_supervision_execution_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.service_config_write_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.receipt_write_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.memory_write -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.resident_claim_authority -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.mutation_authority_granted
+)
 $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
@@ -647,6 +720,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_authority' -Result $PersistentSupervisionEnablementAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_execution_authority' -Result $PersistentSupervisionExecutionAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_enablement_transition_plan' -Result $PersistentSupervisionEnablementTransitionPlanProofResult
 )
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -1617,7 +1691,7 @@ $SummonAnywhereFamilyChainProofObserved = (
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.resident_claim_authority -and
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.mutation_authority_granted
 )
-$Stage6CompletionReviewed = (
+$Stage6CompletionEvidenceReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
@@ -1631,6 +1705,10 @@ $Stage6CompletionReviewed = (
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
   $SummonAnywhereFamilyChainProofObserved
+)
+$Stage6CompletionReviewed = (
+  $Stage6CompletionEvidenceReviewed -and
+  $PersistentSupervisionEnablementTransitionPlanProofObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -1783,7 +1861,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'summon_anywhere_family_chain_proof_readback'
 } elseif (
-  $Stage6CompletionReviewed -and
+  $Stage6CompletionEvidenceReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
@@ -1793,6 +1871,21 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $PersistentSupervisionServiceInstallPlanProofObserved
 ) {
   'persistent_supervision_service_install_plan_proof_readback'
+} elseif (
+  $Stage6CompletionEvidenceReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $PersistentSupervisionServiceInstallPlanProofObserved -and
+  $PersistentSupervisionEnablementAuthorityProofObserved -and
+  $PersistentSupervisionExecutionAuthorityProofObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  -not $PersistentSupervisionEnablementTransitionPlanProofObserved
+) {
+  'persistent_supervision_enablement_transition_plan_proof_readback'
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -1917,8 +2010,10 @@ $Payload = [ordered]@{
     'The audit must consume the persistent-supervision prerequisite proof before treating persistent supervision enablement blockers as fully mapped to the Stage 6 summon-anywhere blocker family chain.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_service_install_plan_proof_readback') {
     'The audit must consume the persistent-supervision service-install plan proof before treating disabled Lens host service configuration as audited Stage 6 enablement evidence.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_transition_plan_proof_readback') {
+    'The audit must consume the persistent-supervision enablement transition-plan proof before treating prerequisite, service-plan, authority-chain, disabled-config, and side-effect readback as one audited Stage 6 handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
-    'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, and the persistent-supervision authority proof chain: prerequisites, disabled service plan, enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
+    'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, the persistent-supervision authority proof chain, and the persistent-supervision enablement transition-plan proof: prerequisites, disabled service plan, enablement authority, execution authority, resident-claim boundary, disabled config toggles, and side-effect denial are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
@@ -2064,6 +2159,9 @@ $Payload = [ordered]@{
     )
     persistent_supervision_resident_claim_boundary = [string[]]@(
       $PersistentSupervisionResidentClaimBoundaryBlockers | Where-Object { $_ -match 'persistent_supervision|service_config|authority|execution|resident_claim|process_supervision|receipt_write' } | Sort-Object -Unique
+    )
+    persistent_supervision_enablement_transition_plan = [string[]]@(
+      $PersistentSupervisionEnablementTransitionPlanProofBlockers | Where-Object { $_ -match 'persistent_supervision|process_supervision|service_|authority|resident_claim|unsupported_platform' } | Sort-Object -Unique
     )
     resident_runtime = [string[]]@(
       @(
@@ -3128,6 +3226,45 @@ $Payload = [ordered]@{
     remaining_authority_families_after_this_boundary = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionResidentClaimBoundaryProof.remaining_authority_families_after_this_boundary)
     next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
   }
+  persistent_supervision_enablement_transition_plan_proof = [ordered]@{
+    status = if ($PersistentSupervisionEnablementTransitionPlanProofObserved) { [string]$PersistentSupervisionEnablementTransitionPlanProof.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionEnablementTransitionPlanProofObserved
+    exit_code = [int]$PersistentSupervisionEnablementTransitionPlanProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionEnablementTransitionPlanProof.evidence)
+    transition_plan_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_observed
+    transition_plan_ready = [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready
+    persistent_supervision_enablement_disabled = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled
+    persistent_supervision_prerequisites_proof_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed
+    persistent_supervision_service_install_plan_proof_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_service_install_plan_proof_observed
+    persistent_supervision_resident_claim_boundary_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_resident_claim_boundary_observed
+    persistent_supervision_plan_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_plan_observed
+    windows_service_supported = [bool]$PersistentSupervisionEnablementTransitionPlanProof.windows_service_supported
+    service_install_plan_supported = [bool]$PersistentSupervisionEnablementTransitionPlanProof.service_install_plan_supported
+    service_plan_status = [string]$PersistentSupervisionEnablementTransitionPlanProof.service_plan_status
+    service_plan_blocked_by = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofServicePlanBlockedBy)
+    required_before_enable = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable)
+    disabled_config_toggles = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles)
+    authority_chain = $PersistentSupervisionEnablementTransitionPlanProof.authority_chain
+    side_effects_denied = [bool]$PersistentSupervisionEnablementTransitionPlanProof.side_effects_denied
+    applied = [bool]$PersistentSupervisionEnablementTransitionPlanProof.applied
+    executed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.executed
+    service_config_updated = [bool]$PersistentSupervisionEnablementTransitionPlanProof.service_config_updated
+    would_update_service_config = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_update_service_config
+    would_enable_process_supervision = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_enable_process_supervision
+    would_enable_persistent_supervision = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_enable_persistent_supervision
+    would_install_service = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_install_service
+    would_start_service = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_start_service
+    would_supervise_process = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_supervise_process
+    would_restart_process = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_restart_process
+    would_write_receipt = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_write_receipt
+    would_write_memory = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_write_memory
+    would_claim_resident = [bool]$PersistentSupervisionEnablementTransitionPlanProof.would_claim_resident
+    transition_plan = @($PersistentSupervisionEnablementTransitionPlanProof.transition_plan)
+    checks = @($PersistentSupervisionEnablementTransitionPlanProof.checks)
+    blockers = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofBlockers)
+    governance = $PersistentSupervisionEnablementTransitionPlanProofGovernance
+    next_smallest_truthful_gap = [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
@@ -3144,6 +3281,7 @@ $Payload = [ordered]@{
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status',
     'scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status',
     'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status',
@@ -3224,6 +3362,7 @@ $Payload = [ordered]@{
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
     persistent_supervision_resident_claim_boundary_proof_readback = $PersistentSupervisionResidentClaimBoundaryObserved
+    persistent_supervision_enablement_transition_plan_proof_readback = $PersistentSupervisionEnablementTransitionPlanProofObserved
     persistent_supervision_enablement_denial_boundary_readback = $PersistentSupervisionEnablementDenialObserved
     persistent_supervision_enablement_execution_denial_boundary_readback = $PersistentSupervisionEnablementExecutionDenialObserved
     resident_runtime_granted_boundary_proof_readback = $ResidentRuntimeGrantedBoundaryProofObserved

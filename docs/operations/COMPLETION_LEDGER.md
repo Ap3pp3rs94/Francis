@@ -20989,6 +20989,52 @@ enablement transition-plan proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-07 - Stage 6/Lens completion audit consumes persistent-supervision transition-plan proof
+
+The Stage 6/Lens completion audit now consumes the standalone
+persistent-supervision enablement transition-plan proof as a child proof:
+
+- `scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status`
+
+The audit exposes the consumed proof as
+`persistent_supervision_enablement_transition_plan_proof`, records the child run
+as `persistent_supervision_enablement_transition_plan`, and reports
+`persistent_supervision_enablement_transition_plan_proof_readback=true` in
+governance. The top-level audit remains `status=blocked`,
+`closure_decision=do_not_close_stage6`, `transition_allowed=false`, and
+`next_smallest_truthful_gap=persistent_supervision_enablement_disabled`.
+
+This keeps the Stage 6 blocker truthful: prerequisites, service-install plan
+truth, bounded authority-chain receipts, disabled config toggles, and
+side-effect denial are now composed in the completion audit, but product
+persistent supervision is still disabled and no runtime launch, service-config
+mutation, receipt write, memory write, or resident claim is made.
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, process supervision authority, process restart
+authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+service-install authority, service-control authority, receipt-write authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens completion audit
+persistent-supervision transition-plan proof consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; persistent_supervision_enablement_transition_plan_proof_readback=true`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `failed before formatting; passed after running ruff format`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
