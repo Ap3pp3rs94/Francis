@@ -21126,6 +21126,47 @@ prerequisite guard proof consumption:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-07 - Stage 6/Lens next-handoff consumes persistent-supervision prerequisite readback
+
+The Stage 6 next-handoff proof now prefers the newer persistent-supervision
+required-prerequisite gap once that readback is visible from `/lens/status`.
+It still preserves the older summon-anywhere resident-host family handoff for
+audit context, but the rolling launchpad now reports:
+
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `recommended_next_slice=resolve_persistent_supervision_required_prerequisites_before_enablement`
+- `recommended_handoff_source=persistent_supervision_required_prerequisites_handoff`
+- `recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+- `recommended_route=/lens/host/persistent-supervision`
+- `recommended_readiness_route=/lens/host/persistent-supervision/enablement`
+- `missing_required_before_enable=["resident_host_process","tray_presence","global_hotkey_binding","overlay_window","summon_binding"]`
+
+This is diagnostic/readback and handoff-alignment work only. It does not create
+production execution authority, approval decision authority, product
+memory-write behavior, local process launch authority, process supervision
+authority, process restart authority, persistent-supervision enablement
+authority, persistent-supervision execution authority, service-config write
+authority, service-install authority, service-control authority,
+receipt-write authority, resident-claim authority, telemetry behavior, a
+resident host, a tray process, an overlay window, a global hotkey, a summon
+binding, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens next-handoff
+persistent-supervision prerequisite readback alignment:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,recommended_route,recommended_readiness_route,authority_required,persistent_supervision_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

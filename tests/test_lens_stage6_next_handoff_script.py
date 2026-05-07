@@ -56,18 +56,18 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert (
-        payload["recommended_next_slice"] == "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+        payload["recommended_next_slice"] == "resolve_persistent_supervision_required_prerequisites_before_enablement"
     )
-    assert payload["recommended_handoff_source"] == "first_blocker_family_completion_audit_handoff"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_required_prerequisites_handoff"
     assert (
         payload["recommended_proof_script"]
-        == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+        == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
     )
-    assert payload["recommended_route"] == "/lens/host"
-    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["blocked_criteria"] == [
         "summon_anywhere",
         "helpful_not_noisy",
@@ -105,6 +105,37 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert family_chain_handoff["would_execute"] is False
     assert family_chain_handoff["would_mutate"] is False
 
+    assert payload["persistent_supervision_required_prerequisites_observed"] is True
+    assert payload["persistent_supervision_missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    persistent_prerequisites_handoff = payload["persistent_supervision_required_prerequisites_handoff"]
+    assert (
+        persistent_prerequisites_handoff["next_step"]
+        == "resolve_persistent_supervision_required_prerequisites_before_enablement"
+    )
+    assert (
+        persistent_prerequisites_handoff["next_smallest_truthful_gap"]
+        == "persistent_supervision_required_prerequisites_missing"
+    )
+    assert persistent_prerequisites_handoff["proof_script"] == (
+        "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert persistent_prerequisites_handoff["route"] == "/lens/host/persistent-supervision"
+    assert persistent_prerequisites_handoff["readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert persistent_prerequisites_handoff["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert persistent_prerequisites_handoff["authority_granted"] is False
+    assert persistent_prerequisites_handoff["read_only_contract"] is True
+    assert persistent_prerequisites_handoff["diagnostic_only"] is True
+    assert persistent_prerequisites_handoff["would_execute"] is False
+    assert persistent_prerequisites_handoff["would_mutate"] is False
+
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["closure_readback"]["status"] == "blocked_closure_readback_observed"
     assert checks["stage_boundary"]["status"] == "stage6_active"
@@ -112,6 +143,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert checks["first_blocker_family_handoff"]["status"] == "resident_host_handoff_ready"
     assert checks["completion_audit_handoff"]["status"] == "process_supervision_audit_handoff_ready"
     assert checks["family_chain_handoff"]["status"] == "summon_family_chain_handoff_ready"
+    assert checks["persistent_supervision_required_prerequisites"]["status"] == "required_prerequisites_handoff_ready"
     assert checks["side_effects_denied"]["status"] == "readback_only"
     assert all(item["passed"] for item in payload["checks"])
 
@@ -119,6 +151,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
         "diagnostic_only": True,
         "read_only_contract": True,
         "uses_lens_status_readback": True,
+        "uses_persistent_supervision_readback": True,
         "proof_script": "scripts/lens-stage6-next-handoff.ps1 -Mode Status",
         "would_execute": False,
         "would_mutate": False,
