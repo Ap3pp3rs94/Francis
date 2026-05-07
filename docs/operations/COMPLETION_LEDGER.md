@@ -20654,6 +20654,52 @@ approval request proof:
 - `python -m ruff format --check tests\test_lens_host_supervision_authority_request_proof_script.py`
   Result: `passed`
 
+### 2026-05-07 - Stage 6/Lens completion audit consumes host-supervision approval proof
+
+The Stage 6/Lens completion audit now consumes the standalone
+host-supervision authority exact approval-request proof as a child proof:
+
+- `scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+
+After the audit observes the exact approval request, explicit approval,
+bounded host-supervision grant receipt, grant readback, and persistent
+supervision enablement boundary, the top-level completion-audit handoff now
+reports:
+
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+
+The audit still reports `status=blocked`, `closure_decision=do_not_close_stage6`,
+`transition_allowed=false`, and the same remaining Stage 6 acceptance blockers:
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence. This keeps Stage 6 active while replacing the previous audit-level
+handoff ambiguity with a verified readback path through the exact approval
+request proof.
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim. The consumed proof grants a bounded host-supervision
+authority lease only inside a temporary TestClient fixture after an explicit
+approval decision.
+
+Latest validation for the `2026-05-07` Stage 6/Lens completion audit proof
+consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; transition_allowed=false`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervision_authority_request_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

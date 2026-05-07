@@ -77,6 +77,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident_host_runtime_boundary",
         "process_supervision_boundary",
         "resident_host_process_supervision_blocker",
+        "host_supervision_authority_request",
         "persistent_supervision_plan",
         "persistent_supervision_enablement_authority",
         "persistent_supervision_execution_authority",
@@ -88,9 +89,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "host_supervision_authority_exact_approval_request"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
     assert payload["stage6_completion_reviewed"] is True
-    assert "exact host-supervision authority approval request" in (payload["next_smallest_truthful_gap_basis"])
+    assert "host-supervision authority approval request proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent-supervision enablement boundary" in (payload["next_smallest_truthful_gap_basis"])
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",
@@ -308,6 +310,42 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "exact_supervision_authority_approval"
         in (payload["closure_blockers"]["host_supervision_authority_readiness_handoff"])
     )
+    host_authority_request_proof = payload["host_supervision_authority_request_proof"]
+    assert host_authority_request_proof["status"] == "proof_passed"
+    assert host_authority_request_proof["ok"] is True
+    assert host_authority_request_proof["exit_code"] == 0
+    assert (
+        "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status"
+        in host_authority_request_proof["evidence"]
+    )
+    assert "/lens/host/supervision/authority/request" in host_authority_request_proof["evidence"]
+    assert "/lens/host/persistent-supervision/enablement" in host_authority_request_proof["evidence"]
+    assert host_authority_request_proof["host_supervision_authority_approval_id"]
+    assert host_authority_request_proof["host_supervision_authority_grant_receipt_id"]
+    assert host_authority_request_proof["authority_granted"] is True
+    assert host_authority_request_proof["grant_applied"] is True
+    assert host_authority_request_proof["executed"] is False
+    assert host_authority_request_proof["supervision_ready"] is False
+    assert host_authority_request_proof["resident_claim_allowed"] is False
+    assert host_authority_request_proof["process_supervision_authority"] is True
+    assert host_authority_request_proof["process_restart_authority"] is True
+    assert host_authority_request_proof["service_install_authority"] is True
+    assert host_authority_request_proof["service_control_authority"] is True
+    assert host_authority_request_proof["receipt_write_authority"] is True
+    assert host_authority_request_proof["resident_claim_authority"] is True
+    assert host_authority_request_proof["memory_write"] is False
+    assert host_authority_request_proof["runtime_files"] == {
+        "lens_host_status": False,
+        "lens_host_pid": False,
+        "lens_host_supervisor_status": False,
+    }
+    assert "persistent_supervision_disabled" in host_authority_request_proof["blockers"]
+    assert "process_supervision_disabled" in host_authority_request_proof["blockers"]
+    assert host_authority_request_proof["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert (
+        "persistent_supervision_disabled" in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
+    )
+    assert "process_supervision_disabled" in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
     helpful_authority_handoff = payload["helpful_not_noisy_runtime_authority_readiness_handoff"]
     assert helpful_authority_handoff["status"] == "blocked"
     assert helpful_authority_handoff["audit_status"] == "complete"
@@ -1540,6 +1578,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-resident-runtime-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
@@ -1564,6 +1603,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
     assert governance["resident_host_process_handoff_consumed"] is True
     assert governance["resident_host_supervision_authority_readiness_handoff_readback"] is True
+    assert governance["host_supervision_authority_request_proof_readback"] is True
     assert governance["helpful_not_noisy_runtime_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
