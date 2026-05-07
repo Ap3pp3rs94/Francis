@@ -21035,6 +21035,46 @@ persistent-supervision transition-plan proof consumption:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision prerequisite readiness guard
+
+The Lens host persistent-supervision plan and enablement preflight now keep
+`required_before_enable` prerequisites in the readiness gate once the authority
+and config-toggle blockers are otherwise cleared. This prevents a future false
+`ready` state where process supervision and persistent supervision are enabled
+in config while the resident host process, tray presence, global hotkey binding,
+overlay window, or summon binding are still missing.
+
+When those prerequisites remain absent, the backend now reports:
+
+- `required_before_enable_ready=false`
+- `blocked_requirements=["required_before_enable"]`
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+This is backend/API readiness enforcement only. It does not create production
+execution authority, approval decision authority, product memory-write behavior,
+local process launch authority, process supervision authority, process restart
+authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+service-install authority, service-control authority, receipt-write authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+prerequisite readiness guard:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_grant_requires_approved_request_and_host_grant tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

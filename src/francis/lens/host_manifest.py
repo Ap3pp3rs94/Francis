@@ -497,6 +497,25 @@ def _readiness_item(item_id: str, *, label: str, ready: bool, status: str, reaso
     }
 
 
+def _required_before_enable_readiness_item(
+    *,
+    required_before_enable: list[str],
+    missing_required_before_enable: list[str],
+) -> dict[str, Any]:
+    ready = not missing_required_before_enable
+    return {
+        **_readiness_item(
+            "required_before_enable",
+            label="Required Lens prerequisite surfaces",
+            ready=ready,
+            status="ready" if ready else "blocked",
+            reason="" if ready else "persistent_supervision_required_prerequisites_missing",
+        ),
+        "required_before_enable": required_before_enable,
+        "missing_required_before_enable": missing_required_before_enable,
+    }
+
+
 def _lens_host_supervision_readiness(
     *,
     entrypoint_exists: bool,
@@ -799,6 +818,10 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
     receipt_write_authority = bool(supervision_readiness.get("receipt_write_authority"))
     resident_claim_authority = bool(supervision_readiness.get("resident_claim_authority"))
 
+    enablement_dependency_readback = _lens_host_enablement_dependency_readback(
+        required_before_enable,
+        launch_manifest=launch_manifest,
+    )
     requirements = [
         _readiness_item(
             "service_config",
@@ -872,8 +895,6 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         ),
     ]
     blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
-    blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
-    ready = not blocked_requirements
     authority_requirement_ids = {
         "process_restart_authority",
         "service_install_authority",
@@ -882,8 +903,23 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         "resident_claim_authority",
     }
     authority_blocked = any(item in authority_requirement_ids for item in blocked_requirements)
+    enablement_toggle_blocked = any(
+        item in {"process_supervision_enabled", "persistent_supervision_enabled"} for item in blocked_requirements
+    )
+    if not authority_blocked and not enablement_toggle_blocked:
+        requirements.append(
+            _required_before_enable_readiness_item(
+                required_before_enable=required_before_enable,
+                missing_required_before_enable=missing_required_before_enable,
+            )
+        )
+        blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
+    blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
+    ready = not blocked_requirements
     next_gap = "persistent_supervision_execution_boundary" if ready else "persistent_supervision_authority_not_granted"
-    if not ready and not authority_blocked:
+    if "required_before_enable" in blocked_requirements:
+        next_gap = "persistent_supervision_required_prerequisites_missing"
+    elif not ready and not authority_blocked:
         next_gap = "persistent_supervision_enablement_disabled"
     return {
         "ok": True,
@@ -910,10 +946,8 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         "blocked_requirements": blocked_requirements,
         "required_before_enable": required_before_enable,
         "missing_required_before_enable": missing_required_before_enable,
-        "enablement_dependency_readback": _lens_host_enablement_dependency_readback(
-            required_before_enable,
-            launch_manifest=launch_manifest,
-        ),
+        "required_before_enable_ready": not missing_required_before_enable,
+        "enablement_dependency_readback": enablement_dependency_readback,
         "blockers": blockers,
         "plan": {
             "mode": "persistent_supervised_resident_host",
@@ -979,6 +1013,10 @@ def lens_host_persistent_supervision_enablement_preflight(
     persistent_supervision_enabled = bool(supervision_readiness.get("persistent_supervision_enabled"))
     authority_grant_active = bool(supervision_readiness.get("authority_grant_active"))
     receipt_id = str(active_grant.get("receipt_id") or "")
+    enablement_dependency_readback = _lens_host_enablement_dependency_readback(
+        required_before_enable,
+        launch_manifest=launch_manifest,
+    )
     requirements = [
         _readiness_item(
             "persistent_supervision_plan",
@@ -1010,10 +1048,23 @@ def lens_host_persistent_supervision_enablement_preflight(
         ),
     ]
     blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
+    enablement_toggle_blocked = any(
+        item in {"process_supervision_enabled", "persistent_supervision_enabled"} for item in blocked_requirements
+    )
+    if authority_grant_active and not enablement_toggle_blocked:
+        requirements.append(
+            _required_before_enable_readiness_item(
+                required_before_enable=required_before_enable,
+                missing_required_before_enable=missing_required_before_enable,
+            )
+        )
+        blocked_requirements = [str(item["id"]) for item in requirements if not bool(item.get("ready"))]
     blockers = sorted({str(item.get("reason")) for item in requirements if str(item.get("reason") or "").strip()})
     enablement_ready = not blocked_requirements
     if enablement_ready:
         next_gap = "persistent_supervision_execution_boundary"
+    elif "required_before_enable" in blocked_requirements:
+        next_gap = "persistent_supervision_required_prerequisites_missing"
     elif authority_grant_active:
         next_gap = "persistent_supervision_enablement_disabled"
     else:
@@ -1040,10 +1091,8 @@ def lens_host_persistent_supervision_enablement_preflight(
         "persistent_supervision_enabled": persistent_supervision_enabled,
         "required_before_enable": required_before_enable,
         "missing_required_before_enable": missing_required_before_enable,
-        "enablement_dependency_readback": _lens_host_enablement_dependency_readback(
-            required_before_enable,
-            launch_manifest=launch_manifest,
-        ),
+        "required_before_enable_ready": not missing_required_before_enable,
+        "enablement_dependency_readback": enablement_dependency_readback,
         "requirements": requirements,
         "requirements_total": len(requirements),
         "requirements_ready_total": len(requirements) - len(blocked_requirements),

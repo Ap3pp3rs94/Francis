@@ -4413,6 +4413,128 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert persistent_denial_criterion["memory_write"] is False
 
 
+def test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    host_request = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants host supervision authority reviewed before persistent enablement",
+        },
+    )
+    assert host_request.status_code == 200
+    host_approval_id = str(host_request.json()["approval_id"])
+    host_decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": host_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved only to prove required surfaces still gate persistent supervision",
+        },
+    )
+    assert host_decision.status_code == 200
+    assert host_decision.json()["status"] == "approved"
+    host_grant = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": host_approval_id,
+            "actor": "test.system.write",
+            "reason": "grant host supervision authority without resident surfaces",
+        },
+    )
+    assert host_grant.status_code == 200
+    assert host_grant.json()["status"] == "authority_granted"
+
+    expected_enablement_prerequisites = [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    persistent_plan = client.get("/lens/host/persistent-supervision")
+    assert persistent_plan.status_code == 200
+    persistent_body = persistent_plan.json()
+    assert persistent_body["status"] == "blocked"
+    assert persistent_body["ready"] is False
+    assert persistent_body["persistent_supervision_ready"] is False
+    assert persistent_body["required_before_enable_ready"] is False
+    assert persistent_body["required_before_enable"] == expected_enablement_prerequisites
+    assert persistent_body["missing_required_before_enable"] == expected_enablement_prerequisites
+    assert persistent_body["requirements_total"] == 11
+    assert persistent_body["requirements_ready_total"] == 10
+    assert persistent_body["requirements_blocked_total"] == 1
+    assert persistent_body["blocked_requirements"] == ["required_before_enable"]
+    assert persistent_body["blockers"] == ["persistent_supervision_required_prerequisites_missing"]
+    assert persistent_body["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    requirements = {item["id"]: item for item in persistent_body["requirements"]}
+    assert requirements["process_supervision_enabled"]["ready"] is True
+    assert requirements["persistent_supervision_enabled"]["ready"] is True
+    assert requirements["process_restart_authority"]["ready"] is True
+    assert requirements["service_install_authority"]["ready"] is True
+    assert requirements["service_control_authority"]["ready"] is True
+    assert requirements["receipt_write_authority"]["ready"] is True
+    assert requirements["resident_claim_authority"]["ready"] is True
+    assert requirements["required_before_enable"]["ready"] is False
+    assert requirements["required_before_enable"]["missing_required_before_enable"] == (
+        expected_enablement_prerequisites
+    )
+
+    enablement = client.get("/lens/host/persistent-supervision/enablement")
+    assert enablement.status_code == 200
+    enablement_body = enablement.json()
+    assert enablement_body["status"] == "blocked"
+    assert enablement_body["ready"] is False
+    assert enablement_body["enablement_ready"] is False
+    assert enablement_body["required_before_enable_ready"] is False
+    assert enablement_body["authority_grant_active"] is True
+    assert enablement_body["process_supervision_enabled"] is True
+    assert enablement_body["persistent_supervision_enabled"] is True
+    assert enablement_body["requirements_total"] == 5
+    assert enablement_body["requirements_ready_total"] == 4
+    assert enablement_body["requirements_blocked_total"] == 1
+    assert enablement_body["blocked_requirements"] == ["required_before_enable"]
+    assert enablement_body["blockers"] == ["persistent_supervision_required_prerequisites_missing"]
+    assert enablement_body["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    enablement_requirements = {item["id"]: item for item in enablement_body["requirements"]}
+    assert enablement_requirements["active_host_supervision_authority_grant"]["ready"] is True
+    assert enablement_requirements["process_supervision_enabled"]["ready"] is True
+    assert enablement_requirements["persistent_supervision_enabled"]["ready"] is True
+    assert enablement_requirements["required_before_enable"]["ready"] is False
+    assert enablement_requirements["required_before_enable"]["missing_required_before_enable"] == (
+        expected_enablement_prerequisites
+    )
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
 def test_lens_persistent_supervision_enablement_authority_request_requires_system_write_without_grant(
     monkeypatch,
     tmp_path: Path,
