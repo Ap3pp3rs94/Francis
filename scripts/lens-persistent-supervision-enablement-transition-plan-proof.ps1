@@ -116,6 +116,7 @@ $ServiceBlockedBy = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Se
 $PlanBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -Name 'blockers' -Default @())
 $ResidentClaimBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentClaim -Name 'blockers' -Default @())
 $RequiredBeforeEnable = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Prerequisites -Name 'required_before_enable' -Default @())
+$RequiredPrerequisiteGuardObserved = [bool](Get-PropertyValue -Payload $Prerequisites -Name 'required_before_enable_guard_observed' -Default $false)
 $PlanBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -Name 'blocked_requirements' -Default @())
 $ConfigToggleBlockers = [string[]]@(
   $PlanBlockedRequirements | Where-Object { $_ -in @('process_supervision_enabled', 'persistent_supervision_enabled') }
@@ -126,7 +127,8 @@ $PrerequisitesObserved = (
   [string](Get-PropertyValue -Payload $Prerequisites -Name 'kind' -Default '') -eq 'lens.persistent_supervision.prerequisites.proof' -and
   [string](Get-PropertyValue -Payload $Prerequisites -Name 'status' -Default '') -eq 'proof_passed' -and
   [bool](Get-PropertyValue -Payload $Prerequisites -Name 'ok' -Default $false) -and
-  [string](Get-PropertyValue -Payload $Prerequisites -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_enablement_disabled'
+  [string](Get-PropertyValue -Payload $Prerequisites -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $RequiredPrerequisiteGuardObserved
 )
 
 $WindowsServiceSupported = [bool](Get-PropertyValue -Payload $ServicePlan -Name 'windows_service_supported' -Default $false)
@@ -216,6 +218,7 @@ $TransitionSteps = @(
   transition_plan_ready = $false
   persistent_supervision_enablement_disabled = $PlanObserved
   persistent_supervision_prerequisites_proof_observed = $PrerequisitesObserved
+  persistent_supervision_required_prerequisites_guard_observed = $RequiredPrerequisiteGuardObserved
   persistent_supervision_service_install_plan_proof_observed = $ServicePlanObserved
   persistent_supervision_resident_claim_boundary_observed = $ResidentClaimObserved
   persistent_supervision_plan_observed = $PlanObserved
@@ -250,8 +253,11 @@ $TransitionSteps = @(
   would_claim_resident = $false
   transition_plan = @($TransitionSteps)
   checks = @($Checks)
-  blockers = [string[]]@(($PlanBlockers + $ResidentClaimBlockers + $ServiceBlockedBy) | Sort-Object -Unique)
-  next_smallest_truthful_gap = 'persistent_supervision_enablement_disabled'
+  blockers = [string[]]@(
+    ($PlanBlockers + $ResidentClaimBlockers + $ServiceBlockedBy + @('persistent_supervision_required_prerequisites_missing')) |
+      Sort-Object -Unique
+  )
+  next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   evidence = @(
     'scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status',

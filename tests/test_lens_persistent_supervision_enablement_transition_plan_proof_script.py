@@ -54,6 +54,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["transition_plan_ready"] is False
     assert payload["persistent_supervision_enablement_disabled"] is True
     assert payload["persistent_supervision_prerequisites_proof_observed"] is True
+    assert payload["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert payload["persistent_supervision_service_install_plan_proof_observed"] is True
     assert payload["persistent_supervision_resident_claim_boundary_observed"] is True
     assert payload["persistent_supervision_plan_observed"] is True
@@ -105,7 +106,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["would_write_receipt"] is False
     assert payload["would_write_memory"] is False
     assert payload["would_claim_resident"] is False
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
 
     steps = {item["id"]: item for item in payload["transition_plan"]}
     assert list(steps) == [
@@ -133,6 +134,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
 
     assert "process_supervision_disabled" in payload["blockers"]
     assert "persistent_supervision_disabled" in payload["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in payload["blockers"]
     assert "resident_claim_authority_not_granted" in payload["blockers"]
 
     assert payload["governance"] == {

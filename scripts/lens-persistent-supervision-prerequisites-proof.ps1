@@ -276,9 +276,15 @@ $PreviousPythonPath = [string]$env:PYTHONPATH
 
 $RouteSource = @'
 import json
+from copy import deepcopy
 from fastapi.testclient import TestClient
 
 from francis.api.app import create_app
+from francis.lens.host_manifest import (
+    lens_host_launch_manifest,
+    lens_host_persistent_supervision_enablement_preflight,
+    lens_host_persistent_supervision_plan,
+)
 
 
 def get(client, route):
@@ -292,9 +298,36 @@ def get(client, route):
 client = TestClient(create_app())
 status = get(client, "/lens/status?limit=5")
 resident_host = status.get("resident_host") if isinstance(status.get("resident_host"), dict) else {}
+manifest = lens_host_launch_manifest()
+guard_manifest = deepcopy(manifest)
+guard_supervision = guard_manifest.get("supervision_readiness")
+if not isinstance(guard_supervision, dict):
+    guard_supervision = {}
+guard_supervision.update(
+    {
+        "authority_grant_active": True,
+        "authority_grant": {
+            "receipt_id": "synthetic-required-prerequisite-guard",
+            "status": "authority_granted",
+        },
+        "process_supervision_enabled": True,
+        "persistent_supervision_enabled": True,
+        "process_restart_authority": True,
+        "service_install_authority": True,
+        "service_control_authority": True,
+        "receipt_write_authority": True,
+        "resident_claim_authority": True,
+    }
+)
+guard_manifest["supervision_readiness"] = guard_supervision
 payload = {
     "plan": get(client, "/lens/host/persistent-supervision"),
     "enablement": get(client, "/lens/host/persistent-supervision/enablement"),
+    "required_prerequisite_guard": {
+        "projection": "synthetic_manifest_readiness_guard",
+        "plan": lens_host_persistent_supervision_plan(manifest=guard_manifest),
+        "enablement": lens_host_persistent_supervision_enablement_preflight(manifest=guard_manifest),
+    },
     "status_readback": {
         "kind": status.get("kind"),
         "resident_host_route": resident_host.get("route"),
@@ -371,6 +404,9 @@ $FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArg
 $RoutePayload = $RouteResult.payload
 $Plan = Get-PropertyValue -Payload $RoutePayload -Name 'plan'
 $Enablement = Get-PropertyValue -Payload $RoutePayload -Name 'enablement'
+$RequiredPrerequisiteGuard = Get-PropertyValue -Payload $RoutePayload -Name 'required_prerequisite_guard'
+$GuardPlan = Get-PropertyValue -Payload $RequiredPrerequisiteGuard -Name 'plan'
+$GuardEnablement = Get-PropertyValue -Payload $RequiredPrerequisiteGuard -Name 'enablement'
 $StatusReadback = Get-PropertyValue -Payload $RoutePayload -Name 'status_readback'
 $StatusPlan = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_plan'
 $StatusEnablement = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_enablement'
@@ -409,6 +445,14 @@ $PlanRequired = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -
 $PlanMissing = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -Name 'missing_required_before_enable' -Default @())
 $EnablementRequired = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Enablement -Name 'required_before_enable' -Default @())
 $EnablementMissing = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Enablement -Name 'missing_required_before_enable' -Default @())
+$GuardPlanRequired = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardPlan -Name 'required_before_enable' -Default @())
+$GuardPlanMissing = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardPlan -Name 'missing_required_before_enable' -Default @())
+$GuardPlanBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardPlan -Name 'blocked_requirements' -Default @())
+$GuardPlanBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardPlan -Name 'blockers' -Default @())
+$GuardEnablementRequired = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardEnablement -Name 'required_before_enable' -Default @())
+$GuardEnablementMissing = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardEnablement -Name 'missing_required_before_enable' -Default @())
+$GuardEnablementBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardEnablement -Name 'blocked_requirements' -Default @())
+$GuardEnablementBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $GuardEnablement -Name 'blockers' -Default @())
 $PlanDependencies = @(Get-PropertyValue -Payload $Plan -Name 'enablement_dependency_readback' -Default @())
 $EnablementDependencies = @(Get-PropertyValue -Payload $Enablement -Name 'enablement_dependency_readback' -Default @())
 $FamilyChainFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FamilyChain -Name 'blocked_families' -Default @())
@@ -438,6 +482,28 @@ $RequiredBeforeEnableObserved = (
 $MissingRequiredBeforeEnableObserved = (
   (Test-StringArrayExact -Actual $PlanMissing -Expected $ExpectedPrerequisites) -and
   (Test-StringArrayExact -Actual $EnablementMissing -Expected $ExpectedPrerequisites)
+)
+$RequiredPrerequisiteGuardObserved = (
+  [int]$RouteResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $RequiredPrerequisiteGuard -Name 'projection' -Default '') -eq 'synthetic_manifest_readiness_guard' -and
+  [string](Get-PropertyValue -Payload $GuardPlan -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_plan' -and
+  [string](Get-PropertyValue -Payload $GuardEnablement -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_enablement.preflight' -and
+  [string](Get-PropertyValue -Payload $GuardPlan -Name 'status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $GuardEnablement -Name 'status' -Default '') -eq 'blocked' -and
+  -not [bool](Get-PropertyValue -Payload $GuardPlan -Name 'persistent_supervision_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $GuardEnablement -Name 'enablement_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $GuardPlan -Name 'required_before_enable_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $GuardEnablement -Name 'required_before_enable_ready' -Default $true) -and
+  [string](Get-PropertyValue -Payload $GuardPlan -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string](Get-PropertyValue -Payload $GuardEnablement -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  (Test-StringArrayExact -Actual $GuardPlanRequired -Expected $ExpectedPrerequisites) -and
+  (Test-StringArrayExact -Actual $GuardEnablementRequired -Expected $ExpectedPrerequisites) -and
+  (Test-StringArrayExact -Actual $GuardPlanMissing -Expected $ExpectedPrerequisites) -and
+  (Test-StringArrayExact -Actual $GuardEnablementMissing -Expected $ExpectedPrerequisites) -and
+  (Test-StringArrayExact -Actual $GuardPlanBlockedRequirements -Expected @('required_before_enable')) -and
+  (Test-StringArrayExact -Actual $GuardEnablementBlockedRequirements -Expected @('required_before_enable')) -and
+  (Test-StringArrayExact -Actual $GuardPlanBlockers -Expected @('persistent_supervision_required_prerequisites_missing')) -and
+  (Test-StringArrayExact -Actual $GuardEnablementBlockers -Expected @('persistent_supervision_required_prerequisites_missing'))
 )
 
 $DependenciesObserved = $true
@@ -525,6 +591,7 @@ $Checks = @(
   (New-Check -Id 'persistent_supervision_enablement_route_readback' -Status $(if ($EnablementRouteReadbackObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $EnablementRouteReadbackObserved -Evidence '/lens/host/persistent-supervision/enablement' -Reason 'The enablement preflight must remain blocked and non-mutating.'),
   (New-Check -Id 'required_before_enable_readback' -Status $(if ($RequiredBeforeEnableObserved) { 'prerequisites_projected' } else { 'missing_or_unexpected' }) -Passed $RequiredBeforeEnableObserved -Evidence 'required_before_enable on plan and enablement routes' -Reason 'The operator-visible contract must expose every prerequisite required before persistent supervision can be enabled.'),
   (New-Check -Id 'missing_required_before_enable_readback' -Status $(if ($MissingRequiredBeforeEnableObserved) { 'missing_prerequisites_projected' } else { 'missing_or_unexpected' }) -Passed $MissingRequiredBeforeEnableObserved -Evidence 'missing_required_before_enable on plan and enablement routes' -Reason 'The route must show that every prerequisite is still missing in the current disabled posture.'),
+  (New-Check -Id 'required_before_enable_readiness_guard' -Status $(if ($RequiredPrerequisiteGuardObserved) { 'prerequisite_guard_blocks_enablement' } else { 'missing_or_unexpected' }) -Passed $RequiredPrerequisiteGuardObserved -Evidence 'synthetic manifest projection of otherwise-ready persistent supervision routes' -Reason 'If authority and enablement toggles are otherwise ready, missing resident-host, tray, hotkey, overlay, and summon surfaces must still block persistent supervision.'),
   (New-Check -Id 'enablement_dependency_readback' -Status $(if ($DependenciesObserved) { 'dependency_routes_bound' } else { 'missing_or_unexpected' }) -Passed $DependenciesObserved -Evidence 'enablement_dependency_readback on plan and enablement routes' -Reason 'Each prerequisite must name a concrete readback route and blocker.'),
   (New-Check -Id 'summon_family_chain_alignment' -Status $(if ($FamilyChainObserved) { 'family_chain_aligned' } else { 'missing_or_unexpected' }) -Passed $FamilyChainObserved -Evidence 'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status' -Reason 'Persistent-supervision prerequisites must align with the already-proven Stage 6 summon-anywhere blocker family chain.'),
   (New-Check -Id 'lens_status_operator_readback' -Status $(if ($StatusReadbackObserved) { 'operator_readback_ready' } else { 'missing_or_unexpected' }) -Passed $StatusReadbackObserved -Evidence '/lens/status resident_host persistent-supervision readback' -Reason 'The operator status payload must carry the same persistent-supervision plan and enablement readback.'),
@@ -545,12 +612,14 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   plan_route = '/lens/host/persistent-supervision'
   enablement_route = '/lens/host/persistent-supervision/enablement'
   route_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Enablement -Name 'next_smallest_truthful_gap' -Default '')
+  guard_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'next_smallest_truthful_gap' -Default '')
   family_chain_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $FamilyChain -Name 'next_smallest_truthful_gap' -Default '')
-  next_smallest_truthful_gap = 'persistent_supervision_enablement_disabled'
+  next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   persistent_supervision_plan_readback_observed = $PlanRouteReadbackObserved
   persistent_supervision_enablement_readback_observed = $EnablementRouteReadbackObserved
   required_before_enable_observed = $RequiredBeforeEnableObserved
   missing_required_before_enable_observed = $MissingRequiredBeforeEnableObserved
+  required_before_enable_guard_observed = $RequiredPrerequisiteGuardObserved
   dependency_readback_observed = $DependenciesObserved
   family_chain_observed = $FamilyChainObserved
   prerequisites_mapped_to_family_chain = $PrerequisitesMappedToFamilyChain
@@ -576,14 +645,31 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     duration_ms = [int]$RouteResult.duration_ms
     plan_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Plan -Name 'next_smallest_truthful_gap' -Default '')
     enablement_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Enablement -Name 'next_smallest_truthful_gap' -Default '')
+    guard_plan_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardPlan -Name 'next_smallest_truthful_gap' -Default '')
+    guard_enablement_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'next_smallest_truthful_gap' -Default '')
     plan_status = [string](Get-PropertyValue -Payload $Plan -Name 'status' -Default '')
     enablement_status = [string](Get-PropertyValue -Payload $Enablement -Name 'status' -Default '')
+    guard_plan_status = [string](Get-PropertyValue -Payload $GuardPlan -Name 'status' -Default '')
+    guard_enablement_status = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'status' -Default '')
+  }
+  guard_readback = [ordered]@{
+    projection = [string](Get-PropertyValue -Payload $RequiredPrerequisiteGuard -Name 'projection' -Default '')
+    observed = $RequiredPrerequisiteGuardObserved
+    plan_status = [string](Get-PropertyValue -Payload $GuardPlan -Name 'status' -Default '')
+    enablement_status = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'status' -Default '')
+    plan_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardPlan -Name 'next_smallest_truthful_gap' -Default '')
+    enablement_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'next_smallest_truthful_gap' -Default '')
+    required_before_enable = [string[]]@($GuardEnablementRequired)
+    missing_required_before_enable = [string[]]@($GuardEnablementMissing)
+    blocked_requirements = [string[]]@($GuardEnablementBlockedRequirements)
+    blockers = [string[]]@($GuardEnablementBlockers)
   }
   checks = @($Checks)
   evidence = @(
     '/lens/host/persistent-supervision',
     '/lens/host/persistent-supervision/enablement',
     '/lens/status',
+    'synthetic manifest required-before-enable readiness guard projection',
     'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status',
     'docs/canonical/ROADMAP.md#4.12'
   )
@@ -594,6 +680,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     wraps_persistent_supervision_enablement_route = $true
     wraps_lens_status = $true
     wraps_summon_anywhere_family_chain_proof = $true
+    readiness_guard_projection = $true
     product_execution_authority = $false
     execution_authority = $false
     approval_decision_authority = $false
@@ -614,7 +701,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes, and every prerequisite maps to the existing Stage 6 summon-anywhere blocker family chain without granting runtime, service, summon, memory, or resident authority.'
+  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes; the required-before-enable guard still blocks an otherwise-ready projection on missing resident-host, tray, hotkey, overlay, and summon surfaces without granting runtime, service, summon, memory, or resident authority.'
 } | ConvertTo-Json -Depth 8
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

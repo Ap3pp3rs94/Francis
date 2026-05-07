@@ -96,15 +96,17 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["stage6_completion_reviewed"] is True
-    assert "host-supervision approval proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent-supervision prerequisite proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent-supervision prerequisite guard proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "service-install plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision enablement transition-plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent supervision enablement is still disabled" in (payload["next_smallest_truthful_gap_basis"])
+    assert (
+        "resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing"
+        in (payload["next_smallest_truthful_gap_basis"])
+    )
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",
@@ -697,6 +699,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert transition_plan["transition_plan_ready"] is False
     assert transition_plan["persistent_supervision_enablement_disabled"] is True
     assert transition_plan["persistent_supervision_prerequisites_proof_observed"] is True
+    assert transition_plan["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert transition_plan["persistent_supervision_service_install_plan_proof_observed"] is True
     assert transition_plan["persistent_supervision_resident_claim_boundary_observed"] is True
     assert transition_plan["persistent_supervision_plan_observed"] is True
@@ -756,7 +759,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "process_supervision_disabled" in transition_plan["blockers"]
     assert "persistent_supervision_disabled" in transition_plan["blockers"]
     assert "resident_claim_authority_not_granted" in transition_plan["blockers"]
-    assert transition_plan["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert transition_plan["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     transition_governance = transition_plan["governance"]
     assert transition_governance["diagnostic_only"] is True
     assert transition_governance["read_only_transition_plan"] is True
@@ -1634,12 +1637,16 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_proof["plan_route"] == "/lens/host/persistent-supervision"
     assert prerequisites_proof["enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert prerequisites_proof["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert prerequisites_proof["guard_next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
     assert prerequisites_proof["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert prerequisites_proof["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert prerequisites_proof["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert prerequisites_proof["persistent_supervision_plan_readback_observed"] is True
     assert prerequisites_proof["persistent_supervision_enablement_readback_observed"] is True
     assert prerequisites_proof["required_before_enable_observed"] is True
     assert prerequisites_proof["missing_required_before_enable_observed"] is True
+    assert prerequisites_proof["required_before_enable_guard_observed"] is True
     assert prerequisites_proof["dependency_readback_observed"] is True
     assert prerequisites_proof["family_chain_observed"] is True
     assert prerequisites_proof["prerequisites_mapped_to_family_chain"] is True
@@ -1654,6 +1661,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     ]
     assert prerequisites_proof["required_before_enable"] == expected_persistent_prerequisites
     assert prerequisites_proof["missing_required_before_enable"] == expected_persistent_prerequisites
+    assert prerequisites_proof["guard_readback"]["observed"] is True
+    assert prerequisites_proof["guard_readback"]["blocked_requirements"] == ["required_before_enable"]
+    assert prerequisites_proof["guard_readback"]["blockers"] == [
+        "persistent_supervision_required_prerequisites_missing"
+    ]
     prerequisite_dependency_readback = {item["id"]: item for item in prerequisites_proof["dependency_readback"]}
     assert set(prerequisite_dependency_readback) == set(expected_persistent_prerequisites)
     assert prerequisite_dependency_readback["resident_host_process"]["family"] == "resident_host"

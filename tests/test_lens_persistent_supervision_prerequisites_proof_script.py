@@ -62,12 +62,14 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["plan_route"] == "/lens/host/persistent-supervision"
     assert payload["enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["guard_next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["persistent_supervision_plan_readback_observed"] is True
     assert payload["persistent_supervision_enablement_readback_observed"] is True
     assert payload["required_before_enable_observed"] is True
     assert payload["missing_required_before_enable_observed"] is True
+    assert payload["required_before_enable_guard_observed"] is True
     assert payload["dependency_readback_observed"] is True
     assert payload["family_chain_observed"] is True
     assert payload["prerequisites_mapped_to_family_chain"] is True
@@ -147,12 +149,35 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert route_readback["enablement_status"] == "blocked"
     assert route_readback["plan_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert route_readback["enablement_next_smallest_truthful_gap"] == ("persistent_supervision_authority_not_granted")
+    assert route_readback["guard_plan_next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert route_readback["guard_enablement_next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert route_readback["guard_plan_status"] == "blocked"
+    assert route_readback["guard_enablement_status"] == "blocked"
+
+    guard_readback = payload["guard_readback"]
+    assert guard_readback == {
+        "projection": "synthetic_manifest_readiness_guard",
+        "observed": True,
+        "plan_status": "blocked",
+        "enablement_status": "blocked",
+        "plan_next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+        "enablement_next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+        "required_before_enable": expected_prerequisites,
+        "missing_required_before_enable": expected_prerequisites,
+        "blocked_requirements": ["required_before_enable"],
+        "blockers": ["persistent_supervision_required_prerequisites_missing"],
+    }
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["persistent_supervision_plan_route_readback"]["status"] == "blocked_readback_ready"
     assert checks["persistent_supervision_enablement_route_readback"]["status"] == "blocked_readback_ready"
     assert checks["required_before_enable_readback"]["status"] == "prerequisites_projected"
     assert checks["missing_required_before_enable_readback"]["status"] == "missing_prerequisites_projected"
+    assert checks["required_before_enable_readiness_guard"]["status"] == "prerequisite_guard_blocks_enablement"
     assert checks["enablement_dependency_readback"]["status"] == "dependency_routes_bound"
     assert checks["summon_family_chain_alignment"]["status"] == "family_chain_aligned"
     assert checks["lens_status_operator_readback"]["status"] == "operator_readback_ready"
@@ -166,6 +191,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
         "wraps_persistent_supervision_enablement_route": True,
         "wraps_lens_status": True,
         "wraps_summon_anywhere_family_chain_proof": True,
+        "readiness_guard_projection": True,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,

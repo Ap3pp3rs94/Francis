@@ -21075,6 +21075,57 @@ prerequisite readiness guard:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-07 - Stage 6/Lens persistent-supervision prerequisite guard proof consumption
+
+The persistent-supervision prerequisite proof now verifies the readiness guard
+added to the backend route. In addition to proving that
+`required_before_enable` and `missing_required_before_enable` are readable from
+the persistent-supervision plan, enablement preflight, and Lens status
+readback, the proof now performs a non-mutating synthetic manifest projection
+where process supervision, persistent supervision, and prerequisite authorities
+are otherwise ready. That projection still reports:
+
+- `required_before_enable_guard_observed=true`
+- `guard_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+The enablement transition-plan proof and Stage 6 completion audit now consume
+that guard proof. The completion audit remains blocked, still refuses Stage 6
+closure, and now reports the top-level handoff as:
+
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, process supervision authority, process restart
+authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+service-install authority, service-control authority, receipt-write authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens persistent-supervision
+prerequisite guard proof consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; required_before_enable_guard_observed=true`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; persistent_supervision_required_prerequisites_guard_observed=true`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; transition_allowed=false`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed twice on audit basis-text assertions before wording correction; passed after correction`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting; passed after running ruff format on tests\test_lens_stage6_completion_audit_script.py`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

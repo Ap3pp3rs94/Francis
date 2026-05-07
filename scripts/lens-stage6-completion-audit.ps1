@@ -411,12 +411,14 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [string]$PersistentSupervisionPrerequisitesProof.plan_route -eq '/lens/host/persistent-supervision' -and
   [string]$PersistentSupervisionPrerequisitesProof.enablement_route -eq '/lens/host/persistent-supervision/enablement' -and
   [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
+  [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
-  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_guard_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain -and
@@ -660,6 +662,7 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
   -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_required_prerequisites_guard_observed -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_service_install_plan_proof_observed -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_resident_claim_boundary_observed -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_plan_observed -and
@@ -684,7 +687,7 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
   $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'summon_binding' -and
   $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'process_supervision_enabled' -and
   $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'persistent_supervision_enabled' -and
-  [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.diagnostic_only -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.read_only_transition_plan -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.wraps_existing_prerequisite_proof -and
@@ -1898,9 +1901,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementAuthorityProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled'
+  $PersistentSupervisionEnablementTransitionPlanProofObserved -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
 ) {
-  'persistent_supervision_enablement_disabled'
+  'persistent_supervision_required_prerequisites_missing'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -2012,6 +2016,8 @@ $Payload = [ordered]@{
     'The audit must consume the persistent-supervision service-install plan proof before treating disabled Lens host service configuration as audited Stage 6 enablement evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_transition_plan_proof_readback') {
     'The audit must consume the persistent-supervision enablement transition-plan proof before treating prerequisite, service-plan, authority-chain, disabled-config, and side-effect readback as one audited Stage 6 handoff.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing') {
+    'The completion audit consumes the persistent-supervision prerequisite guard proof, service-install plan proof, persistent-supervision authority proof chain, resident-claim boundary proof, and persistent-supervision enablement transition-plan proof. Persistent supervision remains blocked because resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing; no runtime launch, service-config mutation, memory write, or resident claim is made.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
     'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, the persistent-supervision authority proof chain, and the persistent-supervision enablement transition-plan proof: prerequisites, disabled service plan, enablement authority, execution authority, resident-claim boundary, disabled config toggles, and side-effect denial are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
@@ -3014,12 +3020,14 @@ $Payload = [ordered]@{
     plan_route = [string]$PersistentSupervisionPrerequisitesProof.plan_route
     enablement_route = [string]$PersistentSupervisionPrerequisitesProof.enablement_route
     route_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap
+    guard_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap
     family_chain_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap
     next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap
     persistent_supervision_plan_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed
     persistent_supervision_enablement_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed
     required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed
     missing_required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed
+    required_before_enable_guard_observed = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_guard_observed
     dependency_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed
     family_chain_observed = [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed
     prerequisites_mapped_to_family_chain = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain
@@ -3030,6 +3038,7 @@ $Payload = [ordered]@{
     dependency_readback = @($PersistentSupervisionPrerequisitesProof.dependency_readback)
     family_chain = $PersistentSupervisionPrerequisitesProof.family_chain
     route_readback = $PersistentSupervisionPrerequisitesProof.route_readback
+    guard_readback = $PersistentSupervisionPrerequisitesProof.guard_readback
     checks = @($PersistentSupervisionPrerequisitesProof.checks)
     governance = $PersistentSupervisionPrerequisitesProofGovernance
   }
@@ -3235,6 +3244,7 @@ $Payload = [ordered]@{
     transition_plan_ready = [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready
     persistent_supervision_enablement_disabled = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled
     persistent_supervision_prerequisites_proof_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed
+    persistent_supervision_required_prerequisites_guard_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_required_prerequisites_guard_observed
     persistent_supervision_service_install_plan_proof_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_service_install_plan_proof_observed
     persistent_supervision_resident_claim_boundary_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_resident_claim_boundary_observed
     persistent_supervision_plan_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_plan_observed
