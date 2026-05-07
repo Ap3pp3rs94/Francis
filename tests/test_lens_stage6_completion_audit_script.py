@@ -88,11 +88,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["next_smallest_truthful_gap"] == "host_supervision_authority_exact_approval_request"
     assert payload["stage6_completion_reviewed"] is True
-    assert (
-        "Stage 6 still cannot close because summon-anywhere is blocked" in (payload["next_smallest_truthful_gap_basis"])
-    )
+    assert "exact host-supervision authority approval request" in (payload["next_smallest_truthful_gap_basis"])
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

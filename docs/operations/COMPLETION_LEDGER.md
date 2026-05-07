@@ -20556,6 +20556,47 @@ preference:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-06 - Stage 6/Lens completion audit concrete handoff
+
+The Stage 6/Lens completion audit now preserves the completed audit state while
+pointing the next builder at the concrete resident-host supervision approval
+handoff. After the audit consumes the resident-host process-supervision proof,
+observes the host-supervision authority readiness handoff, and still cannot
+close Stage 6, the top-level `next_smallest_truthful_gap` now reads back:
+
+- `host_supervision_authority_exact_approval_request`
+
+The audit still reports `status=blocked`, `closure_decision=do_not_close_stage6`,
+`transition_allowed=false`, and the same remaining Stage 6 acceptance blockers:
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence. This avoids sending the next builder back through the broader
+`summon_anywhere_blockers` family after the resident-host process-supervision
+handoff has already been consumed and the exact approval-request handoff is
+available.
+
+This is diagnostic/readback work only. It does not create execution authority,
+approval decision authority, approval request writes, product memory-write
+behavior, local process launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, tray-registration authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens completion audit concrete
+handoff:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=host_supervision_authority_exact_approval_request; transition_allowed=false`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
