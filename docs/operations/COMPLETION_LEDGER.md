@@ -20468,6 +20468,50 @@ supervision:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens resident candidate supervisor readback
+
+The Lens status and host-manifest readback now preserve bounded resident
+candidate supervisor state from `data/runtime/lens-host-supervisor/status.json`.
+When the supervisor state records `host_mode=resident` with
+`status=supervised_session_completed`, `/lens/status`, `/lens/host`,
+`/lens/host/manifest`, the host supervision gate, and resident surface runtime
+readback expose `resident_runtime_candidate_supervised=true` and
+`fresh_resident_runtime_candidate_supervised=true` while keeping
+`resident_supervised_runtime=false`, `resident_claim_allowed=false`, and
+`blocked_reason=resident_runtime_candidate_not_persistent`.
+
+This connects the previous bounded resident-candidate proof to operator/API
+readback without claiming system-resident presence, summon-anywhere behavior,
+helpful/not-noisy resident behavior, service management, restart management,
+global hotkey binding, overlay presence, tray presence, or a durable resident
+host. Stage 6 remains active and blocked on summon-anywhere, helpful/not-noisy
+resident behavior, and system-resident presence.
+
+This is readback/API work only. It does not create execution authority,
+approval decision authority, approval request writes, product memory-write
+behavior, local process launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, tray-registration authority, hotkey-registration authority,
+overlay-control authority, summon authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens resident candidate
+supervisor readback:
+
+- `gh run view 25466652175 --json status,conclusion,updatedAt,createdAt,url,headSha,displayTitle`
+  Result: `passed; ci conclusion=success for 112ffba`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_api_surfaces_host_supervisor_readback_without_authority tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_api_lens.py::test_lens_api_marks_stale_host_supervisor_readback_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

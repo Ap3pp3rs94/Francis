@@ -231,6 +231,7 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
     state_payload = _json_dict_from_path(state_file) if state_exists else {}
     state_status = str(state_payload.get("status") or "")
     mode = str(state_payload.get("mode") or "")
+    host_mode = str(state_payload.get("host_mode") or "")
     observed_pid = _safe_pid(state_payload.get("observed_pid"))
     observed_state = str(state_payload.get("observed_state") or "")
     bounded_supervisor_observed = state_status in {
@@ -241,6 +242,7 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
     }
     supervised_session_completed = state_status == "supervised_session_completed"
     observation_completed = state_status == "observation_completed"
+    resident_runtime_candidate_supervised = supervised_session_completed and host_mode == "resident"
     status = state_status if state_exists and state_status else "missing"
     updated_at = str(state_payload.get("updated_at") or "")
     state_age_seconds = _age_seconds(updated_at)
@@ -254,7 +256,9 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         freshness_status = "stale"
     state_stale = freshness_status == "stale"
     fresh_readback = freshness_status == "fresh"
-    if supervised_session_completed:
+    if resident_runtime_candidate_supervised:
+        blocked_reason = "resident_runtime_candidate_not_persistent"
+    elif supervised_session_completed:
         blocked_reason = "resident_supervision_not_persistent"
     elif bounded_supervisor_observed:
         blocked_reason = "resident_supervision_bounded_not_resident"
@@ -269,6 +273,7 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "state_exists": state_exists,
         "state_status": state_status,
         "mode": mode,
+        "host_mode": host_mode,
         "observed_pid": observed_pid,
         "observed_state": observed_state,
         "updated_at": updated_at,
@@ -280,8 +285,10 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "bounded_supervisor_observed": bounded_supervisor_observed,
         "observation_completed": observation_completed,
         "supervised_session_completed": supervised_session_completed,
+        "resident_runtime_candidate_supervised": resident_runtime_candidate_supervised,
         "fresh_bounded_supervisor_observed": bounded_supervisor_observed and fresh_readback,
         "fresh_supervised_session_completed": supervised_session_completed and fresh_readback,
+        "fresh_resident_runtime_candidate_supervised": resident_runtime_candidate_supervised and fresh_readback,
         "restarted_process": bool(state_payload.get("restarted_process")),
         "managed_service": bool(state_payload.get("managed_service")),
         "resident_supervised_runtime": False,
@@ -646,8 +653,12 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_runtime_candidate_supervised": bool(supervisor_readback.get("resident_runtime_candidate_supervised")),
         "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
         "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
+        "fresh_resident_runtime_candidate_supervised": bool(
+            supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
+        ),
         "resident_supervised_runtime": False,
         "resident_host_supervised": False,
         "service_installed": bool(service_readback.get("installed")),
@@ -1374,6 +1385,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_supervisor_readback",
                 "path": supervisor_readback["runtime_state_path"],
                 "status": supervisor_readback["status"],
+                "host_mode": supervisor_readback["host_mode"],
                 "freshness_status": supervisor_readback["freshness_status"],
                 "state_age_seconds": supervisor_readback["state_age_seconds"],
                 "state_stale": supervisor_readback["state_stale"],

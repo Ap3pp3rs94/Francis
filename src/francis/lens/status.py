@@ -456,6 +456,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             "id": "host_supervisor_readback",
             "label": "Host supervisor readback",
             "status": _safe_str(supervisor_readback.get("status")).strip() or "missing",
+            "host_mode": _safe_str(supervisor_readback.get("host_mode")).strip(),
             "freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
             "state_age_seconds": supervisor_readback.get("state_age_seconds"),
             "state_stale": bool(supervisor_readback.get("state_stale")),
@@ -651,8 +652,12 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_runtime_candidate_supervised": bool(supervisor_readback.get("resident_runtime_candidate_supervised")),
         "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
         "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
+        "fresh_resident_runtime_candidate_supervised": bool(
+            supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
+        ),
         "resident_supervised_runtime": False,
         "supervision_readiness": supervision_readiness,
         "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
@@ -3122,8 +3127,12 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
         "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
         "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
         "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_runtime_candidate_supervised": bool(supervisor_readback.get("resident_runtime_candidate_supervised")),
         "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
         "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
+        "fresh_resident_runtime_candidate_supervised": bool(
+            supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
+        ),
         "resident_supervised_runtime": False,
         "runtime_ready": False,
         "resident_surface_ready": False,
