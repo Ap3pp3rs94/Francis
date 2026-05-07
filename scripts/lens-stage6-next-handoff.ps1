@@ -164,18 +164,21 @@ $FamilyChainCompletionAuditHandoff = Get-PropertyValue -Payload $CriterionHandof
 
 $CriterionNextGap = [string](Get-PropertyValue -Payload $FirstBlockedCriterion -Name 'next_smallest_truthful_gap' -Default '')
 $FamilyNextGap = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
-$RecommendedNextSlice = $FamilyNextGap
-if ([string]::IsNullOrWhiteSpace($RecommendedNextSlice)) {
-  $RecommendedNextSlice = $CriterionNextGap
+$FamilyProofScript = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '')
+$RecommendedNextGap = $FamilyNextGap
+if ([string]::IsNullOrWhiteSpace($RecommendedNextGap)) {
+  $RecommendedNextGap = $CriterionNextGap
 }
-if ([string]::IsNullOrWhiteSpace($RecommendedNextSlice)) {
-  $RecommendedNextSlice = $StageNextGap
+if ([string]::IsNullOrWhiteSpace($RecommendedNextGap)) {
+  $RecommendedNextGap = $StageNextGap
 }
 
-$RecommendedProofScript = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '')
+$RecommendedNextSlice = $RecommendedNextGap
+$RecommendedProofScript = $FamilyProofScript
 $RecommendedRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '')
 $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '')
 $AuthorityRequired = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '')
+$RecommendedHandoffSource = 'first_blocker_family_handoff'
 
 $ClosureObserved = (
   [string](Get-PropertyValue -Payload $ClosureReadback -Name 'kind' -Default '') -eq 'lens.stage6.closure_readback' -and
@@ -202,6 +205,23 @@ $CompletionAuditHandoffObserved = (
   [bool](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'diagnostic_only' -Default $false)
 )
+$CompletionAuditProofScript = [string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'proof_script' -Default '')
+$CompletionAuditNextGap = [string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_smallest_truthful_gap' -Default '')
+$CompletionAuditNextStep = [string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_step' -Default '')
+if (
+  $CompletionAuditHandoffObserved -and
+  -not [string]::IsNullOrWhiteSpace($CompletionAuditProofScript) -and
+  -not [string]::IsNullOrWhiteSpace($CompletionAuditNextGap)
+) {
+  $RecommendedHandoffSource = 'first_blocker_family_completion_audit_handoff'
+  $RecommendedNextGap = $CompletionAuditNextGap
+  $RecommendedNextSlice = $CompletionAuditNextStep
+  if ([string]::IsNullOrWhiteSpace($RecommendedNextSlice)) {
+    $RecommendedNextSlice = $CompletionAuditNextGap
+  }
+  $RecommendedProofScript = $CompletionAuditProofScript
+  $AuthorityRequired = [string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'authority_required' -Default '')
+}
 $FamilyChainHandoffObserved = (
   [string](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
   [bool](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'read_only_contract' -Default $false) -and
@@ -238,13 +258,14 @@ $Payload = [ordered]@{
   stage_state = [string](Get-PropertyValue -Payload $Stage6Readiness -Name 'stage_state' -Default '')
   ready_to_close = [bool](Get-PropertyValue -Payload $ClosureReadback -Name 'ready_to_close' -Default $false)
   stage_next_smallest_truthful_gap = $StageNextGap
-  next_smallest_truthful_gap = $RecommendedNextSlice
+  next_smallest_truthful_gap = $RecommendedNextGap
   acceptance_criterion = $FirstBlockedCriterionId
   acceptance_criterion_status = [string](Get-PropertyValue -Payload $FirstBlockedCriterion -Name 'status' -Default '')
   criterion_next_smallest_truthful_gap = $CriterionNextGap
   first_blocker_family = $FirstBlockerFamily
   first_blocker_family_next_smallest_truthful_gap = $FamilyNextGap
   recommended_next_slice = $RecommendedNextSlice
+  recommended_handoff_source = $RecommendedHandoffSource
   recommended_proof_script = $RecommendedProofScript
   recommended_route = $RecommendedRoute
   recommended_readiness_route = $RecommendedReadinessRoute

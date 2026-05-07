@@ -56,12 +56,18 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["recommended_next_slice"] == "resident_host_runtime_blocker_boundary"
-    assert payload["recommended_proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert (
+        payload["recommended_next_slice"] == "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    )
+    assert payload["recommended_handoff_source"] == "first_blocker_family_completion_audit_handoff"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+    )
     assert payload["recommended_route"] == "/lens/host"
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert payload["authority_required"] == "resident_runtime_execution_authority"
+    assert payload["authority_required"] == "process_supervision_authority"
     assert payload["blocked_criteria"] == [
         "summon_anywhere",
         "helpful_not_noisy",

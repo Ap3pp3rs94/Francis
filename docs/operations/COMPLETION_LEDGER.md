@@ -20512,6 +20512,50 @@ supervisor readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-06 - Stage 6/Lens next-handoff audit preference
+
+Stage 6/Lens next-handoff proof now prefers the existing
+`first_blocker_family_completion_audit_handoff` when that handoff is present,
+diagnostic-only, read-only, and points at a concrete proof script. The current
+verified handoff keeps Stage 6 active and blocked, but now recommends:
+
+- `recommended_handoff_source=first_blocker_family_completion_audit_handoff`
+- `recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff`
+- `recommended_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure`
+- `next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `authority_required=process_supervision_authority`
+
+This avoids sending the next builder back through the weaker default
+resident-host blocker proof after the process-supervision completion-audit
+handoff is already readable. Stage 6 remains active and blocked on
+summon-anywhere, helpful/not-noisy resident behavior, and system-resident
+presence.
+
+This is diagnostic/proof-handoff work only. It does not create execution
+authority, approval decision authority, approval request writes, product
+memory-write behavior, local process launch authority, process-supervision
+authority, process-restart authority, service-install authority,
+service-control authority, tray-registration authority, hotkey-registration
+authority, overlay-control authority, summon authority, resident-claim
+authority, telemetry behavior, a resident host, a tray process, an overlay
+window, a global hotkey, or a UI claim.
+
+Latest validation for the `2026-05-06` Stage 6/Lens next-handoff audit
+preference:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; recommended_handoff_source=first_blocker_family_completion_audit_handoff; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
