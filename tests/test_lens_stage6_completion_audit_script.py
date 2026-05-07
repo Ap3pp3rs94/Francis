@@ -79,19 +79,24 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident_host_process_supervision_blocker",
         "host_supervision_authority_request",
         "persistent_supervision_plan",
+        "persistent_supervision_prerequisites",
         "persistent_supervision_enablement_authority",
         "persistent_supervision_execution_authority",
         "persistent_supervision_resident_claim_boundary",
     }
-    for run in child_proof_runs.values():
+    expected_child_proof_timeouts = {name: 420 for name in child_proof_runs} | {
+        "persistent_supervision_prerequisites": 240
+    }
+    for name, run in child_proof_runs.items():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 420
+        assert run["timeout_seconds"] == expected_child_proof_timeouts[name]
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
     assert payload["stage6_completion_reviewed"] is True
     assert "host-supervision approval proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "persistent-supervision prerequisite proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
     assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent supervision enablement is still disabled" in (payload["next_smallest_truthful_gap_basis"])
@@ -1513,6 +1518,70 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_plan["would_claim_resident"] is False
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in persistent_plan["evidence"]
 
+    prerequisites_proof = payload["persistent_supervision_prerequisites_proof"]
+    assert prerequisites_proof["status"] == "proof_passed"
+    assert prerequisites_proof["ok"] is True
+    assert prerequisites_proof["exit_code"] == 0
+    assert prerequisites_proof["acceptance_criterion"] == "system_resident_presence"
+    assert prerequisites_proof["plan_route"] == "/lens/host/persistent-supervision"
+    assert prerequisites_proof["enablement_route"] == "/lens/host/persistent-supervision/enablement"
+    assert prerequisites_proof["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert prerequisites_proof["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert prerequisites_proof["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert prerequisites_proof["persistent_supervision_plan_readback_observed"] is True
+    assert prerequisites_proof["persistent_supervision_enablement_readback_observed"] is True
+    assert prerequisites_proof["required_before_enable_observed"] is True
+    assert prerequisites_proof["missing_required_before_enable_observed"] is True
+    assert prerequisites_proof["dependency_readback_observed"] is True
+    assert prerequisites_proof["family_chain_observed"] is True
+    assert prerequisites_proof["prerequisites_mapped_to_family_chain"] is True
+    assert prerequisites_proof["lens_status_operator_readback_observed"] is True
+    assert prerequisites_proof["side_effects_denied"] is True
+    expected_persistent_prerequisites = [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert prerequisites_proof["required_before_enable"] == expected_persistent_prerequisites
+    assert prerequisites_proof["missing_required_before_enable"] == expected_persistent_prerequisites
+    prerequisite_dependency_readback = {item["id"]: item for item in prerequisites_proof["dependency_readback"]}
+    assert set(prerequisite_dependency_readback) == set(expected_persistent_prerequisites)
+    assert prerequisite_dependency_readback["resident_host_process"]["family"] == "resident_host"
+    assert prerequisite_dependency_readback["tray_presence"]["route"] == "/lens/tray"
+    assert prerequisite_dependency_readback["global_hotkey_binding"]["blocker"] == "global_hotkey_binding_missing"
+    assert prerequisite_dependency_readback["overlay_window"]["blocker"] == "overlay_window_missing"
+    assert prerequisite_dependency_readback["summon_binding"]["route"] == "/lens/summon"
+    prerequisites_family_chain = prerequisites_proof["family_chain"]
+    assert prerequisites_family_chain["status"] == "proof_passed"
+    assert prerequisites_family_chain["timed_out"] is False
+    assert prerequisites_family_chain["blocked_families"] == expected_summon_family_ids
+    assert prerequisites_family_chain["handoff_count"] == 6
+    assert prerequisites_family_chain["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert prerequisites_family_chain["side_effects_denied"] is True
+    prerequisites_route_readback = prerequisites_proof["route_readback"]
+    assert prerequisites_route_readback["status"] == "readback_ready"
+    assert prerequisites_route_readback["plan_status"] == "blocked"
+    assert prerequisites_route_readback["enablement_status"] == "blocked"
+    assert all(item["passed"] for item in prerequisites_proof["checks"])
+    prerequisites_governance = prerequisites_proof["governance"]
+    assert prerequisites_governance["diagnostic_only"] is True
+    assert prerequisites_governance["read_only_contract"] is True
+    assert prerequisites_governance["wraps_persistent_supervision_plan_route"] is True
+    assert prerequisites_governance["wraps_persistent_supervision_enablement_route"] is True
+    assert prerequisites_governance["wraps_lens_status"] is True
+    assert prerequisites_governance["wraps_summon_anywhere_family_chain_proof"] is True
+    assert prerequisites_governance["execution_authority"] is False
+    assert prerequisites_governance["approval_decision_authority"] is False
+    assert prerequisites_governance["local_process_launch_authority"] is False
+    assert prerequisites_governance["process_supervision_authority"] is False
+    assert prerequisites_governance["service_config_write_authority"] is False
+    assert prerequisites_governance["summon_authority"] is False
+    assert prerequisites_governance["memory_write"] is False
+    assert prerequisites_governance["resident_claim_authority"] is False
+    assert prerequisites_governance["mutation_authority_granted"] is False
+
     enablement_denial = payload["persistent_supervision_enablement_denial_boundary"]
     assert enablement_denial["status"] == "blocked"
     assert enablement_denial["ok"] is True
@@ -1582,6 +1651,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-plan.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert (
@@ -1608,6 +1678,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["host_supervision_authority_request_proof_readback"] is True
     assert governance["helpful_not_noisy_runtime_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
+    assert governance["persistent_supervision_prerequisites_proof_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True
     assert governance["persistent_supervision_resident_claim_boundary_proof_readback"] is True
     assert governance["persistent_supervision_enablement_denial_boundary_readback"] is True

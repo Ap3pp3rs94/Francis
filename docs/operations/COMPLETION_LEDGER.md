@@ -20816,7 +20816,52 @@ prerequisite proof handoff:
 - `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
   Result: `failed before formatting; passed after formatting`
 - `git diff --check`
-  Result: `passed before ledger update`
+  Result: `passed`
+
+### 2026-05-07 - Stage 6/Lens completion audit consumes persistent-supervision prerequisite proof
+
+The Stage 6/Lens completion audit now consumes the standalone
+persistent-supervision prerequisite proof as a child proof:
+
+- `scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+
+The audit now reports that the persistent-supervision prerequisites are read
+back through the persistent-supervision plan route, enablement preflight route,
+operator status route, and the summon-anywhere family-chain proof before it
+keeps the top-level handoff on:
+
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+
+The prerequisite proof is exposed in the completion-audit payload as
+`persistent_supervision_prerequisites_proof`, and the governance readback now
+includes `persistent_supervision_prerequisites_proof_readback=true`. The
+top-level audit remains `status=blocked`, `closure_decision=do_not_close_stage6`,
+and `transition_allowed=false`; Stage 6 remains active with the same acceptance
+blockers: summon-anywhere, helpful/not-noisy resident behavior, and
+system-resident presence.
+
+This is diagnostic/readback work only. It does not create production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, persistent-supervision enablement authority,
+persistent-supervision execution authority, service-config write authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a global
+hotkey, or a UI claim.
+
+Latest validation for the `2026-05-07` Stage 6/Lens completion audit
+persistent-supervision prerequisite proof consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; persistent_supervision_prerequisites_proof_readback=true`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `failed before formatting; passed after running ruff format`
+- `git diff --check`
+  Result: `passed before and after ledger update; PowerShell CRLF normalization warning only`
 
 ## 6. Update rule
 

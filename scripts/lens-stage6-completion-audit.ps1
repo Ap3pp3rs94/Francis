@@ -220,6 +220,7 @@ $ResidentHostRuntimeBoundaryProofScript = Join-Path $PSScriptRoot 'lens-resident
 $ResidentHostProcessSupervisionBlockerProofScript = Join-Path $PSScriptRoot 'lens-resident-host-process-supervision-blocker-proof.ps1'
 $HostSupervisionAuthorityRequestProofScript = Join-Path $PSScriptRoot 'lens-host-supervision-authority-request-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
+$PersistentSupervisionPrerequisitesProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-prerequisites-proof.ps1'
 $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-authority-proof.ps1'
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
@@ -384,6 +385,70 @@ $PersistentSupervisionPlanObserved = (
   -not [bool]$PersistentSupervisionPlan.persistent_supervision_ready -and
   -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
 )
+$PersistentSupervisionPrerequisitesProofTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 240)
+$PersistentSupervisionPrerequisitesProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $PersistentSupervisionPrerequisitesProofScript `
+  -ScriptArgs @(
+    '-Mode',
+    'Status',
+    '-ChildProofTimeoutSeconds',
+    [string]$PersistentSupervisionPrerequisitesProofTimeoutSeconds
+  ) `
+  -TimeoutSeconds $PersistentSupervisionPrerequisitesProofTimeoutSeconds
+$PersistentSupervisionPrerequisitesProof = $PersistentSupervisionPrerequisitesProofResult.payload
+$PersistentSupervisionPrerequisitesProofGovernance = $PersistentSupervisionPrerequisitesProof.governance
+$PersistentSupervisionPrerequisitesRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.required_before_enable
+$PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.missing_required_before_enable
+$PersistentSupervisionPrerequisitesProofObserved = (
+  [int]$PersistentSupervisionPrerequisitesProofResult.exit_code -eq 0 -and
+  [string]$PersistentSupervisionPrerequisitesProof.kind -eq 'lens.persistent_supervision.prerequisites.proof' -and
+  [bool]$PersistentSupervisionPrerequisitesProof.ok -and
+  [string]$PersistentSupervisionPrerequisitesProof.status -eq 'proof_passed' -and
+  [string]$PersistentSupervisionPrerequisitesProof.acceptance_criterion -eq 'system_resident_presence' -and
+  [string]$PersistentSupervisionPrerequisitesProof.plan_route -eq '/lens/host/persistent-supervision' -and
+  [string]$PersistentSupervisionPrerequisitesProof.enablement_route -eq '/lens/host/persistent-supervision/enablement' -and
+  [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
+  [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain -and
+  [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.side_effects_denied -and
+  $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'resident_host_process' -and
+  $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'tray_presence' -and
+  $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'overlay_window' -and
+  $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'summon_binding' -and
+  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'resident_host_process' -and
+  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'tray_presence' -and
+  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'overlay_window' -and
+  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'summon_binding' -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.diagnostic_only -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_plan_route -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_enablement_route -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_lens_status -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_summon_anywhere_family_chain_proof -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.product_execution_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.execution_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.approval_decision_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.process_supervision_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.persistent_supervision_enablement_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.persistent_supervision_execution_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.service_config_write_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.summon_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.memory_write -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.resident_claim_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.mutation_authority_granted
+)
 $PersistentSupervisionEnablementAuthorityProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionEnablementAuthorityProofScript `
@@ -505,6 +570,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
   New-ChildProofRunSummary -Name 'host_supervision_authority_request' -Result $HostSupervisionAuthorityRequestProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
+  New-ChildProofRunSummary -Name 'persistent_supervision_prerequisites' -Result $PersistentSupervisionPrerequisitesProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_authority' -Result $PersistentSupervisionEnablementAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_execution_authority' -Result $PersistentSupervisionExecutionAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
@@ -1484,6 +1550,7 @@ $Stage6CompletionReviewed = (
   $ResidentHostProcessSupervisionBlockerProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
   $OsBindingAuthorityRequestReadbackObserved -and
@@ -1547,6 +1614,16 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $HostSupervisionAuthorityRequestProofObserved
 ) {
   'host_supervision_authority_exact_approval_request'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  -not $PersistentSupervisionPrerequisitesProofObserved
+) {
+  'persistent_supervision_prerequisites_proof_readback'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -1639,6 +1716,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $ResidentHostProcessSupervisionBlockerProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
   $PersistentSupervisionEnablementAuthorityProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
@@ -1750,8 +1828,10 @@ $Payload = [ordered]@{
     'The audit must consume the host supervision authority readiness handoff before treating exact approval-request review as an audited resident-host supervision blocker.'
   } elseif ($NextSmallestTruthfulGap -eq 'host_supervision_authority_exact_approval_request') {
     'The completion audit has consumed the resident-host process-supervision handoff and now reads back the exact host-supervision authority approval request as the first concrete blocker for summon-anywhere resident-host supervision.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_prerequisites_proof_readback') {
+    'The audit must consume the persistent-supervision prerequisite proof before treating persistent supervision enablement blockers as fully mapped to the Stage 6 summon-anywhere blocker family chain.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
-    'The completion audit consumes the host-supervision approval proof and the persistent-supervision authority proof chain: enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
+    'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, and the persistent-supervision authority proof chain: prerequisites, enablement authority, execution authority, and resident-claim boundary are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
     'The audit must consume the Lens command-palette shell bridge before treating OS-level command palette and summon-anywhere behavior as acceptance blockers instead of missing audit readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_os_binding_blocker_proof') {
@@ -2737,6 +2817,34 @@ $Payload = [ordered]@{
     would_write_memory = [bool]$PersistentSupervisionPlan.plan.would_write_memory
     would_claim_resident = [bool]$PersistentSupervisionPlan.plan.would_claim_resident
   }
+  persistent_supervision_prerequisites_proof = [ordered]@{
+    status = if ($PersistentSupervisionPrerequisitesProofObserved) { [string]$PersistentSupervisionPrerequisitesProof.status } else { 'missing_or_failed' }
+    ok = $PersistentSupervisionPrerequisitesProofObserved
+    exit_code = [int]$PersistentSupervisionPrerequisitesProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.evidence)
+    acceptance_criterion = [string]$PersistentSupervisionPrerequisitesProof.acceptance_criterion
+    plan_route = [string]$PersistentSupervisionPrerequisitesProof.plan_route
+    enablement_route = [string]$PersistentSupervisionPrerequisitesProof.enablement_route
+    route_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap
+    family_chain_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap
+    persistent_supervision_plan_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed
+    persistent_supervision_enablement_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed
+    required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed
+    missing_required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed
+    dependency_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed
+    family_chain_observed = [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed
+    prerequisites_mapped_to_family_chain = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain
+    lens_status_operator_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed
+    side_effects_denied = [bool]$PersistentSupervisionPrerequisitesProof.side_effects_denied
+    required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesRequiredBeforeEnable)
+    missing_required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable)
+    dependency_readback = @($PersistentSupervisionPrerequisitesProof.dependency_readback)
+    family_chain = $PersistentSupervisionPrerequisitesProof.family_chain
+    route_readback = $PersistentSupervisionPrerequisitesProof.route_readback
+    checks = @($PersistentSupervisionPrerequisitesProof.checks)
+    governance = $PersistentSupervisionPrerequisitesProofGovernance
+  }
   persistent_supervision_enablement_denial_boundary = [ordered]@{
     status = if ($PersistentSupervisionEnablementDenialObserved) { [string]$PersistentSupervisionEnablementDenial.status } else { 'missing_or_failed' }
     ok = $PersistentSupervisionEnablementDenialObserved
@@ -2912,6 +3020,7 @@ $Payload = [ordered]@{
     'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status',
     'scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
@@ -2990,6 +3099,7 @@ $Payload = [ordered]@{
     host_supervision_authority_request_proof_readback = $HostSupervisionAuthorityRequestProofObserved
     helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
+    persistent_supervision_prerequisites_proof_readback = $PersistentSupervisionPrerequisitesProofObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved
     persistent_supervision_resident_claim_boundary_proof_readback = $PersistentSupervisionResidentClaimBoundaryObserved
