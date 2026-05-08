@@ -1496,7 +1496,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     process_boundary = payload["process_supervision_authority_boundary_proof"]
     assert process_boundary["status"] == "proof_passed"
     assert process_boundary["ok"] is True
-    assert process_boundary["stage6_checkpoint_observed"] is True
+    assert process_boundary["stage6_checkpoint_observed"] is False
+    assert process_boundary["resident_overlay_activation_boundary_observed"] is True
     assert process_boundary["host_supervision_boundary_observed"] is True
     assert process_boundary["process_supervision_boundary_observed"] is True
     assert process_boundary["service_activation_plan_observed"] is True

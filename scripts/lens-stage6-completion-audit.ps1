@@ -2907,6 +2907,7 @@ $Payload = [ordered]@{
       'scripts/lens-host-supervision-proof.ps1 -Mode Status'
     )
     stage6_checkpoint_observed = [bool]$ProcessSupervisionBoundary.stage6_checkpoint_observed
+    resident_overlay_activation_boundary_observed = [bool]$ProcessSupervisionBoundary.resident_overlay_activation_boundary_observed
     host_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.host_supervision_boundary_observed
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

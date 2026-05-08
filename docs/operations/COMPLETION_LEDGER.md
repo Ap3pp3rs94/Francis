@@ -21766,6 +21766,47 @@ proof handoff narrowing slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-08 - Stage 6/Lens process-supervision proof timing stabilization
+
+The Lens process-supervision authority boundary proof now consumes the narrower
+resident overlay activation-boundary proof directly instead of nesting the full
+Stage 6 checkpoint only to re-read that same activation boundary. The proof
+still preserves the same Stage 6 conclusion:
+
+- `process_supervision_boundary_observed=true`
+- `service_activation_plan_observed=true`
+- `next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `stage6_checkpoint_observed=false`
+- `resident_overlay_activation_boundary_observed=true`
+
+This removes a timing-heavy nested audit dependency from
+`scripts/lens-process-supervision-authority-boundary-proof.ps1` and lets the
+composed resident-host process-supervision handoff complete with
+`ChildProofTimeoutSeconds 120` and no child proof timeouts. It does not mark
+Stage 6 complete and does not grant process supervision, restart, service
+install/control, overlay, summon, approval, memory, receipt-write, telemetry,
+resident-claim, or UI authority.
+
+Latest validation for the `2026-05-08` Stage 6/Lens process-supervision proof
+timing stabilization slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,stage6_checkpoint_observed,resident_overlay_activation_boundary_observed,host_supervision_boundary_observed,process_supervision_boundary_observed,service_activation_plan_observed,child_proof_timeouts,next_smallest_truthful_gap | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; stage6_checkpoint_observed=false; resident_overlay_activation_boundary_observed=true; child_proof_timeouts=[]; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,resident_host_process_handoff_observed,process_supervision_boundary_observed,handoff_consumed,authority_denied,child_proof_timeouts | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; previous_next_smallest_truthful_gap=resident_host_process_not_supervised; next_smallest_truthful_gap=stage6_lens_completion_audit; handoff_consumed=true; authority_denied=true; child_proof_timeouts=[]`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warnings only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

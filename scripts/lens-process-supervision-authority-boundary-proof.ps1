@@ -323,44 +323,42 @@ function Get-CriterionById {
 }
 
 $PowerShellPath = Get-PowerShellPath
-$Stage6CheckpointPath = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
+$ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
 $HostSupervisionProofPath = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
 
-$CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $Stage6CheckpointPath -ScriptArgs @(
+$ActivationBoundaryResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
-)
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-ResidentSurfaceForegroundRunSeconds', [string]$SupervisorRunSeconds
+) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
 ) -ExpectedKind 'lens.host.supervision_readiness_proof'
 $ChildProofRuns = @(
-  (New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult),
+  (New-ChildProofRunSummary -Name 'resident_overlay_activation_boundary' -Result $ActivationBoundaryResult),
   (New-ChildProofRunSummary -Name 'host_supervision' -Result $HostSupervisionResult)
 )
 $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
 
-$CheckpointPayload = Get-PropertyValue -Payload $CheckpointResult -Name 'payload'
+$ActivationBoundaryPayload = Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'payload'
 $HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
-$CheckpointGovernance = Get-PropertyValue -Payload $CheckpointPayload -Name 'governance'
+$ActivationBoundaryGovernance = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'governance'
 $HostSupervisionGovernance = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'governance'
-$CheckpointCriteria = @(Get-PropertyValue -Payload $CheckpointPayload -Name 'criteria' -Default @())
-$SystemResidentCriterion = Get-CriterionById -Criteria $CheckpointCriteria -Id 'system_resident_presence'
-$ActivationBoundaryProof = Get-PropertyValue -Payload $CheckpointPayload -Name 'resident_overlay_activation_boundary_proof'
 $HostSupervisionProof = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'proof'
 $ServicePlanBlockedBy = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_plan_blocked_by' -Default @())
 
-$CheckpointObserved = (
-  [int](Get-PropertyValue -Payload $CheckpointResult -Name 'exit_code' -Default -1) -eq 0 -and
-  [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'kind' -Default '') -eq 'lens.stage6.checkpoint' -and
-  [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'status' -Default '') -eq 'blocked' -and
-  [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'stage_state' -Default '') -eq 'active' -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointPayload -Name 'ready_to_close' -Default $true) -and
-  [string](Get-PropertyValue -Payload $SystemResidentCriterion -Name 'status' -Default '') -eq 'resident_overlay_activation_boundary_observed' -and
-  [bool](Get-PropertyValue -Payload $ActivationBoundaryProof -Name 'ok' -Default $false)
+$ActivationBoundaryObserved = (
+  [int](Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_overlay_activation_boundary.proof' -and
+  [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'ok' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'activation_boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'execution_ready' -Default $true)
 )
 $HostSupervisionObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
@@ -374,8 +372,8 @@ $ProcessSupervisionDenied = (
   $HostSupervisionObserved -and
   [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'process_supervision_status' -Default '') -eq 'blocked' -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervised' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'process_supervision_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'process_restart_authority' -Default $true)
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_supervision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_restart_authority' -Default $true)
 )
 $ServiceActivationPlanBlocked = (
   $HostSupervisionObserved -and
@@ -389,35 +387,35 @@ $ServiceActivationPlanBlocked = (
   $ServicePlanBlockedBy -contains 'service_control_authority_false'
 )
 $AuthorityBoundary = (
-  $CheckpointObserved -and
+  $ActivationBoundaryObserved -and
   $HostSupervisionObserved -and
-  [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'diagnostic_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'diagnostic_only' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'execution_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'approval_decision_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'memory_write' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_overlay_activation_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'process_restart_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'process_supervision_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'service_install_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'service_control_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'tray_registration_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'hotkey_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'resident_overlay_activation_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_restart_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_supervision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_install_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'tray_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'hotkey_registration_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'service_control_authority' -Default $true)
 )
 
 $Checks = @(
-  (New-Check -Id 'stage6_checkpoint_activation_boundary' -Status $(if ($CheckpointObserved) { 'activation_boundary_checkpointed' } else { 'failed' }) -Passed $CheckpointObserved -Evidence 'scripts/lens-stage6-checkpoint.ps1 -Mode Status' -Reason 'The latest Stage 6 checkpoint must already consume the overlay activation boundary proof.')
+  (New-Check -Id 'resident_overlay_activation_boundary' -Status $(if ($ActivationBoundaryObserved) { 'activation_boundary_observed' } else { 'failed' }) -Passed $ActivationBoundaryObserved -Evidence 'scripts/lens-resident-overlay-activation-boundary-proof.ps1 -Mode Status' -Reason 'The resident overlay activation boundary must be observed without rerunning the full Stage 6 checkpoint.')
   (New-Check -Id 'host_supervision_boundary' -Status $(if ($HostSupervisionObserved) { 'supervision_blocked' } else { 'failed' }) -Passed $HostSupervisionObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The host supervision proof must remain observable and blocked.')
   (New-Check -Id 'process_supervision_denied' -Status $(if ($ProcessSupervisionDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $ProcessSupervisionDenied -Evidence 'process_supervision_authority + process_restart_authority' -Reason 'Resident process supervision and restart authority remain denied.')
   (New-Check -Id 'service_activation_plan_blocked' -Status $(if ($ServiceActivationPlanBlocked) { 'blocked_no_service_activation' } else { 'unexpected_service_activation' }) -Passed $ServiceActivationPlanBlocked -Evidence 'service_plan' -Reason 'The service plan does not install, start, or manage a resident host service.')
-  (New-Check -Id 'authority_boundary' -Status $(if ($AuthorityBoundary) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBoundary -Evidence 'checkpoint.governance + host_supervision.governance' -Reason 'The proof chain must not grant execution, approval, memory, resident activation, process supervision, service, tray, hotkey, overlay, summon, or capture authority.')
+  (New-Check -Id 'authority_boundary' -Status $(if ($AuthorityBoundary) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBoundary -Evidence 'activation_boundary.governance + host_supervision.governance' -Reason 'The proof chain must not grant execution, approval, memory, resident activation, process supervision, service, tray, hotkey, overlay, summon, or capture authority.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 $AllBlockers = @(
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $CheckpointPayload -Name 'blockers' -Default @())) +
+  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'blockers' -Default @())) +
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionPayload -Name 'blockers' -Default @())) +
   @(
     'process_supervision_authority_not_granted',
@@ -445,7 +443,8 @@ $Payload = [ordered]@{
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
-  stage6_checkpoint_observed = $CheckpointObserved
+  stage6_checkpoint_observed = $false
+  resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
   host_supervision_boundary_observed = $HostSupervisionObserved
   process_supervision_boundary_observed = $ProcessSupervisionDenied
   service_activation_plan_observed = $ServiceActivationPlanBlocked
@@ -473,12 +472,14 @@ $Payload = [ordered]@{
   checks = @($Checks)
   blockers = @($AllBlockers)
   proof = [ordered]@{
-    checkpoint_status = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'status' -Default '')
-    checkpoint_stage_state = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'stage_state' -Default '')
-    checkpoint_system_resident_status = [string](Get-PropertyValue -Payload $SystemResidentCriterion -Name 'status' -Default '')
-    checkpoint_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'next_smallest_truthful_gap' -Default '')
-    activation_boundary_status = [string](Get-PropertyValue -Payload $ActivationBoundaryProof -Name 'status' -Default '')
-    activation_boundary_ok = [bool](Get-PropertyValue -Payload $ActivationBoundaryProof -Name 'ok' -Default $false)
+    checkpoint_status = 'not_run'
+    checkpoint_stage_state = ''
+    checkpoint_system_resident_status = ''
+    checkpoint_next_smallest_truthful_gap = ''
+    activation_boundary_status = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'status' -Default '')
+    activation_boundary_ok = [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'ok' -Default $false)
+    activation_boundary_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
+    resident_overlay_boundary_observed = [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false)
     host_supervision_status = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '')
     host_supervision_ready = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervision_ready' -Default $false)
     host_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'ready_for_resident_claim' -Default $false)
@@ -491,20 +492,21 @@ $Payload = [ordered]@{
     service_plan_blocked_by = $ServicePlanBlockedBy
     service_status = [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_status' -Default '')
   }
-  next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'next_smallest_truthful_gap' -Default 'supervised_resident_host_runtime_authority_grant_readiness_audit')
+  next_smallest_truthful_gap = 'stage6_lens_completion_audit'
   governance = [ordered]@{
     diagnostic_only = $true
-    checkpoint_readback = $CheckpointObserved
-    live_http_readback = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'live_http_readback' -Default $false)
-    temporary_api_process = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'temporary_api_process' -Default $false)
+    checkpoint_readback = $false
+    resident_overlay_activation_boundary_readback = $ActivationBoundaryObserved
+    live_http_readback = [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'live_http_readback' -Default $false)
+    temporary_api_process = [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'temporary_api_process' -Default $false)
     bounded_host_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_host_launch' -Default $false)
     bounded_process_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_process_launch' -Default $false)
-    bounded_supervisor_observation = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'bounded_supervisor_observation' -Default $false)
-    resident_overlay_activation_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_overlay_activation_boundary_observed' -Default $false)
-    resident_host_supervision_authority_denial_boundary_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_denial_boundary_observed' -Default $false)
-    resident_host_supervision_authority_denial_receipt_readback_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_denial_receipt_readback_observed' -Default $false)
-    resident_host_supervision_authority_grant_receipt_readback_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_grant_receipt_readback_observed' -Default $false)
-    resident_host_supervision_authority_readiness_audit_observed = [bool](Get-PropertyValue -Payload $CheckpointGovernance -Name 'resident_host_supervision_authority_readiness_audit_observed' -Default $false)
+    bounded_supervisor_observation = [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'bounded_supervisor_observation' -Default $false)
+    resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
+    resident_host_supervision_authority_denial_boundary_observed = $false
+    resident_host_supervision_authority_denial_receipt_readback_observed = $false
+    resident_host_supervision_authority_grant_receipt_readback_observed = $false
+    resident_host_supervision_authority_readiness_audit_observed = $false
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false
@@ -529,7 +531,7 @@ $Payload = [ordered]@{
     denial_receipt_write_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Stage 6 process supervision authority remains a boundary: checkpointed overlay activation proof and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.'
+  message = 'Stage 6 process supervision authority remains a boundary: overlay activation proof and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.'
 }
 
 $Payload | ConvertTo-Json -Depth 10

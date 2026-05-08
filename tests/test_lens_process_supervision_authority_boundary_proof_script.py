@@ -60,13 +60,14 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
-    assert set(child_proof_runs) == {"stage6_checkpoint", "host_supervision"}
+    assert set(child_proof_runs) == {"resident_overlay_activation_boundary", "host_supervision"}
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
         assert run["timeout_seconds"] == 360
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
-    assert payload["stage6_checkpoint_observed"] is True
+    assert payload["stage6_checkpoint_observed"] is False
+    assert payload["resident_overlay_activation_boundary_observed"] is True
     assert payload["host_supervision_boundary_observed"] is True
     assert payload["process_supervision_boundary_observed"] is True
     assert payload["service_activation_plan_observed"] is True
@@ -93,7 +94,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["would_decide_approval"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["stage6_checkpoint_activation_boundary"]["status"] == "activation_boundary_checkpointed"
+    assert checks["resident_overlay_activation_boundary"]["status"] == "activation_boundary_observed"
     assert checks["host_supervision_boundary"]["status"] == "supervision_blocked"
     assert checks["process_supervision_denied"]["status"] == "blocked"
     assert checks["service_activation_plan_blocked"]["status"] == "blocked_no_service_activation"
@@ -101,12 +102,17 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
-    assert proof["checkpoint_status"] == "blocked"
-    assert proof["checkpoint_stage_state"] == "active"
-    assert proof["checkpoint_system_resident_status"] == "resident_overlay_activation_boundary_observed"
-    assert proof["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert proof["checkpoint_status"] == "not_run"
+    assert proof["checkpoint_stage_state"] == ""
+    assert proof["checkpoint_system_resident_status"] == ""
+    assert proof["checkpoint_next_smallest_truthful_gap"] == ""
     assert proof["activation_boundary_status"] == "proof_passed"
     assert proof["activation_boundary_ok"] is True
+    assert (
+        proof["activation_boundary_next_smallest_truthful_gap"]
+        == "resident_overlay_activation_checkpoint_consumption_or_process_supervision_authority_boundary"
+    )
+    assert proof["resident_overlay_boundary_observed"] is True
     assert proof["host_supervision_status"] == "proof_passed"
     assert proof["host_supervision_ready"] is False
     assert proof["host_ready_for_resident_claim"] is False
@@ -134,17 +140,18 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
 
     assert payload["governance"] == {
         "diagnostic_only": True,
-        "checkpoint_readback": True,
+        "checkpoint_readback": False,
+        "resident_overlay_activation_boundary_readback": True,
         "live_http_readback": True,
         "temporary_api_process": True,
         "bounded_host_launch": True,
         "bounded_process_launch": True,
         "bounded_supervisor_observation": True,
         "resident_overlay_activation_boundary_observed": True,
-        "resident_host_supervision_authority_denial_boundary_observed": True,
-        "resident_host_supervision_authority_denial_receipt_readback_observed": True,
-        "resident_host_supervision_authority_grant_receipt_readback_observed": True,
-        "resident_host_supervision_authority_readiness_audit_observed": True,
+        "resident_host_supervision_authority_denial_boundary_observed": False,
+        "resident_host_supervision_authority_denial_receipt_readback_observed": False,
+        "resident_host_supervision_authority_grant_receipt_readback_observed": False,
+        "resident_host_supervision_authority_readiness_audit_observed": False,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
