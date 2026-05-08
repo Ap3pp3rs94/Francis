@@ -116,8 +116,28 @@ def _lens_host_process_readback() -> dict[str, Any]:
     state_exists = _path_exists(state_file)
     pid_present = _path_exists(pid_file)
     pid = _pid_from_file(pid_file) if pid_present else 0
-    process_alive, process_alive_check = _process_alive_readback(pid)
     state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = str(state_payload.get("kind") or "")
+    state_status = str(state_payload.get("status") or "")
+    state_pid = _safe_pid(state_payload.get("pid"))
+    state_claims_running_host = (
+        state_kind == "lens.host.runtime_state"
+        and state_status in {"foreground_running", "resident_running"}
+        and state_pid > 0
+        and state_pid == pid
+    )
+    if state_claims_running_host:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.host.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status not in {"foreground_running", "resident_running"}:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_running"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_mismatch"
     status = (
         "process_observed"
         if process_alive
@@ -131,7 +151,10 @@ def _lens_host_process_readback() -> dict[str, Any]:
         "readback_ready": True,
         "runtime_state_path": "data/runtime/lens-host/status.json",
         "state_exists": state_exists,
-        "state_status": str(state_payload.get("status") or ""),
+        "state_kind": state_kind,
+        "state_status": state_status,
+        "state_pid": state_pid,
+        "state_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
         "state_updated_at": str(state_payload.get("updated_at") or ""),
         "pid_path": "data/runtime/lens-host/lens-host.pid",
         "pid_present": pid_present,

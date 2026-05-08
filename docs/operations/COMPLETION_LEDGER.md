@@ -22123,6 +22123,50 @@ prerequisite readback slice:
 - `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens API host process evidence guard
+
+The Lens host manifest/API resident-host process readback now uses the same
+runtime-state/PID/process-liveness guard as the hardened Lens preflight scripts.
+`src/francis/lens/host_manifest.py` only treats a host process as observed when
+all of the following are true:
+
+- runtime state exists with `kind=lens.host.runtime_state`
+- runtime state is `foreground_running` or `resident_running`
+- runtime-state PID matches `data/runtime/lens-host/lens-host.pid`
+- the matching PID is alive
+
+The API readback now also reports `state_kind`, `state_pid`,
+`state_pid_matches_pid_file`, and a more specific `process_alive_check` reason
+when a process liveness check is intentionally not attempted. A stale live PID
+file, mismatched runtime-state PID, missing runtime state, wrong state kind, or
+stopped runtime state remains `state_present_process_not_running` or `missing`
+instead of becoming resident-host prerequisite proof.
+
+This keeps `/lens/host/manifest`, `/lens/host/runtime-boundary`, persistent
+supervision prerequisite readback, and Stage 6 resident-host readiness aligned
+with the script-level preflight evidence guard. It is a backend/API readback
+truth slice. It changes no UI behavior, execution authority, approval decision
+authority, memory-write behavior, product local-process-launch authority,
+API local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, receipt-write authority, resident-claim authority, tray/hotkey/
+overlay/summon authority, telemetry behavior, resident host process lifetime,
+or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens API host process evidence
+guard slice:
+
+- `python -m pytest tests\test_lens_host_manifest_process_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_manifest_process_readback.py tests\test_lens_host_runtime_plan_readback.py tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `failed before API expected-readback assertion update; passed after update`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_host_manifest_process_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_host_manifest_process_readback.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
