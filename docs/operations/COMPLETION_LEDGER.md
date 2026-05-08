@@ -21544,6 +21544,55 @@ checkpoint:
 - `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens bounded host activation execution
+
+The Lens host activation path now has a governed bounded execution boundary
+after an exact approved activation request and an active activation authority
+grant. `POST /lens/host/activation/execute` can launch the existing
+`scripts/lens-host.ps1 -Mode Launch` runner for a bounded foreground window
+and records an execution receipt under:
+
+- `data/lens/host_activation_executions/*.json`
+
+New readback surface:
+
+- `GET /lens/host/activation/executions`
+
+The activation preflight and plan now distinguish full Lens activation from the
+bounded prerequisite launch:
+
+- `full_activation_ready=false` while Stage 6 surface blockers remain
+- `bounded_prerequisite_launch_ready=true` only when exact approval,
+  `system.write`, operator posture, foreground host command support, no
+  already-observed process, and active activation authority are all present
+- full resident/service/tray/hotkey/overlay/summon readiness remains blocked
+
+This is an authority-changing backend slice, but it is bounded: it grants only
+the existing approved activation route enough authority to launch a temporary
+foreground host process and write an execution receipt. It does not grant
+approval decision authority, product memory-write behavior, service-install
+authority, service-control authority, persistent-supervision authority,
+process-restart authority, tray-registration authority, hotkey-registration
+authority, overlay-control authority, summon authority, resident-claim
+authority, a resident host, a tray process, an overlay window, a global hotkey,
+a summon binding, telemetry behavior, or any UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens bounded host activation
+execution slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_launch_proof_script.py tests\test_lens_host_foreground_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

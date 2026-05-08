@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field
 
 from francis.lens import (
     deny_lens_os_binding_execution,
-    deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
+    execute_lens_host_activation,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
@@ -19,6 +19,7 @@ from francis.lens import (
     grant_lens_host_persistent_supervision_enablement_authority,
     grant_lens_host_supervision_authority,
     lens_host_activation_denial_receipts,
+    lens_host_activation_execution_receipts,
     lens_host_activation_authority_grant_receipts,
     lens_host_activation_execution_preflight,
     lens_host_activation_execution_plan,
@@ -87,6 +88,7 @@ class LensHostActivationExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens host foreground activation"
+    run_seconds: int = Field(default=2, ge=1, le=10)
 
 
 class LensHostActivationAuthorityGrantIn(BaseModel):
@@ -636,6 +638,15 @@ def host_activation_denials(
     return lens_host_activation_denial_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
+@router.get("/host/activation/executions")
+def host_activation_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_host_activation_execution_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
 @router.get("/host/activation/authority/grants")
 def host_activation_authority_grants(
     limit: int = Query(5, ge=1, le=50),
@@ -810,13 +821,14 @@ def resident_surface_activation(
 
 @router.post("/host/activation/execute")
 def host_activation_execute(request: Request, payload: LensHostActivationExecuteIn) -> dict[str, Any]:
-    return deny_lens_host_activation_execution(
+    return execute_lens_host_activation(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
         record_receipt=True,
+        run_seconds=payload.run_seconds,
     )
 
 

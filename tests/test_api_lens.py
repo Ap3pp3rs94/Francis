@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -45,7 +46,144 @@ ui:
 def _write_lens_host_status_runner(repo_root: Path) -> None:
     script = repo_root / "scripts" / "lens-host.ps1"
     script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("# Lens host status runner fixture\n", encoding="utf-8")
+    script.write_text(
+        """
+[CmdletBinding()]
+param(
+  [ValidateSet('Status', 'Foreground', 'Launch', 'Resident')]
+  [string]$Mode = 'Status',
+  [int]$RunSeconds = 0
+)
+
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$DataRoot = if (-not [string]::IsNullOrWhiteSpace([string]$env:FRANCIS_DATA_DIR)) {
+  [string]$env:FRANCIS_DATA_DIR
+} else {
+  Join-Path $RepoRoot 'data'
+}
+$RuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-host'
+$StatePath = Join-Path $RuntimeDir 'status.json'
+$PidPath = Join-Path $RuntimeDir 'lens-host.pid'
+
+function Write-JsonFile {
+  param([string]$Path, [object]$Payload)
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+  $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+$StateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
+$PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+$Now = (Get-Date).ToUniversalTime().ToString('o')
+$Payload = [ordered]@{
+  ok = $true
+  kind = 'lens.host.status_runner'
+  status = 'status_only'
+  mode = $Mode.ToLowerInvariant()
+  process_readback = [ordered]@{
+    status = if ($StateExists -or $PidPresent) { 'state_present_process_not_running' } else { 'missing' }
+    readback_ready = $true
+    runtime_state_path = 'data/runtime/lens-host/status.json'
+    state_exists = $StateExists
+    state_status = ''
+    state_updated_at = ''
+    heartbeat_count = 0
+    last_heartbeat_at = ''
+    pid_path = 'data/runtime/lens-host/lens-host.pid'
+    pid_present = $PidPresent
+    pid = 0
+    process_alive = $false
+    supervision_enabled = $false
+    blocked_reason = 'resident_host_process_missing'
+  }
+  foreground_supported = $true
+  foreground_session = $false
+  resident_supported = $true
+  resident_session = $false
+  foreground_run_seconds = $RunSeconds
+  blockers = @(
+    'lens_host_runtime_not_implemented',
+    'resident_host_process_missing',
+    'tray_host_missing',
+    'global_hotkey_binding_missing',
+    'overlay_window_missing',
+    'summon_binding_missing'
+  )
+  governance = [ordered]@{
+    execution_authority = $false
+    local_process_launch_authority = $false
+    foreground_session_authority = $false
+    resident_claim_authority = $false
+    service_install_authority = $false
+    service_control_authority = $false
+    memory_write = $false
+  }
+}
+
+if ($Mode -eq 'Launch') {
+  New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+  Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding ASCII
+  $RunningState = [ordered]@{
+    kind = 'lens.host.runtime_state'
+    status = 'foreground_running'
+    mode = 'foreground'
+    pid = $PID
+    process_alive = $true
+    resident = $false
+    service_managed = $false
+    tray_presence = $false
+    global_hotkey = $false
+    overlay_window = $false
+    summon_anywhere = $false
+    started_at = $Now
+    updated_at = $Now
+    heartbeat_count = 1
+    last_heartbeat_at = $Now
+    bounded_run_seconds = $RunSeconds
+    governance = [ordered]@{
+      execution_authority = $false
+      local_process_launch_authority = $false
+      foreground_session_authority = $true
+      resident_claim_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      memory_write = $false
+    }
+  }
+  Write-JsonFile -Path $StatePath -Payload $RunningState
+  $Payload.status = 'launch_started'
+  $Payload.mode = 'launch'
+  $Payload.foreground_session = $true
+  $Payload.launch_supported = $true
+  $Payload.process_readback.status = 'process_observed'
+  $Payload.process_readback.state_exists = $true
+  $Payload.process_readback.state_status = 'foreground_running'
+  $Payload.process_readback.state_updated_at = $Now
+  $Payload.process_readback.heartbeat_count = 1
+  $Payload.process_readback.last_heartbeat_at = $Now
+  $Payload.process_readback.pid_present = $true
+  $Payload.process_readback.pid = $PID
+  $Payload.process_readback.process_alive = $true
+  $Payload.process_readback.blocked_reason = 'resident_host_not_supervised'
+  $Payload.launch = [ordered]@{
+    status = 'started_observed'
+    launcher_pid = $PID
+    observed_pid = $PID
+    run_seconds = $RunSeconds
+    runtime_state_path = 'data/runtime/lens-host/status.json'
+    pid_path = 'data/runtime/lens-host/lens-host.pid'
+    observed_at = $Now
+    stop_mode = 'bounded_self_stop'
+  }
+  $Payload.governance['bounded_process_launch'] = $true
+  $Payload.governance['temporary_runtime_state_write'] = $true
+  $Payload.governance['foreground_session_authority'] = $true
+}
+
+$Payload | ConvertTo-Json -Depth 8
+exit 0
+""".strip(),
+        encoding="utf-8",
+    )
 
 
 def _write_service_manager(repo_root: Path) -> None:
@@ -7216,7 +7354,7 @@ def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch,
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
-def test_lens_host_activation_authority_grant_is_consumed_without_launch(monkeypatch, tmp_path: Path) -> None:
+def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
     _write_dev_environment(repo_root)
@@ -7315,7 +7453,10 @@ def test_lens_host_activation_authority_grant_is_consumed_without_launch(monkeyp
     preflight = client.get(f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write")
     assert preflight.status_code == 200
     preflight_body = preflight.json()
-    assert preflight_body["status"] == "blocked"
+    assert preflight_body["status"] == "bounded_prerequisite_ready"
+    assert preflight_body["ready"] is False
+    assert preflight_body["bounded_prerequisite_launch_ready"] is True
+    assert preflight_body["bounded_prerequisite_launch_blockers"] == []
     assert preflight_body["authority"]["active_grant_receipt_id"] == grant_receipt["receipt_id"]
     assert preflight_body["authority"]["local_process_launch_authority"] is True
     assert "local_process_launch_authority_not_granted" not in preflight_body["blockers"]
@@ -7326,35 +7467,71 @@ def test_lens_host_activation_authority_grant_is_consumed_without_launch(monkeyp
     plan = client.get(f"/lens/host/activation/plan?approval_id={approval_id}&actor=test.system.write")
     assert plan.status_code == 200
     plan_body = plan.json()
-    assert plan_body["status"] == "blocked"
+    assert plan_body["status"] == "bounded_prerequisite_ready"
+    assert plan_body["execution_ready"] is True
+    assert plan_body["full_activation_ready"] is False
+    assert plan_body["bounded_prerequisite_launch_ready"] is True
     plan_steps = {step["id"]: step for step in plan_body["plan"]["steps"]}
     assert plan_steps["launch_foreground_status_session"]["authority_granted"] is True
-    assert plan_body["plan"]["would_launch_process"] is False
+    assert plan_steps["launch_foreground_status_session"]["status"] == "ready"
+    assert plan_steps["record_activation_receipt"]["status"] == "ready"
+    assert plan_body["plan"]["would_launch_process"] is True
+    assert plan_body["plan"]["would_launch_bounded_foreground_process"] is True
     assert "local_process_launch_authority_not_granted" not in plan_body["blockers"]
     assert plan_body["governance"]["local_process_launch_authority"] is True
     assert plan_body["governance"]["execution_authority"] is False
 
-    denied = client.post(
+    executed = client.post(
         "/lens/host/activation/execute",
         json={
             "approval_id": approval_id,
             "actor": "test.system.write",
-            "reason": "prove grant does not launch without remaining Lens gates",
+            "reason": "prove bounded host activation launch remains governed",
+            "run_seconds": 1,
         },
     )
-    assert denied.status_code == 200
-    denied_body = denied.json()
-    assert denied_body["status"] == "denied_no_activation_execution_boundary"
-    assert denied_body["executed"] is False
-    assert denied_body["denial"]["reason"] == "lens_preflight_blocked"
-    assert denied_body["denial"]["would_launch_process"] is False
-    assert "local_process_launch_authority_not_granted" not in denied_body["blockers"]
-    assert denied_body["governance"]["local_process_launch_authority"] is True
-    assert denied_body["governance"]["execution_authority"] is False
-    assert denied_body["receipt_written"] is True
-    assert denied_body["receipt"]["governance"]["local_process_launch_authority"] is True
-    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
-    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    powershell_available = bool(shutil.which("pwsh") or shutil.which("powershell"))
+    assert executed_body["kind"] == "lens.host.activation.execution"
+    assert executed_body["approval_id"] == approval_id
+    assert executed_body["run_seconds"] == 1
+    assert "local_process_launch_authority_not_granted" not in executed_body["blockers"]
+    assert executed_body["governance"]["local_process_launch_authority"] is True
+    assert executed_body["governance"]["execution_authority"] is True
+    assert executed_body["governance"]["resident_claim_authority"] is False
+    assert executed_body["governance"]["service_install_authority"] is False
+    assert executed_body["governance"]["service_control_authority"] is False
+    assert executed_body["governance"]["memory_write"] is False
+    assert executed_body["receipt_written"] is True
+    assert executed_body["receipt"]["kind"] == "lens.host.activation.execution.receipt"
+    assert executed_body["receipt"]["approval_id"] == approval_id
+    assert executed_body["receipt"]["resident_claim"]["resident_host_process_claimed"] is False
+    if powershell_available:
+        assert executed_body["status"] == "bounded_foreground_launch_observed"
+        assert executed_body["executed"] is True
+        assert executed_body["launch"]["ok"] is True
+        assert executed_body["launch"]["runner"]["status"] == "launch_started"
+        assert executed_body["receipt"]["execution"]["bounded_process_launch"] is True
+        assert executed_body["receipt"]["execution"]["observed_process"] is True
+        assert (data_root / "runtime" / "lens-host" / "status.json").exists()
+        assert (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+    else:
+        assert executed_body["status"] == "bounded_foreground_launch_failed"
+        assert executed_body["executed"] is False
+        assert executed_body["launch"]["status"] == "powershell_runtime_missing"
+        assert "powershell_runtime_missing" in executed_body["blockers"]
+        assert executed_body["receipt"]["execution"]["bounded_process_launch"] is False
+        assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+        assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+    executions = client.get(f"/lens/host/activation/executions?limit=10&approval_id={approval_id}")
+    assert executions.status_code == 200
+    executions_body = executions.json()
+    assert executions_body["kind"] == "lens.host.activation.execution_receipts"
+    assert executions_body["status"] == "readback_ready"
+    assert executions_body["total"] == 1
+    assert executions_body["latest"]["receipt_id"] == executed_body["receipt"]["receipt_id"]
 
 
 def test_lens_host_supervision_authority_request_requires_system_write_without_grant(

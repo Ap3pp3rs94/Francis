@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -11,7 +13,7 @@ from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests, request as create_approval_request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
-from francis.kernel.paths import data_dir
+from francis.kernel.paths import data_dir, repo_root
 from francis.lens.host_manifest import (
     lens_host_launch_manifest,
     lens_host_persistent_supervision_enablement_preflight,
@@ -33,6 +35,7 @@ LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE = "/lens/host/activation/preflight"
 LENS_HOST_ACTIVATION_PLAN_ROUTE = "/lens/host/activation/plan"
 LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
 LENS_HOST_ACTIVATION_DENIALS_ROUTE = "/lens/host/activation/denials"
+LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE = "/lens/host/activation/executions"
 LENS_HOST_ACTIVATION_AUTHORITY_ROUTE = "/lens/host/activation/authority"
 LENS_HOST_ACTIVATION_AUTHORITY_GRANTS_ROUTE = "/lens/host/activation/authority/grants"
 LENS_HOST_SUPERVISION_AUTHORITY_ROUTE = "/lens/host/supervision/authority"
@@ -189,6 +192,10 @@ def _activation_authority_grant_receipt_root() -> Path:
     return data_dir() / "lens" / "host_activation_authority_grants"
 
 
+def _activation_execution_receipt_root() -> Path:
+    return data_dir() / "lens" / "host_activation_executions"
+
+
 def _resident_runtime_authority_grant_denial_receipt_root() -> Path:
     return data_dir() / "lens" / "resident_runtime_authority_grant_denials"
 
@@ -227,6 +234,12 @@ def _activation_authority_grant_receipt_id(*, approval_id: str, actor: str, rout
     seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
     digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
     return f"lhaag_{ts}_{digest}"
+
+
+def _activation_execution_receipt_id(*, approval_id: str, actor: str, route: str, ts: int) -> str:
+    seed = f"{approval_id}:{actor}:{route}:{time.time_ns()}"
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"lhae_{ts}_{digest}"
 
 
 def _resident_runtime_authority_grant_denial_receipt_id(
@@ -313,6 +326,13 @@ def _activation_authority_grant_receipt_path(receipt_id: Any) -> Path | None:
     if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
         return None
     return _activation_authority_grant_receipt_root() / f"{cleaned}.json"
+
+
+def _activation_execution_receipt_path(receipt_id: Any) -> Path | None:
+    cleaned = _safe_str(receipt_id).strip()
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned:
+        return None
+    return _activation_execution_receipt_root() / f"{cleaned}.json"
 
 
 def _resident_runtime_authority_grant_denial_receipt_path(receipt_id: Any) -> Path | None:
@@ -1198,6 +1218,9 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
     active_grant = _as_dict(active_grants.get("active_latest"))
     authority_granted = bool(active_grant)
     active_grant_id = _safe_str(active_grant.get("receipt_id")).strip()
+    execution_receipts = lens_host_activation_execution_receipts(limit=1)
+    latest_execution = _as_dict(execution_receipts.get("latest"))
+    latest_execution_id = _safe_str(latest_execution.get("receipt_id")).strip()
     status, next_step = _activation_readback_status(counts, authority_granted=authority_granted)
     latest = latest_items[0] if latest_items else None
     return {
@@ -1208,7 +1231,9 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
         "request_route": LENS_HOST_ACTIVATION_ROUTE,
         "authority_route": LENS_HOST_ACTIVATION_AUTHORITY_ROUTE,
         "authority_grants_route": LENS_HOST_ACTIVATION_AUTHORITY_GRANTS_ROUTE,
+        "executions_route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
         "active_grant_receipt_id": active_grant_id,
+        "latest_execution_receipt_id": latest_execution_id,
         "decision_route": "/approvals/decision",
         "approval_action": LENS_HOST_ACTIVATION_ACTION,
         "pending_count": counts.get("pending", 0),
@@ -1231,7 +1256,9 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
             "gate": "lens_host_activation_readback",
             "read_only_contract": True,
             "authority_grant_receipts_route": LENS_HOST_ACTIVATION_AUTHORITY_GRANTS_ROUTE,
+            "execution_receipts_route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
             "active_grant_receipt_id": active_grant_id,
+            "latest_execution_receipt_id": latest_execution_id,
             "authority_granted": authority_granted,
             "activation_authority": authority_granted,
             "local_process_launch_authority": authority_granted,
@@ -1599,6 +1626,178 @@ def _activation_preflight_status(blockers: list[str]) -> tuple[str, str]:
     return "blocked", "remove_lens_host_activation_blockers_before_execution"
 
 
+_BOUNDED_HOST_ACTIVATION_MAX_RUN_SECONDS = 10
+_BOUNDED_HOST_ACTIVATION_SOFT_BLOCKERS = {
+    "lens_preflight_blocked",
+    "lens_host_runtime_not_implemented",
+    "resident_host_process_missing",
+    "resident_host_not_supervised",
+    "resident_host_process_not_supervised",
+    "resident_supervision_disabled",
+    "install_authority_false",
+    "service_install_authority_false",
+    "service_control_authority_false",
+    "service_control_authority_not_granted",
+    "process_restart_authority",
+    "service_install_authority",
+    "service_control_authority",
+    "receipt_write_authority",
+    "resident_claim_authority",
+    "tray_host_missing",
+    "tray_host_disabled",
+    "tray_icon_disabled",
+    "tray_startup_registration_disabled",
+    "tray_registration_authority_not_granted",
+    "tray_icon_authority_not_granted",
+    "notification_authority_not_granted",
+    "global_hotkey_binding_missing",
+    "global_hotkey_binding_disabled",
+    "global_hotkey_registration_disabled",
+    "global_hotkey_not_declared",
+    "hotkey_registration_authority_not_granted",
+    "overlay_window_missing",
+    "overlay_window_disabled",
+    "always_on_top_disabled",
+    "overlay_dock_not_supported",
+    "overlay_focus_not_supported",
+    "overlay_click_through_not_supported",
+    "overlay_control_authority_not_granted",
+    "window_management_authority_not_granted",
+    "capture_authority_not_granted",
+    "summon_binding_missing",
+    "lens_summon_binding_not_implemented",
+    "summon_authority_not_granted",
+    "lens_summon_config_missing",
+    "lens_summon_config_invalid",
+    "lens_tray_presence_not_implemented",
+    "lens_tray_config_missing",
+    "lens_tray_config_invalid",
+    "lens_overlay_window_not_implemented",
+    "lens_overlay_config_missing",
+    "lens_overlay_config_invalid",
+    "lens_summon_preflight_missing",
+    "lens_tray_preflight_missing",
+}
+
+
+def _bounded_host_activation_run_seconds(value: Any) -> int:
+    if isinstance(value, bool):
+        return 2
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 2
+    return max(1, min(_BOUNDED_HOST_ACTIVATION_MAX_RUN_SECONDS, parsed))
+
+
+def _bounded_host_activation_blockers(blockers: list[str]) -> list[str]:
+    return sorted(
+        {blocker for blocker in blockers if blocker and blocker not in _BOUNDED_HOST_ACTIVATION_SOFT_BLOCKERS}
+    )
+
+
+def _powershell_path() -> str:
+    return shutil.which("pwsh") or shutil.which("powershell") or ""
+
+
+def _parse_json_process_stdout(stdout: str) -> dict[str, Any]:
+    cleaned = stdout.strip()
+    if not cleaned:
+        return {}
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            payload = json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError:
+            return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
+    safe_run_seconds = _bounded_host_activation_run_seconds(run_seconds)
+    root = repo_root()
+    script = root / "scripts" / "lens-host.ps1"
+    if not script.is_file():
+        return {
+            "ok": False,
+            "status": "lens_host_entrypoint_missing",
+            "run_seconds": safe_run_seconds,
+            "blockers": ["lens_host_entrypoint_missing"],
+        }
+
+    powershell = _powershell_path()
+    if not powershell:
+        return {
+            "ok": False,
+            "status": "powershell_runtime_missing",
+            "run_seconds": safe_run_seconds,
+            "blockers": ["powershell_runtime_missing"],
+        }
+
+    command = [powershell, "-NoProfile"]
+    if os.name == "nt":
+        command.extend(["-ExecutionPolicy", "Bypass"])
+    command.extend(
+        [
+            "-File",
+            str(script),
+            "-Mode",
+            "Launch",
+            "-RunSeconds",
+            str(safe_run_seconds),
+        ]
+    )
+    env = dict(os.environ)
+    env.setdefault("FRANCIS_ROOT", str(root))
+    env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=max(20, safe_run_seconds + 15),
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "status": "launch_timeout",
+            "run_seconds": safe_run_seconds,
+            "blockers": ["lens_host_activation_launch_timeout"],
+            "script": "scripts/lens-host.ps1",
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "status": "launch_failed",
+            "run_seconds": safe_run_seconds,
+            "blockers": ["lens_host_activation_launch_failed"],
+            "error": _redact_free_text(str(exc)),
+            "script": "scripts/lens-host.ps1",
+        }
+
+    payload = _parse_json_process_stdout(completed.stdout)
+    runner_ok = completed.returncode == 0 and bool(payload.get("ok"))
+    stderr = (completed.stderr or "").strip()
+    return {
+        "ok": runner_ok,
+        "status": _safe_str(payload.get("status")).strip() or "launch_failed",
+        "returncode": completed.returncode,
+        "run_seconds": safe_run_seconds,
+        "script": "scripts/lens-host.ps1",
+        "runner": _display(payload),
+        "blockers": _str_list(payload.get("blockers")),
+        "stderr": _redact_free_text(stderr[:500]) if stderr else "",
+    }
+
+
 def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: Any = "") -> dict[str, Any]:
     requested_id = _safe_str(approval_id).strip()
     approval, approval_lookup_status = _activation_approval_by_id(requested_id)
@@ -1653,11 +1852,19 @@ def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: An
 
     deduped_blockers = sorted({blocker for blocker in blockers if blocker})
     status, next_step = _activation_preflight_status(deduped_blockers)
+    bounded_launch_blockers = _bounded_host_activation_blockers(deduped_blockers)
+    bounded_launch_ready = not bounded_launch_blockers
+    if bounded_launch_ready and deduped_blockers:
+        status = "bounded_prerequisite_ready"
+        next_step = "execute_bounded_lens_host_prerequisite_launch"
     return {
         "ok": True,
         "kind": "lens.host.activation.execution_preflight",
         "status": status,
         "ready": not deduped_blockers,
+        "full_activation_ready": not deduped_blockers,
+        "bounded_prerequisite_launch_ready": bounded_launch_ready,
+        "bounded_prerequisite_launch_blockers": bounded_launch_blockers,
         "route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
         "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
@@ -1712,6 +1919,8 @@ def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: An
             "activation_authority": local_process_launch_authority,
             "local_process_launch_authority": local_process_launch_authority,
             "receipt_write_authority": local_process_launch_authority,
+            "bounded_prerequisite_launch_ready": bounded_launch_ready,
+            "bounded_prerequisite_launch_blockers": bounded_launch_blockers,
             "next_step": next_step,
         },
     }
@@ -1751,6 +1960,8 @@ def _activation_execution_plan_status(blockers: list[str]) -> tuple[str, str]:
         return "blocked", "configure_actor_scope_before_lens_host_activation"
     if "operator_posture_not_ready" in blockers:
         return "blocked", "switch_operator_posture_before_lens_host_activation"
+    if not _bounded_host_activation_blockers(blockers):
+        return "bounded_prerequisite_ready", "execute_bounded_lens_host_prerequisite_launch"
     return "blocked", "implement_lens_host_execution_authority_in_separate_slice"
 
 
@@ -1764,6 +1975,8 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
     service_plan = _as_dict(host.get("service_plan"))
     authority = _as_dict(preflight.get("authority"))
     local_process_launch_authority = bool(authority.get("local_process_launch_authority"))
+    bounded_launch_blockers = _str_list(preflight.get("bounded_prerequisite_launch_blockers"))
+    bounded_launch_ready = bool(preflight.get("bounded_prerequisite_launch_ready"))
     status, next_step = _activation_execution_plan_status(blockers)
     steps = [
         _plan_step(
@@ -1800,7 +2013,6 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
                 {
                     "lens_host_foreground_command_unavailable",
                     "foreground_session_not_supported",
-                    "lens_preflight_blocked",
                 },
             ),
             source="/lens/host/manifest",
@@ -1814,7 +2026,7 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
         _plan_step(
             "launch_foreground_status_session",
             label="Launch bounded foreground Lens host status session",
-            status="blocked",
+            status="ready" if bounded_launch_ready else "blocked",
             source=(
                 LENS_HOST_ACTIVATION_AUTHORITY_GRANTS_ROUTE
                 if local_process_launch_authority
@@ -1826,10 +2038,10 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
         _plan_step(
             "record_activation_receipt",
             label="Record activation receipt after launch",
-            status="blocked",
-            source="future_receipt_slice",
+            status="ready" if bounded_launch_ready else "blocked",
+            source=LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
             authority_required="receipt_write",
-            authority_granted=False,
+            authority_granted=bounded_launch_ready,
         ),
     ]
     return {
@@ -1837,7 +2049,10 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
         "kind": "lens.host.activation.execution_plan",
         "status": status,
         "plan_available": True,
-        "execution_ready": False,
+        "execution_ready": bounded_launch_ready,
+        "full_activation_ready": not blockers,
+        "bounded_prerequisite_launch_ready": bounded_launch_ready,
+        "bounded_prerequisite_launch_blockers": bounded_launch_blockers,
         "route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
         "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
         "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
@@ -1855,12 +2070,14 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
             "process_readback": process_readback,
             "service_plan": service_plan,
             "authority": authority,
-            "would_launch_process": False,
+            "would_launch_process": bounded_launch_ready,
+            "would_launch_bounded_foreground_process": bounded_launch_ready,
             "would_install_service": False,
             "would_start_service": False,
             "would_register_hotkey": False,
             "would_open_overlay": False,
             "would_write_memory": False,
+            "would_write_receipt": bounded_launch_ready,
             "would_decide_approval": False,
         },
         "blockers": blockers,
@@ -1877,7 +2094,9 @@ def lens_host_activation_execution_plan(*, approval_id: Any = "", actor: Any = "
             "approval_decision_authority": False,
             "local_process_launch_authority": local_process_launch_authority,
             "activation_authority": local_process_launch_authority,
-            "receipt_write_authority": False,
+            "bounded_prerequisite_launch_ready": bounded_launch_ready,
+            "bounded_prerequisite_launch_blockers": bounded_launch_blockers,
+            "receipt_write_authority": bounded_launch_ready,
             "next_step": next_step,
         },
     }
@@ -2083,12 +2302,117 @@ def _record_activation_authority_grant_receipt(grant_response: dict[str, Any]) -
     return display
 
 
+def _activation_execution_receipt(execution: dict[str, Any]) -> dict[str, Any]:
+    ts = _now_s()
+    approval_id = _safe_str(execution.get("approval_id")).strip()
+    actor = _safe_str(execution.get("actor")).strip()
+    route = _safe_str(execution.get("route")).strip() or LENS_HOST_ACTIVATION_EXECUTE_ROUTE
+    receipt_id = _activation_execution_receipt_id(approval_id=approval_id, actor=actor, route=route, ts=ts)
+    plan = _as_dict(execution.get("plan"))
+    plan_body = _as_dict(plan.get("plan"))
+    launch_result = _as_dict(execution.get("launch"))
+    runner = _as_dict(launch_result.get("runner"))
+    process_readback = _as_dict(runner.get("process_readback"))
+    launch_readback = _as_dict(runner.get("launch"))
+    executed = bool(execution.get("executed"))
+    return _filtered_record(
+        {
+            "kind": "lens.host.activation.execution.receipt",
+            "receipt_id": receipt_id,
+            "id": receipt_id,
+            "status": _safe_str(execution.get("status")).strip(),
+            "route": route,
+            "method": _safe_str(execution.get("method")).strip() or "POST",
+            "source_kind": _safe_str(execution.get("kind")).strip(),
+            "source_route": route,
+            "approval_id": approval_id,
+            "actor": actor,
+            "reason": _safe_str(execution.get("reason")).strip(),
+            "created_ts": ts,
+            "run_seconds": _bounded_host_activation_run_seconds(execution.get("run_seconds")),
+            "blockers": _str_list(execution.get("blockers")),
+            "execution": {
+                "applied": bool(execution.get("applied")),
+                "executed": executed,
+                "bounded_process_launch": executed,
+                "launched_process": executed,
+                "observed_process": bool(process_readback.get("process_alive")),
+                "observed_pid": int(launch_readback.get("observed_pid") or process_readback.get("pid") or 0),
+                "runner_status": _safe_str(launch_result.get("status") or runner.get("status")).strip(),
+                "runner_returncode": int(launch_result.get("returncode") or 0),
+                "runtime_state_path": _safe_str(process_readback.get("runtime_state_path")).strip(),
+                "pid_path": _safe_str(process_readback.get("pid_path")).strip(),
+                "would_launch_process": bool(plan_body.get("would_launch_process")),
+                "would_launch_bounded_foreground_process": bool(
+                    plan_body.get("would_launch_bounded_foreground_process")
+                ),
+                "would_install_service": bool(plan_body.get("would_install_service")),
+                "would_start_service": bool(plan_body.get("would_start_service")),
+                "would_register_hotkey": bool(plan_body.get("would_register_hotkey")),
+                "would_open_overlay": bool(plan_body.get("would_open_overlay")),
+                "would_write_memory": bool(plan_body.get("would_write_memory")),
+                "would_decide_approval": bool(plan_body.get("would_decide_approval")),
+            },
+            "resident_claim": {
+                "resident_host_process_claimed": False,
+                "resident_session_claimed": False,
+                "resident_claim_authority": False,
+                "service_managed": False,
+            },
+            "launch": {
+                "status": _safe_str(launch_readback.get("status")).strip(),
+                "launcher_pid": int(launch_readback.get("launcher_pid") or 0),
+                "observed_pid": int(launch_readback.get("observed_pid") or 0),
+                "run_seconds": int(launch_readback.get("run_seconds") or 0),
+                "runtime_state_path": _safe_str(launch_readback.get("runtime_state_path")).strip(),
+                "pid_path": _safe_str(launch_readback.get("pid_path")).strip(),
+                "stop_mode": _safe_str(launch_readback.get("stop_mode")).strip(),
+            },
+            "governance": {
+                "gate": "lens_host_activation_execution_receipt",
+                "execution_boundary": True,
+                "bounded_process_launch": executed,
+                "execution_authority": executed,
+                "approval_decision_authority": False,
+                "activation_authority": True,
+                "local_process_launch_authority": executed,
+                "foreground_session_authority": executed,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "overlay_control_authority": False,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "tray_registration_authority": False,
+                "memory_write": False,
+                "receipt_write_authority": True,
+                "resident_claim_authority": False,
+            },
+        }
+    )
+
+
+def _record_activation_execution_receipt(execution: dict[str, Any]) -> dict[str, Any]:
+    receipt = _activation_execution_receipt(execution)
+    path = _activation_execution_receipt_path(receipt.get("receipt_id"))
+    if path is None:
+        return {}
+    receipt["path"] = str(path)
+    display = _display(receipt)
+    _atomic_write_json(path, display)
+    return display
+
+
 def _read_activation_denial_receipt(path: Path) -> dict[str, Any] | None:
     raw = _read_json(path)
     return _display(raw) if raw is not None else None
 
 
 def _read_activation_authority_grant_receipt(path: Path) -> dict[str, Any] | None:
+    raw = _read_json(path)
+    return _display(raw) if raw is not None else None
+
+
+def _read_activation_execution_receipt(path: Path) -> dict[str, Any] | None:
     raw = _read_json(path)
     return _display(raw) if raw is not None else None
 
@@ -2113,6 +2437,30 @@ def _list_activation_denial_receipts(
     items: list[dict[str, Any]] = []
     for path in root.glob("*.json"):
         item = _read_activation_denial_receipt(path)
+        if not item:
+            continue
+        if not _matches_filter(item, approval_id=approval_id, status=status):
+            continue
+        items.append(item)
+    items.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), _safe_str(item.get("receipt_id"))),
+        reverse=True,
+    )
+    return items[:limit], len(items)
+
+
+def _list_activation_execution_receipts(
+    *,
+    limit: int,
+    approval_id: str = "",
+    status: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    root = _activation_execution_receipt_root()
+    if not root.exists():
+        return [], 0
+    items: list[dict[str, Any]] = []
+    for path in root.glob("*.json"):
+        item = _read_activation_execution_receipt(path)
         if not item:
             continue
         if not _matches_filter(item, approval_id=approval_id, status=status):
@@ -2210,6 +2558,54 @@ def lens_host_activation_denial_receipts(
             "denial_receipt_write_authority": False,
             "receipt_write_authority": False,
             "next_step": "review_denial_receipts_before_adding_execution_authority",
+        },
+    }
+
+
+def lens_host_activation_execution_receipts(
+    *,
+    limit: int = 5,
+    approval_id: Any = "",
+    status: Any = "",
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    safe_approval_id = _safe_str(approval_id).strip()
+    safe_status = _safe_str(status).strip()
+    items, total = _list_activation_execution_receipts(
+        limit=safe_limit,
+        approval_id=safe_approval_id,
+        status=safe_status,
+    )
+    latest = items[0] if items else None
+    latest_execution = _as_dict(_as_dict(latest).get("execution"))
+    return {
+        "ok": True,
+        "kind": "lens.host.activation.execution_receipts",
+        "status": "readback_ready" if items else "empty",
+        "route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "denials_route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
+        "limit": safe_limit,
+        "approval_id": safe_approval_id,
+        "filter_status": safe_status,
+        "total": total,
+        "latest": latest,
+        "items": items,
+        "latest_bounded_process_launch": bool(latest_execution.get("bounded_process_launch")),
+        "latest_observed_process": bool(latest_execution.get("observed_process")),
+        "governance": {
+            **_activation_governance(
+                route=LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
+                approval_request_write=False,
+                read_only_contract=True,
+            ),
+            "gate": "lens_host_activation_execution_receipts_readback",
+            "read_only_contract": True,
+            "execution_authority": False,
+            "local_process_launch_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "next_step": "review_execution_receipts_before_resident_supervision_enablement",
         },
     }
 
@@ -7984,6 +8380,119 @@ def deny_lens_host_activation_execution(
             response["governance"]["denial_receipt_write_authority"] = True
     elif record_receipt:
         response["governance"]["denial_receipt_write_blocker"] = "system_write_scope_not_ready"
+    return response
+
+
+def execute_lens_host_activation(
+    *,
+    approval_id: Any = "",
+    actor: Any = "",
+    reason: Any = "attempt Lens host foreground activation",
+    route: str = LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+    method: str = "POST",
+    record_receipt: bool = False,
+    run_seconds: Any = 2,
+) -> dict[str, Any]:
+    safe_route = _safe_str(route).strip() or LENS_HOST_ACTIVATION_EXECUTE_ROUTE
+    permission = _permission_readiness(actor, route=safe_route, method=method)
+    plan = lens_host_activation_execution_plan(approval_id=approval_id, actor=actor)
+    preflight = _as_dict(plan.get("preflight"))
+    preflight_authority = _as_dict(preflight.get("authority"))
+    local_process_launch_authority = bool(preflight_authority.get("local_process_launch_authority"))
+    blockers = _str_list(plan.get("blockers"))
+    if not bool(permission.get("ready")) and "system_write_scope_not_ready" not in blockers:
+        blockers.append("system_write_scope_not_ready")
+    if not local_process_launch_authority and "local_process_launch_authority_not_granted" not in blockers:
+        blockers.append("local_process_launch_authority_not_granted")
+    deduped_blockers = sorted({blocker for blocker in blockers if blocker})
+    bounded_launch_blockers = _bounded_host_activation_blockers(deduped_blockers)
+    if bounded_launch_blockers:
+        return deny_lens_host_activation_execution(
+            approval_id=approval_id,
+            actor=actor,
+            reason=reason,
+            route=safe_route,
+            method=method,
+            record_receipt=record_receipt,
+        )
+
+    safe_run_seconds = _bounded_host_activation_run_seconds(run_seconds)
+    launch_result = _run_bounded_lens_host_activation(run_seconds=safe_run_seconds)
+    launch_ok = bool(launch_result.get("ok"))
+    launch_blockers = _str_list(launch_result.get("blockers"))
+    remaining_blockers = sorted({blocker for blocker in [*deduped_blockers, *launch_blockers] if blocker})
+    response: dict[str, Any] = {
+        "ok": True,
+        "applied": launch_ok,
+        "executed": launch_ok,
+        "kind": "lens.host.activation.execution",
+        "status": "bounded_foreground_launch_observed" if launch_ok else "bounded_foreground_launch_failed",
+        "route": safe_route,
+        "method": method,
+        "request_route": LENS_HOST_ACTIVATION_ROUTE,
+        "readback_route": LENS_HOST_ACTIVATION_READBACK_ROUTE,
+        "preflight_route": LENS_HOST_ACTIVATION_PREFLIGHT_ROUTE,
+        "plan_route": LENS_HOST_ACTIVATION_PLAN_ROUTE,
+        "execution_receipts_route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
+        "denials_route": LENS_HOST_ACTIVATION_DENIALS_ROUTE,
+        "approval_id": _safe_str(plan.get("approval_id")).strip(),
+        "actor": _redact_free_text(actor),
+        "reason": _redact_free_text(reason),
+        "run_seconds": safe_run_seconds,
+        "receipt_written": False,
+        "receipt": {},
+        "permission": permission,
+        "preflight": preflight,
+        "plan": plan,
+        "launch": launch_result,
+        "blockers": remaining_blockers,
+        "resident_claim": {
+            "resident_host_process_claimed": False,
+            "resident_session_claimed": False,
+            "resident_claim_authority": False,
+            "service_managed": False,
+        },
+        "governance": {
+            **_activation_governance(
+                route=safe_route,
+                approval_request_write=False,
+                read_only_contract=False,
+            ),
+            "gate": "lens_host_activation_execution",
+            "execution_boundary": True,
+            "bounded_prerequisite_launch_ready": True,
+            "bounded_process_launch": launch_ok,
+            "execution_authority": True,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": local_process_launch_authority,
+            "activation_authority": local_process_launch_authority,
+            "foreground_session_authority": launch_ok,
+            "temporary_runtime_state_write": launch_ok,
+            "receipt_write_authority": False,
+            "denial_receipt_write_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "resident_claim_authority": False,
+            "memory_write": False,
+            "next_step": (
+                "review_bounded_execution_receipt_before_resident_supervision_enablement"
+                if launch_ok
+                else "resolve_lens_host_activation_launch_failure"
+            ),
+        },
+    }
+    if record_receipt and bool(permission.get("ready")):
+        receipt = _record_activation_execution_receipt(response)
+        if receipt:
+            response["receipt_written"] = True
+            response["receipt"] = receipt
+            response["governance"]["receipt_write_authority"] = True
+    elif record_receipt:
+        response["governance"]["receipt_write_blocker"] = "system_write_scope_not_ready"
     return response
 
 
