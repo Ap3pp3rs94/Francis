@@ -65,7 +65,23 @@ def test_persistent_supervision_prerequisite_readback_reports_missing_process() 
         lens_host_persistent_supervision_plan(manifest=manifest),
         lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
     ):
+        assert body["first_missing_required_before_enable"] == "resident_host_process"
+        handoff = body["first_missing_requirement_handoff"]
+        assert handoff["id"] == "resident_host_process"
+        assert handoff["family"] == "resident_host"
+        assert handoff["route"] == "/lens/host"
+        assert handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+        assert handoff["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+        assert handoff["blocker"] == "resident_host_process_missing"
+        assert handoff["requirement_state"] == "missing"
+        assert handoff["next_step"] == "resolve_resident_host_process_before_persistent_supervision_enablement"
+        assert handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+        assert handoff["read_only_contract"] is True
+        assert handoff["diagnostic_only"] is True
+        assert handoff["would_execute"] is False
+        assert handoff["would_mutate"] is False
         dependency = _dependency_by_id(body)["resident_host_process"]
+        assert dependency["family"] == "resident_host"
         assert dependency["route"] == "/lens/host"
         assert dependency["ready"] is False
         assert dependency["status"] == "blocked"
@@ -99,6 +115,8 @@ def test_persistent_supervision_prerequisite_readback_links_bounded_activation_r
         lens_host_persistent_supervision_plan(manifest=manifest),
         lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
     ):
+        assert body["first_missing_required_before_enable"] == "resident_host_process"
+        assert body["first_missing_requirement_handoff"]["blocker"] == "resident_host_process_missing"
         dependency = _dependency_by_id(body)["resident_host_process"]
         assert dependency["ready"] is False
         assert dependency["status"] == "blocked"
@@ -130,6 +148,9 @@ def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised
         lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
     ):
         assert body["missing_required_before_enable"] == REQUIRED_BEFORE_ENABLE
+        assert body["first_missing_required_before_enable"] == "resident_host_process"
+        assert body["first_missing_requirement_handoff"]["blocker"] == "resident_host_process_not_supervised"
+        assert body["first_missing_requirement_handoff"]["requirement_state"] == "foreground_observed_not_supervised"
         dependency = _dependency_by_id(body)["resident_host_process"]
         assert dependency["route"] == "/lens/host"
         assert dependency["ready"] is False

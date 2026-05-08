@@ -69,6 +69,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["persistent_supervision_enablement_readback_observed"] is True
     assert payload["required_before_enable_observed"] is True
     assert payload["missing_required_before_enable_observed"] is True
+    assert payload["first_missing_requirement_observed"] is True
     assert payload["required_before_enable_guard_observed"] is True
     assert payload["dependency_readback_observed"] is True
     assert payload["family_chain_observed"] is True
@@ -85,6 +86,21 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     ]
     assert payload["required_before_enable"] == expected_prerequisites
     assert payload["missing_required_before_enable"] == expected_prerequisites
+    assert payload["first_missing_required_before_enable"] == "resident_host_process"
+    first_missing_handoff = payload["first_missing_requirement_handoff"]
+    assert first_missing_handoff["id"] == "resident_host_process"
+    assert first_missing_handoff["family"] == "resident_host"
+    assert first_missing_handoff["route"] == "/lens/host"
+    assert first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert first_missing_handoff["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert first_missing_handoff["next_step"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert first_missing_handoff["read_only_contract"] is True
+    assert first_missing_handoff["diagnostic_only"] is True
+    assert first_missing_handoff["would_execute"] is False
+    assert first_missing_handoff["would_mutate"] is False
 
     dependency_readback = {item["id"]: item for item in payload["dependency_readback"]}
     assert dependency_readback == {
@@ -177,6 +193,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert checks["persistent_supervision_enablement_route_readback"]["status"] == "blocked_readback_ready"
     assert checks["required_before_enable_readback"]["status"] == "prerequisites_projected"
     assert checks["missing_required_before_enable_readback"]["status"] == "missing_prerequisites_projected"
+    assert checks["first_missing_requirement_handoff"]["status"] == "first_missing_requirement_bound"
     assert checks["required_before_enable_readiness_guard"]["status"] == "prerequisite_guard_blocks_enablement"
     assert checks["enablement_dependency_readback"]["status"] == "dependency_routes_bound"
     assert checks["summon_family_chain_alignment"]["status"] == "family_chain_aligned"

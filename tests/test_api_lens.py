@@ -4378,6 +4378,21 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     ]
     assert body["required_before_enable"] == expected_enablement_prerequisites
     assert body["missing_required_before_enable"] == expected_enablement_prerequisites
+    assert body["first_missing_required_before_enable"] == "resident_host_process"
+    plan_first_missing_handoff = body["first_missing_requirement_handoff"]
+    assert plan_first_missing_handoff["id"] == "resident_host_process"
+    assert plan_first_missing_handoff["route"] == "/lens/host"
+    assert plan_first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert plan_first_missing_handoff["proof_script"] == (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    )
+    assert plan_first_missing_handoff["next_step"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert plan_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert plan_first_missing_handoff["read_only_contract"] is True
+    assert plan_first_missing_handoff["would_execute"] is False
+    assert plan_first_missing_handoff["would_mutate"] is False
     assert "process_supervision_disabled" in body["blockers"]
     assert "persistent_supervision_disabled" in body["blockers"]
     assert "process_restart_authority_not_granted" in body["blockers"]
@@ -4436,9 +4451,19 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     ]
     assert enablement_body["required_before_enable"] == expected_enablement_prerequisites
     assert enablement_body["missing_required_before_enable"] == expected_enablement_prerequisites
+    assert enablement_body["first_missing_required_before_enable"] == "resident_host_process"
+    enablement_first_missing_handoff = enablement_body["first_missing_requirement_handoff"]
+    assert enablement_first_missing_handoff["id"] == "resident_host_process"
+    assert enablement_first_missing_handoff["route"] == "/lens/host"
+    assert enablement_first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert enablement_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert enablement_first_missing_handoff["read_only_contract"] is True
+    assert enablement_first_missing_handoff["would_execute"] is False
+    assert enablement_first_missing_handoff["would_mutate"] is False
     dependency_readback = enablement_body["enablement_dependency_readback"]
     assert [item["id"] for item in dependency_readback] == expected_enablement_prerequisites
     dependencies_by_id = {item["id"]: item for item in dependency_readback}
+    assert dependencies_by_id["resident_host_process"]["family"] == "resident_host"
     assert dependencies_by_id["resident_host_process"]["route"] == "/lens/host"
     assert dependencies_by_id["resident_host_process"]["status"] == "blocked"
     assert dependencies_by_id["resident_host_process"]["blocker"] == "resident_host_process_missing"

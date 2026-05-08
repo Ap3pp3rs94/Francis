@@ -303,6 +303,74 @@ def _lens_host_missing_required_before_enable(
     return [item for item in required_before_enable if missing_by_requirement.get(item, False)]
 
 
+def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any]:
+    requirement_id = str(dependency.get("id") or "").strip()
+    if not requirement_id:
+        return {}
+    families = {
+        "resident_host_process": "resident_host",
+        "tray_presence": "tray_presence",
+        "global_hotkey_binding": "global_hotkey_binding",
+        "overlay_window": "overlay_window",
+        "summon_binding": "summon_binding",
+    }
+    proof_scripts = {
+        "resident_host_process": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "tray_presence": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "global_hotkey_binding": "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+        "overlay_window": "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+        "summon_binding": "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+    }
+    readiness_routes = {
+        "resident_host_process": "/lens/host/runtime-loop/readiness",
+        "tray_presence": "/lens/tray/readiness",
+        "global_hotkey_binding": "/lens/summon/readiness",
+        "overlay_window": "/lens/overlay/readiness",
+        "summon_binding": "/lens/summon/readiness",
+    }
+    next_gaps = {
+        "resident_host_process": "resident_host_runtime_blocker_boundary",
+        "tray_presence": "summon_tray_presence_blocker_boundary",
+        "global_hotkey_binding": "os_level_command_palette_binding",
+        "overlay_window": "summon_overlay_window_blocker_boundary",
+        "summon_binding": "summon_anywhere_blockers",
+    }
+    next_steps = {
+        "resident_host_process": "resolve_resident_host_process_before_persistent_supervision_enablement",
+        "tray_presence": "resolve_tray_presence_before_persistent_supervision_enablement",
+        "global_hotkey_binding": "resolve_global_hotkey_binding_before_persistent_supervision_enablement",
+        "overlay_window": "resolve_overlay_window_before_persistent_supervision_enablement",
+        "summon_binding": "resolve_summon_binding_before_persistent_supervision_enablement",
+    }
+    return {
+        "id": requirement_id,
+        "family": families.get(requirement_id, requirement_id),
+        "route": str(dependency.get("route") or "/lens/status"),
+        "readiness_route": str(dependency.get("readiness_route") or readiness_routes.get(requirement_id, "")),
+        "proof_script": proof_scripts.get(requirement_id, ""),
+        "blocker": str(dependency.get("blocker") or ""),
+        "requirement_state": str(dependency.get("requirement_state") or ""),
+        "blocked_reason": str(dependency.get("blocked_reason") or ""),
+        "next_step": next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision"),
+        "next_smallest_truthful_gap": next_gaps.get(requirement_id, str(dependency.get("blocker") or "")),
+        "acceptance_criterion": "system_resident_presence",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+
+def _lens_host_first_missing_prerequisite_handoff(
+    enablement_dependency_readback: list[dict[str, Any]],
+) -> dict[str, Any]:
+    for dependency in enablement_dependency_readback:
+        if not bool(dependency.get("ready")):
+            return _lens_host_prerequisite_handoff(dependency)
+    return {}
+
+
 def _lens_host_resident_process_requirement_readback(
     *,
     launch_manifest: dict[str, Any],
@@ -690,6 +758,13 @@ def _lens_host_enablement_dependency_readback(
             {
                 **extra_readback,
                 "id": item,
+                "family": {
+                    "resident_host_process": "resident_host",
+                    "tray_presence": "tray_presence",
+                    "global_hotkey_binding": "global_hotkey_binding",
+                    "overlay_window": "overlay_window",
+                    "summon_binding": "summon_binding",
+                }.get(item, item),
                 "route": routes.get(item, "/lens/status"),
                 "ready": not item_missing,
                 "status": "blocked" if item_missing else "ready",
@@ -1269,6 +1344,7 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         required_before_enable,
         launch_manifest=launch_manifest,
     )
+    first_missing_handoff = _lens_host_first_missing_prerequisite_handoff(enablement_dependency_readback)
     requirements = [
         _readiness_item(
             "service_config",
@@ -1395,6 +1471,8 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         "missing_required_before_enable": missing_required_before_enable,
         "required_before_enable_ready": not missing_required_before_enable,
         "enablement_dependency_readback": enablement_dependency_readback,
+        "first_missing_required_before_enable": str(first_missing_handoff.get("id") or ""),
+        "first_missing_requirement_handoff": first_missing_handoff,
         "blockers": blockers,
         "plan": {
             "mode": "persistent_supervised_resident_host",
@@ -1465,6 +1543,7 @@ def lens_host_persistent_supervision_enablement_preflight(
         required_before_enable,
         launch_manifest=launch_manifest,
     )
+    first_missing_handoff = _lens_host_first_missing_prerequisite_handoff(enablement_dependency_readback)
     requirements = [
         _readiness_item(
             "persistent_supervision_plan",
@@ -1541,6 +1620,8 @@ def lens_host_persistent_supervision_enablement_preflight(
         "missing_required_before_enable": missing_required_before_enable,
         "required_before_enable_ready": not missing_required_before_enable,
         "enablement_dependency_readback": enablement_dependency_readback,
+        "first_missing_required_before_enable": str(first_missing_handoff.get("id") or ""),
+        "first_missing_requirement_handoff": first_missing_handoff,
         "requirements": requirements,
         "requirements_total": len(requirements),
         "requirements_ready_total": len(requirements) - len(blocked_requirements),

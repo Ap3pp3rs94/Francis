@@ -21668,6 +21668,60 @@ authority readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens persistent-supervision first prerequisite handoff
+
+The Lens persistent-supervision plan and enablement preflight now promote the
+first missing prerequisite before persistent supervision can be enabled. The
+readback remains available from:
+
+- `GET /lens/host/persistent-supervision`
+- `GET /lens/host/persistent-supervision/enablement`
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status`
+
+The broad prerequisite gap remains
+`persistent_supervision_required_prerequisites_missing`, but the operator
+handoff now resolves that group to the first concrete missing prerequisite:
+
+- `first_missing_required_before_enable=resident_host_process`
+- `recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+- `recommended_route=/lens/host`
+- `recommended_readiness_route=/lens/host/runtime-loop/readiness`
+- `recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status`
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It does not
+start or supervise a process, install or control a service, write service
+configuration, write receipts, decide approvals, write memory, claim a resident
+host, grant tray/hotkey/overlay/summon authority, create telemetry behavior, or
+create a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens persistent-supervision
+first prerequisite handoff slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_route,recommended_readiness_route,persistent_supervision_first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_runtime_blocker_boundary; persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,first_missing_requirement_observed,first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; first_missing_requirement_observed=true; first_missing_required_before_enable=resident_host_process`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\host_manifest.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warnings only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
