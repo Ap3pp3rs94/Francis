@@ -74,8 +74,11 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["dependency_readback_observed"] is True
     assert payload["family_chain_observed"] is True
     assert payload["prerequisites_mapped_to_family_chain"] is True
+    assert payload["first_missing_requirement_proof_observed"] is True
+    assert payload["first_missing_requirement_side_effects_bounded"] is True
     assert payload["lens_status_operator_readback_observed"] is True
     assert payload["side_effects_denied"] is True
+    assert payload["side_effects_bounded"] is True
 
     expected_prerequisites = [
         "resident_host_process",
@@ -159,6 +162,20 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert family_chain["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert family_chain["side_effects_denied"] is True
 
+    first_missing_proof = payload["first_missing_requirement_proof"]
+    assert first_missing_proof["status"] == "proof_passed"
+    assert first_missing_proof["exit_code"] == 0
+    assert first_missing_proof["timed_out"] is False
+    assert first_missing_proof["kind"] == "lens.resident_host.runtime_blocker_boundary.proof"
+    assert first_missing_proof["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert first_missing_proof["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert first_missing_proof["runtime_handoff_observed"] is True
+    assert first_missing_proof["bounded_runtime_observed"] is True
+    assert first_missing_proof["process_supervision_handoff_observed"] is True
+    assert first_missing_proof["side_effects_bounded"] is True
+    assert "resident_host_process_not_supervised" in first_missing_proof["blockers"]
+    assert "process_supervision_authority_not_granted" in first_missing_proof["blockers"]
+
     route_readback = payload["route_readback"]
     assert route_readback["status"] == "readback_ready"
     assert route_readback["exit_code"] == 0
@@ -199,22 +216,29 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert checks["required_before_enable_readiness_guard"]["status"] == "prerequisite_guard_blocks_enablement"
     assert checks["enablement_dependency_readback"]["status"] == "dependency_routes_bound"
     assert checks["summon_family_chain_alignment"]["status"] == "family_chain_aligned"
+    assert checks["first_missing_requirement_proof_consumed"]["status"] == "proof_consumed"
     assert checks["lens_status_operator_readback"]["status"] == "operator_readback_ready"
     assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
     assert all(item["passed"] for item in payload["checks"])
 
     assert payload["governance"] == {
         "diagnostic_only": True,
-        "read_only_contract": True,
+        "read_only_contract": False,
+        "route_readback_contract": True,
         "wraps_persistent_supervision_plan_route": True,
         "wraps_persistent_supervision_enablement_route": True,
         "wraps_lens_status": True,
         "wraps_summon_anywhere_family_chain_proof": True,
+        "wraps_first_missing_requirement_proof": True,
         "readiness_guard_projection": True,
+        "bounded_local_process_launch": True,
+        "bounded_process_launch": True,
+        "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,
-        "local_process_launch_authority": False,
+        "local_process_launch_authority": True,
+        "api_local_process_launch_authority": False,
         "process_supervision_authority": False,
         "process_restart_authority": False,
         "service_install_authority": False,

@@ -1651,8 +1651,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_proof["dependency_readback_observed"] is True
     assert prerequisites_proof["family_chain_observed"] is True
     assert prerequisites_proof["prerequisites_mapped_to_family_chain"] is True
+    assert prerequisites_proof["first_missing_requirement_proof_observed"] is True
+    assert prerequisites_proof["first_missing_requirement_side_effects_bounded"] is True
     assert prerequisites_proof["lens_status_operator_readback_observed"] is True
     assert prerequisites_proof["side_effects_denied"] is True
+    assert prerequisites_proof["side_effects_bounded"] is True
     expected_persistent_prerequisites = [
         "resident_host_process",
         "tray_presence",
@@ -1681,6 +1684,13 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_family_chain["handoff_count"] == 6
     assert prerequisites_family_chain["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert prerequisites_family_chain["side_effects_denied"] is True
+    prerequisites_first_missing_proof = prerequisites_proof["first_missing_requirement_proof"]
+    assert prerequisites_first_missing_proof["status"] == "proof_passed"
+    assert prerequisites_first_missing_proof["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert prerequisites_first_missing_proof["resident_host_process_blocker"] == "resident_host_process_not_supervised"
+    assert prerequisites_first_missing_proof["bounded_runtime_observed"] is True
+    assert prerequisites_first_missing_proof["process_supervision_handoff_observed"] is True
+    assert prerequisites_first_missing_proof["side_effects_bounded"] is True
     prerequisites_route_readback = prerequisites_proof["route_readback"]
     assert prerequisites_route_readback["status"] == "readback_ready"
     assert prerequisites_route_readback["plan_status"] == "blocked"
@@ -1688,14 +1698,20 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert all(item["passed"] for item in prerequisites_proof["checks"])
     prerequisites_governance = prerequisites_proof["governance"]
     assert prerequisites_governance["diagnostic_only"] is True
-    assert prerequisites_governance["read_only_contract"] is True
+    assert prerequisites_governance["read_only_contract"] is False
+    assert prerequisites_governance["route_readback_contract"] is True
     assert prerequisites_governance["wraps_persistent_supervision_plan_route"] is True
     assert prerequisites_governance["wraps_persistent_supervision_enablement_route"] is True
     assert prerequisites_governance["wraps_lens_status"] is True
     assert prerequisites_governance["wraps_summon_anywhere_family_chain_proof"] is True
+    assert prerequisites_governance["wraps_first_missing_requirement_proof"] is True
+    assert prerequisites_governance["bounded_local_process_launch"] is True
+    assert prerequisites_governance["bounded_process_launch"] is True
+    assert prerequisites_governance["temporary_runtime_state_write"] is True
     assert prerequisites_governance["execution_authority"] is False
     assert prerequisites_governance["approval_decision_authority"] is False
-    assert prerequisites_governance["local_process_launch_authority"] is False
+    assert prerequisites_governance["local_process_launch_authority"] is True
+    assert prerequisites_governance["api_local_process_launch_authority"] is False
     assert prerequisites_governance["process_supervision_authority"] is False
     assert prerequisites_governance["service_config_write_authority"] is False
     assert prerequisites_governance["summon_authority"] is False

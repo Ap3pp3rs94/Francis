@@ -384,6 +384,10 @@ $FamilyChainScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-
 if (-not (Test-Path -LiteralPath $FamilyChainScript -PathType Leaf)) {
   throw "Lens summon-anywhere family chain proof script is missing: $FamilyChainScript"
 }
+$FirstMissingRequirementProofScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-boundary-proof.ps1'
+if (-not (Test-Path -LiteralPath $FirstMissingRequirementProofScript -PathType Leaf)) {
+  throw "Lens resident-host runtime boundary proof script is missing: $FirstMissingRequirementProofScript"
+}
 
 $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
@@ -400,6 +404,19 @@ $FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArg
   '-DataDir',
   $ProofDataRoot
 ) -TimeoutSeconds $ChildProofTimeoutSeconds
+$FirstMissingRequirementProofResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
+  '-NoProfile',
+  '-ExecutionPolicy',
+  'Bypass',
+  '-File',
+  $FirstMissingRequirementProofScript,
+  '-Mode',
+  'Status',
+  '-ForegroundRunSeconds',
+  '2',
+  '-HostLaunchRunSeconds',
+  '3'
+) -TimeoutSeconds $ChildProofTimeoutSeconds
 
 $RoutePayload = $RouteResult.payload
 $Plan = Get-PropertyValue -Payload $RoutePayload -Name 'plan'
@@ -411,6 +428,9 @@ $StatusReadback = Get-PropertyValue -Payload $RoutePayload -Name 'status_readbac
 $StatusPlan = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_plan'
 $StatusEnablement = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_enablement'
 $FamilyChain = $FamilyChainResult.payload
+$FirstMissingRequirementProof = $FirstMissingRequirementProofResult.payload
+$FirstMissingRequirementProofGovernance = Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'governance'
+$FirstMissingRequirementProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'blockers' -Default @())
 
 $ExpectedPrerequisites = @(
   'resident_host_process',
@@ -575,6 +595,40 @@ $FamilyChainObserved = (
   [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false) -and
   $PrerequisitesMappedToFamilyChain
 )
+$FirstMissingRequirementProofObserved = (
+  [int]$FirstMissingRequirementProofResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'kind' -Default '') -eq 'lens.resident_host.runtime_blocker_boundary.proof' -and
+  [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
+  [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'resident_host_process_blocker' -Default '') -eq 'resident_host_process_not_supervised' -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'runtime_handoff_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'bounded_runtime_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'process_supervision_handoff_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'side_effects_bounded' -Default $false)
+)
+$FirstMissingRequirementSideEffectsBounded = (
+  $FirstMissingRequirementProofObserved -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'bounded_local_process_launch' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'bounded_process_launch' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'temporary_runtime_state_write' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'local_process_launch_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'api_local_process_launch_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'product_execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'process_supervision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'process_restart_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'service_install_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'service_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'hotkey_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'tray_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'overlay_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'summon_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'resident_claim_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstMissingRequirementProofGovernance -Name 'mutation_authority_granted' -Default $true)
+)
 $StatusReadbackObserved = (
   [string](Get-PropertyValue -Payload $StatusReadback -Name 'kind' -Default '') -eq 'lens.status' -and
   [string](Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_plan_route' -Default '') -eq '/lens/host/persistent-supervision' -and
@@ -603,6 +657,7 @@ $SideEffectsDenied = (
   (Test-GovernanceDenied -Governance $PlanGovernance -FalseKeys $DeniedKeys) -and
   (Test-GovernanceDenied -Governance $EnablementGovernance -FalseKeys $DeniedKeys) -and
   [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false) -and
+  $FirstMissingRequirementSideEffectsBounded -and
   -not (Test-Path -LiteralPath (Join-Path $ProofDataRoot 'runtime\lens-host\status.json') -PathType Leaf) -and
   -not (Test-Path -LiteralPath (Join-Path $ProofDataRoot 'runtime\lens-host\lens-host.pid') -PathType Leaf) -and
   -not (Test-Path -LiteralPath (Join-Path $ProofDataRoot 'runtime\lens-host-supervisor\status.json') -PathType Leaf)
@@ -617,8 +672,9 @@ $Checks = @(
   (New-Check -Id 'required_before_enable_readiness_guard' -Status $(if ($RequiredPrerequisiteGuardObserved) { 'prerequisite_guard_blocks_enablement' } else { 'missing_or_unexpected' }) -Passed $RequiredPrerequisiteGuardObserved -Evidence 'synthetic manifest projection of otherwise-ready persistent supervision routes' -Reason 'If authority and enablement toggles are otherwise ready, missing resident-host, tray, hotkey, overlay, and summon surfaces must still block persistent supervision.'),
   (New-Check -Id 'enablement_dependency_readback' -Status $(if ($DependenciesObserved) { 'dependency_routes_bound' } else { 'missing_or_unexpected' }) -Passed $DependenciesObserved -Evidence 'enablement_dependency_readback on plan and enablement routes' -Reason 'Each prerequisite must name a concrete readback route and blocker.'),
   (New-Check -Id 'summon_family_chain_alignment' -Status $(if ($FamilyChainObserved) { 'family_chain_aligned' } else { 'missing_or_unexpected' }) -Passed $FamilyChainObserved -Evidence 'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status' -Reason 'Persistent-supervision prerequisites must align with the already-proven Stage 6 summon-anywhere blocker family chain.'),
+  (New-Check -Id 'first_missing_requirement_proof_consumed' -Status $(if ($FirstMissingRequirementProofObserved) { 'proof_consumed' } else { 'missing_or_unexpected' }) -Passed $FirstMissingRequirementProofObserved -Evidence 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Reason 'The advertised first missing resident-host prerequisite must be consumed by the bounded runtime boundary proof.'),
   (New-Check -Id 'lens_status_operator_readback' -Status $(if ($StatusReadbackObserved) { 'operator_readback_ready' } else { 'missing_or_unexpected' }) -Passed $StatusReadbackObserved -Evidence '/lens/status resident_host persistent-supervision readback' -Reason 'The operator status payload must carry the same persistent-supervision plan and enablement readback.'),
-  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + family-chain governance + proof data root' -Reason 'This proof must not start a runtime, mutate service config, write memory, claim residence, or grant process/service/summon authority.')
+  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + family-chain governance + first missing proof governance + proof data root' -Reason 'This proof may consume one bounded diagnostic host-runtime proof but must not mutate service config, write memory, claim residence, or grant product/API execution, process, service, tray, hotkey, overlay, summon, approval, or resident authority.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 
@@ -647,8 +703,11 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   dependency_readback_observed = $DependenciesObserved
   family_chain_observed = $FamilyChainObserved
   prerequisites_mapped_to_family_chain = $PrerequisitesMappedToFamilyChain
+  first_missing_requirement_proof_observed = $FirstMissingRequirementProofObserved
+  first_missing_requirement_side_effects_bounded = $FirstMissingRequirementSideEffectsBounded
   lens_status_operator_readback_observed = $StatusReadbackObserved
   side_effects_denied = $SideEffectsDenied
+  side_effects_bounded = $SideEffectsDenied
   required_before_enable = [string[]]@($EnablementRequired)
   missing_required_before_enable = [string[]]@($EnablementMissing)
   first_missing_required_before_enable = $EnablementFirstMissingRequiredBeforeEnable
@@ -663,6 +722,20 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     handoff_count = @($FamilyChainHandoffs).Count
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $FamilyChain -Name 'next_smallest_truthful_gap' -Default '')
     side_effects_denied = [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false)
+  }
+  first_missing_requirement_proof = [ordered]@{
+    status = if ($FirstMissingRequirementProofObserved) { [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'status' -Default '') } else { 'missing_or_failed' }
+    exit_code = [int]$FirstMissingRequirementProofResult.exit_code
+    timed_out = [bool]$FirstMissingRequirementProofResult.timed_out
+    duration_ms = [int]$FirstMissingRequirementProofResult.duration_ms
+    kind = [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'kind' -Default '')
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'next_smallest_truthful_gap' -Default '')
+    resident_host_process_blocker = [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'resident_host_process_blocker' -Default '')
+    runtime_handoff_observed = [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'runtime_handoff_observed' -Default $false)
+    bounded_runtime_observed = [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'bounded_runtime_observed' -Default $false)
+    process_supervision_handoff_observed = [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'process_supervision_handoff_observed' -Default $false)
+    side_effects_bounded = [bool](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'side_effects_bounded' -Default $false)
+    blockers = [string[]]@($FirstMissingRequirementProofBlockers)
   }
   route_readback = [ordered]@{
     status = if ($PlanRouteReadbackObserved -and $EnablementRouteReadbackObserved) { 'readback_ready' } else { 'missing_or_failed' }
@@ -697,20 +770,27 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     '/lens/status',
     'synthetic manifest required-before-enable readiness guard projection',
     'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status',
+    'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',
     'docs/canonical/ROADMAP.md#4.12'
   )
   governance = [ordered]@{
     diagnostic_only = $true
-    read_only_contract = $true
+    read_only_contract = $false
+    route_readback_contract = $true
     wraps_persistent_supervision_plan_route = $true
     wraps_persistent_supervision_enablement_route = $true
     wraps_lens_status = $true
     wraps_summon_anywhere_family_chain_proof = $true
+    wraps_first_missing_requirement_proof = $true
     readiness_guard_projection = $true
+    bounded_local_process_launch = $true
+    bounded_process_launch = $true
+    temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false
     approval_decision_authority = $false
-    local_process_launch_authority = $false
+    local_process_launch_authority = $true
+    api_local_process_launch_authority = $false
     process_supervision_authority = $false
     process_restart_authority = $false
     service_install_authority = $false
@@ -727,7 +807,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes; the required-before-enable guard still blocks an otherwise-ready projection on missing resident-host, tray, hotkey, overlay, and summon surfaces without granting runtime, service, summon, memory, or resident authority.'
+  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes; the required-before-enable guard still blocks an otherwise-ready projection on missing resident-host, tray, hotkey, overlay, and summon surfaces, and the first missing resident-host proof is consumed only as a bounded diagnostic launch without granting product/API execution, supervision, service, summon, memory, or resident authority.'
 } | ConvertTo-Json -Depth 8
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

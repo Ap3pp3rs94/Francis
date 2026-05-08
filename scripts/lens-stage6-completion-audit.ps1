@@ -422,8 +422,11 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain -and
+  [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_side_effects_bounded -and
   [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.side_effects_denied -and
+  [bool]$PersistentSupervisionPrerequisitesProof.side_effects_bounded -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'resident_host_process' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'tray_presence' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'global_hotkey_binding' -and
@@ -435,15 +438,21 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'overlay_window' -and
   $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'summon_binding' -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.diagnostic_only -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.route_readback_contract -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_plan_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_enablement_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_lens_status -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_summon_anywhere_family_chain_proof -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_first_missing_requirement_proof -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_local_process_launch -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_process_launch -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.temporary_runtime_state_write -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.product_execution_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.execution_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.approval_decision_authority -and
-  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.api_local_process_launch_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.process_supervision_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.persistent_supervision_enablement_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.persistent_supervision_execution_authority -and
@@ -3032,12 +3041,16 @@ $Payload = [ordered]@{
     dependency_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed
     family_chain_observed = [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed
     prerequisites_mapped_to_family_chain = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain
+    first_missing_requirement_proof_observed = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_observed
+    first_missing_requirement_side_effects_bounded = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_side_effects_bounded
     lens_status_operator_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed
     side_effects_denied = [bool]$PersistentSupervisionPrerequisitesProof.side_effects_denied
+    side_effects_bounded = [bool]$PersistentSupervisionPrerequisitesProof.side_effects_bounded
     required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesRequiredBeforeEnable)
     missing_required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable)
     dependency_readback = @($PersistentSupervisionPrerequisitesProof.dependency_readback)
     family_chain = $PersistentSupervisionPrerequisitesProof.family_chain
+    first_missing_requirement_proof = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof
     route_readback = $PersistentSupervisionPrerequisitesProof.route_readback
     guard_readback = $PersistentSupervisionPrerequisitesProof.guard_readback
     checks = @($PersistentSupervisionPrerequisitesProof.checks)

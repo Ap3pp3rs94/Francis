@@ -21856,6 +21856,59 @@ alignment slice:
 - `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens persistent-supervision first-missing proof consumption
+
+The persistent-supervision prerequisite proof now consumes the first missing
+resident-host prerequisite proof it already advertises. The proof still reports
+the Stage 6 top-level gap as:
+
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+It now also verifies and exposes:
+
+- `first_missing_requirement_proof_observed=true`
+- `first_missing_requirement_side_effects_bounded=true`
+- `first_missing_requirement_proof.next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `first_missing_requirement_proof.resident_host_process_blocker=resident_host_process_not_supervised`
+
+This is a backend/script/test diagnostic-proof slice. It changes the
+`scripts/lens-persistent-supervision-prerequisites-proof.ps1` proof from
+readback-only to diagnostic-bounded because it invokes
+`scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`, which
+observes one bounded local host-runtime proof. It does not change API execution
+authority, approval decision authority, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, service-config write authority,
+receipt-write authority, resident-claim authority, tray/hotkey/overlay/summon
+authority, telemetry behavior, UI claim behavior, resident host process
+lifetime, or Stage 6 transition state.
+
+The Stage 6 completion audit now recognizes this bounded diagnostic proof shape
+and keeps the top-level audit gap on
+`persistent_supervision_required_prerequisites_missing` rather than falling back
+to prerequisite-proof readback.
+
+Latest validation for the `2026-05-08` Stage 6/Lens persistent-supervision
+first-missing proof consumption slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,first_missing_requirement_proof_observed,first_missing_requirement_side_effects_bounded,side_effects_denied,@{Name='first_missing_gap';Expression={$_.first_missing_requirement_proof.next_smallest_truthful_gap}},@{Name='local_launch';Expression={$_.governance.local_process_launch_authority}},@{Name='api_launch';Expression={$_.governance.api_local_process_launch_authority}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing_requirement_proof_observed=true; first_missing_gap=resident_host_process_not_supervised; local_launch=true; api_launch=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,persistent_supervision_first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; recommended_handoff_source=persistent_supervision_required_prerequisites_handoff; persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed before audit recognition fix with next_smallest_truthful_gap=persistent_supervision_prerequisites_proof_readback; passed after the fix`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warnings only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
