@@ -308,6 +308,64 @@ def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str,
     }
 
 
+def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str, Any]:
+    config_path = "config/runtime/lens/summon.json"
+    config = _runtime_json_dict(config_path)
+    config_exists = bool(config)
+    global_hotkey = str(config.get("global_hotkey") or "")
+    binding_scope = str(config.get("binding_scope") or "global")
+    palette_route = str(config.get("palette_route") or "/lens/status")
+    binding_enabled = bool(config.get("binding_enabled"))
+    register_hotkey = bool(config.get("register_hotkey"))
+    startup_register = bool(config.get("startup_register"))
+    hotkey_registration_authority = bool(config.get("hotkey_registration_authority"))
+    summon_authority = bool(config.get("summon_authority"))
+    family_blockers = []
+    if not config_exists:
+        family_blockers.append("lens_summon_config_missing")
+    if not global_hotkey:
+        family_blockers.append("global_hotkey_not_declared")
+    if not binding_enabled:
+        family_blockers.append("global_hotkey_binding_disabled")
+    if not register_hotkey:
+        family_blockers.append("global_hotkey_registration_disabled")
+    if not hotkey_registration_authority:
+        family_blockers.append("hotkey_registration_authority_not_granted")
+
+    requirement_state = "ready"
+    if missing:
+        if not config_exists:
+            requirement_state = "config_missing"
+        elif not global_hotkey:
+            requirement_state = "hotkey_not_declared"
+        elif not binding_enabled:
+            requirement_state = "binding_disabled"
+        elif not register_hotkey:
+            requirement_state = "registration_disabled"
+        elif not hotkey_registration_authority:
+            requirement_state = "registration_authority_blocked"
+        else:
+            requirement_state = "global_hotkey_binding_missing"
+
+    return {
+        "requirement_state": requirement_state,
+        "blocked_reason": family_blockers[0] if missing and family_blockers else "",
+        "config_path": config_path,
+        "config_exists": config_exists,
+        "global_hotkey": global_hotkey,
+        "binding_scope": binding_scope,
+        "palette_route": palette_route,
+        "readiness_route": "/lens/summon/readiness",
+        "preflight_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+        "binding_enabled": binding_enabled,
+        "register_hotkey": register_hotkey,
+        "startup_register": startup_register,
+        "hotkey_registration_authority": hotkey_registration_authority,
+        "summon_authority": summon_authority,
+        "family_blockers": _ordered_unique(family_blockers) if missing else [],
+    }
+
+
 def _lens_host_enablement_dependency_readback(
     required_before_enable: list[str],
     *,
@@ -341,6 +399,8 @@ def _lens_host_enablement_dependency_readback(
             blocker = str(extra_readback.get("blocker") or blocker) if item_missing else ""
         elif item == "tray_presence":
             extra_readback = _lens_host_tray_presence_requirement_readback(missing=item_missing)
+        elif item == "global_hotkey_binding":
+            extra_readback = _lens_host_global_hotkey_requirement_readback(missing=item_missing)
         dependencies.append(
             {
                 **extra_readback,

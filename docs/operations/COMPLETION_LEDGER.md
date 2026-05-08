@@ -21308,6 +21308,66 @@ retry stabilization:
 - `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens global-hotkey prerequisite readback resolver
+
+The persistent-supervision plan and enablement dependency readback now expose
+the `global_hotkey_binding` prerequisite details from the existing disabled
+summon preflight/config posture instead of only naming the broad
+`global_hotkey_binding_missing` surface blocker.
+
+The dependency readback still preserves the stable blocker:
+
+- `blocker=global_hotkey_binding_missing`
+
+It now also reports:
+
+- `route=/lens/summon`
+- `readiness_route=/lens/summon/readiness`
+- `preflight_script=scripts/lens-summon-preflight.ps1 -Mode Status`
+- `requirement_state=binding_disabled`
+- `blocked_reason=global_hotkey_binding_disabled`
+- `config_path=config/runtime/lens/summon.json`
+- `config_exists=true`
+- `global_hotkey=Ctrl+Alt+Space`
+- `binding_scope=global`
+- `palette_route=/lens/status`
+- `binding_enabled=false`
+- `register_hotkey=false`
+- `startup_register=false`
+- `hotkey_registration_authority=false`
+- `summon_authority=false`
+- `family_blockers=["global_hotkey_binding_disabled","global_hotkey_registration_disabled","hotkey_registration_authority_not_granted"]`
+
+This keeps the persistent-supervision prerequisite blocker truthful and more
+operator-actionable without granting production execution authority, approval
+decision authority, product memory-write behavior, local process launch
+authority, process supervision authority, process restart authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, tray-registration authority, tray-icon
+authority, notification authority, hotkey-registration authority, summon
+authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens global-hotkey prerequisite
+readback resolver:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,dependency_readback_observed,missing_required_before_enable_observed,side_effects_denied | ConvertTo-Json -Depth 5`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; dependency_readback_observed=true; side_effects_denied=true`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

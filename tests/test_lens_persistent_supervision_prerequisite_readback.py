@@ -121,3 +121,36 @@ def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate
             "tray_icon_authority_not_granted",
             "notification_authority_not_granted",
         ]
+
+
+def test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate() -> None:
+    manifest = _manifest(process_alive=False, process_blocker="resident_host_process_missing")
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        dependency = _dependency_by_id(body)["global_hotkey_binding"]
+        assert dependency["route"] == "/lens/summon"
+        assert dependency["readiness_route"] == "/lens/summon/readiness"
+        assert dependency["preflight_script"] == "scripts/lens-summon-preflight.ps1 -Mode Status"
+        assert dependency["ready"] is False
+        assert dependency["status"] == "blocked"
+        assert dependency["blocker"] == "global_hotkey_binding_missing"
+        assert dependency["requirement_state"] == "binding_disabled"
+        assert dependency["blocked_reason"] == "global_hotkey_binding_disabled"
+        assert dependency["config_path"] == "config/runtime/lens/summon.json"
+        assert dependency["config_exists"] is True
+        assert dependency["global_hotkey"] == "Ctrl+Alt+Space"
+        assert dependency["binding_scope"] == "global"
+        assert dependency["palette_route"] == "/lens/status"
+        assert dependency["binding_enabled"] is False
+        assert dependency["register_hotkey"] is False
+        assert dependency["startup_register"] is False
+        assert dependency["hotkey_registration_authority"] is False
+        assert dependency["summon_authority"] is False
+        assert dependency["family_blockers"] == [
+            "global_hotkey_binding_disabled",
+            "global_hotkey_registration_disabled",
+            "hotkey_registration_authority_not_granted",
+        ]
