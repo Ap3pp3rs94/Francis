@@ -21368,6 +21368,72 @@ readback resolver:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens overlay prerequisite readback resolver
+
+The persistent-supervision plan and enablement dependency readback now expose
+the `overlay_window` prerequisite details from the existing disabled overlay
+preflight/config posture instead of only naming the broad
+`overlay_window_missing` surface blocker.
+
+The dependency readback still preserves the stable blocker:
+
+- `blocker=overlay_window_missing`
+
+It now also reports:
+
+- `route=/lens/overlay`
+- `readiness_route=/lens/overlay/readiness`
+- `preflight_script=scripts/lens-overlay-preflight.ps1 -Mode Status`
+- `requirement_state=window_disabled`
+- `blocked_reason=lens_overlay_window_not_implemented`
+- `config_path=config/runtime/lens/overlay.json`
+- `config_exists=true`
+- `overlay_name=Francis Lens Overlay`
+- `overlay_scope=user_session`
+- `status_route=/lens/status`
+- `host_route=/lens/host`
+- `required_before_enable=["resident_host_process","tray_presence","overlay_window","always_on_top_policy","global_hotkey_binding","summon_binding"]`
+- `overlay_enabled=false`
+- `window_enabled=false`
+- `always_on_top=false`
+- `dock_supported=false`
+- `focus_supported=false`
+- `click_through_supported=false`
+- `capture_supported=false`
+- `overlay_control_authority=false`
+- `window_management_authority=false`
+- `local_process_launch_authority=false`
+- `capture_authority=false`
+- `summon_authority=false`
+- `tray_registration_authority=false`
+- `family_blockers=["lens_overlay_window_not_implemented","overlay_window_disabled","always_on_top_disabled","overlay_dock_not_supported","overlay_focus_not_supported","overlay_click_through_not_supported","overlay_control_authority_not_granted","window_management_authority_not_granted","local_process_launch_authority_not_granted","capture_authority_not_granted","summon_authority_not_granted","tray_registration_authority_not_granted"]`
+
+This keeps the persistent-supervision prerequisite blocker truthful and more
+operator-actionable without granting production execution authority, approval
+decision authority, product memory-write behavior, local process launch
+authority, process supervision authority, process restart authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, tray-registration authority,
+hotkey-registration authority, overlay-control authority, window-management
+authority, capture authority, summon authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens overlay prerequisite
+readback resolver:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `.\scripts\lens-persistent-supervision-prerequisites-proof.ps1`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; dependency_readback_observed=true; side_effects_denied=true`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -366,6 +366,98 @@ def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str,
     }
 
 
+def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str, Any]:
+    config_path = "config/runtime/lens/overlay.json"
+    config = _runtime_json_dict(config_path)
+    config_exists = bool(config)
+    overlay_name = str(config.get("overlay_name") or "Francis Lens Overlay")
+    overlay_scope = str(config.get("overlay_scope") or "user_session")
+    status_route = str(config.get("status_route") or "/lens/status")
+    host_route = str(config.get("host_route") or "/lens/host")
+    blocked_reason = str(config.get("blocked_reason") or "lens_overlay_window_not_implemented")
+    overlay_enabled = bool(config.get("enabled"))
+    window_enabled = bool(config.get("window_enabled"))
+    always_on_top = bool(config.get("always_on_top"))
+    dock_supported = bool(config.get("dock_supported"))
+    focus_supported = bool(config.get("focus_supported"))
+    click_through_supported = bool(config.get("click_through_supported"))
+    capture_supported = bool(config.get("capture_supported"))
+    overlay_control_authority = bool(config.get("overlay_control_authority"))
+    window_management_authority = bool(config.get("window_management_authority"))
+    local_process_launch_authority = bool(config.get("local_process_launch_authority"))
+    capture_authority = bool(config.get("capture_authority"))
+    summon_authority = bool(config.get("summon_authority"))
+    tray_registration_authority = bool(config.get("tray_registration_authority"))
+    family_blockers = []
+    if not config_exists:
+        family_blockers.append("lens_overlay_config_missing")
+    if blocked_reason:
+        family_blockers.append(blocked_reason)
+    if not window_enabled:
+        family_blockers.append("overlay_window_disabled")
+    if not always_on_top:
+        family_blockers.append("always_on_top_disabled")
+    if not dock_supported:
+        family_blockers.append("overlay_dock_not_supported")
+    if not focus_supported:
+        family_blockers.append("overlay_focus_not_supported")
+    if not click_through_supported:
+        family_blockers.append("overlay_click_through_not_supported")
+    if not overlay_control_authority:
+        family_blockers.append("overlay_control_authority_not_granted")
+    if not window_management_authority:
+        family_blockers.append("window_management_authority_not_granted")
+    if not local_process_launch_authority:
+        family_blockers.append("local_process_launch_authority_not_granted")
+    if not capture_authority:
+        family_blockers.append("capture_authority_not_granted")
+    if not summon_authority:
+        family_blockers.append("summon_authority_not_granted")
+    if not tray_registration_authority:
+        family_blockers.append("tray_registration_authority_not_granted")
+
+    requirement_state = "ready"
+    if missing:
+        if not config_exists:
+            requirement_state = "config_missing"
+        elif not window_enabled:
+            requirement_state = "window_disabled"
+        elif not overlay_control_authority:
+            requirement_state = "overlay_control_authority_blocked"
+        elif not window_management_authority:
+            requirement_state = "window_management_authority_blocked"
+        else:
+            requirement_state = "overlay_window_missing"
+
+    return {
+        "requirement_state": requirement_state,
+        "blocked_reason": family_blockers[0] if missing and family_blockers else "",
+        "config_path": config_path,
+        "config_exists": config_exists,
+        "overlay_name": overlay_name,
+        "overlay_scope": overlay_scope,
+        "status_route": status_route,
+        "host_route": host_route,
+        "readiness_route": "/lens/overlay/readiness",
+        "preflight_script": "scripts/lens-overlay-preflight.ps1 -Mode Status",
+        "required_before_enable": _as_str_list(config.get("required_before_enable")),
+        "overlay_enabled": overlay_enabled,
+        "window_enabled": window_enabled,
+        "always_on_top": always_on_top,
+        "dock_supported": dock_supported,
+        "focus_supported": focus_supported,
+        "click_through_supported": click_through_supported,
+        "capture_supported": capture_supported,
+        "overlay_control_authority": overlay_control_authority,
+        "window_management_authority": window_management_authority,
+        "local_process_launch_authority": local_process_launch_authority,
+        "capture_authority": capture_authority,
+        "summon_authority": summon_authority,
+        "tray_registration_authority": tray_registration_authority,
+        "family_blockers": _ordered_unique(family_blockers) if missing else [],
+    }
+
+
 def _lens_host_enablement_dependency_readback(
     required_before_enable: list[str],
     *,
@@ -401,6 +493,8 @@ def _lens_host_enablement_dependency_readback(
             extra_readback = _lens_host_tray_presence_requirement_readback(missing=item_missing)
         elif item == "global_hotkey_binding":
             extra_readback = _lens_host_global_hotkey_requirement_readback(missing=item_missing)
+        elif item == "overlay_window":
+            extra_readback = _lens_host_overlay_window_requirement_readback(missing=item_missing)
         dependencies.append(
             {
                 **extra_readback,

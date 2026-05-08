@@ -154,3 +154,62 @@ def test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate
             "global_hotkey_registration_disabled",
             "hotkey_registration_authority_not_granted",
         ]
+
+
+def test_persistent_supervision_prerequisite_readback_reports_overlay_window_gate() -> None:
+    manifest = _manifest(process_alive=False, process_blocker="resident_host_process_missing")
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        dependency = _dependency_by_id(body)["overlay_window"]
+        assert dependency["route"] == "/lens/overlay"
+        assert dependency["readiness_route"] == "/lens/overlay/readiness"
+        assert dependency["preflight_script"] == "scripts/lens-overlay-preflight.ps1 -Mode Status"
+        assert dependency["ready"] is False
+        assert dependency["status"] == "blocked"
+        assert dependency["blocker"] == "overlay_window_missing"
+        assert dependency["requirement_state"] == "window_disabled"
+        assert dependency["blocked_reason"] == "lens_overlay_window_not_implemented"
+        assert dependency["config_path"] == "config/runtime/lens/overlay.json"
+        assert dependency["config_exists"] is True
+        assert dependency["overlay_name"] == "Francis Lens Overlay"
+        assert dependency["overlay_scope"] == "user_session"
+        assert dependency["status_route"] == "/lens/status"
+        assert dependency["host_route"] == "/lens/host"
+        assert dependency["required_before_enable"] == [
+            "resident_host_process",
+            "tray_presence",
+            "overlay_window",
+            "always_on_top_policy",
+            "global_hotkey_binding",
+            "summon_binding",
+        ]
+        assert dependency["overlay_enabled"] is False
+        assert dependency["window_enabled"] is False
+        assert dependency["always_on_top"] is False
+        assert dependency["dock_supported"] is False
+        assert dependency["focus_supported"] is False
+        assert dependency["click_through_supported"] is False
+        assert dependency["capture_supported"] is False
+        assert dependency["overlay_control_authority"] is False
+        assert dependency["window_management_authority"] is False
+        assert dependency["local_process_launch_authority"] is False
+        assert dependency["capture_authority"] is False
+        assert dependency["summon_authority"] is False
+        assert dependency["tray_registration_authority"] is False
+        assert dependency["family_blockers"] == [
+            "lens_overlay_window_not_implemented",
+            "overlay_window_disabled",
+            "always_on_top_disabled",
+            "overlay_dock_not_supported",
+            "overlay_focus_not_supported",
+            "overlay_click_through_not_supported",
+            "overlay_control_authority_not_granted",
+            "window_management_authority_not_granted",
+            "local_process_launch_authority_not_granted",
+            "capture_authority_not_granted",
+            "summon_authority_not_granted",
+            "tray_registration_authority_not_granted",
+        ]
