@@ -85,3 +85,39 @@ def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised
         assert dependency["requirement_state"] == "foreground_observed_not_supervised"
         assert dependency["process_alive"] is True
         assert dependency["blocked_reason"] == "resident_host_not_supervised"
+
+
+def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate() -> None:
+    manifest = _manifest(process_alive=False, process_blocker="resident_host_process_missing")
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        dependency = _dependency_by_id(body)["tray_presence"]
+        assert dependency["route"] == "/lens/tray"
+        assert dependency["readiness_route"] == "/lens/tray/readiness"
+        assert dependency["ready"] is False
+        assert dependency["status"] == "blocked"
+        assert dependency["blocker"] == "tray_host_missing"
+        assert dependency["requirement_state"] == "tray_host_disabled"
+        assert dependency["blocked_reason"] == "lens_tray_presence_not_implemented"
+        assert dependency["config_path"] == "config/runtime/lens/tray.json"
+        assert dependency["config_exists"] is True
+        assert dependency["presence_name"] == "Francis Lens Tray Presence"
+        assert dependency["tray_scope"] == "user_session"
+        assert dependency["tray_host_enabled"] is False
+        assert dependency["tray_icon_enabled"] is False
+        assert dependency["startup_register"] is False
+        assert dependency["tray_registration_authority"] is False
+        assert dependency["tray_icon_authority"] is False
+        assert dependency["notification_authority"] is False
+        assert dependency["family_blockers"] == [
+            "lens_tray_presence_not_implemented",
+            "tray_host_disabled",
+            "tray_icon_disabled",
+            "tray_startup_registration_disabled",
+            "tray_registration_authority_not_granted",
+            "tray_icon_authority_not_granted",
+            "notification_authority_not_granted",
+        ]

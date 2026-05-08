@@ -250,6 +250,64 @@ def _lens_host_resident_process_requirement_readback(
     }
 
 
+def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str, Any]:
+    config_path = "config/runtime/lens/tray.json"
+    config = _runtime_json_dict(config_path)
+    config_exists = bool(config)
+    tray_host_enabled = bool(config.get("tray_host_enabled"))
+    tray_icon_enabled = bool(config.get("tray_icon_enabled"))
+    startup_register = bool(config.get("startup_register"))
+    tray_registration_authority = bool(config.get("tray_registration_authority"))
+    tray_icon_authority = bool(config.get("tray_icon_authority"))
+    notification_authority = bool(config.get("notification_authority"))
+    blocked_reason = str(config.get("blocked_reason") or "lens_tray_presence_not_implemented")
+    family_blockers = []
+    if not config_exists:
+        family_blockers.append("lens_tray_config_missing")
+    if blocked_reason:
+        family_blockers.append(blocked_reason)
+    if not tray_host_enabled:
+        family_blockers.append("tray_host_disabled")
+    if not tray_icon_enabled:
+        family_blockers.append("tray_icon_disabled")
+    if not startup_register:
+        family_blockers.append("tray_startup_registration_disabled")
+    if not tray_registration_authority:
+        family_blockers.append("tray_registration_authority_not_granted")
+    if not tray_icon_authority:
+        family_blockers.append("tray_icon_authority_not_granted")
+    if not notification_authority:
+        family_blockers.append("notification_authority_not_granted")
+
+    requirement_state = "ready"
+    if missing:
+        if not config_exists:
+            requirement_state = "config_missing"
+        elif not tray_host_enabled:
+            requirement_state = "tray_host_disabled"
+        elif not tray_registration_authority:
+            requirement_state = "registration_authority_blocked"
+        else:
+            requirement_state = "tray_host_missing"
+
+    return {
+        "requirement_state": requirement_state,
+        "blocked_reason": blocked_reason if missing else "",
+        "config_path": config_path,
+        "config_exists": config_exists,
+        "presence_name": str(config.get("presence_name") or "Francis Lens Tray Presence"),
+        "tray_scope": str(config.get("tray_scope") or "user_session"),
+        "readiness_route": "/lens/tray/readiness",
+        "tray_host_enabled": tray_host_enabled,
+        "tray_icon_enabled": tray_icon_enabled,
+        "startup_register": startup_register,
+        "tray_registration_authority": tray_registration_authority,
+        "tray_icon_authority": tray_icon_authority,
+        "notification_authority": notification_authority,
+        "family_blockers": _ordered_unique(family_blockers) if missing else [],
+    }
+
+
 def _lens_host_enablement_dependency_readback(
     required_before_enable: list[str],
     *,
@@ -281,6 +339,8 @@ def _lens_host_enablement_dependency_readback(
                 missing=item_missing,
             )
             blocker = str(extra_readback.get("blocker") or blocker) if item_missing else ""
+        elif item == "tray_presence":
+            extra_readback = _lens_host_tray_presence_requirement_readback(missing=item_missing)
         dependencies.append(
             {
                 **extra_readback,

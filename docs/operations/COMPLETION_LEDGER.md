@@ -21217,6 +21217,62 @@ readback resolver:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens tray prerequisite readback resolver
+
+The persistent-supervision plan and enablement dependency readback now expose
+the `tray_presence` prerequisite details from the existing disabled tray
+preflight/config posture instead of only naming the broad `tray_host_missing`
+surface blocker.
+
+The dependency readback still preserves the stable blocker:
+
+- `blocker=tray_host_missing`
+
+It now also reports:
+
+- `route=/lens/tray`
+- `readiness_route=/lens/tray/readiness`
+- `requirement_state=tray_host_disabled`
+- `blocked_reason=lens_tray_presence_not_implemented`
+- `config_path=config/runtime/lens/tray.json`
+- `config_exists=true`
+- `tray_host_enabled=false`
+- `tray_icon_enabled=false`
+- `startup_register=false`
+- `tray_registration_authority=false`
+- `tray_icon_authority=false`
+- `notification_authority=false`
+- `family_blockers=["lens_tray_presence_not_implemented","tray_host_disabled","tray_icon_disabled","tray_startup_registration_disabled","tray_registration_authority_not_granted","tray_icon_authority_not_granted","notification_authority_not_granted"]`
+
+This keeps the persistent-supervision prerequisite blocker truthful and more
+operator-actionable without granting production execution authority, approval
+decision authority, product memory-write behavior, local process launch
+authority, process supervision authority, process restart authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, tray-registration authority, tray-icon
+authority, notification authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens tray prerequisite readback
+resolver:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,dependency_readback_observed,missing_required_before_enable_observed,side_effects_denied | ConvertTo-Json -Depth 5`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; dependency_readback_observed=true`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_tray_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check --no-cache src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
