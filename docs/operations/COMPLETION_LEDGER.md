@@ -21909,6 +21909,63 @@ first-missing proof consumption slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warnings only`
 
+### 2026-05-08 - Stage 6/Lens persistent-supervision plan prerequisite readback
+
+The standalone persistent-supervision plan script now exposes the same
+required-before-enable prerequisite readback shape used by the Stage 6 Lens API
+and handoff proofs. `scripts/lens-persistent-supervision-plan.ps1 -Mode Status`
+now reports:
+
+- `required_before_enable_ready=false`
+- `required_before_enable=[resident_host_process, tray_presence, global_hotkey_binding, overlay_window, summon_binding]`
+- `missing_required_before_enable=[resident_host_process, tray_presence, global_hotkey_binding, overlay_window, summon_binding]`
+- `first_missing_required_before_enable=resident_host_process`
+- `required_before_enable_guard_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `first_missing_requirement_handoff.next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `enablement_dependency_readback` entries for the resident host, tray, hotkey, overlay, and summon prerequisites
+
+The resident-host prerequisite readback only treats a process as observed when
+the runtime state file is a `lens.host.runtime_state`, the state is
+`foreground_running` or `resident_running`, and the runtime-state PID matches
+the PID file before checking process liveness. A stale PID file alone does not
+satisfy or partially satisfy the resident-host prerequisite.
+
+This preserves the script's existing service/authority plan semantics:
+`next_smallest_truthful_gap` remains
+`persistent_supervision_authority_not_granted` without an authority grant, and
+`persistent_supervision_enablement_disabled` with an active grant while process
+and persistent supervision remain disabled. The new fields are readback-only
+guard evidence so the standalone plan no longer hides the prerequisite blocker
+that prevents truthful resident enablement.
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It changes no
+API route behavior, UI behavior, execution authority, approval decision
+authority, memory-write behavior, product local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, receipt-write authority, resident-claim
+authority, tray/hotkey/overlay/summon authority, telemetry behavior,
+resident host process lifetime, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens persistent-supervision plan
+prerequisite readback slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,required_before_enable_ready,missing_required_before_enable,first_missing_required_before_enable,required_before_enable_guard_next_smallest_truthful_gap | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; required_before_enable_ready=false; first_missing_required_before_enable=resident_host_process; required_before_enable_guard_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,persistent_supervision_required_prerequisites_guard_observed | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; persistent_supervision_required_prerequisites_guard_observed=true`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
