@@ -366,6 +366,109 @@ def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str,
     }
 
 
+def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str, Any]:
+    config_path = "config/runtime/lens/summon.json"
+    config = _runtime_json_dict(config_path)
+    config_exists = bool(config)
+    summon_name = str(config.get("summon_name") or "Francis Lens Summon")
+    global_hotkey = str(config.get("global_hotkey") or "")
+    binding_scope = str(config.get("binding_scope") or "global")
+    palette_route = str(config.get("palette_route") or "/lens/status")
+    host_preflight = str(config.get("host_preflight") or "scripts/lens-host-preflight.ps1")
+    host_status_runner = str(config.get("host_status_runner") or "scripts/lens-host.ps1")
+    launch_target = str(config.get("launch_target") or "lens_host")
+    launch_mode = str(config.get("launch_mode") or "Foreground")
+    blocked_reason = str(config.get("blocked_reason") or "lens_summon_binding_not_implemented")
+    summon_enabled = bool(config.get("enabled"))
+    binding_enabled = bool(config.get("binding_enabled"))
+    register_hotkey = bool(config.get("register_hotkey"))
+    startup_register = bool(config.get("startup_register"))
+    overlay_required = bool(config.get("overlay_required", True))
+    tray_required = bool(config.get("tray_required", True))
+    summon_authority = bool(config.get("summon_authority"))
+    hotkey_registration_authority = bool(config.get("hotkey_registration_authority"))
+    overlay_control_authority = bool(config.get("overlay_control_authority"))
+    local_process_launch_authority = bool(config.get("local_process_launch_authority"))
+    host_preflight_exists = _runtime_file_exists(host_preflight)
+    host_status_runner_exists = _runtime_file_exists(host_status_runner)
+    family_blockers = []
+    host_dependency_blockers = []
+    surface_dependency_blockers = []
+    authority_blockers = []
+
+    if not config_exists:
+        family_blockers.append("lens_summon_config_missing")
+    if blocked_reason:
+        family_blockers.append(blocked_reason)
+    if not summon_authority:
+        family_blockers.append("summon_authority_not_granted")
+        authority_blockers.append("summon_authority_not_granted")
+    if not host_preflight_exists:
+        host_dependency_blockers.append("lens_host_lifecycle_preflight_missing")
+    if not host_status_runner_exists:
+        host_dependency_blockers.append("lens_host_status_runner_missing")
+    if not local_process_launch_authority:
+        host_dependency_blockers.append("local_process_launch_authority_not_granted")
+        authority_blockers.append("local_process_launch_authority_not_granted")
+    if overlay_required:
+        surface_dependency_blockers.append("overlay_window_missing")
+    if tray_required:
+        surface_dependency_blockers.append("tray_host_missing")
+    if not hotkey_registration_authority:
+        authority_blockers.append("hotkey_registration_authority_not_granted")
+    if not overlay_control_authority:
+        authority_blockers.append("overlay_control_authority_not_granted")
+
+    requirement_state = "ready"
+    if missing:
+        if not config_exists:
+            requirement_state = "config_missing"
+        elif blocked_reason == "lens_summon_binding_not_implemented":
+            requirement_state = "not_implemented"
+        elif not summon_authority:
+            requirement_state = "summon_authority_blocked"
+        elif not local_process_launch_authority:
+            requirement_state = "local_process_launch_authority_blocked"
+        else:
+            requirement_state = "summon_binding_missing"
+
+    return {
+        "requirement_state": requirement_state,
+        "blocked_reason": family_blockers[0] if missing and family_blockers else "",
+        "config_path": config_path,
+        "config_exists": config_exists,
+        "summon_name": summon_name,
+        "global_hotkey": global_hotkey,
+        "binding_scope": binding_scope,
+        "palette_route": palette_route,
+        "readiness_route": "/lens/summon/readiness",
+        "preflight_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+        "acceptance_criterion": "summon_anywhere",
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "required_before_enable": _as_str_list(config.get("required_before_enable")),
+        "host_preflight": host_preflight,
+        "host_preflight_exists": host_preflight_exists,
+        "host_status_runner": host_status_runner,
+        "host_status_runner_exists": host_status_runner_exists,
+        "launch_target": launch_target,
+        "launch_mode": launch_mode,
+        "summon_enabled": summon_enabled,
+        "binding_enabled": binding_enabled,
+        "register_hotkey": register_hotkey,
+        "startup_register": startup_register,
+        "overlay_required": overlay_required,
+        "tray_required": tray_required,
+        "summon_authority": summon_authority,
+        "hotkey_registration_authority": hotkey_registration_authority,
+        "overlay_control_authority": overlay_control_authority,
+        "local_process_launch_authority": local_process_launch_authority,
+        "family_blockers": _ordered_unique(family_blockers) if missing else [],
+        "host_dependency_blockers": _ordered_unique(host_dependency_blockers) if missing else [],
+        "surface_dependency_blockers": _ordered_unique(surface_dependency_blockers) if missing else [],
+        "authority_blockers": _ordered_unique(authority_blockers) if missing else [],
+    }
+
+
 def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str, Any]:
     config_path = "config/runtime/lens/overlay.json"
     config = _runtime_json_dict(config_path)
@@ -495,6 +598,8 @@ def _lens_host_enablement_dependency_readback(
             extra_readback = _lens_host_global_hotkey_requirement_readback(missing=item_missing)
         elif item == "overlay_window":
             extra_readback = _lens_host_overlay_window_requirement_readback(missing=item_missing)
+        elif item == "summon_binding":
+            extra_readback = _lens_host_summon_binding_requirement_readback(missing=item_missing)
         dependencies.append(
             {
                 **extra_readback,

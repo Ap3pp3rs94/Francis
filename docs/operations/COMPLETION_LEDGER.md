@@ -21434,6 +21434,80 @@ readback resolver:
 - `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_api_lens.py -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens summon-binding prerequisite readback resolver
+
+The persistent-supervision plan and enablement dependency readback now expose
+the `summon_binding` prerequisite details from the existing disabled summon
+preflight/config posture instead of only naming the broad
+`summon_binding_missing` surface blocker.
+
+The dependency readback still preserves the stable blocker:
+
+- `blocker=summon_binding_missing`
+
+It now also reports:
+
+- `route=/lens/summon`
+- `readiness_route=/lens/summon/readiness`
+- `preflight_script=scripts/lens-summon-preflight.ps1 -Mode Status`
+- `acceptance_criterion=summon_anywhere`
+- `next_smallest_truthful_gap=summon_anywhere_blockers`
+- `requirement_state=not_implemented`
+- `blocked_reason=lens_summon_binding_not_implemented`
+- `config_path=config/runtime/lens/summon.json`
+- `config_exists=true`
+- `summon_name=Francis Lens Summon`
+- `global_hotkey=Ctrl+Alt+Space`
+- `binding_scope=global`
+- `palette_route=/lens/status`
+- `required_before_enable=["resident_host_process","tray_presence","overlay_window","global_hotkey_binding","summon_binding"]`
+- `host_preflight=scripts/lens-host-preflight.ps1`
+- `host_preflight_exists=true`
+- `host_status_runner=scripts/lens-host.ps1`
+- `host_status_runner_exists=true`
+- `launch_target=lens_host`
+- `launch_mode=Foreground`
+- `summon_enabled=false`
+- `binding_enabled=false`
+- `register_hotkey=false`
+- `startup_register=false`
+- `overlay_required=true`
+- `tray_required=true`
+- `summon_authority=false`
+- `hotkey_registration_authority=false`
+- `overlay_control_authority=false`
+- `local_process_launch_authority=false`
+- `family_blockers=["lens_summon_binding_not_implemented","summon_authority_not_granted"]`
+- `host_dependency_blockers=["local_process_launch_authority_not_granted"]`
+- `surface_dependency_blockers=["overlay_window_missing","tray_host_missing"]`
+- `authority_blockers=["summon_authority_not_granted","local_process_launch_authority_not_granted","hotkey_registration_authority_not_granted","overlay_control_authority_not_granted"]`
+
+This keeps the persistent-supervision prerequisite blocker truthful and more
+operator-actionable without granting production execution authority, approval
+decision authority, product memory-write behavior, local process launch
+authority, process supervision authority, process restart authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, tray-registration authority,
+hotkey-registration authority, overlay-control authority, window-management
+authority, summon authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens summon-binding prerequisite
+readback resolver:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `.\scripts\lens-persistent-supervision-prerequisites-proof.ps1`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; dependency_readback_observed=true; side_effects_denied=true`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_api_lens.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

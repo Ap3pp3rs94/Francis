@@ -213,3 +213,69 @@ def test_persistent_supervision_prerequisite_readback_reports_overlay_window_gat
             "summon_authority_not_granted",
             "tray_registration_authority_not_granted",
         ]
+
+
+def test_persistent_supervision_prerequisite_readback_reports_summon_binding_gate() -> None:
+    manifest = _manifest(process_alive=False, process_blocker="resident_host_process_missing")
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        dependency = _dependency_by_id(body)["summon_binding"]
+        assert dependency["route"] == "/lens/summon"
+        assert dependency["readiness_route"] == "/lens/summon/readiness"
+        assert dependency["preflight_script"] == "scripts/lens-summon-preflight.ps1 -Mode Status"
+        assert dependency["ready"] is False
+        assert dependency["status"] == "blocked"
+        assert dependency["blocker"] == "summon_binding_missing"
+        assert dependency["requirement_state"] == "not_implemented"
+        assert dependency["blocked_reason"] == "lens_summon_binding_not_implemented"
+        assert dependency["config_path"] == "config/runtime/lens/summon.json"
+        assert dependency["config_exists"] is True
+        assert dependency["summon_name"] == "Francis Lens Summon"
+        assert dependency["acceptance_criterion"] == "summon_anywhere"
+        assert dependency["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+        assert dependency["global_hotkey"] == "Ctrl+Alt+Space"
+        assert dependency["binding_scope"] == "global"
+        assert dependency["palette_route"] == "/lens/status"
+        assert dependency["required_before_enable"] == [
+            "resident_host_process",
+            "tray_presence",
+            "overlay_window",
+            "global_hotkey_binding",
+            "summon_binding",
+        ]
+        assert dependency["host_preflight"] == "scripts/lens-host-preflight.ps1"
+        assert dependency["host_preflight_exists"] is True
+        assert dependency["host_status_runner"] == "scripts/lens-host.ps1"
+        assert dependency["host_status_runner_exists"] is True
+        assert dependency["launch_target"] == "lens_host"
+        assert dependency["launch_mode"] == "Foreground"
+        assert dependency["summon_enabled"] is False
+        assert dependency["binding_enabled"] is False
+        assert dependency["register_hotkey"] is False
+        assert dependency["startup_register"] is False
+        assert dependency["overlay_required"] is True
+        assert dependency["tray_required"] is True
+        assert dependency["summon_authority"] is False
+        assert dependency["hotkey_registration_authority"] is False
+        assert dependency["overlay_control_authority"] is False
+        assert dependency["local_process_launch_authority"] is False
+        assert dependency["family_blockers"] == [
+            "lens_summon_binding_not_implemented",
+            "summon_authority_not_granted",
+        ]
+        assert dependency["host_dependency_blockers"] == [
+            "local_process_launch_authority_not_granted",
+        ]
+        assert dependency["surface_dependency_blockers"] == [
+            "overlay_window_missing",
+            "tray_host_missing",
+        ]
+        assert dependency["authority_blockers"] == [
+            "summon_authority_not_granted",
+            "local_process_launch_authority_not_granted",
+            "hotkey_registration_authority_not_granted",
+            "overlay_control_authority_not_granted",
+        ]
