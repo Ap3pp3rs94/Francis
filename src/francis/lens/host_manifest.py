@@ -11,6 +11,8 @@ from francis.kernel.paths import data_dir, repo_root
 
 
 SUPERVISOR_READBACK_FRESH_SECONDS = 15 * 60
+LENS_HOST_ACTIVATION_EXECUTE_ROUTE = "/lens/host/activation/execute"
+LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE = "/lens/host/activation/executions"
 
 
 def _runtime_file_exists(relative_path: str) -> bool:
@@ -145,6 +147,86 @@ def _lens_host_process_readback() -> dict[str, Any]:
     }
 
 
+def _lens_host_activation_execution_receipt_root() -> Path:
+    return data_dir() / "lens" / "host_activation_executions"
+
+
+def _lens_host_activation_execution_receipts() -> list[dict[str, Any]]:
+    root = _lens_host_activation_execution_receipt_root()
+    try:
+        paths = list(root.glob("*.json"))
+    except OSError:
+        return []
+    receipts: list[dict[str, Any]] = []
+    for path in paths:
+        item = _json_dict_from_path(path)
+        if not item:
+            continue
+        kind = str(item.get("kind") or "").strip()
+        if kind and kind != "lens.host.activation.execution.receipt":
+            continue
+        receipts.append(item)
+    receipts.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), str(item.get("receipt_id") or "")),
+        reverse=True,
+    )
+    return receipts
+
+
+def _lens_host_activation_execution_readback() -> dict[str, Any]:
+    receipts = _lens_host_activation_execution_receipts()
+    latest = receipts[0] if receipts else {}
+    latest_execution = _as_dict(latest.get("execution"))
+    latest_resident_claim = _as_dict(latest.get("resident_claim"))
+    latest_governance = _as_dict(latest.get("governance"))
+    bounded_process_launch = bool(
+        latest_execution.get("bounded_process_launch") or latest_governance.get("bounded_process_launch")
+    )
+    resident_host_process_claimed = bool(latest_resident_claim.get("resident_host_process_claimed"))
+    return {
+        "status": "readback_ready" if latest else "empty",
+        "readback_ready": True,
+        "route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
+        "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
+        "receipt_root": "data/lens/host_activation_executions",
+        "receipt_count": len(receipts),
+        "latest_receipt_id": str(latest.get("receipt_id") or ""),
+        "latest_status": str(latest.get("status") or ""),
+        "latest_created_ts": _record_ts(latest.get("created_ts")),
+        "latest_runner_status": str(latest_execution.get("runner_status") or ""),
+        "latest_observed_process": bool(latest_execution.get("observed_process")),
+        "latest_observed_pid": _safe_pid(latest_execution.get("observed_pid")),
+        "latest_runtime_state_path": str(latest_execution.get("runtime_state_path") or ""),
+        "bounded_activation_execution_observed": bounded_process_launch,
+        "resident_host_process_claimed": resident_host_process_claimed,
+        "resident_claim_allowed": False,
+        "resident_claim_authority": bool(latest_governance.get("resident_claim_authority")),
+        "evidence_only": True,
+        "does_not_satisfy_resident_host_process": True,
+    }
+
+
+def _lens_host_activation_execution_requirement_readback(launch_manifest: dict[str, Any]) -> dict[str, Any]:
+    readback = _as_dict(launch_manifest.get("activation_execution_readback"))
+    return {
+        "activation_execution_route": str(readback.get("route") or LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE),
+        "activation_execution_execute_route": str(readback.get("execute_route") or LENS_HOST_ACTIVATION_EXECUTE_ROUTE),
+        "activation_execution_readback_status": str(readback.get("status") or "empty"),
+        "activation_execution_receipt_count": _safe_pid(readback.get("receipt_count")),
+        "activation_execution_receipt_id": str(readback.get("latest_receipt_id") or ""),
+        "activation_execution_status": str(readback.get("latest_status") or ""),
+        "activation_execution_runner_status": str(readback.get("latest_runner_status") or ""),
+        "activation_execution_observed_process": bool(readback.get("latest_observed_process")),
+        "activation_execution_observed_pid": _safe_pid(readback.get("latest_observed_pid")),
+        "bounded_activation_execution_observed": bool(readback.get("bounded_activation_execution_observed")),
+        "resident_host_process_claimed": bool(readback.get("resident_host_process_claimed")),
+        "resident_claim_allowed": False,
+        "resident_claim_authority": bool(readback.get("resident_claim_authority")),
+        "activation_execution_evidence_only": True,
+        "activation_execution_does_not_satisfy_resident_host_process": True,
+    }
+
+
 def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[str, Any]:
     service_name = str(service_config_payload.get("service_name") or "Francis-LensHost")
     return {
@@ -227,22 +309,26 @@ def _lens_host_resident_process_requirement_readback(
     missing: bool,
 ) -> dict[str, Any]:
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    activation_execution_readback = _lens_host_activation_execution_requirement_readback(launch_manifest)
     process_alive = bool(process_readback.get("process_alive"))
     blocked_reason = str(process_readback.get("blocked_reason") or "")
     if not missing:
         return {
+            **activation_execution_readback,
             "requirement_state": "ready",
             "process_alive": process_alive,
             "blocked_reason": "",
         }
     if process_alive:
         return {
+            **activation_execution_readback,
             "requirement_state": "foreground_observed_not_supervised",
             "process_alive": True,
             "blocked_reason": blocked_reason or "resident_host_not_supervised",
             "blocker": "resident_host_process_not_supervised",
         }
     return {
+        **activation_execution_readback,
         "requirement_state": "missing",
         "process_alive": False,
         "blocked_reason": blocked_reason or "resident_host_process_missing",
@@ -1164,6 +1250,7 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
     service_plan = service_plan if isinstance(service_plan, dict) else {}
     process_readback = launch_manifest.get("process_readback")
     process_readback = process_readback if isinstance(process_readback, dict) else {}
+    activation_execution_readback = _as_dict(launch_manifest.get("activation_execution_readback"))
     service_readback = launch_manifest.get("service_readback")
     service_readback = service_readback if isinstance(service_readback, dict) else {}
 
@@ -1328,6 +1415,7 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
             },
             "service_plan": service_plan,
             "process_readback": process_readback,
+            "activation_execution_readback": activation_execution_readback,
             "service_readback": service_readback,
             "supervision_readiness": supervision_readiness,
         },
@@ -1671,6 +1759,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     service_manager = str(service_config_payload.get("manager") or "scripts/service-install.ps1")
     service_manager_exists = _runtime_file_exists(service_manager)
     service_readback = _lens_host_service_readback(service_config_payload)
+    activation_execution_readback = _lens_host_activation_execution_readback()
     service_plan = _lens_host_service_plan(
         entrypoint_exists=entrypoint_exists,
         service_manager=service_manager,
@@ -1840,6 +1929,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         },
         "service_readback": service_readback,
         "process_readback": process_readback,
+        "activation_execution_readback": activation_execution_readback,
         "supervisor_readback": supervisor_readback,
         "supervision_readiness": supervision_readiness,
         "required_bindings": [
@@ -1872,6 +1962,13 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "id": "host_process_readback",
                 "path": process_readback["runtime_state_path"],
                 "status": "readback_ready",
+            },
+            {
+                "id": "host_activation_execution_receipts",
+                "route": activation_execution_readback["route"],
+                "status": activation_execution_readback["status"],
+                "receipt_count": activation_execution_readback["receipt_count"],
+                "latest_receipt_id": activation_execution_readback["latest_receipt_id"],
             },
             {
                 "id": "host_supervisor_readback",

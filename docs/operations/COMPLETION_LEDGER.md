@@ -21593,6 +21593,45 @@ execution slice:
 - `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens activation receipt readiness readback
+
+The Lens host launch manifest and persistent-supervision prerequisite readback
+now consume bounded activation execution receipts as evidence for the resident
+host prerequisite. The readback is available from:
+
+- `GET /lens/host/manifest`
+- `GET /lens/host/persistent-supervision`
+- `GET /lens/host/persistent-supervision/enablement`
+
+The resident host prerequisite remains blocked until a supervised resident host
+process exists. A bounded activation receipt can now be linked back to that
+prerequisite as evidence, but it explicitly does not satisfy
+`resident_host_process`, does not claim a resident host process, and does not
+grant resident-claim authority.
+
+This is a backend readback-only Stage 6/Lens slice. It does not add execution
+authority, approval decision authority, memory-write behavior, local process
+launch authority, process supervision authority, process restart authority,
+service-install authority, service-control authority, receipt-write authority,
+resident-claim authority, telemetry behavior, a resident host, a tray process,
+an overlay window, a global hotkey, a summon binding, or any UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens activation receipt
+readiness readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\host_manifest.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -2384,6 +2384,27 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert launch_manifest["service_plan"] == expected_service_plan
     assert launch_manifest["service_readback"] == resident_host["service_readback"]
     assert launch_manifest["process_readback"] == resident_host["process_readback"]
+    assert launch_manifest["activation_execution_readback"] == {
+        "status": "empty",
+        "readback_ready": True,
+        "route": "/lens/host/activation/executions",
+        "execute_route": "/lens/host/activation/execute",
+        "receipt_root": "data/lens/host_activation_executions",
+        "receipt_count": 0,
+        "latest_receipt_id": "",
+        "latest_status": "",
+        "latest_created_ts": 0.0,
+        "latest_runner_status": "",
+        "latest_observed_process": False,
+        "latest_observed_pid": 0,
+        "latest_runtime_state_path": "",
+        "bounded_activation_execution_observed": False,
+        "resident_host_process_claimed": False,
+        "resident_claim_allowed": False,
+        "resident_claim_authority": False,
+        "evidence_only": True,
+        "does_not_satisfy_resident_host_process": True,
+    }
     assert launch_manifest["supervisor_readback"] == expected_supervisor_readback
     assert launch_manifest["supervision_readiness"] == expected_supervision_readiness
     assert launch_manifest["foreground_session"] == resident_host["foreground_session"]
@@ -2394,6 +2415,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_service_readback",
         "host_service_plan",
         "host_process_readback",
+        "host_activation_execution_receipts",
         "host_supervisor_readback",
         "host_readiness",
         "tray_presence",

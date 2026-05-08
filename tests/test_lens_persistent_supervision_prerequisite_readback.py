@@ -17,7 +17,12 @@ REQUIRED_BEFORE_ENABLE = [
 ]
 
 
-def _manifest(*, process_alive: bool, process_blocker: str) -> dict[str, Any]:
+def _manifest(
+    *,
+    process_alive: bool,
+    process_blocker: str,
+    activation_execution_readback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "required_before_enable": REQUIRED_BEFORE_ENABLE,
         "declared_entrypoint": {"exists": True},
@@ -36,6 +41,7 @@ def _manifest(*, process_alive: bool, process_blocker: str) -> dict[str, Any]:
             "process_alive": process_alive,
             "blocked_reason": process_blocker,
         },
+        "activation_execution_readback": activation_execution_readback or {},
         "blocker_groups": {
             "process_readback": [process_blocker],
             "surface_dependencies": [
@@ -67,6 +73,53 @@ def test_persistent_supervision_prerequisite_readback_reports_missing_process() 
         assert dependency["requirement_state"] == "missing"
         assert dependency["process_alive"] is False
         assert dependency["blocked_reason"] == "resident_host_process_missing"
+
+
+def test_persistent_supervision_prerequisite_readback_links_bounded_activation_receipt() -> None:
+    manifest = _manifest(
+        process_alive=False,
+        process_blocker="resident_host_process_missing",
+        activation_execution_readback={
+            "status": "readback_ready",
+            "route": "/lens/host/activation/executions",
+            "execute_route": "/lens/host/activation/execute",
+            "receipt_count": 1,
+            "latest_receipt_id": "lhae_123_test",
+            "latest_status": "bounded_foreground_launch_observed",
+            "latest_runner_status": "launch_started",
+            "latest_observed_process": True,
+            "latest_observed_pid": 456,
+            "bounded_activation_execution_observed": True,
+            "resident_host_process_claimed": False,
+            "resident_claim_authority": False,
+        },
+    )
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        dependency = _dependency_by_id(body)["resident_host_process"]
+        assert dependency["ready"] is False
+        assert dependency["status"] == "blocked"
+        assert dependency["blocker"] == "resident_host_process_missing"
+        assert dependency["requirement_state"] == "missing"
+        assert dependency["process_alive"] is False
+        assert dependency["activation_execution_route"] == "/lens/host/activation/executions"
+        assert dependency["activation_execution_execute_route"] == "/lens/host/activation/execute"
+        assert dependency["activation_execution_readback_status"] == "readback_ready"
+        assert dependency["activation_execution_receipt_count"] == 1
+        assert dependency["activation_execution_receipt_id"] == "lhae_123_test"
+        assert dependency["activation_execution_status"] == "bounded_foreground_launch_observed"
+        assert dependency["activation_execution_runner_status"] == "launch_started"
+        assert dependency["activation_execution_observed_process"] is True
+        assert dependency["activation_execution_observed_pid"] == 456
+        assert dependency["bounded_activation_execution_observed"] is True
+        assert dependency["activation_execution_evidence_only"] is True
+        assert dependency["activation_execution_does_not_satisfy_resident_host_process"] is True
+        assert dependency["resident_host_process_claimed"] is False
+        assert dependency["resident_claim_allowed"] is False
+        assert dependency["resident_claim_authority"] is False
 
 
 def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised_process() -> None:
