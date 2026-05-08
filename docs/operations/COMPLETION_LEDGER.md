@@ -22167,6 +22167,61 @@ guard slice:
 - `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_host_manifest_process_readback.py tests\test_api_lens.py`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens resident runtime candidate boundary proof
+
+The resident-host runtime boundary proof now consumes the existing bounded
+`scripts/lens-host-supervisor.ps1 -Mode SuperviseResidentOnce` path. The proof
+distinguishes three separate truths:
+
+- a bounded foreground host launch is observable
+- a resident-mode candidate can be supervised once in a diagnostic run
+- persistent resident supervision remains unavailable and not resident-claimable
+
+`scripts/lens-resident-host-runtime-boundary-proof.ps1` now reports the bounded
+resident-candidate observation, the non-persistent supervision blocker, and the
+supervisor proof evidence inside its readback payload. The focused contract test
+now asserts that this proof remains diagnostic-only and grants no product/API
+execution authority, approval authority, memory-write authority, process
+supervision/restart authority, service authority, tray/hotkey/overlay/summon
+authority, mutation authority, or resident-claim authority.
+
+The Stage 6 completion audit was rerun after the proof update. It remains
+blocked, `ready_to_close=false`, with remaining acceptance blockers
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`; no child
+proof timeouts were reported. The next smallest truthful audit gap is now
+`persistent_supervision_enablement_transition_plan_proof_readback`, meaning the
+audit must consume the persistent-supervision enablement transition-plan proof
+before Stage 6 can treat the prerequisite, service-plan, authority-chain,
+disabled-config, and side-effect readbacks as one coherent handoff.
+
+This is a Stage 6/Lens script/test readback-only proof slice. It changes no API
+route behavior, UI behavior, execution authority, approval decision authority,
+memory-write behavior, product local-process-launch authority, API
+local-process-launch authority, persistent process-supervision authority,
+process-restart authority, service-install authority, service-control authority,
+receipt-write authority, resident-claim authority, tray registration authority,
+hotkey registration authority, overlay control authority, summon authority,
+capture authority, new sensing authority, telemetry behavior, resident host
+process lifetime, summon implementation, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens resident runtime candidate
+boundary proof slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds 2 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,resident_runtime_candidate_observed,resident_runtime_candidate_supervised,resident_runtime_candidate_next_smallest_truthful_gap,resident_runtime_persistent,@{Name='candidate_blocker';Expression={$_.resident_runtime_persistence_blocker}},@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},governance | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; resident_runtime_candidate_observed=true; resident_runtime_candidate_supervised=true; resident_runtime_candidate_next_smallest_truthful_gap=resident_supervision_not_persistent; resident_runtime_persistent=false; candidate_blocker=resident_supervision_not_persistent; timeouts empty`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,remaining_stage6_acceptance_blockers,@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}},@{Name='closure_process';Expression={$_.closure_blockers.process_supervision}},@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}} | ConvertTo-Json -Depth 10`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_enablement_transition_plan_proof_readback; remaining blockers=summon_anywhere, helpful_not_noisy, system_resident_presence; child proof timeouts empty`
+- `python -m ruff check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
