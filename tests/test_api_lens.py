@@ -6519,6 +6519,8 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "runtime_loop_status": "blocked",
         "execution_denial_status": "denied_no_resident_runtime_authority",
         "denial_receipts_status": "empty",
+        "authority_grant_active": False,
+        "active_supervision_authority_grant_receipt_id": "",
     }
     assert body["next_smallest_truthful_gap"] == "resident_host_supervision_authority_readiness_blockers"
 

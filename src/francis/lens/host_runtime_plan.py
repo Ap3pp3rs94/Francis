@@ -227,6 +227,7 @@ def _plan_step(
     blockers: list[str],
     route: str = "",
     authority_required: str = "",
+    authority_granted: bool = False,
     source: str = "",
 ) -> dict[str, Any]:
     return {
@@ -238,7 +239,7 @@ def _plan_step(
         "source": source,
         "blockers": [] if ready else _ordered_unique(blockers),
         "authority_required": authority_required,
-        "authority_granted": False,
+        "authority_granted": authority_granted,
         "would_execute": False,
         "would_mutate": False,
     }
@@ -338,6 +339,7 @@ def lens_host_runtime_implementation_plan(
     runtime_boundary = lens_host_runtime_boundary(manifest=launch_manifest)
     declared_entrypoint = _as_dict(launch_manifest.get("declared_entrypoint"))
     service_install = _as_dict(launch_manifest.get("service_install"))
+    supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_readback = _as_dict(runtime_boundary.get("process_readback"))
     blocker_groups = _as_dict(runtime_boundary.get("blocker_groups"))
     runtime_boundary_boundaries = _as_dict(runtime_boundary.get("boundaries"))
@@ -354,6 +356,14 @@ def lens_host_runtime_implementation_plan(
     surface_blockers = _as_str_list(blocker_groups.get("surface_dependencies"))
     service_config_ready = bool(service_install.get("config_exists"))
     service_manager_ready = bool(service_install.get("manager_exists"))
+    authority_grant_active = bool(supervision_readiness.get("authority_grant_active"))
+    active_grant = _as_dict(supervision_readiness.get("authority_grant"))
+    process_supervision_authority = bool(supervision_readiness.get("process_supervision_authority"))
+    process_restart_authority = bool(supervision_readiness.get("process_restart_authority"))
+    service_install_authority = bool(supervision_readiness.get("service_install_authority"))
+    service_control_authority = bool(supervision_readiness.get("service_control_authority"))
+    receipt_write_authority = bool(supervision_readiness.get("receipt_write_authority"))
+    resident_claim_authority = bool(supervision_readiness.get("resident_claim_authority"))
 
     steps = [
         _plan_step(
@@ -402,10 +412,11 @@ def lens_host_runtime_implementation_plan(
             ready=False,
             route="/lens/host/supervision",
             authority_required="process_supervision_authority",
+            authority_granted=process_supervision_authority,
             blockers=[
                 *process_blockers,
-                "process_supervision_authority_not_granted",
-                "process_restart_authority_not_granted",
+                *([] if process_supervision_authority else ["process_supervision_authority_not_granted"]),
+                *([] if process_restart_authority else ["process_restart_authority_not_granted"]),
             ],
         ),
         _plan_step(
@@ -415,11 +426,13 @@ def lens_host_runtime_implementation_plan(
             route="/lens/host/manifest",
             source=str(service_install.get("config_path") or ""),
             authority_required="service_install_and_control_authority",
+            authority_granted=service_install_authority and service_control_authority,
             blockers=[
+                *runtime_blockers,
                 *([] if service_config_ready else ["lens_host_service_config_missing"]),
                 *([] if service_manager_ready else ["lens_host_service_manager_missing"]),
-                "service_install_authority_not_granted",
-                "service_control_authority_not_granted",
+                *([] if service_install_authority else ["service_install_authority_not_granted"]),
+                *([] if service_control_authority else ["service_control_authority_not_granted"]),
             ],
         ),
         _plan_step(
@@ -453,7 +466,11 @@ def lens_host_runtime_implementation_plan(
             label="Resident claim contract",
             ready=False,
             authority_required="resident_claim_authority",
-            blockers=["resident_runtime_not_ready", "resident_claim_authority_not_granted"],
+            authority_granted=resident_claim_authority,
+            blockers=[
+                "resident_runtime_not_ready",
+                *([] if resident_claim_authority else ["resident_claim_authority_not_granted"]),
+            ],
         ),
     ]
 
@@ -461,15 +478,15 @@ def lens_host_runtime_implementation_plan(
     blocked_steps = [str(step["id"]) for step in steps if not bool(step.get("ready"))]
     authority_blockers = [
         "resident_runtime_execution_authority_not_granted",
-        "process_supervision_authority_not_granted",
-        "process_restart_authority_not_granted",
-        "service_install_authority_not_granted",
-        "service_control_authority_not_granted",
+        *([] if process_supervision_authority else ["process_supervision_authority_not_granted"]),
+        *([] if process_restart_authority else ["process_restart_authority_not_granted"]),
+        *([] if service_install_authority else ["service_install_authority_not_granted"]),
+        *([] if service_control_authority else ["service_control_authority_not_granted"]),
         "tray_registration_authority_not_granted",
         "hotkey_registration_authority_not_granted",
         "overlay_control_authority_not_granted",
         "summon_authority_not_granted",
-        "resident_claim_authority_not_granted",
+        *([] if resident_claim_authority else ["resident_claim_authority_not_granted"]),
     ]
     blockers = _ordered_unique(
         [
@@ -496,6 +513,21 @@ def lens_host_runtime_implementation_plan(
         "foreground_process_observed": bool(runtime_boundary.get("foreground_process_observed")),
         "resident_host_process_state": str(runtime_boundary.get("resident_host_process_state") or ""),
         "resident_host_process_blocker": str(runtime_boundary.get("resident_host_process_blocker") or ""),
+        "authority_grant_active": authority_grant_active,
+        "active_supervision_authority_grant_receipt_id": str(active_grant.get("receipt_id") or "").strip(),
+        "authority_readback": {
+            "route": "/lens/host/supervision/authority/grants",
+            "authority_grant_active": authority_grant_active,
+            "active_grant_receipt_id": str(active_grant.get("receipt_id") or "").strip(),
+            "process_supervision_authority": process_supervision_authority,
+            "process_restart_authority": process_restart_authority,
+            "service_install_authority": service_install_authority,
+            "service_control_authority": service_control_authority,
+            "receipt_write_authority": receipt_write_authority,
+            "resident_claim_authority": resident_claim_authority,
+            "does_not_start_loop": True,
+            "does_not_satisfy_resident_runtime_loop": True,
+        },
         "bounded_launch_proof_available": bounded_launch_proof_available,
         "bounded_launch_proof_script": str(runtime_boundary.get("bounded_launch_proof_script") or ""),
         "bounded_launch_proof": bounded_launch_proof,
@@ -526,6 +558,7 @@ def lens_host_runtime_implementation_plan(
             "would_decide_approval": False,
         },
         "runtime_boundary": runtime_boundary,
+        "supervision_readiness": supervision_readiness,
         "evidence": [
             "/lens/host/runtime-plan",
             "/lens/host/runtime-loop",
@@ -533,6 +566,7 @@ def lens_host_runtime_implementation_plan(
             "/lens/host/runtime-boundary",
             "/lens/host/manifest",
             "/lens/host/supervision",
+            "/lens/host/supervision/authority/grants",
             "scripts/lens-host.ps1 -Mode Launch",
             "scripts/lens-host-launch-proof.ps1 -Mode Status",
         ],
@@ -711,6 +745,11 @@ def lens_host_runtime_loop_readiness_audit(
         "resident_runtime_loop": bool(loop_contract.get("resident_runtime_loop")) and ready,
         "resident_runtime_ready": bool(loop_contract.get("resident_runtime_ready")) and ready,
         "resident_claim_allowed": bool(loop_contract.get("resident_claim_allowed")) and ready,
+        "authority_grant_active": bool(loop_contract.get("authority_grant_active")),
+        "active_supervision_authority_grant_receipt_id": str(
+            loop_contract.get("active_supervision_authority_grant_receipt_id") or ""
+        ).strip(),
+        "authority_readback": _as_dict(loop_contract.get("authority_readback")),
         "runtime_plan_available": bool(implementation_plan.get("plan_available")),
         "loop_contract_readback_ready": loop_readback_ready,
         "execution_denial_boundary_observed": execution_denial_boundary_observed,
@@ -732,6 +771,10 @@ def lens_host_runtime_loop_readiness_audit(
             "runtime_loop_status": str(loop_contract.get("status") or "").strip(),
             "execution_denial_status": str(loop_execution_denial.get("status") or "").strip(),
             "denial_receipts_status": str(loop_denial_receipts.get("status") or "").strip(),
+            "authority_grant_active": bool(loop_contract.get("authority_grant_active")),
+            "active_supervision_authority_grant_receipt_id": str(
+                loop_contract.get("active_supervision_authority_grant_receipt_id") or ""
+            ).strip(),
         },
         "evidence": [
             "/lens/host/runtime-loop/readiness",
@@ -739,6 +782,7 @@ def lens_host_runtime_loop_readiness_audit(
             "/lens/host/runtime-loop",
             "/lens/host/runtime-loop/execute",
             "/lens/host/runtime-loop/denials",
+            "/lens/host/supervision/authority/grants",
         ],
         "governance": {
             "gate": "lens_host_runtime_loop_readiness_audit",
@@ -789,23 +833,31 @@ def lens_host_runtime_loop_contract(
     process_readback = _as_dict(runtime_boundary.get("process_readback"))
     foreground_session = _as_dict(runtime_boundary.get("foreground_session"))
     blocker_groups = _as_dict(implementation_plan.get("blocker_groups"))
+    authority_readback = _as_dict(implementation_plan.get("authority_readback"))
 
     runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or ["lens_host_runtime_not_implemented"]
     process_blockers = _as_str_list(blocker_groups.get("process_readback")) or [
         str(runtime_boundary.get("resident_host_process_blocker") or "resident_host_process_missing")
     ]
     surface_blockers = _as_str_list(blocker_groups.get("surface_dependencies"))
+    authority_grant_active = bool(authority_readback.get("authority_grant_active"))
+    process_supervision_authority = bool(authority_readback.get("process_supervision_authority"))
+    process_restart_authority = bool(authority_readback.get("process_restart_authority"))
+    service_install_authority = bool(authority_readback.get("service_install_authority"))
+    service_control_authority = bool(authority_readback.get("service_control_authority"))
+    receipt_write_authority = bool(authority_readback.get("receipt_write_authority"))
+    resident_claim_authority = bool(authority_readback.get("resident_claim_authority"))
     authority_blockers = _as_str_list(blocker_groups.get("authority")) or [
         "resident_runtime_execution_authority_not_granted",
-        "process_supervision_authority_not_granted",
-        "process_restart_authority_not_granted",
-        "service_install_authority_not_granted",
-        "service_control_authority_not_granted",
+        *([] if process_supervision_authority else ["process_supervision_authority_not_granted"]),
+        *([] if process_restart_authority else ["process_restart_authority_not_granted"]),
+        *([] if service_install_authority else ["service_install_authority_not_granted"]),
+        *([] if service_control_authority else ["service_control_authority_not_granted"]),
         "tray_registration_authority_not_granted",
         "hotkey_registration_authority_not_granted",
         "overlay_control_authority_not_granted",
         "summon_authority_not_granted",
-        "resident_claim_authority_not_granted",
+        *([] if resident_claim_authority else ["resident_claim_authority_not_granted"]),
     ]
 
     loop_requirements = [
@@ -839,10 +891,11 @@ def lens_host_runtime_loop_contract(
             ready=False,
             route="/lens/host/supervision",
             authority_required="process_supervision_authority",
+            authority_granted=process_supervision_authority,
             blockers=[
                 *process_blockers,
-                "process_supervision_authority_not_granted",
-                "process_restart_authority_not_granted",
+                *([] if process_supervision_authority else ["process_supervision_authority_not_granted"]),
+                *([] if process_restart_authority else ["process_restart_authority_not_granted"]),
             ],
         ),
         _plan_step(
@@ -851,10 +904,11 @@ def lens_host_runtime_loop_contract(
             ready=False,
             route="/lens/host/persistent-supervision",
             authority_required="service_install_and_control_authority",
+            authority_granted=service_install_authority and service_control_authority,
             blockers=[
                 *runtime_blockers,
-                "service_install_authority_not_granted",
-                "service_control_authority_not_granted",
+                *([] if service_install_authority else ["service_install_authority_not_granted"]),
+                *([] if service_control_authority else ["service_control_authority_not_granted"]),
             ],
         ),
         _plan_step(
@@ -877,7 +931,11 @@ def lens_host_runtime_loop_contract(
             ready=False,
             route="/lens/resident-runtime/execute",
             authority_required="receipt_write_authority",
-            blockers=["resident_runtime_not_ready", "receipt_write_authority_not_granted"],
+            authority_granted=receipt_write_authority,
+            blockers=[
+                "resident_runtime_not_ready",
+                *([] if receipt_write_authority else ["receipt_write_authority_not_granted"]),
+            ],
         ),
         _plan_step(
             "resident_loop_claim_checkpoint",
@@ -885,7 +943,11 @@ def lens_host_runtime_loop_contract(
             ready=False,
             route="/lens/host/runtime-loop",
             authority_required="resident_claim_authority",
-            blockers=["resident_runtime_not_ready", "resident_claim_authority_not_granted"],
+            authority_granted=resident_claim_authority,
+            blockers=[
+                "resident_runtime_not_ready",
+                *([] if resident_claim_authority else ["resident_claim_authority_not_granted"]),
+            ],
         ),
     ]
 
@@ -899,7 +961,7 @@ def lens_host_runtime_loop_contract(
             *authority_blockers,
             "resident_runtime_loop_not_implemented",
             "resident_runtime_loop_not_supervised",
-            "receipt_write_authority_not_granted",
+            *([] if receipt_write_authority else ["receipt_write_authority_not_granted"]),
         ]
     )
 
@@ -927,6 +989,11 @@ def lens_host_runtime_loop_contract(
         "foreground_session_max_seconds": int(foreground_session.get("max_seconds") or 0),
         "resident_host_process_state": str(runtime_boundary.get("resident_host_process_state") or ""),
         "resident_host_process_blocker": str(runtime_boundary.get("resident_host_process_blocker") or ""),
+        "authority_grant_active": authority_grant_active,
+        "active_supervision_authority_grant_receipt_id": str(
+            authority_readback.get("active_grant_receipt_id") or ""
+        ).strip(),
+        "authority_readback": authority_readback,
         "requirements_total": len(loop_requirements),
         "requirements_ready_total": len(ready_requirements),
         "blocked_requirements": blocked_requirements,
@@ -939,7 +1006,7 @@ def lens_host_runtime_loop_contract(
             "loop": [
                 "resident_runtime_loop_not_implemented",
                 "resident_runtime_loop_not_supervised",
-                "receipt_write_authority_not_granted",
+                *([] if receipt_write_authority else ["receipt_write_authority_not_granted"]),
             ],
         },
         "loop_contract": {
@@ -967,6 +1034,7 @@ def lens_host_runtime_loop_contract(
             "/lens/host/runtime-loop/denials",
             "/lens/host/runtime-boundary",
             "/lens/host/supervision",
+            "/lens/host/supervision/authority/grants",
             "/lens/resident-runtime/execute",
         ],
         "governance": {

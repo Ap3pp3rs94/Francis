@@ -21632,6 +21632,42 @@ readiness readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens runtime loop supervision authority readback
+
+The Lens host runtime implementation plan, runtime loop contract, and runtime
+loop readiness audit now consume active host-supervision authority grant
+receipts as readback evidence. When an active
+`lens.host.supervision_authority.grant.receipt` exists, these surfaces report
+the grant receipt id and mark the corresponding process supervision, restart,
+service install/control, receipt-write, and resident-claim authority blockers
+as resolved for readback purposes.
+
+The runtime loop still remains blocked until a supervised resident host loop
+exists. This slice does not start the loop, supervise or restart a process,
+install or control a service, write runtime-loop receipts, claim a resident
+host, decide approvals, write memory, or create a UI claim. It only prevents
+runtime-loop readiness from continuing to report stale
+`*_authority_not_granted` blockers after the existing governed host-supervision
+authority grant has been approved and receipted.
+
+Latest validation for the `2026-05-08` Stage 6/Lens runtime loop supervision
+authority readback slice:
+
+- `python -m pytest tests\test_lens_host_runtime_plan_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt tests\test_api_lens.py::test_lens_host_runtime_loop_contract_stays_readback_only tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only -q`
+  Result: `passed after updating the runtime-loop readiness source-readback contract for the new authority grant fields`
+- `python -m pytest tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\host_runtime_plan.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
