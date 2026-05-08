@@ -221,6 +221,35 @@ def _lens_host_missing_required_before_enable(
     return [item for item in required_before_enable if missing_by_requirement.get(item, False)]
 
 
+def _lens_host_resident_process_requirement_readback(
+    *,
+    launch_manifest: dict[str, Any],
+    missing: bool,
+) -> dict[str, Any]:
+    process_readback = _as_dict(launch_manifest.get("process_readback"))
+    process_alive = bool(process_readback.get("process_alive"))
+    blocked_reason = str(process_readback.get("blocked_reason") or "")
+    if not missing:
+        return {
+            "requirement_state": "ready",
+            "process_alive": process_alive,
+            "blocked_reason": "",
+        }
+    if process_alive:
+        return {
+            "requirement_state": "foreground_observed_not_supervised",
+            "process_alive": True,
+            "blocked_reason": blocked_reason or "resident_host_not_supervised",
+            "blocker": "resident_host_process_not_supervised",
+        }
+    return {
+        "requirement_state": "missing",
+        "process_alive": False,
+        "blocked_reason": blocked_reason or "resident_host_process_missing",
+        "blocker": "resident_host_process_missing",
+    }
+
+
 def _lens_host_enablement_dependency_readback(
     required_before_enable: list[str],
     *,
@@ -241,16 +270,28 @@ def _lens_host_enablement_dependency_readback(
         "overlay_window": "overlay_window_missing",
         "summon_binding": "summon_binding_missing",
     }
-    return [
-        {
-            "id": item,
-            "route": routes.get(item, "/lens/status"),
-            "ready": item not in missing,
-            "status": "blocked" if item in missing else "ready",
-            "blocker": blockers.get(item, f"{item}_missing") if item in missing else "",
-        }
-        for item in required_before_enable
-    ]
+    dependencies = []
+    for item in required_before_enable:
+        item_missing = item in missing
+        blocker = blockers.get(item, f"{item}_missing") if item_missing else ""
+        extra_readback = {}
+        if item == "resident_host_process":
+            extra_readback = _lens_host_resident_process_requirement_readback(
+                launch_manifest=launch_manifest,
+                missing=item_missing,
+            )
+            blocker = str(extra_readback.get("blocker") or blocker) if item_missing else ""
+        dependencies.append(
+            {
+                **extra_readback,
+                "id": item,
+                "route": routes.get(item, "/lens/status"),
+                "ready": not item_missing,
+                "status": "blocked" if item_missing else "ready",
+                "blocker": blocker,
+            }
+        )
+    return dependencies
 
 
 def _record_ts(value: Any) -> float:

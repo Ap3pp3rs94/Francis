@@ -21167,6 +21167,56 @@ persistent-supervision prerequisite readback alignment:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-08 - Stage 6/Lens resident-host prerequisite readback resolver
+
+The persistent-supervision plan and enablement dependency readback now
+distinguish the `resident_host_process` prerequisite state instead of flattening
+all resident-host process failures into `resident_host_process_missing`.
+
+When no host process is observed, the dependency readback still reports:
+
+- `blocker=resident_host_process_missing`
+- `requirement_state=missing`
+- `process_alive=false`
+
+When a foreground host process is observed but is not a supervised resident
+host, the same dependency readback now reports:
+
+- `blocker=resident_host_process_not_supervised`
+- `requirement_state=foreground_observed_not_supervised`
+- `process_alive=true`
+- `blocked_reason=resident_host_not_supervised`
+
+This keeps the persistent-supervision prerequisite blocker truthful for the
+next Stage 6 slice without granting production execution authority, approval
+decision authority, product memory-write behavior, local process launch
+authority, process supervision authority, process restart authority,
+persistent-supervision enablement authority, persistent-supervision execution
+authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens resident-host prerequisite
+readback resolver:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,dependency_readback_observed,missing_required_before_enable_observed,side_effects_denied | ConvertTo-Json -Depth 5`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; dependency_readback_observed=true`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
