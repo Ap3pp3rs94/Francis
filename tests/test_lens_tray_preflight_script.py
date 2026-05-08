@@ -56,7 +56,9 @@ def test_lens_tray_preflight_reports_disabled_presence_without_authority() -> No
     ]
     assert payload["tray"]["tray_host_enabled"] is False
     assert payload["tray"]["tray_icon_enabled"] is False
+    assert payload["resident_host_process"]["process_alive"] is False
     assert "tray_host_disabled" in payload["blockers"]
+    assert "resident_host_process_missing" in payload["blockers"]
     assert "tray_registration_authority_not_granted" in payload["blockers"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["tray_config"]["status"] == "present_disabled"
@@ -81,6 +83,48 @@ def test_lens_tray_preflight_reports_disabled_presence_without_authority() -> No
         "notification_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_tray_preflight_rejects_stale_runtime_pid(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-host"
+    runtime_dir.mkdir(parents=True)
+    pid_file_pid = 999999
+    status_pid = 999998
+    (runtime_dir / "lens-host.pid").write_text(str(pid_file_pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "pid": status_pid,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.tray.preflight"
+    assert payload["status"] == "blocked"
+    assert payload["ready"] is False
+    assert payload["data_root"] == str(data_dir)
+    process = payload["resident_host_process"]
+    assert process["pid"] == pid_file_pid
+    assert process["pid_present"] is True
+    assert process["runtime_state_exists"] is True
+    assert process["runtime_status_kind"] == "lens.host.runtime_state"
+    assert process["runtime_status"] == "resident_running"
+    assert process["runtime_status_pid"] == status_pid
+    assert process["runtime_status_pid_matches_pid_file"] is False
+    assert process["process_alive"] is False
+    assert process["requirement_state"] == "stale_or_unverified"
+    assert process["blocker"] == "resident_host_process_missing"
+    assert "resident_host_process_missing" in payload["blockers"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["runtime_state"]["status"] == "stale_or_unverified"
 
 
 def test_lens_tray_preflight_refuses_register_actions() -> None:

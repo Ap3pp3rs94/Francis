@@ -21966,6 +21966,59 @@ prerequisite readback slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warning only`
 
+### 2026-05-08 - Stage 6/Lens tray preflight resident-host evidence guard
+
+The Lens tray preflight now uses the same resident-host process evidence shape
+as the persistent-supervision prerequisite guard before treating the resident
+host as present. `scripts/lens-tray-preflight.ps1 -Mode Status` now reports:
+
+- `data_root`
+- `resident_host_process.process_alive`
+- `resident_host_process.pid`
+- `resident_host_process.pid_present`
+- `resident_host_process.runtime_state_exists`
+- `resident_host_process.runtime_status_kind`
+- `resident_host_process.runtime_status`
+- `resident_host_process.runtime_status_pid`
+- `resident_host_process.runtime_status_pid_matches_pid_file`
+- `resident_host_process.requirement_state`
+- `resident_host_process.blocker`
+
+The tray preflight now keeps `resident_host_process_missing` blocked unless the
+runtime status is a `lens.host.runtime_state`, the runtime status is
+`foreground_running` or `resident_running`, the runtime-state PID matches the
+PID file, and the process is actually alive. A stale PID file or mismatched
+runtime status no longer counts as resident-host prerequisite evidence.
+
+`scripts/lens-resident-runtime-tray-presence-boundary-proof.ps1` now passes its
+isolated `-DataDir` through to `scripts/lens-tray-preflight.ps1`, so tray
+boundary and summon-chain proofs do not accidentally read stale repo-local
+runtime state while validating temporary proof data.
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It changes no
+API route behavior, UI behavior, execution authority, approval decision
+authority, memory-write behavior, product local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, receipt-write authority, resident-claim
+authority, tray registration authority, tray icon authority, notification
+authority, hotkey authority, overlay authority, summon authority, telemetry
+behavior, resident host process lifetime, tray implementation, or Stage 6
+transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens tray preflight
+resident-host evidence guard slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ready,@{Name='runtime_state';Expression={$_.resident_host_process.requirement_state}},@{Name='resident_blocker';Expression={$_.resident_host_process.blocker}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; ready=false; runtime_state=missing; resident_blocker=resident_host_process_missing`
+- `python -m pytest tests\test_lens_tray_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_preflight_script.py tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_tray_preflight_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -106,7 +106,12 @@ try {
   $AuthorityBlockersPayload = $null
 }
 
-$TrayPreflightOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $TrayPreflightScript -Mode Status 2>&1
+$TrayPreflightArgs = @('-Mode', 'Status')
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $TrayPreflightArgs += @('-DataDir', $DataDir)
+}
+
+$TrayPreflightOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $TrayPreflightScript @TrayPreflightArgs 2>&1
 $TrayPreflightExitCode = $LASTEXITCODE
 $TrayPreflightText = ($TrayPreflightOutput | ForEach-Object { [string]$_ }) -join "`n"
 $TrayPreflightPayload = $null
