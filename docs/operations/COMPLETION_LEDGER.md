@@ -21508,6 +21508,42 @@ readback resolver:
 - `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_api_lens.py -q`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens completion audit checkpoint
+
+The Stage 6/Lens completion audit was rerun after the latest prerequisite
+readback resolvers. The audit keeps Stage 6 active and blocked; it does not
+permit transition to Stage 7.
+
+Verified audit posture:
+
+- `stage_state=active`
+- `ready_to_close=false`
+- `transition_allowed=false`
+- `closure_decision=do_not_close_stage6`
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `remaining_stage6_acceptance_blockers=["summon_anywhere","helpful_not_noisy","system_resident_presence"]`
+
+This checkpoint is audit/ledger-only. It does not grant production execution
+authority, approval decision authority, product memory-write behavior, local
+process launch authority, process supervision authority, process restart
+authority, persistent-supervision enablement authority, persistent-supervision
+execution authority, service-config write authority, service-install authority,
+service-control authority, receipt-write authority, resident-claim authority,
+telemetry behavior, a resident host, a tray process, an overlay window, a
+global hotkey, a summon binding, tray-registration authority,
+hotkey-registration authority, overlay-control authority, window-management
+authority, summon authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens completion audit
+checkpoint:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
