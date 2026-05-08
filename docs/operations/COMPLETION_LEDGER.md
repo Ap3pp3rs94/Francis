@@ -22077,6 +22077,52 @@ resident-host evidence guard slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warnings only`
 
+### 2026-05-08 - Stage 6/Lens summon preflight prerequisite readback
+
+The Lens summon preflight now exposes the prerequisite state it already required
+before summon-anywhere can be enabled. `scripts/lens-summon-preflight.ps1 -Mode
+Status` now reports:
+
+- `data_root`
+- `missing_required_before_enable`
+- `required_before_enable_ready`
+- `first_missing_required_before_enable`
+- `first_missing_requirement_handoff`
+- `enablement_dependency_readback`
+- `resident_host_process_readback`
+
+The readback keeps the direct summon preflight blocked on the configured
+Stage 6 prerequisites: `resident_host_process`, `tray_presence`,
+`overlay_window`, `global_hotkey_binding`, and `summon_binding`. It also reads
+resident-host runtime status through the same PID/status/process-liveness guard
+used by the tray and overlay preflights, and supports isolated `-DataDir`
+inspection so stale repo-local runtime files do not become prerequisite proof.
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It changes no
+API route behavior, UI behavior, execution authority, approval decision
+authority, memory-write behavior, product local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, receipt-write authority,
+resident-claim authority, tray registration authority, tray icon authority,
+notification authority, hotkey registration authority, overlay control
+authority, window-management authority, capture authority, summon authority,
+telemetry behavior, resident host process lifetime, summon implementation, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens summon preflight
+prerequisite readback slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,remaining_stage6_acceptance_blockers,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; remaining blockers=summon_anywhere, helpful_not_noisy, system_resident_presence; child proof timeouts empty`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,required_before_enable_ready,missing_required_before_enable,first_missing_required_before_enable,@{Name='resident_state';Expression={$_.resident_host_process_readback.requirement_state}},@{Name='dependency_count';Expression={$_.enablement_dependency_readback.Count}},governance | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; required_before_enable_ready=false; first_missing_required_before_enable=resident_host_process; resident_state=missing; dependency_count=5`
+- `python -m pytest tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_preflight_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

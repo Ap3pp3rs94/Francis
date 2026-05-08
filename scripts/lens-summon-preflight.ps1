@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status', 'Bind', 'Launch')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [string]$DataDir = ''
 )
 
 Set-StrictMode -Version 2
@@ -104,6 +106,102 @@ function Get-StringListProperty {
   return @($Items.ToArray())
 }
 
+function Get-DataRoot {
+  param([string]$Override)
+
+  if (-not [string]::IsNullOrWhiteSpace($Override)) {
+    return [System.IO.Path]::GetFullPath($Override)
+  }
+  $EnvOverride = [string]$env:FRANCIS_DATA_DIR
+  if (-not [string]::IsNullOrWhiteSpace($EnvOverride)) {
+    return [System.IO.Path]::GetFullPath($EnvOverride)
+  }
+  return (Join-Path $RepoRoot 'data')
+}
+
+function Get-IntegerProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [int]$Default = 0
+  )
+
+  $Value = Get-StringProperty -Payload $Payload -Name $Name -Default ''
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+  try {
+    return [int]$Value
+  } catch {
+    return $Default
+  }
+}
+
+function Read-JsonFile {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Get-HostProcessReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-host'
+  $PidPath = Join-Path $RuntimeRoot 'lens-host.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $HostPid = 0
+  if ($PidPresent) {
+    try {
+      $HostPid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $HostPid = 0
+    }
+  }
+
+  $StatusClaimsRunningHost = (
+    $StatusKind -eq 'lens.host.runtime_state' -and
+    @('foreground_running', 'resident_running') -contains $StatusValue -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $HostPid
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningHost -and $HostPid -gt 0) {
+    try {
+      $ProcessAlive = $null -ne (Get-Process -Id $HostPid -ErrorAction Stop)
+    } catch {
+      $ProcessAlive = $false
+    }
+  }
+
+  return [ordered]@{
+    process_alive = $ProcessAlive
+    pid = $HostPid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $HostPid)
+    requirement_state = if ($ProcessAlive) { 'running' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }
+    blocker = if ($ProcessAlive) { '' } else { 'resident_host_process_missing' }
+  }
+}
+
 function Select-Blockers {
   param(
     [object[]]$Blockers,
@@ -117,6 +215,72 @@ function Select-Blockers {
     }
   }
   return @($Selected.ToArray())
+}
+
+function New-PrerequisiteReadback {
+  param(
+    [string]$Id,
+    [string]$Family,
+    [bool]$Ready,
+    [string[]]$Blockers,
+    [string]$Route,
+    [string]$ReadinessRoute,
+    [string]$ProofScript,
+    [string]$NextStep,
+    [string]$NextSmallestTruthfulGap,
+    [string]$AuthorityRequired
+  )
+
+  $BlockerArray = [string[]]@($Blockers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  $FirstBlocker = if (@($BlockerArray).Count -gt 0) { [string]$BlockerArray[0] } else { '' }
+  return [ordered]@{
+    id = $Id
+    family = $Family
+    status = if ($Ready) { 'ready' } else { 'blocked' }
+    ready = $Ready
+    route = $Route
+    readiness_route = $ReadinessRoute
+    proof_script = $ProofScript
+    blocker = $FirstBlocker
+    blockers = [string[]]@($BlockerArray)
+    blocked_reason = $FirstBlocker
+    next_step = $NextStep
+    next_smallest_truthful_gap = $NextSmallestTruthfulGap
+    authority_required = $AuthorityRequired
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+
+function New-FirstMissingRequirementHandoff {
+  param([object[]]$Dependencies)
+
+  foreach ($Dependency in @($Dependencies)) {
+    if (-not [bool]$Dependency.ready) {
+      return [ordered]@{
+        id = [string]$Dependency.id
+        family = [string]$Dependency.family
+        status = [string]$Dependency.status
+        blocker = [string]$Dependency.blocker
+        blockers = [string[]]@($Dependency.blockers)
+        route = [string]$Dependency.route
+        readiness_route = [string]$Dependency.readiness_route
+        proof_script = [string]$Dependency.proof_script
+        next_step = [string]$Dependency.next_step
+        next_smallest_truthful_gap = [string]$Dependency.next_smallest_truthful_gap
+        authority_required = [string]$Dependency.authority_required
+        authority_granted = $false
+        read_only_contract = $true
+        diagnostic_only = $true
+        would_execute = $false
+        would_mutate = $false
+      }
+    }
+  }
+  return [ordered]@{}
 }
 
 function Select-AuthorityBlockers {
@@ -165,6 +329,8 @@ $HotkeyRegistrationAuthority = Get-BoolProperty -Payload $Config -Name 'hotkey_r
 $OverlayControlAuthority = Get-BoolProperty -Payload $Config -Name 'overlay_control_authority' -Default $false
 $LocalProcessLaunchAuthority = Get-BoolProperty -Payload $Config -Name 'local_process_launch_authority' -Default $false
 $RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_before_enable'
+$DataRoot = Get-DataRoot -Override $DataDir
+$ResidentHostProcessReadback = Get-HostProcessReadback -Root $DataRoot
 
 $HostPreflightPath = Join-Path $RepoRoot $HostPreflight
 $HostPreflightExists = Test-Path -LiteralPath $HostPreflightPath -PathType Leaf
@@ -230,6 +396,101 @@ $BlockerGroups = [ordered]@{
   authority = [string[]]@(Select-AuthorityBlockers -Blockers $BlockerArray)
 }
 
+$RequiredBeforeEnableDependencies = [System.Collections.ArrayList]::new()
+foreach ($Requirement in @($RequiredBeforeEnable)) {
+  switch ($Requirement) {
+    'resident_host_process' {
+      $RequirementBlockers = [System.Collections.ArrayList]::new()
+      if (-not [bool]$ResidentHostProcessReadback.process_alive) {
+        [void]$RequirementBlockers.Add([string]$ResidentHostProcessReadback.blocker)
+      }
+      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+            -Id 'resident_host_process' `
+            -Family 'resident_host' `
+            -Ready ([bool]$ResidentHostProcessReadback.process_alive) `
+            -Blockers ([string[]]@($RequirementBlockers.ToArray())) `
+            -Route '/lens/host' `
+            -ReadinessRoute '/lens/host/runtime-loop/readiness' `
+            -ProofScript 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' `
+            -NextStep 'resolve_resident_host_process_before_summon_enablement' `
+            -NextSmallestTruthfulGap 'resident_host_process_not_supervised' `
+            -AuthorityRequired 'resident_runtime_execution_authority'))
+    }
+    'tray_presence' {
+      $RequirementBlockers = if ($TrayRequired) { [string[]]@('tray_host_missing') } else { [string[]]@() }
+      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+            -Id 'tray_presence' `
+            -Family 'tray_presence' `
+            -Ready (-not $TrayRequired) `
+            -Blockers $RequirementBlockers `
+            -Route '/lens/tray' `
+            -ReadinessRoute '/lens/tray/readiness' `
+            -ProofScript 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' `
+            -NextStep 'resolve_tray_presence_before_summon_enablement' `
+            -NextSmallestTruthfulGap 'summon_overlay_window_blocker_boundary' `
+            -AuthorityRequired 'tray_registration_authority'))
+    }
+    'overlay_window' {
+      $RequirementBlockers = if ($OverlayRequired) { [string[]]@('overlay_window_missing') } else { [string[]]@() }
+      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+            -Id 'overlay_window' `
+            -Family 'overlay_window' `
+            -Ready (-not $OverlayRequired) `
+            -Blockers $RequirementBlockers `
+            -Route '/lens/overlay' `
+            -ReadinessRoute '/lens/overlay/readiness' `
+            -ProofScript 'scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status' `
+            -NextStep 'resolve_overlay_window_before_summon_enablement' `
+            -NextSmallestTruthfulGap 'summon_global_hotkey_binding_blocker_boundary' `
+            -AuthorityRequired 'overlay_control_authority'))
+    }
+    'global_hotkey_binding' {
+      $RequirementBlockers = [System.Collections.ArrayList]::new()
+      if (-not $GlobalHotkey) { [void]$RequirementBlockers.Add('global_hotkey_not_declared') }
+      if (-not $BindingEnabled) { [void]$RequirementBlockers.Add('global_hotkey_binding_disabled') }
+      if (-not $RegisterHotkey) { [void]$RequirementBlockers.Add('global_hotkey_registration_disabled') }
+      if (-not $HotkeyRegistrationAuthority) { [void]$RequirementBlockers.Add('hotkey_registration_authority_not_granted') }
+      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+            -Id 'global_hotkey_binding' `
+            -Family 'global_hotkey_binding' `
+            -Ready ($RequirementBlockers.Count -eq 0) `
+            -Blockers ([string[]]@($RequirementBlockers.ToArray())) `
+            -Route '/lens/summon' `
+            -ReadinessRoute '/lens/summon/readiness' `
+            -ProofScript 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' `
+            -NextStep 'resolve_global_hotkey_binding_before_summon_enablement' `
+            -NextSmallestTruthfulGap 'summon_binding_blocker_boundary' `
+            -AuthorityRequired 'hotkey_registration_authority'))
+    }
+    'summon_binding' {
+      $RequirementBlockers = [System.Collections.ArrayList]::new()
+      if ($BlockedReason) { [void]$RequirementBlockers.Add($BlockedReason) }
+      if (-not $SummonAuthority) { [void]$RequirementBlockers.Add('summon_authority_not_granted') }
+      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+            -Id 'summon_binding' `
+            -Family 'summon_binding' `
+            -Ready ($RequirementBlockers.Count -eq 0) `
+            -Blockers ([string[]]@($RequirementBlockers.ToArray())) `
+            -Route '/lens/summon' `
+            -ReadinessRoute '/lens/summon/readiness' `
+            -ProofScript 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' `
+            -NextStep 'resolve_summon_binding_before_summon_enablement' `
+            -NextSmallestTruthfulGap 'summon_authority_blocker_boundary' `
+            -AuthorityRequired 'summon_authority'))
+    }
+  }
+}
+$RequiredBeforeEnableDependencyArray = @($RequiredBeforeEnableDependencies.ToArray())
+$MissingRequiredBeforeEnable = [string[]]@(
+  $RequiredBeforeEnableDependencyArray | Where-Object { -not [bool]$_.ready } | ForEach-Object { [string]$_.id }
+)
+$FirstMissingRequirementHandoff = New-FirstMissingRequirementHandoff -Dependencies $RequiredBeforeEnableDependencyArray
+$FirstMissingRequiredBeforeEnable = if (@($MissingRequiredBeforeEnable).Count -gt 0) {
+  [string]$MissingRequiredBeforeEnable[0]
+} else {
+  ''
+}
+
 $Ready = $Blockers.Count -eq 0
 $Payload = [ordered]@{
   ok = $true
@@ -238,11 +499,18 @@ $Payload = [ordered]@{
   mode = $ModeName
   ready = $Ready
   repo_root = $RepoRoot
+  data_root = $DataRoot
   summon_name = $SummonName
   config_path = 'config/runtime/lens/summon.json'
   acceptance_criterion = 'summon_anywhere'
   next_smallest_truthful_gap = 'summon_anywhere_blockers'
   required_before_enable = @($RequiredBeforeEnable)
+  missing_required_before_enable = @($MissingRequiredBeforeEnable)
+  required_before_enable_ready = (@($MissingRequiredBeforeEnable).Count -eq 0)
+  first_missing_required_before_enable = $FirstMissingRequiredBeforeEnable
+  first_missing_requirement_handoff = $FirstMissingRequirementHandoff
+  enablement_dependency_readback = @($RequiredBeforeEnableDependencyArray)
+  resident_host_process_readback = $ResidentHostProcessReadback
   global_hotkey = $GlobalHotkey
   binding_scope = $BindingScope
   palette_route = $PaletteRoute
@@ -268,6 +536,8 @@ $Payload = [ordered]@{
     new_sensing_authority = $false
     local_process_launch_authority = $false
     hotkey_registration_authority = $false
+    required_before_enable_readback = $true
+    resident_host_process_readback = $true
     mutation_authority_granted = $false
   }
   message = 'Lens summon preflight is read-only; global hotkey binding and summon launch remain blocked.'
