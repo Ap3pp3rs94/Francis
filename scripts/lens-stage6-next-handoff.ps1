@@ -277,15 +277,6 @@ if ($PersistentSupervisionRequiredPrerequisitesObserved) {
   $RecommendedRoute = '/lens/host/persistent-supervision'
   $RecommendedReadinessRoute = '/lens/host/persistent-supervision/enablement'
   $AuthorityRequired = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
-  if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
-    $RecommendedHandoffSource = 'persistent_supervision_first_missing_requirement_handoff'
-    $RecommendedNextGap = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default $RecommendedNextGap)
-    $RecommendedNextSlice = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_step' -Default $RecommendedNextSlice)
-    $RecommendedProofScript = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'proof_script' -Default $RecommendedProofScript)
-    $RecommendedRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'route' -Default $RecommendedRoute)
-    $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'readiness_route' -Default $RecommendedReadinessRoute)
-    $AuthorityRequired = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default $AuthorityRequired)
-  }
 }
 $FamilyChainHandoffObserved = (
   [string](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and

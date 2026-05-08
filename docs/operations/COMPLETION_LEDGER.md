@@ -21807,6 +21807,55 @@ timing stabilization slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warnings only`
 
+### 2026-05-08 - Stage 6/Lens completion-audit handoff alignment
+
+The Stage 6 next-handoff proof now aligns its top-level recommendation with the
+completion audit's current post-audit gap. After the process-supervision proof
+chain has been consumed, `scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+reports:
+
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+`scripts/lens-stage6-next-handoff.ps1 -Mode Status` now reports the same
+top-level gap and recommendation:
+
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `recommended_next_slice=resolve_persistent_supervision_required_prerequisites_before_enablement`
+- `recommended_handoff_source=persistent_supervision_required_prerequisites_handoff`
+- `recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+
+The first concrete missing prerequisite remains visible inside the nested
+handoff:
+
+- `persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `persistent_supervision_first_missing_requirement_handoff.next_smallest_truthful_gap=resident_host_process_not_supervised`
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It changes no
+execution authority, approval decision authority, memory-write behavior,
+local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, receipt-write authority, resident-claim authority,
+tray/hotkey/overlay/summon authority, telemetry behavior, UI claim, resident
+host process, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens completion-audit handoff
+alignment slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | ConvertTo-Json -Depth 12`
+  Result: `passed; status=blocked; audit_status=complete; child_proof_timeouts=[]; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,recommended_route,recommended_readiness_route,persistent_supervision_first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; recommended_handoff_source=persistent_supervision_required_prerequisites_handoff; persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,first_missing_requirement_observed,first_missing_required_before_enable,@{Name='first_missing_gap';Expression={$_.first_missing_requirement_handoff.next_smallest_truthful_gap}},side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing_required_before_enable=resident_host_process; first_missing_gap=resident_host_process_not_supervised; side_effects_denied=true`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
