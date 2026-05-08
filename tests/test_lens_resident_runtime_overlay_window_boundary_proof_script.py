@@ -134,3 +134,30 @@ def test_lens_resident_runtime_overlay_window_boundary_is_readback_only() -> Non
     assert governance["memory_write"] is False
     assert governance["resident_claim_authority"] is False
     assert governance["mutation_authority_granted"] is False
+
+
+def test_lens_resident_runtime_overlay_window_boundary_passes_isolated_data_dir(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-host"
+
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    overlay_preflight = payload["overlay_preflight"]
+    assert "resident_host_process_missing" in overlay_preflight["blockers"]
+    process = overlay_preflight["resident_host_process"]
+    assert Path(process["status_path"]) == runtime_dir / "status.json"
+    assert Path(process["pid_path"]) == runtime_dir / "lens-host.pid"
+    assert process["process_alive"] is False
+    assert process["runtime_state_exists"] is False
+    assert process["runtime_status_kind"] == ""
+    assert process["runtime_status"] == ""
+    assert process["runtime_status_pid"] == 0
+    assert process["pid"] == 0
+    assert process["runtime_status_pid_matches_pid_file"] is False
+    assert process["requirement_state"] == "missing"
+    assert process["blocker"] == "resident_host_process_missing"
+    assert payload["overlay_preflight_observed"] is True
+    assert payload["side_effects_denied"] is True

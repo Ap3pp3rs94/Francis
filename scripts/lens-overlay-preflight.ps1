@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status', 'Open', 'Focus')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [string]$DataDir = ''
 )
 
 Set-StrictMode -Version 2
@@ -104,6 +106,102 @@ function Get-StringListProperty {
   return @($Items.ToArray())
 }
 
+function Get-DataRoot {
+  param([string]$Override)
+
+  if (-not [string]::IsNullOrWhiteSpace($Override)) {
+    return [System.IO.Path]::GetFullPath($Override)
+  }
+  $EnvOverride = [string]$env:FRANCIS_DATA_DIR
+  if (-not [string]::IsNullOrWhiteSpace($EnvOverride)) {
+    return [System.IO.Path]::GetFullPath($EnvOverride)
+  }
+  return (Join-Path $RepoRoot 'data')
+}
+
+function Get-IntegerProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [int]$Default = 0
+  )
+
+  $Value = Get-StringProperty -Payload $Payload -Name $Name -Default ''
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+  try {
+    return [int]$Value
+  } catch {
+    return $Default
+  }
+}
+
+function Read-JsonFile {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Get-HostProcessReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-host'
+  $PidPath = Join-Path $RuntimeRoot 'lens-host.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $HostPid = 0
+  if ($PidPresent) {
+    try {
+      $HostPid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $HostPid = 0
+    }
+  }
+
+  $StatusClaimsRunningHost = (
+    $StatusKind -eq 'lens.host.runtime_state' -and
+    @('foreground_running', 'resident_running') -contains $StatusValue -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $HostPid
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningHost -and $HostPid -gt 0) {
+    try {
+      $ProcessAlive = $null -ne (Get-Process -Id $HostPid -ErrorAction Stop)
+    } catch {
+      $ProcessAlive = $false
+    }
+  }
+
+  return [ordered]@{
+    process_alive = $ProcessAlive
+    pid = $HostPid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $HostPid)
+    requirement_state = if ($ProcessAlive) { 'running' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }
+    blocker = if ($ProcessAlive) { '' } else { 'resident_host_process_missing' }
+  }
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -145,10 +243,11 @@ $HostPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostPrefligh
 $HostStatusRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostStatusRunner) -PathType Leaf
 $SummonPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $SummonPreflight) -PathType Leaf
 $TrayPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $TrayPreflight) -PathType Leaf
-$RuntimeStatePath = Join-Path $RepoRoot 'data\runtime\lens-host\status.json'
-$PidPath = Join-Path $RepoRoot 'data\runtime\lens-host\lens-host.pid'
-$RuntimeStateExists = Test-Path -LiteralPath $RuntimeStatePath -PathType Leaf
-$PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+$DataRoot = Get-DataRoot -Override $DataDir
+$HostProcessReadback = Get-HostProcessReadback -Root $DataRoot
+$RuntimeStateExists = [bool]$HostProcessReadback.runtime_state_exists
+$PidPresent = [bool]$HostProcessReadback.pid_present
+$ResidentHostProcessAlive = [bool]$HostProcessReadback.process_alive
 
 $Checks = [System.Collections.ArrayList]::new()
 Add-Check -Target $Checks -Id 'runtime_root' -Status 'ready' -Reason 'runtime root accepted' -Evidence $RepoRoot
@@ -161,7 +260,7 @@ Add-Check -Target $Checks -Id 'host_preflight' -Status $(if ($HostPreflightExist
 Add-Check -Target $Checks -Id 'host_status_runner' -Status $(if ($HostStatusRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($HostStatusRunnerExists) { 'host status runner is present' } else { 'host status runner is missing' }) -Evidence $HostStatusRunner
 Add-Check -Target $Checks -Id 'summon_preflight' -Status $(if ($SummonPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonPreflightExists) { 'summon preflight is present' } else { 'summon preflight is missing' }) -Evidence $SummonPreflight
 Add-Check -Target $Checks -Id 'tray_preflight' -Status $(if ($TrayPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($TrayPreflightExists) { 'tray preflight is present' } else { 'tray preflight is missing' }) -Evidence $TrayPreflight
-Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($RuntimeStateExists -or $PidPresent) { 'state_present' } else { 'missing' }) -Reason 'resident host runtime state is not present' -Evidence 'data/runtime/lens-host'
+Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($ResidentHostProcessAlive) { 'process_observed' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }) -Reason $(if ($ResidentHostProcessAlive) { 'resident host process is live and matches runtime state' } else { 'resident host runtime state is not live' }) -Evidence 'data/runtime/lens-host'
 Add-Check -Target $Checks -Id 'overlay_control_authority' -Status $(if ($OverlayControlAuthority) { 'allowed' } else { 'blocked' }) -Reason 'overlay control authority is not granted' -Evidence 'overlay_control_authority'
 Add-Check -Target $Checks -Id 'window_management_authority' -Status $(if ($WindowManagementAuthority) { 'allowed' } else { 'blocked' }) -Reason 'window management authority is not granted' -Evidence 'window_management_authority'
 
@@ -178,7 +277,7 @@ if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_prefli
 if (-not $HostStatusRunnerExists) { [void]$Blockers.Add('lens_host_status_runner_missing') }
 if (-not $SummonPreflightExists) { [void]$Blockers.Add('lens_summon_preflight_missing') }
 if (-not $TrayPreflightExists) { [void]$Blockers.Add('lens_tray_preflight_missing') }
-if (-not $RuntimeStateExists -and -not $PidPresent) { [void]$Blockers.Add('resident_host_process_missing') }
+if (-not $ResidentHostProcessAlive) { [void]$Blockers.Add('resident_host_process_missing') }
 if (-not $OverlayControlAuthority) { [void]$Blockers.Add('overlay_control_authority_not_granted') }
 if (-not $WindowManagementAuthority) { [void]$Blockers.Add('window_management_authority_not_granted') }
 if (-not $LocalProcessLaunchAuthority) { [void]$Blockers.Add('local_process_launch_authority_not_granted') }
@@ -194,6 +293,7 @@ $Payload = [ordered]@{
   mode = $ModeName
   ready = $Ready
   repo_root = $RepoRoot
+  data_root = $DataRoot
   overlay_name = $OverlayName
   config_path = 'config/runtime/lens/overlay.json'
   required_before_enable = @($RequiredBeforeEnable)
@@ -215,6 +315,7 @@ $Payload = [ordered]@{
     summon_preflight = $SummonPreflight
     tray_preflight = $TrayPreflight
   }
+  resident_host_process = $HostProcessReadback
   governance = [ordered]@{
     read_only_contract = $true
     execution_authority = $false
