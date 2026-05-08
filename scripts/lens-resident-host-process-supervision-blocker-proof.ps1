@@ -322,11 +322,11 @@ $RuntimeBoundaryScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-bou
 $ProcessBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
 $PowerShellPath = Get-PowerShellPath
 
-$RuntimeResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $RuntimeBoundaryScript -ScriptArgs @(
+$RuntimeResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $RuntimeBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
-)
+) -ExpectedKind 'lens.resident_host.runtime_blocker_boundary.proof'
 $ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,

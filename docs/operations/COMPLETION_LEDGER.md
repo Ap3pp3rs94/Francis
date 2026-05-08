@@ -21273,6 +21273,41 @@ resolver:
 - `python -m ruff format --check --no-cache src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens process-supervision proof retry stabilization
+
+The composed resident-host process-supervision blocker proof now applies the
+existing child-proof retry wrapper to the resident-host runtime-boundary child
+proof before consuming the process-supervision boundary. The process-supervision
+child already used this retry path.
+
+This fixes the observed Windows `3.12` CI posture where the runtime-boundary
+child could return a transient `proof_failed` during the composed proof even
+though the runtime boundary still reported the expected
+`resident_host_process_not_supervised` next gap and foreground process state.
+The proof still requires the runtime-boundary child to return
+`kind=lens.resident_host.runtime_blocker_boundary.proof` and
+`status=proof_passed`; the retry only stabilizes bounded diagnostic observation
+timing.
+
+This is diagnostic/proof-path stabilization only. It does not grant production
+execution authority, approval decision authority, product memory-write behavior,
+local process launch authority outside the existing bounded diagnostic proof,
+process supervision authority, process restart authority, persistent-supervision
+enablement authority, persistent-supervision execution authority,
+service-config write authority, service-install authority, service-control
+authority, receipt-write authority, resident-claim authority, telemetry
+behavior, a resident host, a tray process, an overlay window, a global hotkey, a
+summon binding, tray-registration authority, tray-icon authority, notification
+authority, or a UI claim.
+
+Latest validation for the `2026-05-08` Stage 6/Lens process-supervision proof
+retry stabilization:
+
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
