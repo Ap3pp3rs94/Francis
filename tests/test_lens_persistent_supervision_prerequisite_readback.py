@@ -71,11 +71,11 @@ def test_persistent_supervision_prerequisite_readback_reports_missing_process() 
         assert handoff["family"] == "resident_host"
         assert handoff["route"] == "/lens/host"
         assert handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
-        assert handoff["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+        assert handoff["proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
         assert handoff["blocker"] == "resident_host_process_missing"
         assert handoff["requirement_state"] == "missing"
         assert handoff["next_step"] == "resolve_resident_host_process_before_persistent_supervision_enablement"
-        assert handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+        assert handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
         assert handoff["read_only_contract"] is True
         assert handoff["diagnostic_only"] is True
         assert handoff["would_execute"] is False

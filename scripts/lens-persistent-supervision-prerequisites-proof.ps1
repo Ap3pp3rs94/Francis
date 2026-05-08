@@ -494,8 +494,8 @@ $FirstMissingRequirementObserved = (
   [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
   [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'route' -Default '') -eq '/lens/host' -and
   [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'route' -Default '') -eq '/lens/host' -and
-  [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
+  [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
+  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
   [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'diagnostic_only' -Default $false) -and

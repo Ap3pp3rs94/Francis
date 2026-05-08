@@ -315,7 +315,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "summon_binding": "summon_binding",
     }
     proof_scripts = {
-        "resident_host_process": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "resident_host_process": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
         "tray_presence": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
         "global_hotkey_binding": "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
         "overlay_window": "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
@@ -329,7 +329,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "summon_binding": "/lens/summon/readiness",
     }
     next_gaps = {
-        "resident_host_process": "resident_host_runtime_blocker_boundary",
+        "resident_host_process": "resident_host_process_not_supervised",
         "tray_presence": "summon_tray_presence_blocker_boundary",
         "global_hotkey_binding": "os_level_command_palette_binding",
         "overlay_window": "summon_overlay_window_blocker_boundary",

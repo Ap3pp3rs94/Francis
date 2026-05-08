@@ -92,11 +92,13 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert first_missing_handoff["family"] == "resident_host"
     assert first_missing_handoff["route"] == "/lens/host"
     assert first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert first_missing_handoff["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert first_missing_handoff["proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
     assert first_missing_handoff["next_step"] == (
         "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
-    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert first_missing_handoff["read_only_contract"] is True
     assert first_missing_handoff["diagnostic_only"] is True
     assert first_missing_handoff["would_execute"] is False

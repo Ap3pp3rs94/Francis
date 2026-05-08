@@ -21722,6 +21722,50 @@ first prerequisite handoff slice:
 - `git diff --check`
   Result: `passed; PowerShell CRLF normalization warnings only`
 
+### 2026-05-08 - Stage 6/Lens resident-host prerequisite proof handoff narrowing
+
+The Lens persistent-supervision prerequisite handoff now points the first
+missing `resident_host_process` prerequisite at the existing focused
+resident-host runtime-boundary proof:
+
+- `scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+
+The handoff no longer sends the next builder back to the broader summon
+resident-host bridge for this prerequisite. `scripts/lens-stage6-next-handoff.ps1
+-Mode Status` now reports:
+
+- `next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `recommended_handoff_source=persistent_supervision_first_missing_requirement_handoff`
+
+This is a backend/script/test readback-only Stage 6/Lens slice. It changes no
+execution authority, approval decision authority, memory-write behavior,
+local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, receipt-write authority, resident-claim authority,
+tray/hotkey/overlay/summon authority, telemetry behavior, UI claim, resident
+host process, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens resident-host prerequisite
+proof handoff narrowing slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,recommended_route,recommended_readiness_route,persistent_supervision_first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,first_missing_requirement_observed,first_missing_required_before_enable,@{Name='first_missing_gap';Expression={$_.first_missing_requirement_handoff.next_smallest_truthful_gap}},@{Name='first_missing_proof';Expression={$_.first_missing_requirement_handoff.proof_script}},side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; first_missing_gap=resident_host_process_not_supervised; first_missing_proof=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status; side_effects_denied=true`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src\francis\lens\host_manifest.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; PowerShell CRLF normalization warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

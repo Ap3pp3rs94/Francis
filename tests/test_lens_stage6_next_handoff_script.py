@@ -56,12 +56,12 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["recommended_next_slice"] == (
         "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
     assert payload["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
-    assert payload["recommended_proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
     assert payload["recommended_route"] == "/lens/host"
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
@@ -116,11 +116,13 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert first_missing_handoff["family"] == "resident_host"
     assert first_missing_handoff["route"] == "/lens/host"
     assert first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert first_missing_handoff["proof_script"] == ("scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status")
+    assert first_missing_handoff["proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
     assert first_missing_handoff["next_step"] == (
         "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
-    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert first_missing_handoff["read_only_contract"] is True
     assert first_missing_handoff["diagnostic_only"] is True
     assert first_missing_handoff["would_execute"] is False

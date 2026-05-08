@@ -4384,12 +4384,12 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert plan_first_missing_handoff["route"] == "/lens/host"
     assert plan_first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert plan_first_missing_handoff["proof_script"] == (
-        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
     )
     assert plan_first_missing_handoff["next_step"] == (
         "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
-    assert plan_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert plan_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert plan_first_missing_handoff["read_only_contract"] is True
     assert plan_first_missing_handoff["would_execute"] is False
     assert plan_first_missing_handoff["would_mutate"] is False
@@ -4456,7 +4456,7 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert enablement_first_missing_handoff["id"] == "resident_host_process"
     assert enablement_first_missing_handoff["route"] == "/lens/host"
     assert enablement_first_missing_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert enablement_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert enablement_first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert enablement_first_missing_handoff["read_only_contract"] is True
     assert enablement_first_missing_handoff["would_execute"] is False
     assert enablement_first_missing_handoff["would_mutate"] is False
