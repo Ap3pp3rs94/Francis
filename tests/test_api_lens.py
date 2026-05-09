@@ -1841,7 +1841,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert service_readback["service_status_readback"] is True
     assert service_readback["host_query"] == "windows_service_status"
     if os.name == "nt":
-        assert service_readback["status"] in {"not_installed", "running", "stopped", "paused", "unavailable"}
+        assert service_readback["status"] in {
+            "not_installed",
+            "running",
+            "stopped",
+            "paused",
+            "start_pending",
+            "stop_pending",
+            "continue_pending",
+            "pause_pending",
+            "unknown",
+            "unavailable",
+        }
         assert service_readback["platform_supported"] is True
     else:
         assert service_readback["status"] == "unsupported_platform"
@@ -3697,6 +3708,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "running",
             "stopped",
             "paused",
+            "start_pending",
+            "stop_pending",
+            "continue_pending",
+            "pause_pending",
+            "unknown",
             "unavailable",
         }
     else:

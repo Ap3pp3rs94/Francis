@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import shutil
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -93,6 +90,132 @@ def _windows_process_alive(pid: int) -> tuple[bool, str]:
         return exit_code.value == still_active, "windows_exit_code"
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _windows_service_status_readback(service_name: str) -> dict[str, Any]:
+    import ctypes
+    from ctypes import wintypes
+
+    windll_factory = getattr(ctypes, "WinDLL", None)
+    if windll_factory is None:
+        return {
+            "status": "unavailable",
+            "installed": False,
+            "service_status": "",
+            "display_name": "",
+            "start_type": "",
+            "query_error": "windows_api_unavailable",
+        }
+
+    class SERVICE_STATUS_PROCESS(ctypes.Structure):
+        _fields_ = [
+            ("dwServiceType", wintypes.DWORD),
+            ("dwCurrentState", wintypes.DWORD),
+            ("dwControlsAccepted", wintypes.DWORD),
+            ("dwWin32ExitCode", wintypes.DWORD),
+            ("dwServiceSpecificExitCode", wintypes.DWORD),
+            ("dwCheckPoint", wintypes.DWORD),
+            ("dwWaitHint", wintypes.DWORD),
+            ("dwProcessId", wintypes.DWORD),
+            ("dwServiceFlags", wintypes.DWORD),
+        ]
+
+    service_state_names = {
+        1: "stopped",
+        2: "start_pending",
+        3: "stop_pending",
+        4: "running",
+        5: "continue_pending",
+        6: "pause_pending",
+        7: "paused",
+    }
+    error_service_does_not_exist = 1060
+    sc_manager_connect = 0x0001
+    service_query_status = 0x0004
+    sc_status_process_info = 0
+
+    advapi32 = windll_factory("advapi32", use_last_error=True)
+    advapi32.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    advapi32.OpenSCManagerW.restype = wintypes.HANDLE
+    advapi32.OpenServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD]
+    advapi32.OpenServiceW.restype = wintypes.HANDLE
+    advapi32.QueryServiceStatusEx.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPBYTE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.QueryServiceStatusEx.restype = wintypes.BOOL
+    advapi32.CloseServiceHandle.argtypes = [wintypes.HANDLE]
+    advapi32.CloseServiceHandle.restype = wintypes.BOOL
+
+    service_control_manager = advapi32.OpenSCManagerW(None, None, sc_manager_connect)
+    if not service_control_manager:
+        return {
+            "status": "unavailable",
+            "installed": False,
+            "service_status": "",
+            "display_name": "",
+            "start_type": "",
+            "query_error": f"windows_open_service_manager_failed:{ctypes.get_last_error()}",
+        }
+
+    service_handle = None
+    try:
+        service_handle = advapi32.OpenServiceW(service_control_manager, service_name, service_query_status)
+        if not service_handle:
+            error = ctypes.get_last_error()
+            if error == error_service_does_not_exist:
+                return {
+                    "status": "not_installed",
+                    "installed": False,
+                    "service_status": "",
+                    "display_name": "",
+                    "start_type": "",
+                    "query_error": "",
+                }
+            return {
+                "status": "unavailable",
+                "installed": False,
+                "service_status": "",
+                "display_name": "",
+                "start_type": "",
+                "query_error": f"windows_open_service_failed:{error}",
+            }
+
+        service_status = SERVICE_STATUS_PROCESS()
+        bytes_needed = wintypes.DWORD(0)
+        queried = advapi32.QueryServiceStatusEx(
+            service_handle,
+            sc_status_process_info,
+            ctypes.cast(ctypes.byref(service_status), wintypes.LPBYTE),
+            ctypes.sizeof(service_status),
+            ctypes.byref(bytes_needed),
+        )
+        if not queried:
+            return {
+                "status": "unavailable",
+                "installed": True,
+                "service_status": "",
+                "display_name": service_name,
+                "start_type": "",
+                "query_error": f"windows_query_service_status_failed:{ctypes.get_last_error()}",
+            }
+
+        status = service_state_names.get(int(service_status.dwCurrentState), "unknown")
+        return {
+            "status": status,
+            "installed": True,
+            "service_status": status.upper(),
+            "display_name": service_name,
+            "start_type": "",
+            "query_error": "",
+        }
+    finally:
+        if service_handle:
+            advapi32.CloseServiceHandle(service_handle)
+        advapi32.CloseServiceHandle(service_control_manager)
 
 
 def _process_alive_readback(pid: int) -> tuple[bool, str]:
@@ -270,42 +393,19 @@ def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[
         status = "unsupported_platform"
         blocked_reason = "windows_service_readback_unavailable"
     else:
-        service_query = shutil.which("sc.exe") or shutil.which("sc")
-        if not service_query:
-            status = "unavailable"
+        service_query = _windows_service_status_readback(service_name)
+        status = str(service_query.get("status") or "unavailable")
+        installed = bool(service_query.get("installed"))
+        service_status = str(service_query.get("service_status") or "")
+        display_name = str(service_query.get("display_name") or "")
+        start_type = str(service_query.get("start_type") or "")
+        query_error = str(service_query.get("query_error") or "")
+        if status == "not_installed":
+            blocked_reason = "lens_host_service_not_installed"
+        elif status == "unavailable":
             blocked_reason = "windows_service_readback_unavailable"
         else:
-            try:
-                proc = subprocess.run(
-                    [service_query, "query", service_name],
-                    cwd=repo_root(),
-                    text=True,
-                    capture_output=True,
-                    timeout=2,
-                    check=False,
-                )
-                query_output = "\n".join(part for part in (proc.stdout, proc.stderr) if part).strip()
-                if proc.returncode == 0 and query_output:
-                    state_match = re.search(r"STATE\s*:\s*\d+\s+([A-Z_]+)", query_output)
-                    service_status = state_match.group(1) if state_match else ""
-                    status = service_status.lower() if service_status else "installed"
-                    installed = True
-                    display_name = service_name
-                elif "1060" in query_output or "does not exist" in query_output.lower():
-                    status = "not_installed"
-                else:
-                    status = "unavailable"
-                    query_error = query_output
-            except (OSError, subprocess.SubprocessError) as exc:
-                status = "unavailable"
-                query_error = str(exc)
-
-            if status == "not_installed":
-                blocked_reason = "lens_host_service_not_installed"
-            elif status == "unavailable":
-                blocked_reason = "windows_service_readback_unavailable"
-            else:
-                blocked_reason = "service_control_authority_not_granted"
+            blocked_reason = "service_control_authority_not_granted"
 
     return {
         "status": status,
