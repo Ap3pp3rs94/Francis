@@ -278,6 +278,34 @@ if ($PersistentSupervisionRequiredPrerequisitesObserved) {
   $RecommendedReadinessRoute = '/lens/host/persistent-supervision/enablement'
   $AuthorityRequired = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
 }
+if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
+  $FirstMissingNextGap = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')
+  $FirstMissingNextSlice = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_step' -Default '')
+  $FirstMissingProofScript = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'proof_script' -Default '')
+  $FirstMissingRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'route' -Default '')
+  $FirstMissingReadinessRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'readiness_route' -Default '')
+  $FirstMissingAuthorityRequired = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default '')
+
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingNextGap)) {
+    $RecommendedHandoffSource = 'persistent_supervision_first_missing_requirement_handoff'
+    $RecommendedNextGap = $FirstMissingNextGap
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingNextSlice)) {
+    $RecommendedNextSlice = $FirstMissingNextSlice
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingProofScript)) {
+    $RecommendedProofScript = $FirstMissingProofScript
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingRoute)) {
+    $RecommendedRoute = $FirstMissingRoute
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingReadinessRoute)) {
+    $RecommendedReadinessRoute = $FirstMissingReadinessRoute
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FirstMissingAuthorityRequired)) {
+    $AuthorityRequired = $FirstMissingAuthorityRequired
+  }
+}
 $FamilyChainHandoffObserved = (
   [string](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
   [bool](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'read_only_contract' -Default $false) -and
@@ -305,7 +333,7 @@ $Checks = @(
   New-Check -Id 'first_blocker_family_handoff' -Status 'resident_host_handoff_ready' -Passed $FirstFamilyHandoffObserved -Evidence 'summon_anywhere.handoff.first_blocker_family_handoff' -Reason 'The next concrete handoff points at the resident host runtime boundary.'
   New-Check -Id 'completion_audit_handoff' -Status 'process_supervision_audit_handoff_ready' -Passed $CompletionAuditHandoffObserved -Evidence 'summon_anywhere.handoff.first_blocker_family_completion_audit_handoff' -Reason 'The process-supervision handoff is present but diagnostic-only.'
   New-Check -Id 'family_chain_handoff' -Status 'summon_family_chain_handoff_ready' -Passed $FamilyChainHandoffObserved -Evidence 'summon_anywhere.handoff.summon_anywhere_family_chain_completion_audit_handoff' -Reason 'The summon blocker family chain can still be consumed by audit.'
-  New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff should prefer the persistent-supervision prerequisite gap once the audit chain has consumed the older resident-host proofs.'
+  New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'first_missing_requirement_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $PersistentSupervisionFirstMissingRequirementHandoffReady -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice.'
   New-Check -Id 'side_effects_denied' -Status 'readback_only' -Passed $SideEffectsDenied -Evidence 'handoff governance flags' -Reason 'The handoff script must not grant or imply execution authority.'
 )

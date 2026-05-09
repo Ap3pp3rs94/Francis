@@ -56,16 +56,14 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["recommended_next_slice"] == (
-        "resolve_persistent_supervision_required_prerequisites_before_enablement"
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
-    assert payload["recommended_handoff_source"] == "persistent_supervision_required_prerequisites_handoff"
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
-    )
-    assert payload["recommended_route"] == "/lens/host/persistent-supervision"
-    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
+    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
+    assert payload["recommended_route"] == "/lens/host"
+    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["blocked_criteria"] == [
         "summon_anywhere",

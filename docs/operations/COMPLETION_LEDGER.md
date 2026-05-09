@@ -22267,6 +22267,53 @@ proof-chain isolation slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens concrete next handoff
+
+The Stage 6 next-handoff proof now preserves the full persistent-supervision
+required-prerequisite map while recommending the first concrete missing
+prerequisite when that handoff is available. `scripts/lens-stage6-next-handoff.ps1`
+still reports the broader persistent-supervision prerequisite bucket, but its
+operator-facing `next_smallest_truthful_gap` now resolves to
+`resident_host_process_not_supervised` with:
+
+- `recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+- `recommended_handoff_source=persistent_supervision_first_missing_requirement_handoff`
+- `recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `recommended_route=/lens/host`
+- `recommended_readiness_route=/lens/host/runtime-loop/readiness`
+
+This keeps the rolling handoff actionable after the completion audit consumes
+the persistent-supervision transition plan. It does not close Stage 6 and does
+not implement resident host process supervision, tray presence, global hotkey
+binding, overlay windowing, summon binding, persistent supervision enablement,
+or resident claiming.
+
+This is a Stage 6/Lens script/test readback-only handoff slice. It changes no
+API route behavior, UI behavior, execution authority, approval decision
+authority, memory-write behavior, product local-process-launch authority,
+API local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, receipt-write authority, resident-claim authority, tray registration
+authority, hotkey registration authority, overlay control authority, summon
+authority, capture authority, new sensing authority, telemetry behavior,
+resident host process lifetime, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens concrete next handoff
+slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,recommended_route,recommended_readiness_route,authority_required,persistent_supervision_first_missing_required_before_enable | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement; recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
