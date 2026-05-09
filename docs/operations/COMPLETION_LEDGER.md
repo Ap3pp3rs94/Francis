@@ -22909,6 +22909,51 @@ handoff route readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens remaining prerequisite handoffs expose actionability readback
+
+The persistent-supervision first-missing prerequisite handoff now promotes
+existing readback/actionability metadata for the remaining resident prerequisite
+families after resident host is not the first blocker:
+
+- tray presence handoff exposes `/lens/tray`, `/lens/tray/readiness`,
+  `/lens/preflight`, the tray config path, and tray blocker-family readback
+- global hotkey handoff exposes `/lens/summon`, `/lens/summon/readiness`,
+  `/lens/preflight`, the summon config path, hotkey blocker-family readback,
+  and the existing OS-binding authority review/readback routes
+- overlay window handoff exposes `/lens/overlay`, `/lens/overlay/readiness`,
+  `/lens/preflight`, the overlay config path, and overlay blocker-family
+  readback
+- summon binding handoff exposes `/lens/summon`, `/lens/summon/readiness`,
+  `/lens/preflight`, the summon config path, and summon blocker-family readback
+
+This makes the Stage 6 prerequisite-family handoff more actionable without
+granting tray registration, hotkey registration, overlay control, summon,
+local process launch, process supervision, service install/control, resident
+claim, approval decision, memory write, receipt write, UI claim, or Stage 6
+transition authority. The global-hotkey handoff only names the existing
+OS-binding approval/request/readback surfaces; it does not request or grant
+authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens remaining prerequisite
+handoff actionability readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,authority_required,@{Name='handoff_id';Expression={$_.persistent_supervision_first_missing_requirement_handoff.id}},@{Name='handoff_route';Expression={$_.persistent_supervision_first_missing_requirement_handoff.route}},@{Name='handoff_readback_route';Expression={$_.persistent_supervision_first_missing_requirement_handoff.readback_route}},@{Name='os_binding_authority_route';Expression={$_.persistent_supervision_first_missing_requirement_handoff.os_binding_authority_route}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; active handoff remains resident_host_process on current runtime state`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; child proof timeouts empty`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

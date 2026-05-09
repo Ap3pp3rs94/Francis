@@ -534,6 +534,19 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "overlay_window": "resolve_overlay_window_before_persistent_supervision_enablement",
         "summon_binding": "resolve_summon_binding_before_persistent_supervision_enablement",
     }
+    surface_readback_keys = (
+        "preflight_script",
+        "config_path",
+        "config_exists",
+        "family_blockers",
+        "authority_blockers",
+        "host_dependency_blockers",
+        "surface_dependency_blockers",
+        "palette_route",
+        "status_route",
+        "host_route",
+        "required_before_enable",
+    )
     if requirement_id == "resident_host_process" and blocker == "resident_supervision_not_persistent":
         next_gap = "resident_supervision_not_persistent"
         next_step = "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
@@ -568,7 +581,29 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         next_gap = next_gaps.get(requirement_id, blocker)
         next_step = next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision")
         authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
-        authority_readback = {}
+        authority_readback = {
+            "readback_route": str(dependency.get("route") or readiness_routes.get(requirement_id, "/lens/status")),
+            "preflight_route": "/lens/preflight",
+        }
+        for key in surface_readback_keys:
+            value = dependency.get(key)
+            if value not in ("", None, [], {}):
+                authority_readback[key] = value
+        if requirement_id == "global_hotkey_binding":
+            authority_readback.update(
+                {
+                    "os_binding_readiness_route": "/lens/os-binding/readiness",
+                    "os_binding_plan_route": "/lens/os-binding/plan",
+                    "os_binding_authority_route": "/lens/os-binding/authority",
+                    "os_binding_authority_request_route": "/lens/os-binding/authority/request",
+                    "os_binding_authority_requests_route": "/lens/os-binding/authority/requests",
+                    "os_binding_authority_grants_route": "/lens/os-binding/authority/grants",
+                    "os_binding_execution_readiness_route": "/lens/os-binding/execution/readiness",
+                    "os_binding_execution_denials_route": "/lens/os-binding/denials",
+                    "approval_action": "lens.os_binding.command_palette_binding_authority",
+                    "authority_scope": "system.write",
+                }
+            )
     handoff = {
         "id": requirement_id,
         "family": families.get(requirement_id, requirement_id),

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from francis.lens.host_manifest import (
     lens_host_persistent_supervision_enablement_preflight,
     lens_host_persistent_supervision_plan,
@@ -21,9 +23,11 @@ def _manifest(
     *,
     process_alive: bool,
     process_blocker: str,
+    surface_dependencies: list[str] | None = None,
     activation_execution_readback: dict[str, Any] | None = None,
     supervisor_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    process_blockers = [process_blocker] if process_blocker else []
     return {
         "required_before_enable": REQUIRED_BEFORE_ENABLE,
         "declared_entrypoint": {"exists": True},
@@ -45,8 +49,10 @@ def _manifest(
         "activation_execution_readback": activation_execution_readback or {},
         "supervisor_readback": supervisor_readback or {},
         "blocker_groups": {
-            "process_readback": [process_blocker],
-            "surface_dependencies": [
+            "process_readback": process_blockers,
+            "surface_dependencies": surface_dependencies
+            if surface_dependencies is not None
+            else [
                 "tray_host_missing",
                 "global_hotkey_binding_missing",
                 "overlay_window_missing",
@@ -256,6 +262,139 @@ def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate
             "tray_icon_authority_not_granted",
             "notification_authority_not_granted",
         ]
+
+
+@pytest.mark.parametrize(
+    (
+        "requirement_id",
+        "surface_dependencies",
+        "expected_readback_route",
+        "expected_readiness_route",
+        "expected_proof_script",
+        "expected_config_path",
+        "expected_blocker",
+        "expected_next_gap",
+    ),
+    [
+        (
+            "tray_presence",
+            [
+                "tray_host_missing",
+                "global_hotkey_binding_missing",
+                "overlay_window_missing",
+                "summon_binding_missing",
+            ],
+            "/lens/tray",
+            "/lens/tray/readiness",
+            "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+            "config/runtime/lens/tray.json",
+            "tray_host_missing",
+            "summon_tray_presence_blocker_boundary",
+        ),
+        (
+            "global_hotkey_binding",
+            [
+                "global_hotkey_binding_missing",
+                "overlay_window_missing",
+                "summon_binding_missing",
+            ],
+            "/lens/summon",
+            "/lens/summon/readiness",
+            "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+            "config/runtime/lens/summon.json",
+            "global_hotkey_binding_missing",
+            "os_level_command_palette_binding",
+        ),
+        (
+            "overlay_window",
+            [
+                "overlay_window_missing",
+                "summon_binding_missing",
+            ],
+            "/lens/overlay",
+            "/lens/overlay/readiness",
+            "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+            "config/runtime/lens/overlay.json",
+            "overlay_window_missing",
+            "summon_overlay_window_blocker_boundary",
+        ),
+        (
+            "summon_binding",
+            ["summon_binding_missing"],
+            "/lens/summon",
+            "/lens/summon/readiness",
+            "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+            "config/runtime/lens/summon.json",
+            "summon_binding_missing",
+            "summon_anywhere_blockers",
+        ),
+    ],
+)
+def test_persistent_supervision_prerequisite_handoff_routes_remaining_family_gates(
+    requirement_id: str,
+    surface_dependencies: list[str],
+    expected_readback_route: str,
+    expected_readiness_route: str,
+    expected_proof_script: str,
+    expected_config_path: str,
+    expected_blocker: str,
+    expected_next_gap: str,
+) -> None:
+    manifest = _manifest(process_alive=True, process_blocker="", surface_dependencies=surface_dependencies)
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        handoff = body["first_missing_requirement_handoff"]
+        assert body["first_missing_required_before_enable"] == requirement_id
+        assert handoff["id"] == requirement_id
+        assert handoff["route"] == expected_readback_route
+        assert handoff["readback_route"] == expected_readback_route
+        assert handoff["readiness_route"] == expected_readiness_route
+        assert handoff["proof_script"] == expected_proof_script
+        assert handoff["preflight_route"] == "/lens/preflight"
+        assert handoff["config_path"] == expected_config_path
+        assert handoff["blocker"] == expected_blocker
+        assert handoff["next_smallest_truthful_gap"] == expected_next_gap
+        assert handoff["family_blockers"]
+        assert handoff["read_only_contract"] is True
+        assert handoff["diagnostic_only"] is True
+        assert handoff["would_execute"] is False
+        assert handoff["would_mutate"] is False
+
+
+def test_persistent_supervision_prerequisite_handoff_promotes_os_binding_review_for_hotkey() -> None:
+    manifest = _manifest(
+        process_alive=True,
+        process_blocker="",
+        surface_dependencies=[
+            "global_hotkey_binding_missing",
+            "overlay_window_missing",
+            "summon_binding_missing",
+        ],
+    )
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        handoff = body["first_missing_requirement_handoff"]
+        assert handoff["id"] == "global_hotkey_binding"
+        assert handoff["os_binding_readiness_route"] == "/lens/os-binding/readiness"
+        assert handoff["os_binding_plan_route"] == "/lens/os-binding/plan"
+        assert handoff["os_binding_authority_route"] == "/lens/os-binding/authority"
+        assert handoff["os_binding_authority_request_route"] == "/lens/os-binding/authority/request"
+        assert handoff["os_binding_authority_requests_route"] == "/lens/os-binding/authority/requests"
+        assert handoff["os_binding_authority_grants_route"] == "/lens/os-binding/authority/grants"
+        assert handoff["os_binding_execution_readiness_route"] == "/lens/os-binding/execution/readiness"
+        assert handoff["os_binding_execution_denials_route"] == "/lens/os-binding/denials"
+        assert handoff["approval_action"] == "lens.os_binding.command_palette_binding_authority"
+        assert handoff["authority_scope"] == "system.write"
+        assert handoff["read_only_contract"] is True
+        assert handoff["diagnostic_only"] is True
+        assert handoff["would_execute"] is False
+        assert handoff["would_mutate"] is False
 
 
 def test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate() -> None:
