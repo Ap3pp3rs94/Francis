@@ -22956,6 +22956,38 @@ handoff actionability readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens runtime-loop readiness proof consumes supervision authority handoff
+
+Added a focused proof script for the resident host runtime-loop readiness
+handoff:
+
+- `scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status`
+
+The proof reads `/lens/host/runtime-loop/readiness` and verifies that its first
+blocked runtime-loop requirement, `resident_loop_process_supervision`, is
+consumed as a readback-only handoff into
+`/lens/host/supervision/authority/readiness`. It then verifies that the
+supervision-authority readiness surface exposes
+`exact_supervision_authority_approval` as the next blocker with request/readback
+routes for `/lens/host/supervision/authority/request` and
+`/lens/host/supervision/authority/requests`.
+
+This advances Stage 6's `system_resident_presence` work by proving the current
+resident runtime-loop blocker chain is inspectable and actionable without
+granting execution authority, process supervision, process restart, service
+install/control, approval decision, receipt write, memory write, resident
+claim, UI claim, or Stage 6 transition authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens runtime-loop readiness
+handoff proof slice:
+
+- `python -m pytest tests\test_lens_host_runtime_loop_readiness_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-runtime-loop-readiness-proof.ps1 -Mode Status -DataDir data\test_runs\runtime-loop-readiness-proof`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=host_supervision_authority_exact_approval_request; side_effects_denied=true`
+- `python -m pytest tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
