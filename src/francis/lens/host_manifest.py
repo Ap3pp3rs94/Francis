@@ -547,6 +547,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "host_route",
         "required_before_enable",
     )
+    authority_readback: dict[str, Any]
     if requirement_id == "resident_host_process" and blocker == "resident_supervision_not_persistent":
         next_gap = "resident_supervision_not_persistent"
         next_step = "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"

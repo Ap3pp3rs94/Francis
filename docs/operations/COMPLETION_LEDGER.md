@@ -22947,6 +22947,8 @@ handoff actionability readback slice:
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; active handoff remains resident_host_process on current runtime state`
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
   Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; child proof timeouts empty`
+- `python -m mypy src`
+  Result: `passed`
 - `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
   Result: `passed`
 - `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
