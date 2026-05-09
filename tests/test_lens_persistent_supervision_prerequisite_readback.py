@@ -170,6 +170,12 @@ def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised
         assert body["first_missing_required_before_enable"] == "resident_host_process"
         assert body["first_missing_requirement_handoff"]["blocker"] == "resident_host_process_not_supervised"
         assert body["first_missing_requirement_handoff"]["requirement_state"] == "foreground_observed_not_supervised"
+        assert body["first_missing_requirement_handoff"]["proof_script"] == (
+            "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
+        )
+        assert body["first_missing_requirement_handoff"]["next_step"] == (
+            "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+        )
         assert body["first_missing_requirement_handoff"]["authority_route"] == "/lens/host/activation/authority"
         assert body["first_missing_requirement_handoff"]["authority_request_route"] == "/lens/host/activation/request"
         assert body["first_missing_requirement_handoff"]["approval_action"] == "lens.host.foreground_activation"
@@ -205,6 +211,9 @@ def test_persistent_supervision_prerequisite_readback_links_persistent_process_a
         assert handoff["blocker"] == "resident_supervision_not_persistent"
         assert (
             handoff["next_step"] == "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+        )
+        assert (
+            handoff["proof_script"] == "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
         )
         assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
         assert handoff["authority_required"] == "persistent_process_supervision_authority"

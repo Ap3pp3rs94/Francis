@@ -218,6 +218,62 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     }
 
 
+def test_lens_stage6_next_handoff_consumes_unsupervised_process_readback(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    runtime_root = data_root / "runtime" / "lens-host"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    pid = os.getpid()
+    (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "foreground_running",
+                "mode": "foreground",
+                "pid": pid,
+                "process_alive": True,
+                "resident": False,
+                "service_managed": False,
+                "tray_presence": False,
+                "global_hotkey": False,
+                "overlay_window": False,
+                "summon_anywhere": False,
+                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert payload["recommended_next_slice"] == (
+        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    )
+    assert payload["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
+    )
+    handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
+    assert handoff["blocker"] == "resident_host_process_not_supervised"
+    assert handoff["requirement_state"] == "foreground_observed_not_supervised"
+    assert handoff["proof_script"] == ("scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status")
+    assert handoff["next_step"] == "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert payload["governance"]["process_supervision_authority"] is False
+    assert payload["governance"]["local_process_launch_authority"] is False
+
+
 def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     state_path = data_root / "runtime" / "lens-host-supervisor" / "status.json"

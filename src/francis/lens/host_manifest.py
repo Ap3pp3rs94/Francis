@@ -551,6 +551,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
     if requirement_id == "resident_host_process" and blocker == "resident_supervision_not_persistent":
         next_gap = "resident_supervision_not_persistent"
         next_step = "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+        proof_script = "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
         authority_required = "persistent_process_supervision_authority"
         authority_readback = {
             "authority_route": "/lens/host/supervision/authority",
@@ -563,7 +564,12 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         }
     elif requirement_id == "resident_host_process":
         next_gap = next_gaps.get(requirement_id, blocker)
-        next_step = next_steps.get(requirement_id, "resolve_resident_host_process_before_persistent_supervision")
+        if blocker == "resident_host_process_not_supervised":
+            next_step = "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+            proof_script = "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
+        else:
+            next_step = next_steps.get(requirement_id, "resolve_resident_host_process_before_persistent_supervision")
+            proof_script = proof_scripts.get(requirement_id, "")
         authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
         authority_readback = {
             "authority_route": "/lens/host/activation/authority",
@@ -581,6 +587,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
     else:
         next_gap = next_gaps.get(requirement_id, blocker)
         next_step = next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision")
+        proof_script = proof_scripts.get(requirement_id, "")
         authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
         authority_readback = {
             "readback_route": str(dependency.get("route") or readiness_routes.get(requirement_id, "/lens/status")),
@@ -610,7 +617,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "family": families.get(requirement_id, requirement_id),
         "route": str(dependency.get("route") or "/lens/status"),
         "readiness_route": str(dependency.get("readiness_route") or readiness_routes.get(requirement_id, "")),
-        "proof_script": proof_scripts.get(requirement_id, ""),
+        "proof_script": proof_script,
         "blocker": blocker,
         "requirement_state": str(dependency.get("requirement_state") or ""),
         "blocked_reason": str(dependency.get("blocked_reason") or ""),

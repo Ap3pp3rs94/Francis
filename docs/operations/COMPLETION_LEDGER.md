@@ -23148,6 +23148,55 @@ persistence-proof handoff slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident-host handoff consumes unsupervised process state
+
+The persistent-supervision resident-host prerequisite handoff now distinguishes
+between two different resident-host states:
+
+- missing resident-host process still points at
+  `scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- observed foreground host process that is not supervised now points at
+  `scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+- fresh supervised resident candidate that is not persistent now points at
+  `scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+
+This prevents the Stage 6 next-handoff from replaying the runtime-boundary proof
+after `resident_host_process_not_supervised` is already the current blocker. The
+handoff now routes that state to the focused process-supervision blocker proof,
+which consumes the handoff and returns the chain to Stage 6 completion audit.
+
+This is a Stage 6/Lens backend/test readback-only correction. It grants no UI
+behavior, execution authority, approval decision authority, production
+approval-write behavior, memory-write behavior, product local-process-launch
+authority, API local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control authority,
+tray registration authority, hotkey registration authority, overlay control
+authority, summon authority, capture authority, new sensing authority,
+telemetry behavior, persistent resident process lifetime, resident claim, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident-host unsupervised
+process handoff slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,resident_host_process_handoff_observed,process_supervision_boundary_observed,handoff_consumed,authority_denied,child_proof_timeouts | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; previous_next_smallest_truthful_gap=resident_host_process_not_supervised; next_smallest_truthful_gap=stage6_lens_completion_audit; handoff_consumed=true; authority_denied=true; child_proof_timeouts=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,@{Name='handoff_proof';Expression={$_.persistent_supervision_first_missing_requirement_handoff.proof_script}},@{Name='handoff_blocker';Expression={$_.persistent_supervision_first_missing_requirement_handoff.blocker}} | ConvertTo-Json -Depth 6`
+  Result: `passed; live state returned next_smallest_truthful_gap=resident_supervision_not_persistent and recommended_proof_script=scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
