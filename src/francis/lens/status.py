@@ -1172,6 +1172,177 @@ def _stage6_closure_criterion(
     }
 
 
+def _stage6_next_handoff_readback(
+    *,
+    closure_readback: dict[str, Any],
+    resident_host: dict[str, Any],
+) -> dict[str, Any]:
+    blocked_criteria = [_safe_str(item).strip() for item in _as_list(closure_readback.get("blocked_criteria"))]
+    criteria = [_as_dict(item) for item in _as_list(closure_readback.get("criteria"))]
+    criteria_by_id = {_safe_str(item.get("id")).strip(): item for item in criteria}
+    first_blocked_criterion = blocked_criteria[0] if blocked_criteria else ""
+    first_criterion = criteria_by_id.get(first_blocked_criterion, {})
+    criterion_handoff = _as_dict(first_criterion.get("handoff"))
+    stage_next_gap = _safe_str(closure_readback.get("next_smallest_truthful_gap")).strip()
+    criterion_next_gap = _safe_str(first_criterion.get("next_smallest_truthful_gap")).strip()
+
+    next_gap = criterion_next_gap or stage_next_gap or "stage6_lens_completion_audit"
+    recommended_next_slice = _safe_str(criterion_handoff.get("next_step")).strip() or next_gap
+    recommended_handoff_source = "closure_readback"
+    recommended_proof_script = _safe_str(criterion_handoff.get("proof_script")).strip()
+    recommended_route = (
+        _safe_str(criterion_handoff.get("route")).strip() or _safe_str(criterion_handoff.get("status_route")).strip()
+    )
+    recommended_readiness_route = _safe_str(criterion_handoff.get("readiness_route")).strip()
+    authority_required = _safe_str(criterion_handoff.get("authority_required")).strip()
+
+    persistent_plan = _as_dict(resident_host.get("persistent_supervision_plan"))
+    persistent_enablement = _as_dict(resident_host.get("persistent_supervision_enablement"))
+    missing_required = [
+        _safe_str(item).strip() for item in _as_list(persistent_plan.get("missing_required_before_enable"))
+    ]
+    enablement_missing_required = [
+        _safe_str(item).strip() for item in _as_list(persistent_enablement.get("missing_required_before_enable"))
+    ]
+    first_missing = (
+        _safe_str(persistent_plan.get("first_missing_required_before_enable")).strip()
+        or _safe_str(persistent_enablement.get("first_missing_required_before_enable")).strip()
+    )
+    first_missing_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff")) or _as_dict(
+        persistent_enablement.get("first_missing_requirement_handoff")
+    )
+    first_missing_handoff_ready = (
+        bool(first_missing)
+        and _safe_str(first_missing_handoff.get("id")).strip() == first_missing
+        and bool(first_missing_handoff.get("read_only_contract"))
+        and bool(first_missing_handoff.get("diagnostic_only"))
+        and not bool(first_missing_handoff.get("would_execute"))
+        and not bool(first_missing_handoff.get("would_mutate"))
+    )
+    prerequisites_observed = (
+        bool(missing_required)
+        and bool(enablement_missing_required)
+        and not bool(persistent_plan.get("required_before_enable_ready", True))
+        and not bool(persistent_enablement.get("required_before_enable_ready", True))
+    )
+    prerequisites_handoff: dict[str, Any] = {}
+    if prerequisites_observed:
+        prerequisites_handoff = {
+            "next_step": "resolve_persistent_supervision_required_prerequisites_before_enablement",
+            "proof_script": "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
+            "route": "/lens/host/persistent-supervision",
+            "readiness_route": "/lens/host/persistent-supervision/enablement",
+            "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+            "missing_required_before_enable": missing_required,
+            "first_missing_required_before_enable": first_missing,
+            "first_missing_requirement_handoff": first_missing_handoff,
+            "acceptance_criterion": "system_resident_presence",
+            "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        }
+        recommended_handoff_source = "persistent_supervision_required_prerequisites_handoff"
+        next_gap = "persistent_supervision_required_prerequisites_missing"
+        recommended_next_slice = "resolve_persistent_supervision_required_prerequisites_before_enablement"
+        recommended_proof_script = "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+        recommended_route = "/lens/host/persistent-supervision"
+        recommended_readiness_route = "/lens/host/persistent-supervision/enablement"
+        authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+
+    if first_missing_handoff_ready:
+        first_missing_next_gap = _safe_str(first_missing_handoff.get("next_smallest_truthful_gap")).strip()
+        first_missing_next_slice = _safe_str(first_missing_handoff.get("next_step")).strip()
+        if first_missing_next_gap:
+            recommended_handoff_source = "persistent_supervision_first_missing_requirement_handoff"
+            next_gap = first_missing_next_gap
+        if first_missing_next_slice:
+            recommended_next_slice = first_missing_next_slice
+        recommended_proof_script = (
+            _safe_str(first_missing_handoff.get("proof_script")).strip() or recommended_proof_script
+        )
+        recommended_route = _safe_str(first_missing_handoff.get("route")).strip() or recommended_route
+        recommended_readiness_route = (
+            _safe_str(first_missing_handoff.get("readiness_route")).strip() or recommended_readiness_route
+        )
+        authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip() or authority_required
+
+    resident_candidate_observed = (
+        bool(resident_host.get("fresh_resident_runtime_candidate_supervised"))
+        and bool(resident_host.get("resident_runtime_candidate_supervised"))
+        and next_gap == "resident_supervision_not_persistent"
+    )
+    resident_candidate_handoff: dict[str, Any] = {}
+    if resident_candidate_observed:
+        resident_candidate_handoff = {
+            "id": "resident_runtime_candidate",
+            "status": "observed_not_persistent",
+            "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+            "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+            "recommended_next_slice": "resolve_resident_supervision_persistence_before_persistent_supervision_enablement",
+            "proof_script": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+            "route": "/lens/host",
+            "readiness_route": "/lens/host/runtime-loop/readiness",
+            "acceptance_criterion": "system_resident_presence",
+            "authority_required": "persistent_process_supervision_authority",
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        }
+        recommended_handoff_source = "resident_runtime_candidate_handoff"
+        recommended_next_slice = _safe_str(resident_candidate_handoff.get("recommended_next_slice")).strip()
+        recommended_proof_script = _safe_str(resident_candidate_handoff.get("proof_script")).strip()
+        recommended_route = _safe_str(resident_candidate_handoff.get("route")).strip()
+        recommended_readiness_route = _safe_str(resident_candidate_handoff.get("readiness_route")).strip()
+        authority_required = _safe_str(resident_candidate_handoff.get("authority_required")).strip()
+
+    return {
+        "kind": "lens.stage6.next_handoff.readback",
+        "status": "readback_ready",
+        "ready_to_close": bool(closure_readback.get("ready_to_close")),
+        "stage_next_smallest_truthful_gap": stage_next_gap,
+        "next_smallest_truthful_gap": next_gap,
+        "recommended_next_slice": recommended_next_slice,
+        "recommended_handoff_source": recommended_handoff_source,
+        "recommended_proof_script": recommended_proof_script,
+        "recommended_route": recommended_route,
+        "recommended_readiness_route": recommended_readiness_route,
+        "authority_required": authority_required,
+        "first_blocked_criterion": first_blocked_criterion,
+        "first_blocked_criterion_next_smallest_truthful_gap": criterion_next_gap,
+        "persistent_supervision_required_prerequisites_observed": prerequisites_observed,
+        "persistent_supervision_missing_required_before_enable": missing_required,
+        "persistent_supervision_first_missing_required_before_enable": first_missing,
+        "persistent_supervision_first_missing_requirement_handoff": first_missing_handoff,
+        "persistent_supervision_required_prerequisites_handoff": prerequisites_handoff,
+        "resident_runtime_candidate_handoff_observed": resident_candidate_observed,
+        "resident_runtime_candidate_handoff": resident_candidate_handoff,
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "uses_lens_status_readback": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _stage6_closure_readback(
     *,
     mode: dict[str, Any],
@@ -1527,6 +1698,7 @@ def _stage6_readiness(
         resident_surface_activation=resident_surface_activation,
     )
     ready_to_close = bool(closure_readback.get("ready_to_close"))
+    next_handoff = _stage6_next_handoff_readback(closure_readback=closure_readback, resident_host=resident_host)
     return {
         "stage": "Stage 6 / Lens MVP",
         "stage_state": "ready_to_close" if ready_to_close else "active",
@@ -1540,6 +1712,7 @@ def _stage6_readiness(
         "next_smallest_truthful_gap": _safe_str(closure_readback.get("next_smallest_truthful_gap")).strip()
         or "stage6_lens_completion_audit",
         "claim": "backend_readback_contract_only",
+        "next_handoff": next_handoff,
         "closure_readback": closure_readback,
         "criteria": [
             {

@@ -1012,6 +1012,45 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "system_resident_presence",
     ]
     assert stage6_readiness["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    next_handoff = stage6_readiness["next_handoff"]
+    assert next_handoff["kind"] == "lens.stage6.next_handoff.readback"
+    assert next_handoff["status"] == "readback_ready"
+    assert next_handoff["stage_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert next_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert next_handoff["recommended_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert next_handoff["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
+    assert next_handoff["recommended_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_route"] == "/lens/host"
+    assert next_handoff["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert next_handoff["authority_required"] == ("resident_host_process_tray_hotkey_overlay_and_summon_prerequisites")
+    assert next_handoff["first_blocked_criterion"] == "summon_anywhere"
+    assert next_handoff["persistent_supervision_required_prerequisites_observed"] is True
+    assert next_handoff["persistent_supervision_missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert next_handoff["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["id"] == "resident_host_process"
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["read_only_contract"] is True
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["diagnostic_only"] is True
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_execute"] is False
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_mutate"] is False
+    assert (
+        next_handoff["persistent_supervision_required_prerequisites_handoff"]["next_smallest_truthful_gap"]
+        == "persistent_supervision_required_prerequisites_missing"
+    )
+    assert next_handoff["resident_runtime_candidate_handoff_observed"] is False
+    assert next_handoff["resident_runtime_candidate_handoff"] == {}
+    assert next_handoff["governance"]["execution_authority"] is False
+    assert next_handoff["governance"]["process_supervision_authority"] is False
+    assert next_handoff["governance"]["resident_claim_authority"] is False
     closure = body["stage6_readiness"]["closure_readback"]
     assert closure["kind"] == "lens.stage6.closure_readback"
     assert closure["status"] == "blocked"
@@ -7123,6 +7162,25 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     assert resident_host["resident_runtime_candidate_supervised"] is True
     assert resident_host["fresh_resident_runtime_candidate_supervised"] is True
     assert resident_host["resident_supervised_runtime"] is False
+    next_handoff = body["stage6_readiness"]["next_handoff"]
+    assert next_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert next_handoff["recommended_next_slice"] == (
+        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    )
+    assert next_handoff["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
+    assert next_handoff["recommended_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert next_handoff["resident_runtime_candidate_handoff_observed"] is True
+    assert next_handoff["resident_runtime_candidate_handoff"]["status"] == "observed_not_persistent"
+    assert (
+        next_handoff["resident_runtime_candidate_handoff"]["next_smallest_truthful_gap"]
+        == "resident_supervision_not_persistent"
+    )
+    assert next_handoff["governance"]["execution_authority"] is False
+    assert next_handoff["governance"]["process_supervision_authority"] is False
+    assert next_handoff["governance"]["resident_claim_authority"] is False
 
     persistent_plan = resident_host["persistent_supervision_plan"]
     plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}

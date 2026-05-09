@@ -22752,6 +22752,50 @@ persistence proof consumption slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens status exposes concrete next handoff
+
+`/lens/status` now exposes a read-only `stage6_readiness.next_handoff`
+projection. The projection preserves the existing Stage 6 closure readback while
+also distilling the first concrete next handoff from the persistent-supervision
+prerequisite map:
+
+- base readback: `next_smallest_truthful_gap=resident_host_process_not_supervised`
+- base readback: `recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+- base readback: `recommended_handoff_source=persistent_supervision_first_missing_requirement_handoff`
+- fresh bounded resident candidate readback: `next_smallest_truthful_gap=resident_supervision_not_persistent`
+- fresh bounded resident candidate readback: `recommended_handoff_source=resident_runtime_candidate_handoff`
+
+This keeps the operator/API readback aligned with the rolling Stage 6 handoff
+script without starting a resident host, supervising a process, installing or
+controlling a service, writing receipts or memory, deciding approvals, claiming
+resident state, or closing Stage 6.
+
+This is a Stage 6/Lens backend readback and test slice. It changes no UI
+behavior, execution authority, approval decision authority, production
+approval-write behavior, memory-write behavior, product local-process-launch
+authority, API local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control authority,
+tray registration authority, hotkey registration authority, overlay control
+authority, summon authority, capture authority, new sensing authority,
+telemetry behavior, resident host process lifetime, persistent resident state,
+or Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens status next-handoff
+readback slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,authority_required | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_handoff_source=persistent_supervision_first_missing_requirement_handoff`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
