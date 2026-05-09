@@ -22653,6 +22653,58 @@ resident-candidate readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident supervision persistence boundary proof
+
+The resident-supervision persistence boundary proof now creates a fresh bounded
+resident candidate through the existing resident-host runtime boundary proof,
+then reads back the same data root through `/lens/status`,
+`/lens/host/persistent-supervision`, and
+`/lens/host/persistent-supervision/enablement`.
+
+The proof output shows:
+
+- `previous_next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `consumed_resident_candidate_next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `route_next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+- `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+- `recommended_next_slice=consume_resident_supervision_persistence_boundary_in_stage6_audit`
+- `recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+- `authority_required=persistent_process_supervision_authority`
+
+This closes the readback gap between a one-shot resident candidate supervisor
+observation and the persistent-supervision plan/enablement routes: the
+persistent-supervision dependency and first-missing handoff now prove the
+resident candidate as `resident_candidate_observed_not_persistent` instead of
+flattening it back to a generic missing resident host process. Persistent
+supervision remains blocked and authority-denied.
+
+This is a Stage 6/Lens diagnostic proof and test slice. It changes no API route
+behavior, UI behavior, execution authority, approval decision authority,
+production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, resident host process
+lifetime, resident claiming, persistent resident state, or Stage 6 transition
+state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident supervision
+persistence boundary proof slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,consumed_resident_candidate_next_smallest_truthful_gap,route_next_smallest_truthful_gap,next_smallest_truthful_gap,recommended_next_slice,resident_candidate_boundary_proof_observed,persistent_supervision_plan_candidate_readback_observed,persistent_supervision_enablement_candidate_readback_observed,resident_dependency_candidate_readback_observed,route_blocking_preserved,side_effects_bounded | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; consumed_resident_candidate_next_smallest_truthful_gap=resident_supervision_not_persistent; route_next_smallest_truthful_gap=persistent_supervision_authority_not_granted; next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
