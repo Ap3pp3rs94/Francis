@@ -22314,6 +22314,48 @@ slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens host supervision authority handoff proof
+
+The host-supervision authority request proof now surfaces its continuation
+handoff explicitly after proving the exact approval-request path. The proof
+output includes:
+
+- `previous_next_smallest_truthful_gap=host_supervision_authority_exact_approval_request`
+- `next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `recommended_next_slice=review_persistent_supervision_enablement_boundary_without_runtime_start`
+- `recommended_proof_script=scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`
+- direct readback routes for host-supervision readiness, request/readback,
+  grant/denial readback, and persistent-supervision enablement
+- a structured read-only `handoff` object naming the next boundary and authority
+  requirement
+
+This keeps the resident-host process blocker chain actionable once the exact
+host-supervision approval proof is being inspected. It does not start a Lens
+host process, supervise a process, update service config, write memory, claim a
+resident runtime, or close Stage 6.
+
+This is a Stage 6/Lens script/test proof-readback slice. It changes no API route
+behavior, UI behavior, execution authority, approval decision authority,
+production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, resident host process
+lifetime, persistent-supervision enablement, or Stage 6 transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens host supervision authority
+handoff proof slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,recommended_next_slice,recommended_proof_script,request_route,persistent_supervision_enablement_route,@{Name='handoff_next';Expression={$_.handoff.next_smallest_truthful_gap}} | Format-List`
+  Result: `passed; status=proof_passed; previous_next_smallest_truthful_gap=host_supervision_authority_exact_approval_request; next_smallest_truthful_gap=persistent_supervision_enablement_disabled; handoff_next=persistent_supervision_enablement_disabled`
+- `python -m pytest tests\test_lens_host_supervision_authority_request_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

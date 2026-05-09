@@ -63,7 +63,40 @@ def test_lens_host_supervision_authority_request_proof_consumes_exact_request(
     assert payload["receipt_write_authority"] is True
     assert payload["resident_claim_authority"] is True
     assert payload["memory_write"] is False
+    assert payload["previous_next_smallest_truthful_gap"] == "host_supervision_authority_exact_approval_request"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert (
+        payload["recommended_next_slice"] == "review_persistent_supervision_enablement_boundary_without_runtime_start"
+    )
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert payload["readiness_route"] == "/lens/host/supervision/authority/readiness"
+    assert payload["request_route"] == "/lens/host/supervision/authority/request"
+    assert payload["requests_route"] == "/lens/host/supervision/authority/requests"
+    assert payload["grant_route"] == "/lens/host/supervision/authority"
+    assert payload["grants_route"] == "/lens/host/supervision/authority/grants"
+    assert payload["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert payload["persistent_supervision_route"] == "/lens/host/persistent-supervision"
+    assert payload["persistent_supervision_enablement_route"] == "/lens/host/persistent-supervision/enablement"
+
+    handoff = payload["handoff"]
+    assert handoff == {
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "host_supervision_authority_exact_approval_request",
+        "next_smallest_truthful_gap": "persistent_supervision_enablement_disabled",
+        "next_step": "review_persistent_supervision_enablement_boundary_without_runtime_start",
+        "proof_script": "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+        "route": "/lens/host/persistent-supervision",
+        "readiness_route": "/lens/host/persistent-supervision/enablement",
+        "authority_required": "persistent_supervision_enablement_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["readiness_before_points_to_exact_approval_request"]["status"] == "blocked"
