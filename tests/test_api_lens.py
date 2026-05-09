@@ -1834,21 +1834,30 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_host["service_config_present"] is True
     assert resident_host["service_config_path"] == "config/runtime/services/lens-host.json"
     assert resident_host["service_readback_ready"] is True
-    assert resident_host["service_readback"] == {
-        "status": "not_checked_by_api",
-        "readback_ready": True,
-        "service_name": "Francis-LensHost",
-        "installed": False,
-        "windows_service": True,
-        "host_query": "runner_only",
-        "install_supported": False,
-        "start_supported": False,
-        "stop_supported": False,
-        "restart_supported": False,
-        "install_authority": False,
-        "service_install_authority": False,
-        "service_control_authority": False,
-        "blocked_reason": "lens_host_service_status_runner_required",
+    service_readback = resident_host["service_readback"]
+    assert service_readback["readback_ready"] is True
+    assert service_readback["service_name"] == "Francis-LensHost"
+    assert service_readback["windows_service"] is True
+    assert service_readback["service_status_readback"] is True
+    assert service_readback["host_query"] == "windows_service_status"
+    if os.name == "nt":
+        assert service_readback["status"] in {"not_installed", "running", "stopped", "paused", "unavailable"}
+        assert service_readback["platform_supported"] is True
+    else:
+        assert service_readback["status"] == "unsupported_platform"
+        assert service_readback["platform_supported"] is False
+    assert isinstance(service_readback["installed"], bool)
+    assert service_readback["install_supported"] is False
+    assert service_readback["start_supported"] is False
+    assert service_readback["stop_supported"] is False
+    assert service_readback["restart_supported"] is False
+    assert service_readback["install_authority"] is False
+    assert service_readback["service_install_authority"] is False
+    assert service_readback["service_control_authority"] is False
+    assert service_readback["blocked_reason"] in {
+        "lens_host_service_not_installed",
+        "service_control_authority_not_granted",
+        "windows_service_readback_unavailable",
     }
     expected_service_plan = {
         "kind": "service_install.plan_projection",
@@ -3682,7 +3691,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert manifest_body["service_install"]["config_exists"] is True
     assert manifest_body["service_install"]["installable"] is False
     assert manifest_body["service_plan"] == expected_service_plan
-    assert manifest_body["service_readback"]["status"] == "not_checked_by_api"
+    if os.name == "nt":
+        assert manifest_body["service_readback"]["status"] in {
+            "not_installed",
+            "running",
+            "stopped",
+            "paused",
+            "unavailable",
+        }
+    else:
+        assert manifest_body["service_readback"]["status"] == "unsupported_platform"
     assert manifest_body["service_readback"]["service_control_authority"] is False
     assert manifest_body["process_readback"]["status"] == "missing"
     assert manifest_body["status_command"]["executable"] is True

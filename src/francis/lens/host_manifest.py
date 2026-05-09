@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -252,13 +255,71 @@ def _lens_host_activation_execution_requirement_readback(launch_manifest: dict[s
 
 def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[str, Any]:
     service_name = str(service_config_payload.get("service_name") or "Francis-LensHost")
+    readback_declared = bool(service_config_payload.get("service_status_readback"))
+    platform_supported = os.name == "nt"
+    status = "not_checked_by_api"
+    installed = False
+    service_status = ""
+    display_name = ""
+    start_type = ""
+    query_error = ""
+
+    if not readback_declared:
+        blocked_reason = "lens_host_service_status_runner_required"
+    elif not platform_supported:
+        status = "unsupported_platform"
+        blocked_reason = "windows_service_readback_unavailable"
+    else:
+        service_query = shutil.which("sc.exe") or shutil.which("sc")
+        if not service_query:
+            status = "unavailable"
+            blocked_reason = "windows_service_readback_unavailable"
+        else:
+            try:
+                proc = subprocess.run(
+                    [service_query, "query", service_name],
+                    cwd=repo_root(),
+                    text=True,
+                    capture_output=True,
+                    timeout=2,
+                    check=False,
+                )
+                query_output = "\n".join(part for part in (proc.stdout, proc.stderr) if part).strip()
+                if proc.returncode == 0 and query_output:
+                    state_match = re.search(r"STATE\s*:\s*\d+\s+([A-Z_]+)", query_output)
+                    service_status = state_match.group(1) if state_match else ""
+                    status = service_status.lower() if service_status else "installed"
+                    installed = True
+                    display_name = service_name
+                elif "1060" in query_output or "does not exist" in query_output.lower():
+                    status = "not_installed"
+                else:
+                    status = "unavailable"
+                    query_error = query_output
+            except (OSError, subprocess.SubprocessError) as exc:
+                status = "unavailable"
+                query_error = str(exc)
+
+            if status == "not_installed":
+                blocked_reason = "lens_host_service_not_installed"
+            elif status == "unavailable":
+                blocked_reason = "windows_service_readback_unavailable"
+            else:
+                blocked_reason = "service_control_authority_not_granted"
+
     return {
-        "status": "not_checked_by_api",
+        "status": status,
         "readback_ready": True,
         "service_name": service_name,
-        "installed": False,
+        "installed": installed,
         "windows_service": True,
-        "host_query": "runner_only",
+        "platform_supported": platform_supported,
+        "service_status_readback": readback_declared,
+        "host_query": "windows_service_status" if readback_declared else "runner_only",
+        "service_status": service_status,
+        "display_name": display_name,
+        "start_type": start_type,
+        "query_error": query_error,
         "install_supported": False,
         "start_supported": False,
         "stop_supported": False,
@@ -266,7 +327,7 @@ def _lens_host_service_readback(service_config_payload: dict[str, Any]) -> dict[
         "install_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
-        "blocked_reason": "lens_host_service_status_runner_required",
+        "blocked_reason": blocked_reason,
     }
 
 

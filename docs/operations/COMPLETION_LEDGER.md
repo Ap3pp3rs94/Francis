@@ -22500,6 +22500,51 @@ resident-claim audit handoff slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens host service status readback
+
+Lens host launch-manifest service readback now performs a bounded, read-only
+Windows service status query when the service config declares
+`service_status_readback`. On Windows this uses `sc.exe query
+Francis-LensHost` to report whether the service is installed and what service
+state was observed. On non-Windows platforms the same contract reports an
+unsupported-platform readback instead of pretending the Windows service was
+checked.
+
+This replaces the previous API placeholder status of `not_checked_by_api` for
+the Lens host service with truthful host readback while keeping service
+installation, start, stop, restart, and service-control authority false. In the
+current local proof environment the service is not installed, so the readback
+returns `status=not_installed` and
+`blocked_reason=lens_host_service_not_installed`.
+
+This is a Stage 6/Lens backend readback and test slice. It changes no UI
+behavior, execution authority, approval decision authority, memory-write
+behavior, product local-process-launch authority, API local-process-launch
+authority, process-supervision authority, process-restart authority,
+service-install authority, service-control authority, tray registration
+authority, hotkey registration authority, overlay control authority, summon
+authority, capture authority, new sensing authority, telemetry behavior,
+resident host process lifetime, resident claiming, persistent resident state, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens host service status
+readback slice:
+
+- `$env:PYTHONPATH='D:\Francis\src'; python -c "from francis.lens.host_manifest import lens_host_launch_manifest; import json; print(json.dumps(lens_host_launch_manifest()['service_readback'], indent=2))"`
+  Result: `passed; status=not_installed; service_status_readback=true; host_query=windows_service_status; service_control_authority=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status -StartupTimeoutSeconds 20`
+  Result: `failed before the service readback implementation was tightened; passed after switching the service query to bounded read-only sc.exe readback`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_blocks_supervision_and_service_activation -q`
+  Result: `failed before the service readback implementation was tightened; passed after the fix`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_live_operator_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
