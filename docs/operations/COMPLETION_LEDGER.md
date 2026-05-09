@@ -22796,6 +22796,31 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens persistent-supervision proof stabilizes nested observation window
+
+The persistent-supervision prerequisites proof now gives its nested resident-host
+runtime boundary proof a five-second foreground, host-launch, and
+resident-candidate observation window. This replaces the previous two/three
+second nested proof mix that could leave the enablement-transition wrapper
+unable to observe the prerequisites proof on the Windows Python 3.13 CI leg.
+
+The change keeps the proof diagnostic-only and does not change any route
+contract, product runtime behavior, process supervision, service control,
+resident claim, approval decision, receipt write, memory write, UI claim, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens persistent-supervision
+proof observation-window recovery slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object ok,status,persistent_supervision_prerequisites_proof_observed,transition_plan_observed,next_smallest_truthful_gap | ConvertTo-Json -Depth 4`
+  Result: `passed; status=proof_passed; persistent_supervision_prerequisites_proof_observed=true; transition_plan_observed=true; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
