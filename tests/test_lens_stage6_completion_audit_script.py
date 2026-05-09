@@ -78,6 +78,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident_host_runtime_boundary",
         "process_supervision_boundary",
         "resident_host_process_supervision_blocker",
+        "resident_supervision_persistence_boundary",
         "host_supervision_authority_request",
         "persistent_supervision_plan",
         "persistent_supervision_prerequisites",
@@ -88,7 +89,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "persistent_supervision_enablement_transition_plan",
     }
     expected_child_proof_timeouts = {name: 420 for name in child_proof_runs} | {
-        "persistent_supervision_prerequisites": 240
+        "resident_supervision_persistence_boundary": 240,
+        "persistent_supervision_prerequisites": 240,
     }
     for name, run in child_proof_runs.items():
         assert run["timed_out"] is False
@@ -98,6 +100,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["stage6_completion_reviewed"] is True
+    assert "resident-supervision persistence boundary proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision prerequisite guard proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "service-install plan proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
@@ -279,6 +282,69 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "process_restart_authority_not_granted"
         in payload["closure_blockers"]["resident_host_process_supervision_handoff"]
     )
+    assert (
+        "resident_supervision_not_persistent"
+        in payload["closure_blockers"]["resident_supervision_persistence_boundary"]
+    )
+    assert (
+        "persistent_supervision_authority_not_granted"
+        in payload["closure_blockers"]["resident_supervision_persistence_boundary"]
+    )
+    assert (
+        "persistent_process_supervision_authority_required"
+        in payload["closure_blockers"]["resident_supervision_persistence_boundary"]
+    )
+    assert payload["resident_supervision_persistence_boundary_proof_observed"] is True
+    resident_persistence_boundary = payload["resident_supervision_persistence_boundary_proof"]
+    assert resident_persistence_boundary["status"] == "proof_passed"
+    assert resident_persistence_boundary["ok"] is True
+    assert resident_persistence_boundary["exit_code"] == 0
+    assert resident_persistence_boundary["acceptance_criterion"] == "system_resident_presence"
+    assert (
+        resident_persistence_boundary["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    )
+    assert (
+        resident_persistence_boundary["consumed_resident_candidate_next_smallest_truthful_gap"]
+        == "resident_supervision_not_persistent"
+    )
+    assert resident_persistence_boundary["route_next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert resident_persistence_boundary["next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert resident_persistence_boundary["recommended_next_slice"] == (
+        "consume_resident_supervision_persistence_boundary_in_stage6_audit"
+    )
+    assert resident_persistence_boundary["resident_candidate_boundary_proof_observed"] is True
+    assert resident_persistence_boundary["persistent_supervision_plan_candidate_readback_observed"] is True
+    assert resident_persistence_boundary["persistent_supervision_enablement_candidate_readback_observed"] is True
+    assert resident_persistence_boundary["resident_dependency_candidate_readback_observed"] is True
+    assert resident_persistence_boundary["route_blocking_preserved"] is True
+    assert resident_persistence_boundary["side_effects_bounded"] is True
+    assert resident_persistence_boundary["resident_runtime_candidate_supervised"] is True
+    assert resident_persistence_boundary["resident_supervised_runtime"] is False
+    assert resident_persistence_boundary["resident_host_process_requirement_state"] == (
+        "resident_candidate_observed_not_persistent"
+    )
+    assert resident_persistence_boundary["resident_host_process_blocker"] == "resident_supervision_not_persistent"
+    assert resident_persistence_boundary["authority_required"] == "persistent_process_supervision_authority"
+    assert resident_persistence_boundary["plan_route"] == "/lens/host/persistent-supervision"
+    assert resident_persistence_boundary["enablement_route"] == "/lens/host/persistent-supervision/enablement"
+    assert all(item["passed"] for item in resident_persistence_boundary["checks"])
+    assert resident_persistence_boundary["governance"]["diagnostic_only"] is True
+    assert resident_persistence_boundary["governance"]["route_readback_contract"] is True
+    assert resident_persistence_boundary["governance"]["wraps_resident_host_runtime_boundary_proof"] is True
+    assert resident_persistence_boundary["governance"]["wraps_persistent_supervision_plan_route"] is True
+    assert resident_persistence_boundary["governance"]["wraps_persistent_supervision_enablement_route"] is True
+    assert resident_persistence_boundary["governance"]["execution_authority"] is False
+    assert resident_persistence_boundary["governance"]["approval_decision_authority"] is False
+    assert resident_persistence_boundary["governance"]["api_local_process_launch_authority"] is False
+    assert resident_persistence_boundary["governance"]["process_supervision_authority"] is False
+    assert resident_persistence_boundary["governance"]["memory_write"] is False
+    assert resident_persistence_boundary["governance"]["receipt_write_authority"] is False
+    assert resident_persistence_boundary["governance"]["resident_claim_authority"] is False
+    assert resident_persistence_boundary["governance"]["mutation_authority_granted"] is False
     host_authority_handoff = payload["resident_host_supervision_authority_readiness_handoff"]
     assert host_authority_handoff["status"] == "blocked"
     assert host_authority_handoff["audit_status"] == "complete"

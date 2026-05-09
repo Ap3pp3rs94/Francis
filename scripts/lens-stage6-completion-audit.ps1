@@ -218,6 +218,7 @@ $CheckpointScript = Join-Path $PSScriptRoot 'lens-stage6-checkpoint.ps1'
 $ProcessSupervisionBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
 $ResidentHostRuntimeBoundaryProofScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-boundary-proof.ps1'
 $ResidentHostProcessSupervisionBlockerProofScript = Join-Path $PSScriptRoot 'lens-resident-host-process-supervision-blocker-proof.ps1'
+$ResidentSupervisionPersistenceBoundaryProofScript = Join-Path $PSScriptRoot 'lens-resident-supervision-persistence-boundary-proof.ps1'
 $HostSupervisionAuthorityRequestProofScript = Join-Path $PSScriptRoot 'lens-host-supervision-authority-request-proof.ps1'
 $PersistentSupervisionPlanScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
 $PersistentSupervisionPrerequisitesProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-prerequisites-proof.ps1'
@@ -331,6 +332,67 @@ $ResidentHostProcessSupervisionBlockerProofObserved = (
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_restart_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_install_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_control_authority_not_granted'
+)
+$ResidentSupervisionPersistenceBoundaryProofOuterTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 240)
+$ResidentSupervisionPersistenceBoundaryProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 180)
+$ResidentSupervisionPersistenceBoundaryProofResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $ResidentSupervisionPersistenceBoundaryProofScript `
+  -ScriptArgs @(
+    '-Mode',
+    'Status',
+    '-ChildProofTimeoutSeconds',
+    [string]$ResidentSupervisionPersistenceBoundaryProofChildTimeoutSeconds
+  ) `
+  -TimeoutSeconds $ResidentSupervisionPersistenceBoundaryProofOuterTimeoutSeconds
+$ResidentSupervisionPersistenceBoundaryProof = $ResidentSupervisionPersistenceBoundaryProofResult.payload
+$ResidentSupervisionPersistenceBoundaryProofBlockers = ConvertTo-StringArray -Value $ResidentSupervisionPersistenceBoundaryProof.blockers
+$ResidentSupervisionPersistenceBoundaryProofGovernance = $ResidentSupervisionPersistenceBoundaryProof.governance
+$ResidentSupervisionPersistenceBoundaryProofObserved = (
+  [int]$ResidentSupervisionPersistenceBoundaryProofResult.exit_code -eq 0 -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.kind -eq 'lens.resident_supervision.persistence_boundary.proof' -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.ok -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.acceptance_criterion -eq 'system_resident_presence' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.previous_next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.consumed_resident_candidate_next_smallest_truthful_gap -eq 'resident_supervision_not_persistent' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_next_slice -eq 'consume_resident_supervision_persistence_boundary_in_stage6_audit' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_candidate_boundary_proof_observed -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_plan_candidate_readback_observed -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_enablement_candidate_readback_observed -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_dependency_candidate_readback_observed -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.route_blocking_preserved -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.side_effects_bounded -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_runtime_candidate_supervised -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_supervised_runtime -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_requirement_state -eq 'resident_candidate_observed_not_persistent' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_blocker -eq 'resident_supervision_not_persistent' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required -eq 'persistent_process_supervision_authority' -and
+  $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'resident_supervision_not_persistent' -and
+  $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'persistent_supervision_authority_not_granted' -and
+  $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'persistent_process_supervision_authority_required' -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.diagnostic_only -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.route_readback_contract -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.wraps_resident_host_runtime_boundary_proof -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.wraps_persistent_supervision_plan_route -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.wraps_persistent_supervision_enablement_route -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.bounded_local_process_launch -and
+  [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.temporary_runtime_state_write -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.product_execution_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.execution_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.approval_decision_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.api_local_process_launch_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.process_supervision_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.process_restart_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.service_install_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.service_control_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.memory_write -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.receipt_write_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.resident_claim_authority -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProofGovernance.mutation_authority_granted
 )
 $HostSupervisionAuthorityRequestProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
@@ -725,6 +787,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
   New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessSupervisionBoundaryResult
   New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
+  New-ChildProofRunSummary -Name 'resident_supervision_persistence_boundary' -Result $ResidentSupervisionPersistenceBoundaryProofResult
   New-ChildProofRunSummary -Name 'host_supervision_authority_request' -Result $HostSupervisionAuthorityRequestProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
   New-ChildProofRunSummary -Name 'persistent_supervision_prerequisites' -Result $PersistentSupervisionPrerequisitesProofResult
@@ -1707,6 +1770,7 @@ $Stage6CompletionEvidenceReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -1765,6 +1829,15 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  -not $ResidentSupervisionPersistenceBoundaryProofObserved
+) {
+  'resident_supervision_persistence_boundary_proof_readback'
+} elseif (
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
   -not $HostSupervisionAuthorityReadinessHandoffObserved
 ) {
   'resident_host_supervision_authority_readiness_handoff'
@@ -1773,6 +1846,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   -not $HostSupervisionAuthorityRequestProofObserved
 ) {
@@ -1782,6 +1856,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   -not $PersistentSupervisionPrerequisitesProofObserved
@@ -2015,6 +2090,8 @@ $Payload = [ordered]@{
     'The audit now consumes the persistent-supervision enablement authority proof: the bounded enablement authority grant is readable, while service-config write, persistent execution, memory, runtime launch, and resident-claim authority remain denied.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_supervision_handoff') {
     'The audit must consume the resident-host process supervision handoff proof before treating resident-host process supervision as an acceptance blocker instead of a missing audit readback.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_supervision_persistence_boundary_proof_readback') {
+    'The audit must consume the resident-supervision persistence boundary proof before treating a bounded supervised candidate as promoted through persistent-supervision plan and enablement readback.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_supervision_authority_readiness_handoff') {
     'The audit must consume the host supervision authority readiness handoff before treating exact approval-request review as an audited resident-host supervision blocker.'
   } elseif ($NextSmallestTruthfulGap -eq 'host_supervision_authority_exact_approval_request') {
@@ -2026,7 +2103,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_transition_plan_proof_readback') {
     'The audit must consume the persistent-supervision enablement transition-plan proof before treating prerequisite, service-plan, authority-chain, disabled-config, and side-effect readback as one audited Stage 6 handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing') {
-    'The completion audit consumes the persistent-supervision prerequisite guard proof, service-install plan proof, persistent-supervision authority proof chain, resident-claim boundary proof, and persistent-supervision enablement transition-plan proof. Persistent supervision remains blocked because resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing; no runtime launch, service-config mutation, memory write, or resident claim is made.'
+    'The completion audit consumes the resident-supervision persistence boundary proof, persistent-supervision prerequisite guard proof, service-install plan proof, persistent-supervision authority proof chain, resident-claim boundary proof, and persistent-supervision enablement transition-plan proof. Persistent supervision remains blocked because resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing; no runtime launch, service-config mutation, memory write, or resident claim is made.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
     'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, the persistent-supervision authority proof chain, and the persistent-supervision enablement transition-plan proof: prerequisites, disabled service plan, enablement authority, execution authority, resident-claim boundary, disabled config toggles, and side-effect denial are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
@@ -2062,6 +2139,7 @@ $Payload = [ordered]@{
   summon_anywhere_first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
   summon_anywhere_first_blocker_family_runtime_boundary_observed = $ResidentHostRuntimeBoundaryProofObserved
   summon_anywhere_first_blocker_family_runtime_boundary_next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
+  resident_supervision_persistence_boundary_proof_observed = $ResidentSupervisionPersistenceBoundaryProofObserved
   summon_anywhere_blocker_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
   checkpoint_summon_enablement_gate_handoff_observed = $CheckpointSummonEnablementGateHandoffObserved
   checkpoint_summon_enablement_gate_handoff = [ordered]@{
@@ -2134,6 +2212,11 @@ $Payload = [ordered]@{
     resident_host_process_supervision_handoff = [string[]]@(
       $ResidentHostProcessSupervisionBlockerProofBlockers | Where-Object {
         $_ -match 'process_supervision|process_restart|resident_host_process|service_'
+      } | Sort-Object -Unique
+    )
+    resident_supervision_persistence_boundary = [string[]]@(
+      $ResidentSupervisionPersistenceBoundaryProofBlockers | Where-Object {
+        $_ -match 'resident_supervision|persistent_supervision|persistent_process'
       } | Sort-Object -Unique
     )
     host_supervision_authority_readiness_handoff = [string[]]@(
@@ -2969,6 +3052,37 @@ $Payload = [ordered]@{
     would_decide_approval = [bool]$ResidentHostProcessSupervisionBlockerProof.would_decide_approval
     blockers = [string[]]@($ResidentHostProcessSupervisionBlockerProofBlockers)
   }
+  resident_supervision_persistence_boundary_proof = [ordered]@{
+    status = if ($ResidentSupervisionPersistenceBoundaryProofObserved) { [string]$ResidentSupervisionPersistenceBoundaryProof.status } else { 'missing_or_failed' }
+    ok = $ResidentSupervisionPersistenceBoundaryProofObserved
+    exit_code = [int]$ResidentSupervisionPersistenceBoundaryProofResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentSupervisionPersistenceBoundaryProof.evidence)
+    acceptance_criterion = [string]$ResidentSupervisionPersistenceBoundaryProof.acceptance_criterion
+    previous_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.previous_next_smallest_truthful_gap
+    consumed_resident_candidate_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.consumed_resident_candidate_next_smallest_truthful_gap
+    route_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap
+    recommended_next_slice = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_next_slice
+    recommended_proof_script = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_proof_script
+    resident_candidate_boundary_proof_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_candidate_boundary_proof_observed
+    persistent_supervision_plan_candidate_readback_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_plan_candidate_readback_observed
+    persistent_supervision_enablement_candidate_readback_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_enablement_candidate_readback_observed
+    resident_dependency_candidate_readback_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_dependency_candidate_readback_observed
+    route_blocking_preserved = [bool]$ResidentSupervisionPersistenceBoundaryProof.route_blocking_preserved
+    side_effects_bounded = [bool]$ResidentSupervisionPersistenceBoundaryProof.side_effects_bounded
+    resident_runtime_candidate_supervised = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_runtime_candidate_supervised
+    resident_supervised_runtime = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_supervised_runtime
+    resident_host_process_requirement_state = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_requirement_state
+    resident_host_process_blocker = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_blocker
+    authority_required = [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required
+    plan_route = [string]$ResidentSupervisionPersistenceBoundaryProof.plan_route
+    enablement_route = [string]$ResidentSupervisionPersistenceBoundaryProof.enablement_route
+    checks = @($ResidentSupervisionPersistenceBoundaryProof.checks)
+    blockers = [string[]]@($ResidentSupervisionPersistenceBoundaryProofBlockers)
+    proof = $ResidentSupervisionPersistenceBoundaryProof.proof
+    handoff = $ResidentSupervisionPersistenceBoundaryProof.handoff
+    governance = $ResidentSupervisionPersistenceBoundaryProofGovernance
+  }
   host_supervision_authority_request_proof = [ordered]@{
     status = if ($HostSupervisionAuthorityRequestProofObserved) { [string]$HostSupervisionAuthorityRequestProof.status } else { 'missing_or_failed' }
     ok = $HostSupervisionAuthorityRequestProofObserved
@@ -3377,6 +3491,7 @@ $Payload = [ordered]@{
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
+    resident_supervision_persistence_boundary_proof_readback = $ResidentSupervisionPersistenceBoundaryProofObserved
     resident_host_supervision_authority_readiness_handoff_readback = $HostSupervisionAuthorityReadinessHandoffObserved
     host_supervision_authority_request_proof_readback = $HostSupervisionAuthorityRequestProofObserved
     helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved

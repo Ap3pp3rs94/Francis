@@ -22705,6 +22705,53 @@ persistence boundary proof slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens completion audit consumes resident persistence proof
+
+The Stage 6 completion audit now consumes the resident-supervision persistence
+boundary proof as a child proof before reporting Stage 6 completion evidence as
+reviewed. The audit payload now exposes:
+
+- `resident_supervision_persistence_boundary_proof_observed=true`
+- `resident_supervision_persistence_boundary_proof`
+- `closure_blockers.resident_supervision_persistence_boundary`
+- `governance.resident_supervision_persistence_boundary_proof_readback`
+- a `resident_supervision_persistence_boundary` child proof run summary
+
+The completed audit still reports `status=blocked`, `stage_state=active`,
+`ready_to_close=false`, and `next_smallest_truthful_gap:
+persistent_supervision_required_prerequisites_missing`. This means the bounded
+resident candidate is now audited through the persistent-supervision plan and
+enablement readback, but Stage 6 remains blocked on resident-host process, tray,
+global hotkey, overlay, and summon-binding prerequisites. No runtime launch,
+service-config mutation, memory write, receipt write, resident claim, approval
+decision, or product execution authority was added.
+
+This is a Stage 6/Lens audit readback and test slice. It changes no UI behavior,
+API route behavior, execution authority, approval decision authority,
+production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, resident host process
+lifetime, persistent resident state, or Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens completion audit resident
+persistence proof consumption slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; stage6_completion_reviewed=true; resident_supervision_persistence_boundary_proof_observed=true; child proof timeouts empty`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
