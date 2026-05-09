@@ -23071,6 +23071,38 @@ window recovery slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens prerequisites proof stabilizes nested resident-host retry
+
+CI run `25610642151` for commit `a6ad0ca` confirmed the previous recovery fixed
+the Windows 3.12 leg, but `test (windows-latest, 3.13)` still failed
+`tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority`.
+The completion audit returned
+`next_smallest_truthful_gap=persistent_supervision_prerequisites_proof_readback`,
+which means the direct Stage 6 completion audit still did not consistently
+observe the nested persistent-supervision prerequisites proof under full-suite
+Windows 3.13 load.
+
+The nested resident-host runtime-boundary proof inside
+`scripts/lens-persistent-supervision-prerequisites-proof.ps1` now follows the
+existing Stage 6 expected-kind retry pattern and uses twelve-second bounded
+foreground, host-launch, and resident-candidate observation windows. This keeps
+the proof readback-only and diagnostic-only while making the prerequisites
+proof less sensitive to CI scheduler timing.
+
+This does not grant product execution authority, API execution authority,
+process supervision, process restart, service install/control, tray
+registration, hotkey registration, overlay control, summon authority, approval
+decision authority, memory write, receipt write, resident-claim authority, UI
+claim behavior, or Stage 6 transition authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens prerequisites nested retry
+recovery slice:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed in CI before fix on Windows 3.13; passed locally after retry/window stabilization`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

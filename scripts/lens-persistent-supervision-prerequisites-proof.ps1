@@ -191,6 +191,48 @@ function Invoke-JsonProcess {
   }
 }
 
+function Invoke-JsonProcessWithProofRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FileName,
+
+    [string[]]$ProcessArgs = @(),
+
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedKind,
+
+    [int]$Attempts = 2,
+
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
+  )
+
+  $LastProof = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $Proof = Invoke-JsonProcess -FileName $FileName -ProcessArgs $ProcessArgs -TimeoutSeconds $TimeoutSeconds
+    $LastProof = $Proof
+
+    $ExitCode = [int](Get-PropertyValue -Payload $Proof -Name 'exit_code' -Default -1)
+    $Payload = Get-PropertyValue -Payload $Proof -Name 'payload'
+    if (
+      $ExitCode -eq 0 -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+    ) {
+      return $Proof
+    }
+
+    if ([bool](Get-PropertyValue -Payload $Proof -Name 'timed_out' -Default $false)) {
+      return $Proof
+    }
+
+    if ($Attempt -lt $Attempts) {
+      Start-Sleep -Milliseconds 750
+    }
+  }
+
+  return $LastProof
+}
+
 function Get-PythonPath {
   $Python = Get-Command python -ErrorAction SilentlyContinue
   if ($null -ne $Python) {
@@ -408,7 +450,7 @@ $FirstMissingRequirementProofDataRoot = Join-Path $ProofDataRoot 'proofs\residen
 $BeforeFirstMissingRequirementDataDir = [string]$env:FRANCIS_DATA_DIR
 try {
   $env:FRANCIS_DATA_DIR = $FirstMissingRequirementProofDataRoot
-  $FirstMissingRequirementProofResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
+  $FirstMissingRequirementProofResult = Invoke-JsonProcessWithProofRetry -FileName $PowerShell.Source -ProcessArgs @(
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
@@ -417,12 +459,12 @@ try {
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '8',
+    '12',
     '-HostLaunchRunSeconds',
-    '8',
+    '12',
     '-ResidentCandidateRunSeconds',
-    '8'
-  ) -TimeoutSeconds $ChildProofTimeoutSeconds
+    '12'
+  ) -ExpectedKind 'lens.resident_host.runtime_blocker_boundary.proof' -TimeoutSeconds $ChildProofTimeoutSeconds
 } finally {
   if ([string]::IsNullOrWhiteSpace($BeforeFirstMissingRequirementDataDir)) {
     Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
