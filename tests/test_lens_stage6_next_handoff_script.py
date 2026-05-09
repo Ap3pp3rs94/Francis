@@ -131,6 +131,17 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
     assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert first_missing_handoff["authority_route"] == "/lens/host/activation/authority"
+    assert first_missing_handoff["authority_request_route"] == "/lens/host/activation/request"
+    assert first_missing_handoff["authority_readback_route"] == "/lens/host/activation"
+    assert first_missing_handoff["authority_preflight_route"] == "/lens/host/activation/preflight"
+    assert first_missing_handoff["authority_plan_route"] == "/lens/host/activation/plan"
+    assert first_missing_handoff["authority_execute_route"] == "/lens/host/activation/execute"
+    assert first_missing_handoff["authority_executions_route"] == "/lens/host/activation/executions"
+    assert first_missing_handoff["authority_grants_route"] == "/lens/host/activation/authority/grants"
+    assert first_missing_handoff["execution_denials_route"] == "/lens/host/activation/denials"
+    assert first_missing_handoff["approval_action"] == "lens.host.foreground_activation"
+    assert first_missing_handoff["authority_scope"] == "system.write"
     assert first_missing_handoff["read_only_contract"] is True
     assert first_missing_handoff["diagnostic_only"] is True
     assert first_missing_handoff["would_execute"] is False

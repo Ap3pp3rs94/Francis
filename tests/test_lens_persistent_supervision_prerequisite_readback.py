@@ -78,6 +78,17 @@ def test_persistent_supervision_prerequisite_readback_reports_missing_process() 
         assert handoff["requirement_state"] == "missing"
         assert handoff["next_step"] == "resolve_resident_host_process_before_persistent_supervision_enablement"
         assert handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+        assert handoff["authority_route"] == "/lens/host/activation/authority"
+        assert handoff["authority_request_route"] == "/lens/host/activation/request"
+        assert handoff["authority_readback_route"] == "/lens/host/activation"
+        assert handoff["authority_preflight_route"] == "/lens/host/activation/preflight"
+        assert handoff["authority_plan_route"] == "/lens/host/activation/plan"
+        assert handoff["authority_execute_route"] == "/lens/host/activation/execute"
+        assert handoff["authority_executions_route"] == "/lens/host/activation/executions"
+        assert handoff["authority_grants_route"] == "/lens/host/activation/authority/grants"
+        assert handoff["execution_denials_route"] == "/lens/host/activation/denials"
+        assert handoff["approval_action"] == "lens.host.foreground_activation"
+        assert handoff["authority_scope"] == "system.write"
         assert handoff["read_only_contract"] is True
         assert handoff["diagnostic_only"] is True
         assert handoff["would_execute"] is False
@@ -153,6 +164,9 @@ def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised
         assert body["first_missing_required_before_enable"] == "resident_host_process"
         assert body["first_missing_requirement_handoff"]["blocker"] == "resident_host_process_not_supervised"
         assert body["first_missing_requirement_handoff"]["requirement_state"] == "foreground_observed_not_supervised"
+        assert body["first_missing_requirement_handoff"]["authority_route"] == "/lens/host/activation/authority"
+        assert body["first_missing_requirement_handoff"]["authority_request_route"] == "/lens/host/activation/request"
+        assert body["first_missing_requirement_handoff"]["approval_action"] == "lens.host.foreground_activation"
         dependency = _dependency_by_id(body)["resident_host_process"]
         assert dependency["route"] == "/lens/host"
         assert dependency["ready"] is False

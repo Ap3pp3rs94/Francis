@@ -1038,6 +1038,18 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     ]
     assert next_handoff["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["id"] == "resident_host_process"
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["authority_route"]
+        == "/lens/host/activation/authority"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["authority_request_route"]
+        == "/lens/host/activation/request"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["approval_action"]
+        == "lens.host.foreground_activation"
+    )
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["read_only_contract"] is True
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["diagnostic_only"] is True
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_execute"] is False

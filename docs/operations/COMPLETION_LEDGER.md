@@ -22857,6 +22857,58 @@ handoff authority-route readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident host handoff names activation review route
+
+The persistent-supervision first-missing prerequisite handoff now names the
+existing Lens host activation review surfaces when the resident host process is
+missing or observed only as an unsupervised foreground process:
+
+- `authority_route=/lens/host/activation/authority`
+- `authority_request_route=/lens/host/activation/request`
+- `authority_readback_route=/lens/host/activation`
+- `authority_preflight_route=/lens/host/activation/preflight`
+- `authority_plan_route=/lens/host/activation/plan`
+- `authority_execute_route=/lens/host/activation/execute`
+- `authority_executions_route=/lens/host/activation/executions`
+- `authority_grants_route=/lens/host/activation/authority/grants`
+- `execution_denials_route=/lens/host/activation/denials`
+- `approval_action=lens.host.foreground_activation`
+- `authority_scope=system.write`
+
+This makes the cold/no-resident-candidate Stage 6 resident-host prerequisite
+handoff actionable without granting local process launch authority, process
+supervision, process restart, service install/control, resident claim, approval
+decision, memory write, receipt write, UI claim, or Stage 6 transition
+authority. Live runtime state can still shift the active handoff to
+`resident_supervision_not_persistent` after a fresh bounded resident candidate is
+observed.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident host activation
+handoff route readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; child proof timeouts empty`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,authority_required,@{Name='authority_route';Expression={$_.persistent_supervision_first_missing_requirement_handoff.authority_route}},@{Name='authority_request_route';Expression={$_.persistent_supervision_first_missing_requirement_handoff.authority_request_route}},@{Name='approval_action';Expression={$_.persistent_supervision_first_missing_requirement_handoff.approval_action}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; live runtime state had a fresh bounded resident candidate, so next_smallest_truthful_gap=resident_supervision_not_persistent and the active handoff used the host supervision authority route`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,side_effects_bounded | ConvertTo-Json -Depth 4`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; side_effects_bounded=true`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

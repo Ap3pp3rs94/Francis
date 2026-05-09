@@ -547,6 +547,23 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
             "authority_denials_route": "/lens/host/supervision/authority/denials",
             "approval_action": "lens.host.supervision_authority",
         }
+    elif requirement_id == "resident_host_process":
+        next_gap = next_gaps.get(requirement_id, blocker)
+        next_step = next_steps.get(requirement_id, "resolve_resident_host_process_before_persistent_supervision")
+        authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+        authority_readback = {
+            "authority_route": "/lens/host/activation/authority",
+            "authority_request_route": "/lens/host/activation/request",
+            "authority_readback_route": "/lens/host/activation",
+            "authority_preflight_route": "/lens/host/activation/preflight",
+            "authority_plan_route": "/lens/host/activation/plan",
+            "authority_execute_route": "/lens/host/activation/execute",
+            "authority_executions_route": "/lens/host/activation/executions",
+            "authority_grants_route": "/lens/host/activation/authority/grants",
+            "execution_denials_route": "/lens/host/activation/denials",
+            "approval_action": "lens.host.foreground_activation",
+            "authority_scope": "system.write",
+        }
     else:
         next_gap = next_gaps.get(requirement_id, blocker)
         next_step = next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision")
