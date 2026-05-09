@@ -404,19 +404,30 @@ $FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArg
   '-DataDir',
   $ProofDataRoot
 ) -TimeoutSeconds $ChildProofTimeoutSeconds
-$FirstMissingRequirementProofResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
-  '-NoProfile',
-  '-ExecutionPolicy',
-  'Bypass',
-  '-File',
-  $FirstMissingRequirementProofScript,
-  '-Mode',
-  'Status',
-  '-ForegroundRunSeconds',
-  '2',
-  '-HostLaunchRunSeconds',
-  '3'
-) -TimeoutSeconds $ChildProofTimeoutSeconds
+$FirstMissingRequirementProofDataRoot = Join-Path $ProofDataRoot 'proofs\resident-host-runtime-boundary\data'
+$BeforeFirstMissingRequirementDataDir = [string]$env:FRANCIS_DATA_DIR
+try {
+  $env:FRANCIS_DATA_DIR = $FirstMissingRequirementProofDataRoot
+  $FirstMissingRequirementProofResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    $FirstMissingRequirementProofScript,
+    '-Mode',
+    'Status',
+    '-ForegroundRunSeconds',
+    '2',
+    '-HostLaunchRunSeconds',
+    '3'
+  ) -TimeoutSeconds $ChildProofTimeoutSeconds
+} finally {
+  if ([string]::IsNullOrWhiteSpace($BeforeFirstMissingRequirementDataDir)) {
+    Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+  } else {
+    $env:FRANCIS_DATA_DIR = $BeforeFirstMissingRequirementDataDir
+  }
+}
 
 $RoutePayload = $RouteResult.payload
 $Plan = Get-PropertyValue -Payload $RoutePayload -Name 'plan'

@@ -22222,6 +22222,51 @@ boundary proof slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens persistent supervision proof-chain isolation
+
+The persistent-supervision prerequisites proof now isolates its nested
+resident-host runtime-boundary diagnostic under a child proof data root before
+returning control to the parent proof chain. This preserves the new bounded
+resident-candidate supervisor evidence while keeping the higher-level
+persistent-supervision enablement transition-plan proof readback-only at its
+own data root.
+
+This corrects the CI failure introduced by the resident runtime candidate proof
+slice: when the transition-plan proof called the prerequisites proof with
+`FRANCIS_DATA_DIR` already pointing at the transition-plan data root, the
+nested resident-boundary diagnostic could leave temporary supervisor runtime
+state in the parent root and make the parent side-effect guard fail. The nested
+diagnostic still runs, remains bounded, and still grants no product/API
+execution authority, approval authority, memory-write authority,
+process-supervision authority, process-restart authority, service authority,
+receipt-write authority, resident-claim authority, tray/hotkey/overlay/summon
+authority, mutation authority, or Stage 6 transition state.
+
+This is a Stage 6/Lens script-only proof-chain containment fix. It changes no
+API route behavior, UI behavior, persistent runtime behavior, product local
+process launch authority, memory contract, telemetry behavior, or operator
+claim behavior.
+
+Latest validation for the `2026-05-08` Stage 6/Lens persistent supervision
+proof-chain isolation slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `failed before fix; passed after fix`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
