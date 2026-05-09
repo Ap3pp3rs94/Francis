@@ -97,7 +97,34 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
 
     assert "resident_claim_authority_not_granted" in payload["blockers"]
     assert payload["remaining_authority_families_after_this_boundary"] == []
+    assert payload["previous_next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert (
+        payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["stage6_completion_audit_script"] == "scripts/lens-stage6-completion-audit.ps1"
+    assert payload["persistent_supervision_execution_route"] == "/lens/host/persistent-supervision/enablement/execution"
+    assert (
+        payload["persistent_supervision_execution_readiness_route"]
+        == "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
+    assert payload["persistent_supervision_plan_script"] == "scripts/lens-persistent-supervision-plan.ps1"
+    assert payload["handoff"] == {
+        "status": "audit_needed",
+        "previous_next_smallest_truthful_gap": "persistent_supervision_resident_claim_authority_boundary",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "next_step": "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback",
+        "proof_script": "scripts/lens-stage6-completion-audit.ps1 -Mode Status",
+        "route": "/lens/host/persistent-supervision/enablement/execution",
+        "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+        "authority_required": "none_new_stage6_completion_audit",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["persistent_supervision_execution_authority_proof"]["status"] == "proof_observed"

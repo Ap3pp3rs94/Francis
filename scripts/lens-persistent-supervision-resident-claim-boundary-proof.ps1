@@ -203,7 +203,29 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   checks = @($Checks)
   blockers = [string[]]@($CombinedBlockers)
   remaining_authority_families_after_this_boundary = [string[]]@()
+  previous_next_smallest_truthful_gap = 'persistent_supervision_resident_claim_authority_boundary'
   next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+  recommended_next_slice = 'run_stage6_lens_completion_audit_after_resident_claim_boundary_readback'
+  recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+  stage6_completion_audit_script = 'scripts/lens-stage6-completion-audit.ps1'
+  persistent_supervision_execution_route = '/lens/host/persistent-supervision/enablement/execution'
+  persistent_supervision_execution_readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+  persistent_supervision_plan_script = 'scripts/lens-persistent-supervision-plan.ps1'
+  handoff = [ordered]@{
+    status = 'audit_needed'
+    previous_next_smallest_truthful_gap = 'persistent_supervision_resident_claim_authority_boundary'
+    next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    next_step = 'run_stage6_lens_completion_audit_after_resident_claim_boundary_readback'
+    proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision/enablement/execution'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    authority_required = 'none_new_stage6_completion_audit'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+  }
   evidence = @(
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
