@@ -7181,11 +7181,14 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     )
     assert next_handoff["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
     assert next_handoff["recommended_proof_script"] == (
-        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+        "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
     )
     assert next_handoff["authority_required"] == "persistent_process_supervision_authority"
     assert next_handoff["resident_runtime_candidate_handoff_observed"] is True
     assert next_handoff["resident_runtime_candidate_handoff"]["status"] == "observed_not_persistent"
+    assert next_handoff["resident_runtime_candidate_handoff"]["proof_script"] == (
+        "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
+    )
     assert (
         next_handoff["resident_runtime_candidate_handoff"]["next_smallest_truthful_gap"]
         == "resident_supervision_not_persistent"

@@ -246,7 +246,10 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
         "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
     )
     assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
-    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
+    )
     assert payload["recommended_route"] == "/lens/host"
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["authority_required"] == "persistent_process_supervision_authority"
@@ -254,6 +257,7 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
 
     handoff = payload["resident_runtime_candidate_handoff"]
     assert handoff["status"] == "observed_not_persistent"
+    assert handoff["proof_script"] == "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
     assert handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
     assert handoff["previous_diagnostic_proof_observed"] is True

@@ -237,7 +237,7 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
     previous_next_smallest_truthful_gap = 'resident_host_process_not_supervised'
     next_smallest_truthful_gap = 'resident_supervision_not_persistent'
     recommended_next_slice = 'resolve_resident_supervision_persistence_before_persistent_supervision_enablement'
-    proof_script = 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status'
+    proof_script = 'scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status'
     route = '/lens/host'
     readiness_route = '/lens/host/runtime-loop/readiness'
     source = '/lens/status resident_host.fresh_resident_runtime_candidate_supervised'

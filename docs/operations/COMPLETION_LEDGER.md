@@ -23103,6 +23103,51 @@ recovery slice:
 - `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py -q`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident-candidate handoff points to persistence proof
+
+The Stage 6 next-handoff readback now points fresh bounded resident candidates
+at the proof that actually consumes that state:
+
+- `scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+
+Previously, the fresh-candidate handoff still recommended the older
+resident-host runtime-boundary proof even after the repository added and audited
+the resident-supervision persistence boundary proof. The live handoff now keeps
+`next_smallest_truthful_gap=resident_supervision_not_persistent`, but its
+recommended proof script names the persistence-boundary proof so the next
+builder session can continue the right Stage 6 resident-host path without
+replaying an already-consumed boundary.
+
+This is a Stage 6/Lens backend/script/test readback-only correction. It changes
+no UI behavior, execution authority, approval decision authority,
+production approval-write behavior, memory-write behavior,
+product local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority,
+capture authority, new sensing authority, telemetry behavior, resident host
+process lifetime, persistent resident state, or Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident-candidate
+persistence-proof handoff slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_proof_script,@{Name='candidate_proof';Expression={$_.resident_runtime_candidate_handoff.proof_script}},authority_required | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_supervision_not_persistent; recommended_proof_script=scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
