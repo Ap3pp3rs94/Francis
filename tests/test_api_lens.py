@@ -7124,6 +7124,37 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     assert resident_host["fresh_resident_runtime_candidate_supervised"] is True
     assert resident_host["resident_supervised_runtime"] is False
 
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    resident_process_dependency = plan_dependencies["resident_host_process"]
+    assert resident_process_dependency["requirement_state"] == "resident_candidate_observed_not_persistent"
+    assert resident_process_dependency["blocked_reason"] == "resident_supervision_not_persistent"
+    assert resident_process_dependency["blocker"] == "resident_supervision_not_persistent"
+    assert resident_process_dependency["resident_runtime_candidate_supervised"] is True
+    assert resident_process_dependency["fresh_resident_runtime_candidate_supervised"] is True
+    assert resident_process_dependency["resident_supervised_runtime"] is False
+    plan_handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert plan_handoff["id"] == "resident_host_process"
+    assert plan_handoff["requirement_state"] == "resident_candidate_observed_not_persistent"
+    assert plan_handoff["blocker"] == "resident_supervision_not_persistent"
+    assert plan_handoff["next_step"] == (
+        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    )
+    assert plan_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert plan_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert plan_handoff["read_only_contract"] is True
+    assert plan_handoff["would_execute"] is False
+    assert plan_handoff["would_mutate"] is False
+
+    persistent_enablement = resident_host["persistent_supervision_enablement"]
+    enablement_dependencies = {item["id"]: item for item in persistent_enablement["enablement_dependency_readback"]}
+    assert enablement_dependencies["resident_host_process"]["blocker"] == "resident_supervision_not_persistent"
+    enablement_handoff = persistent_enablement["first_missing_requirement_handoff"]
+    assert enablement_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert enablement_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert persistent_enablement["governance"]["process_supervision_authority"] is False
+    assert persistent_enablement["governance"]["service_config_write_authority"] is False
+
     components = {item["id"]: item for item in resident_host["components"]}
     assert components["host_supervisor_readback"]["host_mode"] == "resident"
     supervision_gate = resident_host["supervision_gate"]

@@ -225,7 +225,10 @@ $ResidentRuntimeCandidateHandoffObserved = (
   $ResidentRuntimeCandidateSupervised -and
   $SupervisorFreshnessStatus -eq 'fresh' -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
-  [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised'
+  @(
+    'resident_host_process_not_supervised',
+    'resident_supervision_not_persistent'
+  ) -contains [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')
 )
 if ($ResidentRuntimeCandidateHandoffObserved) {
   $ResidentRuntimeCandidateHandoff = [ordered]@{

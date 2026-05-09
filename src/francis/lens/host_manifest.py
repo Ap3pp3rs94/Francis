@@ -498,6 +498,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
     requirement_id = str(dependency.get("id") or "").strip()
     if not requirement_id:
         return {}
+    blocker = str(dependency.get("blocker") or "")
     families = {
         "resident_host_process": "resident_host",
         "tray_presence": "tray_presence",
@@ -533,19 +534,27 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "overlay_window": "resolve_overlay_window_before_persistent_supervision_enablement",
         "summon_binding": "resolve_summon_binding_before_persistent_supervision_enablement",
     }
+    if requirement_id == "resident_host_process" and blocker == "resident_supervision_not_persistent":
+        next_gap = "resident_supervision_not_persistent"
+        next_step = "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+        authority_required = "persistent_process_supervision_authority"
+    else:
+        next_gap = next_gaps.get(requirement_id, blocker)
+        next_step = next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision")
+        authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     return {
         "id": requirement_id,
         "family": families.get(requirement_id, requirement_id),
         "route": str(dependency.get("route") or "/lens/status"),
         "readiness_route": str(dependency.get("readiness_route") or readiness_routes.get(requirement_id, "")),
         "proof_script": proof_scripts.get(requirement_id, ""),
-        "blocker": str(dependency.get("blocker") or ""),
+        "blocker": blocker,
         "requirement_state": str(dependency.get("requirement_state") or ""),
         "blocked_reason": str(dependency.get("blocked_reason") or ""),
-        "next_step": next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision"),
-        "next_smallest_truthful_gap": next_gaps.get(requirement_id, str(dependency.get("blocker") or "")),
+        "next_step": next_step,
+        "next_smallest_truthful_gap": next_gap,
         "acceptance_criterion": "system_resident_presence",
-        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "authority_required": authority_required,
         "read_only_contract": True,
         "diagnostic_only": True,
         "would_execute": False,
@@ -568,15 +577,35 @@ def _lens_host_resident_process_requirement_readback(
     missing: bool,
 ) -> dict[str, Any]:
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     activation_execution_readback = _lens_host_activation_execution_requirement_readback(launch_manifest)
     process_alive = bool(process_readback.get("process_alive"))
     blocked_reason = str(process_readback.get("blocked_reason") or "")
+    resident_candidate_supervised = bool(supervisor_readback.get("resident_runtime_candidate_supervised"))
+    fresh_resident_candidate_supervised = bool(supervisor_readback.get("fresh_resident_runtime_candidate_supervised"))
     if not missing:
         return {
             **activation_execution_readback,
             "requirement_state": "ready",
             "process_alive": process_alive,
             "blocked_reason": "",
+            "resident_runtime_candidate_supervised": resident_candidate_supervised,
+            "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
+            "resident_supervised_runtime": False,
+        }
+    if fresh_resident_candidate_supervised and resident_candidate_supervised:
+        return {
+            **activation_execution_readback,
+            "requirement_state": "resident_candidate_observed_not_persistent",
+            "process_alive": process_alive,
+            "blocked_reason": "resident_supervision_not_persistent",
+            "blocker": "resident_supervision_not_persistent",
+            "resident_runtime_candidate_supervised": True,
+            "fresh_resident_runtime_candidate_supervised": True,
+            "resident_supervised_runtime": False,
+            "resident_claim_allowed": False,
+            "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
+            "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
         }
     if process_alive:
         return {
@@ -585,6 +614,9 @@ def _lens_host_resident_process_requirement_readback(
             "process_alive": True,
             "blocked_reason": blocked_reason or "resident_host_not_supervised",
             "blocker": "resident_host_process_not_supervised",
+            "resident_runtime_candidate_supervised": resident_candidate_supervised,
+            "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
+            "resident_supervised_runtime": False,
         }
     return {
         **activation_execution_readback,
@@ -592,6 +624,9 @@ def _lens_host_resident_process_requirement_readback(
         "process_alive": False,
         "blocked_reason": blocked_reason or "resident_host_process_missing",
         "blocker": "resident_host_process_missing",
+        "resident_runtime_candidate_supervised": resident_candidate_supervised,
+        "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
+        "resident_supervised_runtime": False,
     }
 
 
