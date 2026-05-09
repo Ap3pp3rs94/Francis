@@ -22553,6 +22553,53 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident-candidate handoff readback
+
+The Stage 6 next-handoff proof now consumes the fresh resident-runtime
+candidate readback already exposed by `/lens/status`. When
+`resident_host.fresh_resident_runtime_candidate_supervised=true` and the
+persistent-supervision first missing requirement still names the resident host
+process, the handoff advances from:
+
+- `next_smallest_truthful_gap=resident_host_process_not_supervised`
+
+to:
+
+- `next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `recommended_next_slice=resolve_resident_supervision_persistence_before_persistent_supervision_enablement`
+- `recommended_handoff_source=resident_runtime_candidate_handoff`
+- `authority_required=persistent_process_supervision_authority`
+
+This keeps the rolling Stage 6 handoff from sending the next builder back to an
+already-consumed diagnostic proof. The baseline no-fresh-state path remains
+stable and continues to report `resident_host_process_not_supervised`.
+
+This is a Stage 6/Lens script/test readback-only slice. It changes no API route
+behavior, UI behavior, execution authority, approval decision authority,
+memory-write behavior, product local-process-launch authority, API
+local-process-launch authority, process-supervision authority,
+process-restart authority, service-install authority, service-control
+authority, tray registration authority, hotkey registration authority, overlay
+control authority, summon authority, capture authority, new sensing authority,
+telemetry behavior, resident host process lifetime, resident claiming,
+persistent resident state, or Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident-candidate handoff
+readback slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,resident_runtime_candidate_handoff_observed | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_supervision_not_persistent; recommended_handoff_source=resident_runtime_candidate_handoff; resident_runtime_candidate_handoff_observed=true`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

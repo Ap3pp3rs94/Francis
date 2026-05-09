@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,7 +21,11 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_proof(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
     return subprocess.run(
         [
             _powershell(),
@@ -35,11 +41,13 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=60,
+        env=run_env,
     )
 
 
-def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() -> None:
-    proc = _run_proof("-Mode", "Status")
+def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
@@ -151,6 +159,8 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
     assert persistent_prerequisites_handoff["diagnostic_only"] is True
     assert persistent_prerequisites_handoff["would_execute"] is False
     assert persistent_prerequisites_handoff["would_mutate"] is False
+    assert payload["resident_runtime_candidate_handoff_observed"] is False
+    assert payload["resident_runtime_candidate_handoff"] == {}
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["closure_readback"]["status"] == "blocked_closure_readback_observed"
@@ -164,6 +174,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
         checks["persistent_supervision_first_missing_requirement"]["status"]
         == "first_missing_requirement_handoff_ready"
     )
+    assert checks["resident_runtime_candidate_handoff"]["status"] == "not_observed"
     assert checks["side_effects_denied"]["status"] == "readback_only"
     assert all(item["passed"] for item in payload["checks"])
 
@@ -194,3 +205,55 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority() 
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    state_path = data_root / "runtime" / "lens-host-supervisor" / "status.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "supervised_session_completed",
+                "mode": "supervise_resident_once",
+                "host_mode": "resident",
+                "observed_pid": 1234,
+                "observed_state": "running",
+                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert payload["recommended_next_slice"] == (
+        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    )
+    assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host"
+    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert payload["authority_required"] == "persistent_process_supervision_authority"
+    assert payload["resident_runtime_candidate_handoff_observed"] is True
+
+    handoff = payload["resident_runtime_candidate_handoff"]
+    assert handoff["status"] == "observed_not_persistent"
+    assert handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert handoff["previous_diagnostic_proof_observed"] is True
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_runtime_candidate_handoff"]["status"] == "fresh_candidate_handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["process_supervision_authority"] is False
+    assert payload["governance"]["resident_claim_authority"] is False
