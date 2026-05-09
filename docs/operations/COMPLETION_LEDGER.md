@@ -22356,6 +22356,55 @@ handoff proof slice:
 - `python -m ruff format --check tests\test_lens_host_supervision_authority_request_proof_script.py`
   Result: `passed`
 
+### 2026-05-08 - Stage 6/Lens persistent supervision enablement handoff proof
+
+The persistent-supervision enablement authority proof now surfaces its
+continuation handoff after proving the bounded enablement-authority grant
+boundary. The proof output includes:
+
+- `previous_next_smallest_truthful_gap=persistent_supervision_enablement_disabled`
+- `next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary`
+- `recommended_next_slice=review_persistent_supervision_execution_and_resident_claim_boundary_without_runtime_start`
+- `recommended_proof_script=scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
+- direct readback routes for persistent-supervision enablement authority,
+  authority-grant readback, authority-readiness readback, and execution
+  readiness
+- a structured read-only `handoff` object naming the next authority boundary
+  and proof script
+
+This keeps the resident-host process blocker chain actionable after the
+persistent-supervision enablement authority proof. It does not start a Lens
+host process, supervise a process, grant persistent-supervision execution
+authority, update service config, write memory, claim a resident runtime, or
+close Stage 6.
+
+This is a Stage 6/Lens script/test proof-readback slice. It changes no API route
+behavior, UI behavior, execution authority, approval decision authority,
+production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, resident host process
+lifetime, persistent-supervision execution, resident claiming, or Stage 6
+transition state.
+
+Latest validation for the `2026-05-08` Stage 6/Lens persistent supervision
+enablement handoff proof slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,recommended_next_slice,recommended_proof_script,@{Name='handoff_next';Expression={$_.handoff.next_smallest_truthful_gap}} | Format-List`
+  Result: `passed; status=proof_passed; previous_next_smallest_truthful_gap=persistent_supervision_enablement_disabled; next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary; handoff_next=persistent_supervision_execution_authority_or_resident_claim_boundary`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `failed before formatting; passed after formatting`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

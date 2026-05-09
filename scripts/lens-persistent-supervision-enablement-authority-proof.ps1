@@ -391,7 +391,38 @@ def _run() -> tuple[int, dict[str, Any]]:
             ),
             "status_denial_boundary_status": denial_criterion.get("status"),
         },
+        "previous_next_smallest_truthful_gap": "persistent_supervision_enablement_disabled",
         "next_smallest_truthful_gap": "persistent_supervision_execution_authority_or_resident_claim_boundary",
+        "recommended_next_slice": (
+            "review_persistent_supervision_execution_and_resident_claim_boundary_without_runtime_start"
+        ),
+        "recommended_proof_script": "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status",
+        "persistent_supervision_enablement_route": "/lens/host/persistent-supervision/enablement",
+        "enablement_authority_request_route": "/lens/host/persistent-supervision/enablement/authority/request",
+        "enablement_authority_grants_route": "/lens/host/persistent-supervision/enablement/authority/grants",
+        "enablement_authority_readiness_route": "/lens/host/persistent-supervision/enablement/authority/readiness",
+        "persistent_supervision_execution_readiness_route": (
+            "/lens/host/persistent-supervision/enablement/execution/readiness"
+        ),
+        "handoff": {
+            "status": "blocked",
+            "previous_next_smallest_truthful_gap": "persistent_supervision_enablement_disabled",
+            "next_smallest_truthful_gap": "persistent_supervision_execution_authority_or_resident_claim_boundary",
+            "next_step": (
+                "review_persistent_supervision_execution_and_resident_claim_boundary_without_runtime_start"
+            ),
+            "proof_script": "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status",
+            "route": "/lens/host/persistent-supervision/enablement",
+            "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+            "authority_required": (
+                "persistent_supervision_execution_authority_and_resident_claim_authority"
+            ),
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        },
         "governance": {
             "diagnostic_only": True,
             "api_route_proof": True,
