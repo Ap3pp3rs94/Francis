@@ -417,11 +417,11 @@ try {
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '5',
+    '8',
     '-HostLaunchRunSeconds',
-    '5',
+    '8',
     '-ResidentCandidateRunSeconds',
-    '5'
+    '8'
   ) -TimeoutSeconds $ChildProofTimeoutSeconds
 } finally {
   if ([string]::IsNullOrWhiteSpace($BeforeFirstMissingRequirementDataDir)) {

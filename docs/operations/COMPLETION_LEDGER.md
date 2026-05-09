@@ -23035,6 +23035,42 @@ slice:
 - `python -m ruff format --check tests\test_lens_stage6_prerequisite_gap_proof_script.py`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens prerequisites proof widens nested observation window
+
+CI run `25609540907` for commit `a476adf` failed only on
+`test (windows-latest, 3.12)` because
+`tests/test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only`
+did not observe the nested persistent-supervision prerequisites proof. The
+payload still showed the route/readback guard and downstream service/authority
+proofs, but `persistent_supervision_prerequisites_proof_observed=false`.
+
+The nested resident-host runtime-boundary proof observation window inside
+`scripts/lens-persistent-supervision-prerequisites-proof.ps1` now uses eight
+seconds for foreground, host-launch, and resident-candidate observations. This
+keeps the proof bounded and diagnostic-only while giving the Windows 3.12 CI
+leg enough time to observe the resident-host boundary proof under full-suite
+load.
+
+This does not grant product execution authority, API execution authority,
+process supervision, process restart, service install/control, tray
+registration, hotkey registration, overlay control, summon authority, approval
+decision authority, memory write, receipt write, resident-claim authority, UI
+claim behavior, or Stage 6 transition authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens prerequisites observation
+window recovery slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `failed in CI before fix on Windows 3.12; passed locally after widening the nested observation window`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -DataDir data\test_runs\persistent-supervision-prerequisites-recovery`
+  Result: `passed; status=proof_passed; first_missing_requirement_proof_observed=true; first_missing_requirement_proof.duration_ms=33889`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
