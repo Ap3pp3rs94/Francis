@@ -22544,6 +22544,10 @@ readback slice:
   Result: `passed`
 - `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
   Result: `passed`
+- `python -m mypy --platform linux src\francis\lens\host_manifest.py`
+  Result: `passed; reproduces the Linux CI type-checking view that previously rejected direct Windows-only ctypes last-error calls`
+- `python -m mypy --platform linux src`
+  Result: `passed`
 - `python -m mypy src\francis\lens\host_manifest.py`
   Result: `passed`
 - `git diff --check`

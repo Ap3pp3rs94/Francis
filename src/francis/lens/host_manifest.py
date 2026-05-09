@@ -135,6 +135,13 @@ def _windows_service_status_readback(service_name: str) -> dict[str, Any]:
     sc_status_process_info = 0
 
     advapi32 = windll_factory("advapi32", use_last_error=True)
+    get_last_error = getattr(ctypes, "get_last_error", None)
+
+    def last_windows_error() -> int:
+        if callable(get_last_error):
+            return int(get_last_error())
+        return 0
+
     advapi32.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
     advapi32.OpenSCManagerW.restype = wintypes.HANDLE
     advapi32.OpenServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD]
@@ -158,14 +165,14 @@ def _windows_service_status_readback(service_name: str) -> dict[str, Any]:
             "service_status": "",
             "display_name": "",
             "start_type": "",
-            "query_error": f"windows_open_service_manager_failed:{ctypes.get_last_error()}",
+            "query_error": f"windows_open_service_manager_failed:{last_windows_error()}",
         }
 
     service_handle = None
     try:
         service_handle = advapi32.OpenServiceW(service_control_manager, service_name, service_query_status)
         if not service_handle:
-            error = ctypes.get_last_error()
+            error = last_windows_error()
             if error == error_service_does_not_exist:
                 return {
                     "status": "not_installed",
@@ -200,7 +207,7 @@ def _windows_service_status_readback(service_name: str) -> dict[str, Any]:
                 "service_status": "",
                 "display_name": service_name,
                 "start_type": "",
-                "query_error": f"windows_query_service_status_failed:{ctypes.get_last_error()}",
+                "query_error": f"windows_query_service_status_failed:{last_windows_error()}",
             }
 
         status = service_state_names.get(int(service_status.dwCurrentState), "unknown")
