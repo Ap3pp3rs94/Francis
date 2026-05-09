@@ -22988,6 +22988,53 @@ handoff proof slice:
 - `python -m pytest tests\test_lens_host_runtime_plan_readback.py tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only tests\test_lens_stage6_next_handoff_script.py -q`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens prerequisite gap proof records resident presence blockers
+
+Added a focused Stage 6 prerequisite-gap proof:
+
+- `scripts/lens-stage6-prerequisite-gap-proof.ps1 -Mode Status`
+
+The proof reads `/lens/status` and records the current resident-presence blocker
+without rerunning the full multi-minute Stage 6 completion audit. It verifies
+that Stage 6 remains active, the closure readback is still blocked on
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`, and the
+persistent-supervision plan still requires:
+
+- `resident_host_process`
+- `tray_presence`
+- `global_hotkey_binding`
+- `overlay_window`
+- `summon_binding`
+
+The proof also records the first missing requirement handoff:
+
+- `first_missing_required_before_enable=resident_host_process`
+- `route=/lens/host`
+- `readiness_route=/lens/host/runtime-loop/readiness`
+- `proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+This is a readback-only continuation proof. It does not grant execution
+authority, approval-decision authority, local process launch authority, process
+supervision, process restart, service install/control, tray registration,
+hotkey registration, overlay control, summon authority, sensing/capture
+authority, receipt write authority, memory write authority, resident-claim
+authority, UI claim behavior, or Stage 6 transition authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens prerequisite-gap proof
+slice:
+
+- `scripts\lens-stage6-prerequisite-gap-proof.ps1 -Mode Status -DataDir data\test_runs\stage6-prerequisite-gap-proof`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing_required_before_enable=resident_host_process`
+- `python -m pytest tests\test_lens_stage6_prerequisite_gap_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_gap_proof_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_gap_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
