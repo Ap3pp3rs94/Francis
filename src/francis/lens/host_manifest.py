@@ -538,11 +538,21 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         next_gap = "resident_supervision_not_persistent"
         next_step = "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
         authority_required = "persistent_process_supervision_authority"
+        authority_readback = {
+            "authority_route": "/lens/host/supervision/authority",
+            "authority_request_route": "/lens/host/supervision/authority/request",
+            "authority_requests_route": "/lens/host/supervision/authority/requests",
+            "authority_readiness_route": "/lens/host/supervision/authority/readiness",
+            "authority_grants_route": "/lens/host/supervision/authority/grants",
+            "authority_denials_route": "/lens/host/supervision/authority/denials",
+            "approval_action": "lens.host.supervision_authority",
+        }
     else:
         next_gap = next_gaps.get(requirement_id, blocker)
         next_step = next_steps.get(requirement_id, f"resolve_{requirement_id}_before_persistent_supervision")
         authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
-    return {
+        authority_readback = {}
+    handoff = {
         "id": requirement_id,
         "family": families.get(requirement_id, requirement_id),
         "route": str(dependency.get("route") or "/lens/status"),
@@ -560,6 +570,8 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "would_execute": False,
         "would_mutate": False,
     }
+    handoff.update(authority_readback)
+    return handoff
 
 
 def _lens_host_first_missing_prerequisite_handoff(

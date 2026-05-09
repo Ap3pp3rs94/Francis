@@ -22,6 +22,7 @@ def _manifest(
     process_alive: bool,
     process_blocker: str,
     activation_execution_readback: dict[str, Any] | None = None,
+    supervisor_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "required_before_enable": REQUIRED_BEFORE_ENABLE,
@@ -42,6 +43,7 @@ def _manifest(
             "blocked_reason": process_blocker,
         },
         "activation_execution_readback": activation_execution_readback or {},
+        "supervisor_readback": supervisor_readback or {},
         "blocker_groups": {
             "process_readback": [process_blocker],
             "surface_dependencies": [
@@ -159,6 +161,51 @@ def test_persistent_supervision_prerequisite_readback_distinguishes_unsupervised
         assert dependency["requirement_state"] == "foreground_observed_not_supervised"
         assert dependency["process_alive"] is True
         assert dependency["blocked_reason"] == "resident_host_not_supervised"
+
+
+def test_persistent_supervision_prerequisite_readback_links_persistent_process_authority_review() -> None:
+    manifest = _manifest(
+        process_alive=False,
+        process_blocker="resident_host_process_missing",
+        supervisor_readback={
+            "resident_runtime_candidate_supervised": True,
+            "fresh_resident_runtime_candidate_supervised": True,
+            "freshness_status": "fresh",
+            "state_age_seconds": 3,
+        },
+    )
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        handoff = body["first_missing_requirement_handoff"]
+        assert handoff["id"] == "resident_host_process"
+        assert handoff["requirement_state"] == "resident_candidate_observed_not_persistent"
+        assert handoff["blocker"] == "resident_supervision_not_persistent"
+        assert (
+            handoff["next_step"] == "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+        )
+        assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        assert handoff["authority_required"] == "persistent_process_supervision_authority"
+        assert handoff["authority_route"] == "/lens/host/supervision/authority"
+        assert handoff["authority_request_route"] == "/lens/host/supervision/authority/request"
+        assert handoff["authority_requests_route"] == "/lens/host/supervision/authority/requests"
+        assert handoff["authority_readiness_route"] == "/lens/host/supervision/authority/readiness"
+        assert handoff["authority_grants_route"] == "/lens/host/supervision/authority/grants"
+        assert handoff["authority_denials_route"] == "/lens/host/supervision/authority/denials"
+        assert handoff["approval_action"] == "lens.host.supervision_authority"
+        assert handoff["read_only_contract"] is True
+        assert handoff["diagnostic_only"] is True
+        assert handoff["would_execute"] is False
+        assert handoff["would_mutate"] is False
+
+        dependency = _dependency_by_id(body)["resident_host_process"]
+        assert dependency["blocker"] == "resident_supervision_not_persistent"
+        assert dependency["requirement_state"] == "resident_candidate_observed_not_persistent"
+        assert dependency["fresh_resident_runtime_candidate_supervised"] is True
+        assert dependency["resident_runtime_candidate_supervised"] is True
+        assert dependency["resident_supervised_runtime"] is False
 
 
 def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate() -> None:

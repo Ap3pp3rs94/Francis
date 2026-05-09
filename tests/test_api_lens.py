@@ -7200,6 +7200,13 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     )
     assert plan_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
     assert plan_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert plan_handoff["authority_route"] == "/lens/host/supervision/authority"
+    assert plan_handoff["authority_request_route"] == "/lens/host/supervision/authority/request"
+    assert plan_handoff["authority_requests_route"] == "/lens/host/supervision/authority/requests"
+    assert plan_handoff["authority_readiness_route"] == "/lens/host/supervision/authority/readiness"
+    assert plan_handoff["authority_grants_route"] == "/lens/host/supervision/authority/grants"
+    assert plan_handoff["authority_denials_route"] == "/lens/host/supervision/authority/denials"
+    assert plan_handoff["approval_action"] == "lens.host.supervision_authority"
     assert plan_handoff["read_only_contract"] is True
     assert plan_handoff["would_execute"] is False
     assert plan_handoff["would_mutate"] is False
@@ -7210,6 +7217,8 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     enablement_handoff = persistent_enablement["first_missing_requirement_handoff"]
     assert enablement_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
     assert enablement_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert enablement_handoff["authority_request_route"] == "/lens/host/supervision/authority/request"
+    assert enablement_handoff["approval_action"] == "lens.host.supervision_authority"
     assert persistent_enablement["governance"]["process_supervision_authority"] is False
     assert persistent_enablement["governance"]["service_config_write_authority"] is False
 

@@ -22821,6 +22821,42 @@ proof observation-window recovery slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident persistence handoff names authority review route
+
+The persistent-supervision first-missing prerequisite handoff now names the exact
+host supervision authority review surfaces when a bounded resident candidate has
+been observed but is not persistent:
+
+- `authority_required=persistent_process_supervision_authority`
+- `authority_route=/lens/host/supervision/authority`
+- `authority_request_route=/lens/host/supervision/authority/request`
+- `authority_requests_route=/lens/host/supervision/authority/requests`
+- `authority_readiness_route=/lens/host/supervision/authority/readiness`
+- `authority_grants_route=/lens/host/supervision/authority/grants`
+- `authority_denials_route=/lens/host/supervision/authority/denials`
+- `approval_action=lens.host.supervision_authority`
+
+This makes the Stage 6 resident-supervision persistence handoff actionable
+without granting process supervision, process restart, service install/control,
+resident claim, approval decision, memory write, receipt write, UI claim, or
+Stage 6 transition authority.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident persistence
+handoff authority-route readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
