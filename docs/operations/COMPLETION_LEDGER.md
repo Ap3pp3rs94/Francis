@@ -23512,6 +23512,38 @@ completion-audit handoff slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning`
 
+### 2026-05-10 - Stage 6/Lens completion-audit checkpoint diagnostic stabilized
+
+GitHub Actions run `25624430578` for commit `629aeb8` failed only on
+`test (windows-latest, 3.12)`. The failure was in
+`tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority`:
+the Stage 6 completion audit still selected the strict audited next gap
+`persistent_supervision_required_prerequisites_missing`, but the nested
+checkpoint diagnostic reported
+`resident_overlay_activation_or_process_supervision_authority_boundary` instead
+of `stage6_lens_completion_audit` on the slower Windows 3.12 runner.
+
+The test contract now treats `checkpoint_next_smallest_truthful_gap` as the live
+diagnostic it is, while keeping the completion-audit decision, recommended
+handoff, blockers, authority denials, child proof runs, and Stage 6 closure
+decision strict. This is a test-only validation stabilization. It changes no
+runtime behavior, route behavior, UI behavior, execution authority, approval
+authority, memory-write behavior, process supervision, restart behavior, service
+control, tray/hotkey/overlay/summon behavior, resident claim, or Stage 6
+transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens completion-audit checkpoint
+diagnostic stabilization:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
