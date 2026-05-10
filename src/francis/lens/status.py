@@ -1222,6 +1222,17 @@ def _stage6_next_handoff_readback(
     first_missing_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff")) or _as_dict(
         persistent_enablement.get("first_missing_requirement_handoff")
     )
+    activation_state = _as_dict(resident_host.get("activation_state"))
+    activation_execution_handoff = _as_dict(activation_state.get("latest_execution_handoff"))
+    activation_execution_handoff_ready = (
+        bool(activation_state.get("latest_execution_handoff_observed"))
+        and bool(activation_execution_handoff)
+        and _safe_str(activation_execution_handoff.get("id")).strip() == "resident_host_process"
+        and bool(activation_execution_handoff.get("read_only_contract"))
+        and bool(activation_execution_handoff.get("diagnostic_only"))
+        and not bool(activation_execution_handoff.get("would_execute"))
+        and not bool(activation_execution_handoff.get("would_mutate"))
+    )
     first_missing_handoff_ready = (
         bool(first_missing)
         and _safe_str(first_missing_handoff.get("id")).strip() == first_missing
@@ -1280,6 +1291,25 @@ def _stage6_next_handoff_readback(
         )
         authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip() or authority_required
 
+    if activation_execution_handoff_ready:
+        activation_next_gap = _safe_str(activation_execution_handoff.get("next_smallest_truthful_gap")).strip()
+        activation_next_slice = _safe_str(activation_execution_handoff.get("next_step")).strip()
+        if activation_next_gap:
+            recommended_handoff_source = "activation_execution_handoff"
+            next_gap = activation_next_gap
+        if activation_next_slice:
+            recommended_next_slice = activation_next_slice
+        recommended_proof_script = (
+            _safe_str(activation_execution_handoff.get("proof_script")).strip() or recommended_proof_script
+        )
+        recommended_route = _safe_str(activation_execution_handoff.get("route")).strip() or recommended_route
+        recommended_readiness_route = (
+            _safe_str(activation_execution_handoff.get("readiness_route")).strip() or recommended_readiness_route
+        )
+        authority_required = (
+            _safe_str(activation_execution_handoff.get("authority_required")).strip() or authority_required
+        )
+
     resident_candidate_observed = (
         bool(resident_host.get("fresh_resident_runtime_candidate_supervised"))
         and bool(resident_host.get("resident_runtime_candidate_supervised"))
@@ -1329,6 +1359,8 @@ def _stage6_next_handoff_readback(
         "persistent_supervision_first_missing_required_before_enable": first_missing,
         "persistent_supervision_first_missing_requirement_handoff": first_missing_handoff,
         "persistent_supervision_required_prerequisites_handoff": prerequisites_handoff,
+        "activation_execution_handoff_observed": activation_execution_handoff_ready,
+        "activation_execution_handoff": activation_execution_handoff if activation_execution_handoff_ready else {},
         "resident_runtime_candidate_handoff_observed": resident_candidate_observed,
         "resident_runtime_candidate_handoff": resident_candidate_handoff,
         "governance": {

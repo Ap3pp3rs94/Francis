@@ -274,6 +274,72 @@ def test_lens_stage6_next_handoff_consumes_unsupervised_process_readback(tmp_pat
     assert payload["governance"]["local_process_launch_authority"] is False
 
 
+def test_lens_stage6_next_handoff_consumes_activation_execution_handoff(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    receipt_root = data_root / "lens" / "host_activation_executions"
+    receipt_root.mkdir(parents=True, exist_ok=True)
+    receipt_id = "activation-execution-observed"
+    (receipt_root / f"{receipt_id}.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.activation.execution.receipt",
+                "receipt_id": receipt_id,
+                "approval_id": "approval-1",
+                "actor": "test.system.write",
+                "route": "/lens/host/activation/execute",
+                "status": "bounded_foreground_launch_observed",
+                "created_ts": datetime.now(UTC).timestamp(),
+                "execution": {
+                    "bounded_process_launch": True,
+                    "observed_process": True,
+                },
+                "resident_claim": {
+                    "resident_host_process_claimed": False,
+                },
+                "governance": {
+                    "execution_authority": True,
+                    "local_process_launch_authority": True,
+                    "resident_claim_authority": False,
+                    "memory_write": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert payload["recommended_next_slice"] == (
+        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    )
+    assert payload["recommended_handoff_source"] == "activation_execution_handoff"
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
+    )
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["latest_activation_execution_handoff_observed"] is True
+    handoff = payload["latest_activation_execution_handoff"]
+    assert handoff["id"] == "resident_host_process"
+    assert handoff["receipt_id"] == receipt_id
+    assert handoff["activation_execution_evidence_only"] is True
+    assert handoff["does_not_satisfy_resident_host_process"] is True
+    assert handoff["next_step"] == "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["activation_execution_handoff"]["status"] == "activation_execution_handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
+    assert payload["governance"]["process_supervision_authority"] is False
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["resident_claim_authority"] is False
+
+
 def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     state_path = data_root / "runtime" / "lens-host-supervisor" / "status.json"

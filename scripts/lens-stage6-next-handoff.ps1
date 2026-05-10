@@ -183,6 +183,16 @@ $PersistentSupervisionFirstMissingRequiredBeforeEnable = [string](
   Get-PropertyValue -Payload $PersistentSupervisionPlanReadback -Name 'first_missing_required_before_enable' -Default ''
 )
 $PersistentSupervisionFirstMissingRequirementHandoff = Get-PropertyValue -Payload $PersistentSupervisionPlanReadback -Name 'first_missing_requirement_handoff' -Default ([ordered]@{})
+$ActivationStateReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'activation_state' -Default ([ordered]@{})
+$ActivationExecutionHandoff = Get-PropertyValue -Payload $ActivationStateReadback -Name 'latest_execution_handoff' -Default ([ordered]@{})
+$ActivationExecutionHandoffReady = (
+  [bool](Get-PropertyValue -Payload $ActivationStateReadback -Name 'latest_execution_handoff_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
+  [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_mutate' -Default $false)
+)
 $PersistentSupervisionFirstMissingRequirementHandoffReady = (
   -not [string]::IsNullOrWhiteSpace($PersistentSupervisionFirstMissingRequiredBeforeEnable) -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'id' -Default '') -eq $PersistentSupervisionFirstMissingRequiredBeforeEnable -and
@@ -349,6 +359,34 @@ if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
     $AuthorityRequired = $FirstMissingAuthorityRequired
   }
 }
+if ($ActivationExecutionHandoffReady) {
+  $ActivationExecutionNextGap = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'next_smallest_truthful_gap' -Default '')
+  $ActivationExecutionNextSlice = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'next_step' -Default '')
+  $ActivationExecutionProofScript = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'proof_script' -Default '')
+  $ActivationExecutionRoute = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'route' -Default '')
+  $ActivationExecutionReadinessRoute = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'readiness_route' -Default '')
+  $ActivationExecutionAuthorityRequired = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'authority_required' -Default '')
+
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionNextGap)) {
+    $RecommendedHandoffSource = 'activation_execution_handoff'
+    $RecommendedNextGap = $ActivationExecutionNextGap
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionNextSlice)) {
+    $RecommendedNextSlice = $ActivationExecutionNextSlice
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionProofScript)) {
+    $RecommendedProofScript = $ActivationExecutionProofScript
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionRoute)) {
+    $RecommendedRoute = $ActivationExecutionRoute
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionReadinessRoute)) {
+    $RecommendedReadinessRoute = $ActivationExecutionReadinessRoute
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionAuthorityRequired)) {
+    $AuthorityRequired = $ActivationExecutionAuthorityRequired
+  }
+}
 if ($ResidentRuntimeCandidateHandoffObserved) {
   $RecommendedHandoffSource = 'resident_runtime_candidate_handoff'
   $RecommendedNextGap = 'resident_supervision_not_persistent'
@@ -375,7 +413,9 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_execute' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_mutate' -Default $false)
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_mutate' -Default $false)
 )
 
 $Checks = @(
@@ -387,6 +427,7 @@ $Checks = @(
   New-Check -Id 'family_chain_handoff' -Status 'summon_family_chain_handoff_ready' -Passed $FamilyChainHandoffObserved -Evidence 'summon_anywhere.handoff.summon_anywhere_family_chain_completion_audit_handoff' -Reason 'The summon blocker family chain can still be consumed by audit.'
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'first_missing_requirement_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $PersistentSupervisionFirstMissingRequirementHandoffReady -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice.'
+  New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.fresh_resident_runtime_candidate_supervised' -Reason 'When a fresh supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
   New-Check -Id 'side_effects_denied' -Status 'readback_only' -Passed $SideEffectsDenied -Evidence 'handoff governance flags' -Reason 'The handoff script must not grant or imply execution authority.'
 )
@@ -423,6 +464,10 @@ $Payload = [ordered]@{
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionFirstMissingRequiredBeforeEnable
   persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionFirstMissingRequirementHandoff
   persistent_supervision_required_prerequisites_handoff = $PersistentSupervisionRequiredPrerequisitesHandoff
+  latest_activation_execution_handoff_observed = $ActivationExecutionHandoffReady
+  latest_activation_execution_handoff = $(if ($ActivationExecutionHandoffReady) { $ActivationExecutionHandoff } else { [ordered]@{} })
+  activation_execution_handoff_observed = $ActivationExecutionHandoffReady
+  activation_execution_handoff = $(if ($ActivationExecutionHandoffReady) { $ActivationExecutionHandoff } else { [ordered]@{} })
   resident_runtime_candidate_handoff_observed = $ResidentRuntimeCandidateHandoffObserved
   resident_runtime_candidate_handoff = $ResidentRuntimeCandidateHandoff
   checks = $Checks

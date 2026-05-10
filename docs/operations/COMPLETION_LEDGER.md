@@ -23377,6 +23377,53 @@ handoff readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens next handoff consumes activation execution receipts
+
+The Stage 6 next-handoff readback now consumes the activation execution receipt
+handoff exposed by the Lens host activation state. When
+`resident_host.activation_state.latest_execution_handoff` is present, scoped to
+`resident_host_process`, and explicitly read-only/diagnostic-only, both
+`stage6_readiness.next_handoff` and `scripts/lens-stage6-next-handoff.ps1 -Mode
+Status` project it as the next concrete slice:
+
+- `recommended_handoff_source=activation_execution_handoff`
+- `next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `recommended_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure`
+- `recommended_proof_script=scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+- `authority_required=process_supervision_authority`
+
+The current repo data does not contain a live activation execution receipt, so
+the default live handoff still points to the persistent-supervision first
+missing requirement and the resident-host runtime boundary proof. The new
+seeded proof verifies the receipt-conditioned route without claiming resident
+host process presence.
+
+This is a Stage 6/Lens readback-only, diagnostic-only, backend/proof-script/test
+slice. It grants no UI behavior, execution authority, approval decision
+authority, production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, persistent resident
+process lifetime, resident claim, or Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens activation execution
+handoff consumption slice:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed after formatting src\francis\lens\status.py`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
