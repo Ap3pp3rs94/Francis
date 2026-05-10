@@ -65,6 +65,15 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["guard_next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert (
+        payload["recommended_handoff_source"]
+        == "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["persistent_supervision_plan_readback_observed"] is True
     assert payload["persistent_supervision_enablement_readback_observed"] is True
     assert payload["required_before_enable_observed"] is True
@@ -106,6 +115,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert first_missing_handoff["diagnostic_only"] is True
     assert first_missing_handoff["would_execute"] is False
     assert first_missing_handoff["would_mutate"] is False
+    assert payload["recommended_handoff"] == first_missing_handoff
 
     dependency_readback = {item["id"]: item for item in payload["dependency_readback"]}
     assert dependency_readback == {

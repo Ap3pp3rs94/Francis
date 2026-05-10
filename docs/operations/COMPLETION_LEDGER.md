@@ -23544,6 +23544,51 @@ diagnostic stabilization:
 - `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens persistent-supervision prerequisites proof carries first-missing handoff
+
+The persistent-supervision prerequisites proof now returns the concrete
+first-missing requirement handoff it was already proving. When
+`scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+confirms persistent supervision is blocked by missing required prerequisites,
+the payload now exposes:
+
+- `recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff`
+- `recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+- `recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites`
+- `recommended_handoff`
+
+This keeps the Stage 6 handoff chain explicit from the completion audit to the
+persistent-supervision prerequisites proof and then to the first missing
+resident-host prerequisite. It removes a null top-level handoff readback gap
+without claiming persistent supervision, resident process lifetime, tray
+presence, global hotkey binding, overlay control, summon-anywhere, or Stage 6
+closure.
+
+This is a Stage 6/Lens readback-only and diagnostic-only proof-script/test
+slice. It grants no UI behavior, execution authority, approval decision
+authority, production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, persistent resident
+process lifetime, resident claim, or Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens persistent-supervision
+prerequisites first-missing handoff slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required,first_missing_requirement_proof_observed,first_missing_requirement_side_effects_bounded | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed after formatting tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
