@@ -23337,6 +23337,46 @@ stability slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens activation execution receipt handoff readback
+
+The Lens host activation execution receipt readback now carries a concrete
+handoff when the latest execution receipt proves a bounded foreground host
+process was observed. `GET /lens/host/activation/executions` and `GET
+/lens/host/activation` expose:
+
+- `latest_execution_handoff_observed`
+- `latest_execution_handoff`
+
+When the latest bounded activation receipt observed a process and did not claim
+resident host status, the handoff points to
+`scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+with `next_smallest_truthful_gap=resident_host_process_not_supervised`. Empty or
+failed execution receipt readback keeps the handoff empty.
+
+This is a Stage 6/Lens route/API and readback-only slice. It does not create a
+resident host process, keep a process alive, install or start a service, grant
+approval-decision authority, grant new local-process-launch authority, grant
+process-supervision or process-restart authority, grant service-control
+authority, register tray or hotkey surfaces, control overlays, create summon
+authority, write memory, claim resident presence, or move Stage 6 toward closure
+by itself.
+
+Latest validation for the `2026-05-10` Stage 6/Lens activation execution receipt
+handoff readback slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

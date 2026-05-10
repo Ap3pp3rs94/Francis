@@ -1249,6 +1249,9 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
     execution_receipts = lens_host_activation_execution_receipts(limit=1)
     latest_execution = _as_dict(execution_receipts.get("latest"))
     latest_execution_id = _safe_str(latest_execution.get("receipt_id")).strip()
+    latest_execution_body = _as_dict(latest_execution.get("execution"))
+    latest_execution_handoff = _activation_execution_handoff(latest_execution)
+    latest_execution_handoff_observed = bool(latest_execution_handoff)
     status, next_step = _activation_readback_status(counts, authority_granted=authority_granted)
     latest = latest_items[0] if latest_items else None
     return {
@@ -1262,6 +1265,11 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
         "executions_route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
         "active_grant_receipt_id": active_grant_id,
         "latest_execution_receipt_id": latest_execution_id,
+        "latest_execution_status": _safe_str(latest_execution.get("status")).strip(),
+        "latest_execution_bounded_process_launch": bool(latest_execution_body.get("bounded_process_launch")),
+        "latest_execution_observed_process": bool(latest_execution_body.get("observed_process")),
+        "latest_execution_handoff_observed": latest_execution_handoff_observed,
+        "latest_execution_handoff": latest_execution_handoff,
         "decision_route": "/approvals/decision",
         "approval_action": LENS_HOST_ACTIVATION_ACTION,
         "pending_count": counts.get("pending", 0),
@@ -1287,6 +1295,7 @@ def lens_host_activation_readback(*, limit: int = 5) -> dict[str, Any]:
             "execution_receipts_route": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
             "active_grant_receipt_id": active_grant_id,
             "latest_execution_receipt_id": latest_execution_id,
+            "latest_execution_handoff_readback": latest_execution_handoff_observed,
             "authority_granted": authority_granted,
             "activation_authority": authority_granted,
             "local_process_launch_authority": authority_granted,
@@ -2501,6 +2510,36 @@ def _list_activation_execution_receipts(
     return items[:limit], len(items)
 
 
+def _activation_execution_handoff(latest: dict[str, Any] | None) -> dict[str, Any]:
+    item = latest if isinstance(latest, dict) else {}
+    execution = _as_dict(item.get("execution"))
+    resident_claim = _as_dict(item.get("resident_claim"))
+    bounded_launch_observed = bool(execution.get("bounded_process_launch")) and bool(execution.get("observed_process"))
+    resident_claimed = bool(resident_claim.get("resident_host_process_claimed"))
+    if not item or not bounded_launch_observed or resident_claimed:
+        return {}
+    return {
+        "id": "resident_host_process",
+        "status": "bounded_foreground_activation_observed_not_resident",
+        "source": LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
+        "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+        "activation_execution_status": _safe_str(item.get("status")).strip(),
+        "activation_execution_evidence_only": True,
+        "does_not_satisfy_resident_host_process": True,
+        "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+        "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+        "next_step": "consume_resident_host_process_supervision_handoff_before_stage6_closure",
+        "proof_script": "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "authority_required": "process_supervision_authority",
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+
 def _activation_authority_grant_active(item: dict[str, Any], *, now: int | None = None) -> bool:
     lease = _as_dict(item.get("lease"))
     expires_ts = _record_ts(lease.get("expires_ts") or item.get("expires_ts"))
@@ -2606,6 +2645,8 @@ def lens_host_activation_execution_receipts(
     )
     latest = items[0] if items else None
     latest_execution = _as_dict(_as_dict(latest).get("execution"))
+    latest_execution_handoff = _activation_execution_handoff(latest)
+    latest_execution_handoff_observed = bool(latest_execution_handoff)
     return {
         "ok": True,
         "kind": "lens.host.activation.execution_receipts",
@@ -2621,6 +2662,8 @@ def lens_host_activation_execution_receipts(
         "items": items,
         "latest_bounded_process_launch": bool(latest_execution.get("bounded_process_launch")),
         "latest_observed_process": bool(latest_execution.get("observed_process")),
+        "latest_execution_handoff_observed": latest_execution_handoff_observed,
+        "latest_execution_handoff": latest_execution_handoff,
         "governance": {
             **_activation_governance(
                 route=LENS_HOST_ACTIVATION_EXECUTIONS_ROUTE,
@@ -2633,6 +2676,7 @@ def lens_host_activation_execution_receipts(
             "local_process_launch_authority": False,
             "receipt_write_authority": False,
             "resident_claim_authority": False,
+            "latest_execution_handoff_readback": latest_execution_handoff_observed,
             "next_step": "review_execution_receipts_before_resident_supervision_enablement",
         },
     }

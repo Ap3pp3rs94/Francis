@@ -7755,9 +7755,16 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     readback_body = readback.json()
     assert readback_body["status"] == "authority_granted"
     assert readback_body["active_grant_receipt_id"] == grant_receipt["receipt_id"]
+    assert readback_body["latest_execution_receipt_id"] == ""
+    assert readback_body["latest_execution_status"] == ""
+    assert readback_body["latest_execution_bounded_process_launch"] is False
+    assert readback_body["latest_execution_observed_process"] is False
+    assert readback_body["latest_execution_handoff_observed"] is False
+    assert readback_body["latest_execution_handoff"] == {}
     assert readback_body["activation_authority"] is True
     assert readback_body["local_process_launch_authority"] is True
     assert readback_body["governance"]["local_process_launch_authority"] is True
+    assert readback_body["governance"]["latest_execution_handoff_readback"] is False
 
     preflight = client.get(f"/lens/host/activation/preflight?approval_id={approval_id}&actor=test.system.write")
     assert preflight.status_code == 200
@@ -7841,6 +7848,51 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executions_body["status"] == "readback_ready"
     assert executions_body["total"] == 1
     assert executions_body["latest"]["receipt_id"] == executed_body["receipt"]["receipt_id"]
+    if powershell_available:
+        assert executions_body["latest_bounded_process_launch"] is True
+        assert executions_body["latest_observed_process"] is True
+        assert executions_body["latest_execution_handoff_observed"] is True
+        execution_handoff = executions_body["latest_execution_handoff"]
+        assert execution_handoff["id"] == "resident_host_process"
+        assert execution_handoff["status"] == "bounded_foreground_activation_observed_not_resident"
+        assert execution_handoff["source"] == "/lens/host/activation/executions"
+        assert execution_handoff["receipt_id"] == executed_body["receipt"]["receipt_id"]
+        assert execution_handoff["activation_execution_status"] == "bounded_foreground_launch_observed"
+        assert execution_handoff["activation_execution_evidence_only"] is True
+        assert execution_handoff["does_not_satisfy_resident_host_process"] is True
+        assert execution_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+        assert execution_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+        assert execution_handoff["next_step"] == (
+            "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+        )
+        assert execution_handoff["proof_script"] == (
+            "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
+        )
+        assert execution_handoff["route"] == "/lens/host"
+        assert execution_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+        assert execution_handoff["authority_required"] == "process_supervision_authority"
+        assert execution_handoff["read_only_contract"] is True
+        assert execution_handoff["diagnostic_only"] is True
+        assert execution_handoff["would_execute"] is False
+        assert execution_handoff["would_mutate"] is False
+        assert executions_body["governance"]["latest_execution_handoff_readback"] is True
+
+        readback_after_execution = client.get("/lens/host/activation?limit=10")
+        assert readback_after_execution.status_code == 200
+        readback_after_execution_body = readback_after_execution.json()
+        assert readback_after_execution_body["latest_execution_receipt_id"] == executed_body["receipt"]["receipt_id"]
+        assert readback_after_execution_body["latest_execution_status"] == "bounded_foreground_launch_observed"
+        assert readback_after_execution_body["latest_execution_bounded_process_launch"] is True
+        assert readback_after_execution_body["latest_execution_observed_process"] is True
+        assert readback_after_execution_body["latest_execution_handoff_observed"] is True
+        assert readback_after_execution_body["latest_execution_handoff"] == execution_handoff
+        assert readback_after_execution_body["governance"]["latest_execution_handoff_readback"] is True
+    else:
+        assert executions_body["latest_bounded_process_launch"] is False
+        assert executions_body["latest_observed_process"] is False
+        assert executions_body["latest_execution_handoff_observed"] is False
+        assert executions_body["latest_execution_handoff"] == {}
+        assert executions_body["governance"]["latest_execution_handoff_readback"] is False
 
 
 def test_lens_host_supervision_authority_request_requires_system_write_without_grant(
