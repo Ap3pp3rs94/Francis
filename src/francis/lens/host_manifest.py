@@ -307,6 +307,10 @@ def _lens_host_activation_execution_receipt_root() -> Path:
     return data_dir() / "lens" / "host_activation_executions"
 
 
+def _lens_host_supervision_execution_receipt_root() -> Path:
+    return data_dir() / "lens" / "host_supervision_executions"
+
+
 def _lens_host_activation_execution_receipts() -> list[dict[str, Any]]:
     root = _lens_host_activation_execution_receipt_root()
     try:
@@ -320,6 +324,28 @@ def _lens_host_activation_execution_receipts() -> list[dict[str, Any]]:
             continue
         kind = str(item.get("kind") or "").strip()
         if kind and kind != "lens.host.activation.execution.receipt":
+            continue
+        receipts.append(item)
+    receipts.sort(
+        key=lambda item: (_record_ts(item.get("created_ts")), str(item.get("receipt_id") or "")),
+        reverse=True,
+    )
+    return receipts
+
+
+def _lens_host_supervision_execution_receipts() -> list[dict[str, Any]]:
+    root = _lens_host_supervision_execution_receipt_root()
+    try:
+        paths = list(root.glob("*.json"))
+    except OSError:
+        return []
+    receipts: list[dict[str, Any]] = []
+    for path in paths:
+        item = _json_dict_from_path(path)
+        if not item:
+            continue
+        kind = str(item.get("kind") or "").strip()
+        if kind and kind != "lens.host.supervision.execution.receipt":
             continue
         receipts.append(item)
     receipts.sort(
@@ -362,6 +388,44 @@ def _lens_host_activation_execution_readback() -> dict[str, Any]:
     }
 
 
+def _lens_host_supervision_execution_readback() -> dict[str, Any]:
+    receipts = _lens_host_supervision_execution_receipts()
+    latest = receipts[0] if receipts else {}
+    latest_execution = _as_dict(latest.get("execution"))
+    latest_resident_claim = _as_dict(latest.get("resident_claim"))
+    candidate_supervised = bool(latest_execution.get("resident_runtime_candidate_supervised"))
+    resident_supervised_runtime = bool(latest_execution.get("resident_supervised_runtime"))
+    next_gap = str(latest_execution.get("next_smallest_truthful_gap") or "").strip()
+    candidate_receipt_observed = (
+        bool(latest)
+        and candidate_supervised
+        and not resident_supervised_runtime
+        and next_gap == "resident_supervision_not_persistent"
+        and not bool(latest_resident_claim.get("resident_host_process_claimed"))
+    )
+    return {
+        "status": "readback_ready" if latest else "empty",
+        "readback_ready": True,
+        "route": "/lens/host/supervision/executions",
+        "execute_route": "/lens/host/supervision/execute",
+        "receipt_root": "data/lens/host_supervision_executions",
+        "receipt_count": len(receipts),
+        "latest_receipt_id": str(latest.get("receipt_id") or ""),
+        "latest_status": str(latest.get("status") or ""),
+        "latest_created_ts": _record_ts(latest.get("created_ts")),
+        "latest_bounded_supervised_session": bool(latest_execution.get("bounded_supervised_session")),
+        "latest_temporary_host_process_observed": bool(latest_execution.get("temporary_host_process_observed")),
+        "latest_resident_runtime_candidate_supervised": candidate_supervised,
+        "latest_resident_supervised_runtime": resident_supervised_runtime,
+        "latest_next_smallest_truthful_gap": next_gap,
+        "resident_runtime_candidate_receipt_observed": candidate_receipt_observed,
+        "resident_claim_allowed": False,
+        "resident_claim_authority": False,
+        "evidence_only": True,
+        "does_not_satisfy_resident_host_process": True,
+    }
+
+
 def _lens_host_activation_execution_requirement_readback(launch_manifest: dict[str, Any]) -> dict[str, Any]:
     readback = _as_dict(launch_manifest.get("activation_execution_readback"))
     return {
@@ -380,6 +444,32 @@ def _lens_host_activation_execution_requirement_readback(launch_manifest: dict[s
         "resident_claim_authority": bool(readback.get("resident_claim_authority")),
         "activation_execution_evidence_only": True,
         "activation_execution_does_not_satisfy_resident_host_process": True,
+    }
+
+
+def _lens_host_supervision_execution_requirement_readback(launch_manifest: dict[str, Any]) -> dict[str, Any]:
+    readback = _as_dict(launch_manifest.get("supervision_execution_readback"))
+    return {
+        "supervision_execution_route": str(readback.get("route") or "/lens/host/supervision/executions"),
+        "supervision_execution_execute_route": str(readback.get("execute_route") or "/lens/host/supervision/execute"),
+        "supervision_execution_readback_status": str(readback.get("status") or "empty"),
+        "supervision_execution_receipt_count": _safe_pid(readback.get("receipt_count")),
+        "supervision_execution_receipt_id": str(readback.get("latest_receipt_id") or ""),
+        "supervision_execution_status": str(readback.get("latest_status") or ""),
+        "supervision_execution_bounded_session": bool(readback.get("latest_bounded_supervised_session")),
+        "supervision_execution_temporary_host_process_observed": bool(
+            readback.get("latest_temporary_host_process_observed")
+        ),
+        "supervision_execution_resident_runtime_candidate_supervised": bool(
+            readback.get("latest_resident_runtime_candidate_supervised")
+        ),
+        "supervision_execution_resident_supervised_runtime": bool(readback.get("latest_resident_supervised_runtime")),
+        "supervision_execution_next_smallest_truthful_gap": str(
+            readback.get("latest_next_smallest_truthful_gap") or ""
+        ),
+        "supervision_execution_receipt_observed": bool(readback.get("resident_runtime_candidate_receipt_observed")),
+        "supervision_execution_evidence_only": True,
+        "supervision_execution_does_not_satisfy_resident_host_process": True,
     }
 
 
@@ -630,6 +720,19 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "would_execute": False,
         "would_mutate": False,
     }
+    if requirement_id == "resident_host_process":
+        for key in (
+            "resident_runtime_candidate_supervised",
+            "fresh_resident_runtime_candidate_supervised",
+            "supervisor_freshness_status",
+            "supervisor_state_age_seconds",
+            "supervision_execution_receipt_observed",
+            "supervision_execution_receipt_id",
+            "supervision_execution_readback_status",
+            "supervision_execution_next_smallest_truthful_gap",
+        ):
+            if key in dependency:
+                handoff[key] = dependency[key]
     handoff.update(authority_readback)
     return handoff
 
@@ -651,52 +754,66 @@ def _lens_host_resident_process_requirement_readback(
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     activation_execution_readback = _lens_host_activation_execution_requirement_readback(launch_manifest)
+    supervision_execution_readback = _lens_host_supervision_execution_requirement_readback(launch_manifest)
     process_alive = bool(process_readback.get("process_alive"))
     blocked_reason = str(process_readback.get("blocked_reason") or "")
     resident_candidate_supervised = bool(supervisor_readback.get("resident_runtime_candidate_supervised"))
     fresh_resident_candidate_supervised = bool(supervisor_readback.get("fresh_resident_runtime_candidate_supervised"))
+    supervision_execution_candidate_observed = bool(
+        supervision_execution_readback.get("supervision_execution_receipt_observed")
+    )
+    durable_resident_candidate_supervised = resident_candidate_supervised or bool(
+        supervision_execution_readback.get("supervision_execution_resident_runtime_candidate_supervised")
+    )
     if not missing:
         return {
             **activation_execution_readback,
+            **supervision_execution_readback,
             "requirement_state": "ready",
             "process_alive": process_alive,
             "blocked_reason": "",
-            "resident_runtime_candidate_supervised": resident_candidate_supervised,
+            "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
             "resident_supervised_runtime": False,
         }
-    if fresh_resident_candidate_supervised and resident_candidate_supervised:
+    if (
+        fresh_resident_candidate_supervised and resident_candidate_supervised
+    ) or supervision_execution_candidate_observed:
         return {
             **activation_execution_readback,
+            **supervision_execution_readback,
             "requirement_state": "resident_candidate_observed_not_persistent",
             "process_alive": process_alive,
             "blocked_reason": "resident_supervision_not_persistent",
             "blocker": "resident_supervision_not_persistent",
             "resident_runtime_candidate_supervised": True,
-            "fresh_resident_runtime_candidate_supervised": True,
+            "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
             "resident_supervised_runtime": False,
             "resident_claim_allowed": False,
             "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
             "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
+            "supervision_execution_receipt_observed": supervision_execution_candidate_observed,
         }
     if process_alive:
         return {
             **activation_execution_readback,
+            **supervision_execution_readback,
             "requirement_state": "foreground_observed_not_supervised",
             "process_alive": True,
             "blocked_reason": blocked_reason or "resident_host_not_supervised",
             "blocker": "resident_host_process_not_supervised",
-            "resident_runtime_candidate_supervised": resident_candidate_supervised,
+            "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
             "resident_supervised_runtime": False,
         }
     return {
         **activation_execution_readback,
+        **supervision_execution_readback,
         "requirement_state": "missing",
         "process_alive": False,
         "blocked_reason": blocked_reason or "resident_host_process_missing",
         "blocker": "resident_host_process_missing",
-        "resident_runtime_candidate_supervised": resident_candidate_supervised,
+        "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
         "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
         "resident_supervised_runtime": False,
     }
@@ -2148,6 +2265,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     )
     process_readback = _lens_host_process_readback()
     supervisor_readback = _lens_host_supervisor_readback()
+    supervision_execution_readback = _lens_host_supervision_execution_readback()
     supervision_readiness = _lens_host_supervision_readiness(
         entrypoint_exists=entrypoint_exists,
         service_manager=service_manager,
@@ -2309,6 +2427,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "service_readback": service_readback,
         "process_readback": process_readback,
         "activation_execution_readback": activation_execution_readback,
+        "supervision_execution_readback": supervision_execution_readback,
         "supervisor_readback": supervisor_readback,
         "supervision_readiness": supervision_readiness,
         "required_bindings": [
@@ -2348,6 +2467,13 @@ def lens_host_launch_manifest() -> dict[str, Any]:
                 "status": activation_execution_readback["status"],
                 "receipt_count": activation_execution_readback["receipt_count"],
                 "latest_receipt_id": activation_execution_readback["latest_receipt_id"],
+            },
+            {
+                "id": "host_supervision_execution_receipts",
+                "route": supervision_execution_readback["route"],
+                "status": supervision_execution_readback["status"],
+                "receipt_count": supervision_execution_readback["receipt_count"],
+                "latest_receipt_id": supervision_execution_readback["latest_receipt_id"],
             },
             {
                 "id": "host_supervisor_readback",

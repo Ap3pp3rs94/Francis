@@ -25,6 +25,7 @@ def _manifest(
     process_blocker: str,
     surface_dependencies: list[str] | None = None,
     activation_execution_readback: dict[str, Any] | None = None,
+    supervision_execution_readback: dict[str, Any] | None = None,
     supervisor_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     process_blockers = [process_blocker] if process_blocker else []
@@ -47,6 +48,7 @@ def _manifest(
             "blocked_reason": process_blocker,
         },
         "activation_execution_readback": activation_execution_readback or {},
+        "supervision_execution_readback": supervision_execution_readback or {},
         "supervisor_readback": supervisor_readback or {},
         "blocker_groups": {
             "process_readback": process_blockers,
@@ -235,6 +237,59 @@ def test_persistent_supervision_prerequisite_readback_links_persistent_process_a
         assert dependency["fresh_resident_runtime_candidate_supervised"] is True
         assert dependency["resident_runtime_candidate_supervised"] is True
         assert dependency["resident_supervised_runtime"] is False
+
+
+def test_persistent_supervision_prerequisite_readback_preserves_supervision_receipt_after_freshness() -> None:
+    manifest = _manifest(
+        process_alive=False,
+        process_blocker="resident_host_process_missing",
+        supervisor_readback={
+            "resident_runtime_candidate_supervised": True,
+            "fresh_resident_runtime_candidate_supervised": False,
+            "freshness_status": "stale",
+            "state_age_seconds": 1200,
+        },
+        supervision_execution_readback={
+            "status": "readback_ready",
+            "route": "/lens/host/supervision/executions",
+            "execute_route": "/lens/host/supervision/execute",
+            "receipt_count": 1,
+            "latest_receipt_id": "lhse_test_receipt",
+            "latest_status": "resident_candidate_supervised_not_persistent",
+            "latest_bounded_supervised_session": True,
+            "latest_temporary_host_process_observed": True,
+            "latest_resident_runtime_candidate_supervised": True,
+            "latest_resident_supervised_runtime": False,
+            "latest_next_smallest_truthful_gap": "resident_supervision_not_persistent",
+            "resident_runtime_candidate_receipt_observed": True,
+        },
+    )
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        handoff = body["first_missing_requirement_handoff"]
+        assert handoff["id"] == "resident_host_process"
+        assert handoff["requirement_state"] == "resident_candidate_observed_not_persistent"
+        assert handoff["blocker"] == "resident_supervision_not_persistent"
+        assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        assert (
+            handoff["proof_script"] == "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
+        )
+        assert handoff["supervision_execution_receipt_observed"] is True
+        assert handoff["supervision_execution_receipt_id"] == "lhse_test_receipt"
+        assert handoff["fresh_resident_runtime_candidate_supervised"] is False
+        assert handoff["resident_runtime_candidate_supervised"] is True
+
+        dependency = _dependency_by_id(body)["resident_host_process"]
+        assert dependency["requirement_state"] == "resident_candidate_observed_not_persistent"
+        assert dependency["blocker"] == "resident_supervision_not_persistent"
+        assert dependency["supervision_execution_receipt_observed"] is True
+        assert dependency["supervision_execution_receipt_id"] == "lhse_test_receipt"
+        assert dependency["supervision_execution_next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        assert dependency["fresh_resident_runtime_candidate_supervised"] is False
+        assert dependency["resident_runtime_candidate_supervised"] is True
 
 
 def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate() -> None:

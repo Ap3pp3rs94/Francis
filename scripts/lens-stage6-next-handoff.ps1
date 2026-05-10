@@ -228,17 +228,34 @@ if ($PersistentSupervisionRequiredPrerequisitesObserved) {
   }
 }
 
+$FirstMissingResidentCandidateSupervised = [bool](
+  Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'resident_runtime_candidate_supervised' -Default $false
+)
+$SupervisionExecutionReceiptObserved = [bool](
+  Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'supervision_execution_receipt_observed' -Default $false
+)
+$SupervisionExecutionReceiptId = [string](
+  Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'supervision_execution_receipt_id' -Default ''
+)
+$CandidateObservedByFreshSupervisor = (
+  $FreshResidentRuntimeCandidateSupervised -and
+  $ResidentRuntimeCandidateSupervised -and
+  $SupervisorFreshnessStatus -eq 'fresh'
+)
+$CandidateObservedByDurableReceipt = (
+  $SupervisionExecutionReceiptObserved -and
+  $FirstMissingResidentCandidateSupervised -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'supervision_execution_next_smallest_truthful_gap' -Default '') -eq 'resident_supervision_not_persistent'
+)
 $ResidentRuntimeCandidateHandoff = [ordered]@{}
 $ResidentRuntimeCandidateHandoffObserved = (
   $PersistentSupervisionFirstMissingRequirementHandoffReady -and
-  $FreshResidentRuntimeCandidateSupervised -and
-  $ResidentRuntimeCandidateSupervised -and
-  $SupervisorFreshnessStatus -eq 'fresh' -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
   @(
     'resident_host_process_not_supervised',
     'resident_supervision_not_persistent'
-  ) -contains [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')
+  ) -contains [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -and
+  ($CandidateObservedByFreshSupervisor -or $CandidateObservedByDurableReceipt)
 )
 if ($ResidentRuntimeCandidateHandoffObserved) {
   $ResidentRuntimeCandidateHandoff = [ordered]@{
@@ -250,7 +267,10 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
     proof_script = 'scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status'
     route = '/lens/host'
     readiness_route = '/lens/host/runtime-loop/readiness'
-    source = '/lens/status resident_host.fresh_resident_runtime_candidate_supervised'
+    source = $(if ($CandidateObservedByDurableReceipt) { '/lens/status resident_host.persistent_supervision_plan.first_missing_requirement_handoff.supervision_execution_receipt_observed' } else { '/lens/status resident_host.fresh_resident_runtime_candidate_supervised' })
+    receipt_id = $SupervisionExecutionReceiptId
+    candidate_observed_by_fresh_supervisor = $CandidateObservedByFreshSupervisor
+    candidate_observed_by_supervision_execution_receipt = $CandidateObservedByDurableReceipt
     blocked_reason = 'resident_supervision_not_persistent'
     acceptance_criterion = 'system_resident_presence'
     authority_required = 'persistent_process_supervision_authority'
@@ -428,7 +448,7 @@ $Checks = @(
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'first_missing_requirement_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $PersistentSupervisionFirstMissingRequirementHandoffReady -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
-  New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.fresh_resident_runtime_candidate_supervised' -Reason 'When a fresh supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
+  New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
   New-Check -Id 'side_effects_denied' -Status 'readback_only' -Passed $SideEffectsDenied -Evidence 'handoff governance flags' -Reason 'The handoff script must not grant or imply execution authority.'
 )
 $Ok = -not @($Checks | Where-Object { -not [bool](Get-PropertyValue -Payload $_ -Name 'passed' -Default $false) })

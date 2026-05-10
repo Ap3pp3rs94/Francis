@@ -394,3 +394,66 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
     assert payload["governance"]["local_process_launch_authority"] is False
     assert payload["governance"]["process_supervision_authority"] is False
     assert payload["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    receipt_root = data_root / "lens" / "host_supervision_executions"
+    receipt_root.mkdir(parents=True, exist_ok=True)
+    receipt_id = "lhse_test_durable_candidate"
+    (receipt_root / f"{receipt_id}.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervision.execution.receipt",
+                "receipt_id": receipt_id,
+                "status": "resident_candidate_supervised_not_persistent",
+                "created_ts": int(datetime.now(UTC).timestamp()),
+                "execution": {
+                    "bounded_supervised_session": True,
+                    "temporary_host_process_observed": True,
+                    "resident_runtime_candidate_supervised": True,
+                    "resident_supervised_runtime": False,
+                    "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+                },
+                "resident_claim": {
+                    "resident_host_process_claimed": False,
+                    "resident_runtime_claimed": False,
+                    "resident_claim_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert payload["recommended_next_slice"] == (
+        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    )
+    assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
+    assert payload["resident_runtime_candidate_handoff_observed"] is True
+
+    handoff = payload["resident_runtime_candidate_handoff"]
+    assert handoff["status"] == "observed_not_persistent"
+    assert handoff["receipt_id"] == receipt_id
+    assert handoff["source"] == (
+        "/lens/status resident_host.persistent_supervision_plan.first_missing_requirement_handoff."
+        "supervision_execution_receipt_observed"
+    )
+    assert handoff["candidate_observed_by_fresh_supervisor"] is False
+    assert handoff["candidate_observed_by_supervision_execution_receipt"] is True
+    assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_runtime_candidate_handoff"]["status"] == "receipt_candidate_handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["process_supervision_authority"] is False
+    assert payload["governance"]["resident_claim_authority"] is False
