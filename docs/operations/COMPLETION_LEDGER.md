@@ -23802,6 +23802,40 @@ handoff slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-next-handoff.ps1`
 
+### 2026-05-10 - Stage 6/Lens completion audit child-proof timeouts
+
+The Stage 6 completion audit now carries its bounded child-proof timeout into
+the summon-anywhere family-chain proof. The family-chain proof now runs its
+child proof scripts through a timeout-aware process wrapper and reports
+`child_proof_timeout_seconds`, `child_proof_timeouts`, and `child_proof_runs`.
+The completion audit preserves those nested fields in its
+`summon_anywhere_family_chain_proof` readback.
+
+This is a Stage 6/Lens diagnostic/audit-harness and test slice. It changes no
+UI files, execution authority, approval decision authority, memory-write
+behavior, process-supervision authority, process-restart authority, service
+install/control authority, tray registration, hotkey registration, overlay
+control, summon authority, capture or sensing authority, resident claim,
+telemetry behavior, or Stage 6 transition state.
+
+Stage 6 remains active and not ready to close. This slice makes the completion
+audit path more bounded and inspectable before the next resident-supervision
+and summon-anywhere readiness work.
+
+Latest validation for the `2026-05-10` Stage 6/Lens completion audit
+child-proof timeout slice:
+
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 60 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,child_proof_timeout_seconds,child_proof_timeouts | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; child_proof_timeout_seconds=60; child_proof_timeouts=[]`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed after audit projection fix`
+- `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

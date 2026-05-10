@@ -51,7 +51,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "-SupervisorRunSeconds",
         "3",
         "-ChildProofTimeoutSeconds",
-        "420",
+        "120",
     )
 
     assert proc.returncode == 0, proc.stderr
@@ -68,7 +68,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["next_stage"] == "Stage 7 / Telemetry"
     assert payload["requested_child_host_launch_run_seconds"] == 2
     assert payload["child_host_launch_run_seconds"] >= 5
-    assert payload["child_proof_timeout_seconds"] == 420
+    assert payload["child_proof_timeout_seconds"] == 120
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
@@ -88,10 +88,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "persistent_supervision_resident_claim_boundary",
         "persistent_supervision_enablement_transition_plan",
     }
-    expected_child_proof_timeouts = {name: 420 for name in child_proof_runs} | {
-        "resident_supervision_persistence_boundary": 240,
-        "persistent_supervision_prerequisites": 240,
-    }
+    expected_child_proof_timeouts = {name: 120 for name in child_proof_runs}
     for name, run in child_proof_runs.items():
         assert run["timed_out"] is False
         assert run["timeout_seconds"] == expected_child_proof_timeouts[name]
@@ -1559,6 +1556,19 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["all_summon_blocker_families_consumed"] is True
     assert summon_anywhere_family_chain_proof["handoff_aligned"] is True
     assert summon_anywhere_family_chain_proof["side_effects_denied"] is True
+    assert summon_anywhere_family_chain_proof["child_proof_timeout_seconds"] == 120
+    assert summon_anywhere_family_chain_proof["child_proof_timeouts"] == []
+    family_child_proof_runs = {item["name"]: item for item in summon_anywhere_family_chain_proof["child_proof_runs"]}
+    assert set(family_child_proof_runs) == {
+        "summon_anywhere_blockers",
+        "summon_resident_host_blocker",
+        "summon_authority_blocker",
+    }
+    for run in family_child_proof_runs.values():
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 120
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
     assert summon_anywhere_family_chain_proof["blocked_families"] == expected_summon_family_ids
     assert [item["id"] for item in summon_anywhere_family_chain_proof["blocked_family_handoffs"]] == (
         expected_summon_family_ids

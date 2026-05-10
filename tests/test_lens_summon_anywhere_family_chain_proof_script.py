@@ -39,7 +39,14 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> None:
-    proc = _run_proof("-Mode", "Status", "-DataDir", str(tmp_path / "data"))
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(tmp_path / "data"),
+        "-ChildProofTimeoutSeconds",
+        "60",
+    )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
@@ -57,6 +64,19 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["all_summon_blocker_families_consumed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
+    assert payload["child_proof_timeout_seconds"] == 60
+    assert payload["child_proof_timeouts"] == []
+    child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
+    assert set(child_proof_runs) == {
+        "summon_anywhere_blockers",
+        "summon_resident_host_blocker",
+        "summon_authority_blocker",
+    }
+    for run in child_proof_runs.values():
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 60
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
 
     assert payload["blocked_families"] == [
         "resident_host",

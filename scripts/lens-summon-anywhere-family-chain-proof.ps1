@@ -2,7 +2,10 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [ValidateRange(5, 600)]
+  [int]$ChildProofTimeoutSeconds = 120
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +58,31 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-JsonScript {
   param(
     [Parameter(Mandatory = $true)]
@@ -63,7 +91,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -71,12 +101,85 @@ function Invoke-JsonScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $ArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $ScriptPath)
+  )
+  foreach ($Arg in $ScriptArgs) {
+    $ArgumentParts += (Quote-ProcessArgument -Value $Arg)
+  }
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = $ArgumentParts -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StderrTask = $Process.StandardError.ReadToEndAsync()
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $Text = $StdoutTask.GetAwaiter().GetResult()
+  $ErrorText = $StderrTask.GetAwaiter().GetResult()
+  $Timer.Stop()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -85,9 +188,29 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
+    timeout_seconds = $TimeoutSeconds
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+  }
+}
+
+function New-ChildProofRunSummary {
+  param(
+    [string]$Name,
+    [object]$Result
+  )
+
+  return [ordered]@{
+    name = $Name
+    exit_code = [int](Get-PropertyValue -Payload $Result -Name 'exit_code' -Default -1)
+    timed_out = [bool](Get-PropertyValue -Payload $Result -Name 'timed_out' -Default $false)
+    timeout_seconds = [int](Get-PropertyValue -Payload $Result -Name 'timeout_seconds' -Default $ChildProofTimeoutSeconds)
+    duration_ms = [int](Get-PropertyValue -Payload $Result -Name 'duration_ms' -Default 0)
+    error = [string](Get-PropertyValue -Payload $Result -Name 'error' -Default '')
   }
 }
 
@@ -168,6 +291,12 @@ $AuthorityGovernance = Get-PropertyValue -Payload $AuthorityPayload -Name 'gover
 $AuthorityBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $AuthorityPayload -Name 'summon_authority_blockers' -Default @()
 )
+$ChildProofRuns = @(
+  (New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonResult),
+  (New-ChildProofRunSummary -Name 'summon_resident_host_blocker' -Result $ResidentHostResult),
+  (New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $AuthorityResult)
+)
+$ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
 
 $ExpectedFamilies = @(
   'resident_host',
@@ -290,6 +419,9 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   all_summon_blocker_families_consumed = $HandoffAligned
   handoff_aligned = $HandoffAligned
   side_effects_denied = $SideEffectsDenied
+  child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+  child_proof_timeouts = [string[]]@($ChildProofTimeouts)
+  child_proof_runs = @($ChildProofRuns)
   blocked_families = [string[]]@($SummonFamilies)
   blocked_family_handoffs = @($SummonHandoffs)
   first_blocker_family = [string](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family' -Default '')

@@ -260,7 +260,8 @@ $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShe
 )
 $SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
 $SummonAnywhereFamilyChainProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereFamilyChainProofScript -ScriptArgs @(
-  '-Mode', 'Status'
+  '-Mode', 'Status',
+  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
 )
 $SummonAnywhereFamilyChainProof = $SummonAnywhereFamilyChainProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
@@ -2918,6 +2919,9 @@ $Payload = [ordered]@{
     all_summon_blocker_families_consumed = [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed
     handoff_aligned = [bool]$SummonAnywhereFamilyChainProof.handoff_aligned
     side_effects_denied = [bool]$SummonAnywhereFamilyChainProof.side_effects_denied
+    child_proof_timeout_seconds = [int]$SummonAnywhereFamilyChainProof.child_proof_timeout_seconds
+    child_proof_timeouts = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.child_proof_timeouts)
+    child_proof_runs = @($SummonAnywhereFamilyChainProof.child_proof_runs)
     blocked_families = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
     blocked_family_handoffs = @($SummonAnywhereFamilyChainProof.blocked_family_handoffs)
     first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
