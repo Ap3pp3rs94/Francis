@@ -99,6 +99,22 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         assert run["duration_ms"] >= 0
     assert payload["checkpoint_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["recommended_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "resident_host_process"
+    assert recommended_handoff["blocker"] == "resident_host_process_missing"
+    assert recommended_handoff["requirement_state"] == "missing"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
     assert payload["stage6_completion_reviewed"] is True
     assert "resident-supervision persistence boundary proof" in (payload["next_smallest_truthful_gap_basis"])
     assert "persistent-supervision prerequisite guard proof" in (payload["next_smallest_truthful_gap_basis"])
@@ -110,6 +126,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing"
         in (payload["next_smallest_truthful_gap_basis"])
     )
+    assert "first concrete handoff" in payload["next_smallest_truthful_gap_basis"]
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

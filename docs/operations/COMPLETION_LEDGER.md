@@ -23249,6 +23249,47 @@ service-config execution receipt slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens completion audit carries prerequisite handoff
+
+The Stage 6 completion audit now returns a concrete top-level handoff when the
+active completion gap is `persistent_supervision_required_prerequisites_missing`.
+Instead of ending the audit payload with a broad prerequisite blocker and no
+recommended slice, the audit now projects the existing persistent-supervision
+prerequisites first-missing-requirement handoff into:
+
+- `recommended_handoff_source`
+- `recommended_next_slice`
+- `recommended_proof_script`
+- `authority_required`
+- `recommended_handoff`
+
+For the current repo truth, that handoff points to the resident-host process
+prerequisite via `scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode
+Status`, with the next slice
+`resolve_resident_host_process_before_persistent_supervision_enablement`.
+
+This is a Stage 6/Lens audit/readback-only correction. It grants no UI behavior,
+execution authority, approval decision authority, production approval-write
+behavior, memory-write behavior, product local-process-launch authority, API
+local-process-launch authority, process-supervision authority, process-restart
+authority, service-install authority, service-control authority, tray
+registration authority, hotkey registration authority, overlay control
+authority, summon authority, capture authority, new sensing authority,
+telemetry behavior, persistent resident process lifetime, resident claim, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens completion audit handoff
+slice:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting the test assertion block`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
