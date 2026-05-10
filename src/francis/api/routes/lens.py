@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from francis.lens import (
     deny_lens_os_binding_execution,
     deny_lens_host_persistent_supervision_enablement,
+    deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
     execute_lens_host_activation,
@@ -476,6 +477,20 @@ def host_persistent_supervision_enablement_execution(
 
 
 @router.post("/host/persistent-supervision/enablement/execution")
+def host_persistent_supervision_enablement_execution_denial(
+    request: Request,
+    payload: LensHostPersistentSupervisionEnablementExecutionIn,
+) -> dict[str, Any]:
+    return deny_lens_host_persistent_supervision_enablement_execution(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.post("/host/persistent-supervision/enablement/execution/apply")
 def host_persistent_supervision_enablement_execution_apply(
     request: Request,
     payload: LensHostPersistentSupervisionEnablementExecutionIn,

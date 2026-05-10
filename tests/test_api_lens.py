@@ -5773,8 +5773,37 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert granted_requirements["receipt_write_authority"]["ready"] is True
     assert granted_requirements["resident_claim_authority"]["ready"] is False
 
-    execution = client.post(
+    granted_denial = client.post(
         "/lens/host/persistent-supervision/enablement/execution",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "prove execution boundary remains read-only after explicit authority",
+        },
+    )
+    assert granted_denial.status_code == 200
+    granted_denial_body = granted_denial.json()
+    assert granted_denial_body["kind"] == "lens.host.persistent_supervision_enablement_execution.denial"
+    assert granted_denial_body["status"] == "denied_no_resident_claim_authority"
+    assert granted_denial_body["route"] == "/lens/host/persistent-supervision/enablement/execution"
+    assert granted_denial_body["apply_route"] == "/lens/host/persistent-supervision/enablement/execution/apply"
+    assert granted_denial_body["authority_granted"] is True
+    assert granted_denial_body["service_config_write_authority"] is True
+    assert granted_denial_body["persistent_supervision_execution_authority"] is True
+    assert granted_denial_body["applied"] is False
+    assert granted_denial_body["executed"] is False
+    assert granted_denial_body["service_config_updated"] is False
+    assert granted_denial_body["denial"]["would_update_service_config"] is False
+    assert granted_denial_body["denial"]["would_write_receipt"] is False
+    assert not (data_root / "lens" / "pse_executions").exists()
+    denied_service_config = json.loads(
+        (repo_root / "config" / "runtime" / "services" / "lens-host.json").read_text(encoding="utf-8")
+    )
+    assert denied_service_config["process_supervision_enabled"] is False
+    assert denied_service_config["persistent_supervision_enabled"] is False
+
+    execution = client.post(
+        "/lens/host/persistent-supervision/enablement/execution/apply",
         json={
             "approval_id": approval_id,
             "actor": "test.system.write",
@@ -5785,6 +5814,9 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     execution_body = execution.json()
     assert execution_body["kind"] == "lens.host.persistent_supervision_enablement_execution.execution"
     assert execution_body["status"] == "service_config_updated"
+    assert execution_body["route"] == "/lens/host/persistent-supervision/enablement/execution/apply"
+    assert execution_body["denial_route"] == "/lens/host/persistent-supervision/enablement/execution"
+    assert execution_body["apply_route"] == "/lens/host/persistent-supervision/enablement/execution/apply"
     assert execution_body["authority_granted"] is True
     assert execution_body["active_execution_authority_grant_receipt_id"] == execution_receipt_id
     assert execution_body["service_config_write_authority"] is True
@@ -5878,6 +5910,9 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert resident_host["persistent_supervision_enablement_execution_denial"]["applied"] is False
     assert resident_host["persistent_supervision_enablement_execution_denial"]["executed"] is False
     assert resident_host["persistent_supervision_enablement_execution_denial"]["service_config_updated"] is False
+    assert resident_host["persistent_supervision_enablement_execution_apply_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/apply"
+    )
     assert resident_host["persistent_supervision_enablement_execution_receipts_route"] == (
         "/lens/host/persistent-supervision/enablement/executions"
     )

@@ -601,6 +601,9 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
             persistent_supervision_enablement_execution_denial.get("route")
         ).strip(),
         "persistent_supervision_enablement_execution_denial": persistent_supervision_enablement_execution_denial,
+        "persistent_supervision_enablement_execution_apply_route": _safe_str(
+            persistent_supervision_enablement_execution_denial.get("apply_route")
+        ).strip(),
         "persistent_supervision_enablement_execution_receipts_route": _safe_str(
             persistent_supervision_enablement_execution_receipts.get("route")
         ).strip(),

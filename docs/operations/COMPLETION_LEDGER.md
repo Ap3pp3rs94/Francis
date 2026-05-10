@@ -23207,11 +23207,13 @@ service-config step after the full existing authority chain is satisfied:
 - active persistent-supervision execution authority grant
 - `system.write` actor scope
 
-When those gates are present, `POST
-/lens/host/persistent-supervision/enablement/execution` updates only the Lens
-host service config fields that make process supervision and persistent
+When those gates are present, the explicit apply boundary at `POST
+/lens/host/persistent-supervision/enablement/execution/apply` updates only the
+Lens host service config fields that make process supervision and persistent
 supervision enabled for the next prerequisite check, then writes a receipt under
-`data/lens/pse_executions`. The receipt is readable from
+`data/lens/pse_executions`. The existing `POST
+/lens/host/persistent-supervision/enablement/execution` route remains a
+read-only denial/proof boundary for Stage 6 proof scripts. The receipt is readable from
 `GET /lens/host/persistent-supervision/enablement/executions` and is projected
 into `/lens/status` and the Stage 6 readiness criteria.
 

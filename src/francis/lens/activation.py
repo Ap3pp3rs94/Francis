@@ -67,6 +67,9 @@ LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ACTION = (
     "lens.host.persistent_supervision_enablement_execution_authority"
 )
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_ROUTE = "/lens/host/persistent-supervision/enablement/execution"
+LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_APPLY_ROUTE = (
+    "/lens/host/persistent-supervision/enablement/execution/apply"
+)
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTIONS_ROUTE = "/lens/host/persistent-supervision/enablement/executions"
 LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE = (
     "/lens/host/persistent-supervision/enablement/execution/request"
@@ -7808,6 +7811,7 @@ def deny_lens_host_persistent_supervision_enablement_execution(
         "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE,
         "requests_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUESTS_ROUTE,
         "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_READINESS_ROUTE,
+        "apply_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_APPLY_ROUTE,
         "grant_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_ROUTE,
         "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_GRANTS_ROUTE,
         "enablement_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_ROUTE,
@@ -7877,11 +7881,11 @@ def execute_lens_host_persistent_supervision_enablement(
     approval_id: Any = "",
     actor: Any = "",
     reason: Any = "attempt Lens persistent supervision execution enablement",
-    route: str = LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_ROUTE,
+    route: str = LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_APPLY_ROUTE,
     method: str = "POST",
     record_receipt: bool = False,
 ) -> dict[str, Any]:
-    safe_route = _safe_str(route).strip() or LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_ROUTE
+    safe_route = _safe_str(route).strip() or LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_APPLY_ROUTE
     safe_method = _safe_str(method).strip() or "POST"
     safe_approval_id = _safe_str(approval_id).strip()
     boundary = deny_lens_host_persistent_supervision_enablement_execution(
@@ -7940,6 +7944,8 @@ def execute_lens_host_persistent_supervision_enablement(
         "request_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE,
         "requests_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUESTS_ROUTE,
         "readiness_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_READINESS_ROUTE,
+        "denial_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_ROUTE,
+        "apply_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_APPLY_ROUTE,
         "grant_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_ROUTE,
         "grants_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_GRANTS_ROUTE,
         "receipts_route": LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTIONS_ROUTE,
