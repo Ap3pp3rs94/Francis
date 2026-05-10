@@ -100,7 +100,7 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     assert proof["supervisor_runner"] == "scripts/lens-host-supervisor.ps1"
     assert proof["service_config"] == "config/runtime/services/lens-host.json"
     assert proof["service_plan_runtime_mode"] == "Resident"
-    assert proof["service_plan_process_supervision_enabled"] is False
+    assert proof["service_plan_process_supervision_enabled"] is True
     assert proof["service_plan_service_control_authority"] is False
     assert proof["resident_runtime_candidate_available"] is True
     assert proof["resident_runtime_candidate_supervised"] is False

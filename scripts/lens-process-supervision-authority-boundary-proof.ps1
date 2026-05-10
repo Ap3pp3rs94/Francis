@@ -370,7 +370,7 @@ $HostSupervisionObserved = (
 )
 $ProcessSupervisionDenied = (
   $HostSupervisionObserved -and
-  [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'process_supervision_status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'process_supervision_status' -Default '') -in @('blocked', 'enabled') -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervised' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_supervision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_restart_authority' -Default $true)

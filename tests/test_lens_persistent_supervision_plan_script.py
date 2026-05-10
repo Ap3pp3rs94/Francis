@@ -61,8 +61,8 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert payload["authority_grant_active"] is False
     assert payload["authority_grant_receipt_id"] == ""
     assert payload["requirements_total"] >= 10
-    assert payload["requirements_ready_total"] >= 3
-    assert payload["requirements_blocked_total"] >= 7
+    assert payload["requirements_ready_total"] >= 5
+    assert payload["requirements_blocked_total"] >= 5
     expected_required_before_enable = [
         "resident_host_process",
         "tray_presence",
@@ -83,8 +83,8 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert requirements["service_config"]["ready"] is True
     assert requirements["host_entrypoint"]["ready"] is True
     assert requirements["service_manager"]["ready"] is True
-    assert requirements["process_supervision_enabled"]["ready"] is False
-    assert requirements["persistent_supervision_enabled"]["ready"] is False
+    assert requirements["process_supervision_enabled"]["ready"] is True
+    assert requirements["persistent_supervision_enabled"]["ready"] is True
     assert requirements["process_restart_authority"]["ready"] is False
     assert requirements["service_install_authority"]["ready"] is False
     assert requirements["service_control_authority"]["ready"] is False
@@ -145,14 +145,13 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
 
     assert payload["first_missing_requirement_handoff"] == resident_host
 
-    assert "process_supervision_disabled" in payload["blockers"]
-    assert "persistent_supervision_disabled" in payload["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in payload["blockers"]
     assert "process_restart_authority_not_granted" in payload["blockers"]
     assert "service_install_authority_not_granted" in payload["blockers"]
     assert "service_control_authority_not_granted" in payload["blockers"]
     assert "receipt_write_authority_not_granted" in payload["blockers"]
     assert "resident_claim_authority_not_granted" in payload["blockers"]
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
 
     plan = payload["plan"]
     assert plan["would_install_service"] is False
@@ -229,7 +228,7 @@ def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receip
     assert payload["resident_claim_allowed"] is False
     assert payload["authority_grant_active"] is True
     assert payload["authority_grant_receipt_id"] == receipt_id
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["required_before_enable_ready"] is False
     assert payload["missing_required_before_enable"] == [
         "resident_host_process",
@@ -244,8 +243,8 @@ def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receip
     )
 
     requirements = {item["id"]: item for item in payload["requirements"]}
-    assert requirements["process_supervision_enabled"]["ready"] is False
-    assert requirements["persistent_supervision_enabled"]["ready"] is False
+    assert requirements["process_supervision_enabled"]["ready"] is True
+    assert requirements["persistent_supervision_enabled"]["ready"] is True
     assert requirements["process_restart_authority"]["ready"] is True
     assert requirements["service_install_authority"]["ready"] is True
     assert requirements["service_control_authority"]["ready"] is True
@@ -257,13 +256,11 @@ def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receip
     assert requirements["receipt_write_authority"]["authority_granted"] is True
     assert requirements["resident_claim_authority"]["authority_granted"] is True
 
-    assert payload["blocked_requirements"] == [
-        "process_supervision_enabled",
-        "persistent_supervision_enabled",
-    ]
-    assert payload["requirements_ready_total"] == payload["requirements_total"] - 2
-    assert "process_supervision_disabled" in payload["blockers"]
-    assert "persistent_supervision_disabled" in payload["blockers"]
+    assert payload["blocked_requirements"] == []
+    assert payload["requirements_ready_total"] == payload["requirements_total"]
+    assert "persistent_supervision_required_prerequisites_missing" in payload["blockers"]
+    assert "process_supervision_disabled" not in payload["blockers"]
+    assert "persistent_supervision_disabled" not in payload["blockers"]
     assert "process_restart_authority_not_granted" not in payload["blockers"]
     assert "service_install_authority_not_granted" not in payload["blockers"]
     assert "service_control_authority_not_granted" not in payload["blockers"]

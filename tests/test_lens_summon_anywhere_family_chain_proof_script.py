@@ -75,7 +75,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     resident_host = payload["resident_host"]
     assert resident_host["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert resident_host["runtime_blockers"] == ["lens_host_runtime_not_implemented"]
+    assert resident_host["runtime_blockers"] == ["lens_host_persistent_supervision_prerequisites_pending"]
     assert resident_host["surface_blockers"] == [
         "tray_host_missing",
         "global_hotkey_binding_missing",

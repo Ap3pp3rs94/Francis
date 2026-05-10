@@ -118,8 +118,12 @@ $ResidentClaimBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payloa
 $RequiredBeforeEnable = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Prerequisites -Name 'required_before_enable' -Default @())
 $RequiredPrerequisiteGuardObserved = [bool](Get-PropertyValue -Payload $Prerequisites -Name 'required_before_enable_guard_observed' -Default $false)
 $PlanBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -Name 'blocked_requirements' -Default @())
-$ConfigToggleBlockers = [string[]]@(
-  $PlanBlockedRequirements | Where-Object { $_ -in @('process_supervision_enabled', 'persistent_supervision_enabled') }
+$PlanRequirements = @(Get-PropertyValue -Payload $Plan -Name 'requirements' -Default @())
+$EnabledConfigToggles = [string[]]@(
+  $PlanRequirements | Where-Object {
+    [string](Get-PropertyValue -Payload $_ -Name 'id' -Default '') -in @('process_supervision_enabled', 'persistent_supervision_enabled') -and
+    [bool](Get-PropertyValue -Payload $_ -Name 'ready' -Default $false)
+  } | ForEach-Object { [string](Get-PropertyValue -Payload $_ -Name 'id' -Default '') }
 )
 
 $PrerequisitesObserved = (
@@ -151,7 +155,7 @@ $ServicePlanObserved = (
   [string](Get-PropertyValue -Payload $ServicePlan -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_service_install_plan.proof' -and
   [string](Get-PropertyValue -Payload $ServicePlan -Name 'status' -Default '') -eq 'proof_passed' -and
   [bool](Get-PropertyValue -Payload $ServicePlan -Name 'ok' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $ServicePlan -Name 'persistent_supervision_enablement_disabled' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ServicePlan -Name 'persistent_supervision_config_gate_enabled' -Default $false) -and
   ($WindowsServicePlanObserved -or $UnsupportedServicePlanObserved)
 )
 
@@ -172,9 +176,9 @@ $PlanObserved = (
   [string](Get-PropertyValue -Payload $Plan -Name 'status' -Default '') -eq 'blocked' -and
   [bool](Get-PropertyValue -Payload $Plan -Name 'ok' -Default $false) -and
   [bool](Get-PropertyValue -Payload $Plan -Name 'authority_grant_active' -Default $false) -and
-  [string](Get-PropertyValue -Payload $Plan -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_enablement_disabled' -and
-  $PlanBlockers -contains 'process_supervision_disabled' -and
-  $PlanBlockers -contains 'persistent_supervision_disabled'
+  -not [bool](Get-PropertyValue -Payload $Plan -Name 'required_before_enable_ready' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Plan -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $PlanBlockers -contains 'persistent_supervision_required_prerequisites_missing'
 )
 
 $SideEffectsDenied = (
@@ -194,16 +198,21 @@ $Checks = @(
   (New-Check -Id 'persistent_supervision_prerequisites_proof' -Status $(if ($PrerequisitesObserved) { 'proof_observed' } else { 'missing_or_failed' }) -Passed $PrerequisitesObserved -Evidence 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status' -Reason 'Persistent supervision enablement must name route-bound prerequisites before transition planning can be trusted.')
   (New-Check -Id 'service_install_plan_boundary' -Status $(if ($ServicePlanObserved) { $ServicePlanStatus } else { 'missing_or_failed' }) -Passed $ServicePlanObserved -Evidence 'scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status' -Reason 'The transition plan must preserve Windows service plan truth without claiming a service plan on unsupported platforms.')
   (New-Check -Id 'persistent_supervision_authority_chain' -Status $(if ($ResidentClaimObserved) { 'resident_claim_boundary_observed' } else { 'missing_or_failed' }) -Passed $ResidentClaimObserved -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'The transition plan must consume the bounded authority chain before naming disabled enablement as the remaining product gap.')
-  (New-Check -Id 'disabled_enablement_config_readback' -Status $(if ($PlanObserved) { 'blocked_disabled' } else { 'missing_or_unexpected' }) -Passed $PlanObserved -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status' -Reason 'After bounded authority readback, the plan must still show process and persistent supervision disabled in service config.')
+  (New-Check -Id 'required_prerequisite_guard_readback' -Status $(if ($PlanObserved) { 'blocked_prerequisites' } else { 'missing_or_unexpected' }) -Passed $PlanObserved -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status' -Reason 'After bounded authority readback, the plan must still block on resident host, tray, hotkey, overlay, and summon prerequisites.')
   (New-Check -Id 'transition_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'no_side_effects' } else { 'unexpected_side_effect' }) -Passed $SideEffectsDenied -Evidence 'persistent_supervision_resident_claim_boundary.would_*' -Reason 'The transition plan proof must not mutate service config, start a runtime, write receipts, write memory, or claim residency.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
+$CombinedBlockers = @()
+$CombinedBlockers += @($PlanBlockers)
+$CombinedBlockers += @($ResidentClaimBlockers)
+$CombinedBlockers += @($ServiceBlockedBy)
+$CombinedBlockers += @('persistent_supervision_required_prerequisites_missing')
 
 $TransitionSteps = @(
   (New-TransitionStep -Id 'read_required_prerequisites' -Label 'Read persistent-supervision prerequisites' -Status $(if ($PrerequisitesObserved) { 'readback_ready' } else { 'blocked' }) -Ready $PrerequisitesObserved -Evidence 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status' -Blockers @() -NextStep 'verify_service_install_plan_boundary')
   (New-TransitionStep -Id 'verify_service_install_plan_boundary' -Label 'Verify service-install plan boundary' -Status $(if ($ServicePlanObserved) { $ServicePlanStatus } else { 'blocked' }) -Ready $ServicePlanObserved -Evidence 'scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status' -Blockers $ServiceBlockedBy -NextStep 'consume_persistent_supervision_authority_chain')
-  (New-TransitionStep -Id 'consume_persistent_supervision_authority_chain' -Label 'Consume bounded persistent-supervision authority chain' -Status $(if ($ResidentClaimObserved) { 'resident_claim_boundary_observed' } else { 'blocked' }) -Ready $ResidentClaimObserved -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Blockers $ResidentClaimBlockers -NextStep 'verify_disabled_enablement_config')
-  (New-TransitionStep -Id 'verify_disabled_enablement_config' -Label 'Verify disabled process and persistent supervision config' -Status $(if ($PlanObserved) { 'blocked_disabled' } else { 'blocked' }) -Ready $PlanObserved -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status' -Blockers $PlanBlockers -NextStep 'keep_runtime_mutation_denied')
+  (New-TransitionStep -Id 'consume_persistent_supervision_authority_chain' -Label 'Consume bounded persistent-supervision authority chain' -Status $(if ($ResidentClaimObserved) { 'resident_claim_boundary_observed' } else { 'blocked' }) -Ready $ResidentClaimObserved -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Blockers $ResidentClaimBlockers -NextStep 'verify_required_prerequisite_guard')
+  (New-TransitionStep -Id 'verify_required_prerequisite_guard' -Label 'Verify resident prerequisite guard' -Status $(if ($PlanObserved) { 'blocked_prerequisites' } else { 'blocked' }) -Ready $PlanObserved -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status' -Blockers $PlanBlockers -NextStep 'keep_runtime_mutation_denied')
   (New-TransitionStep -Id 'keep_runtime_mutation_denied' -Label 'Keep runtime mutation and resident claim denied' -Status $(if ($SideEffectsDenied) { 'no_side_effects' } else { 'blocked' }) -Ready $SideEffectsDenied -Evidence 'persistent_supervision_resident_claim_boundary.would_*' -Blockers @('resident_claim_authority_not_granted') -NextStep 'return_to_stage6_completion_audit')
 )
 
@@ -216,7 +225,8 @@ $TransitionSteps = @(
   data_root = $ProofDataDir
   transition_plan_observed = $ProofPassed
   transition_plan_ready = $false
-  persistent_supervision_enablement_disabled = $PlanObserved
+  persistent_supervision_config_gate_enabled = $ServicePlanObserved
+  persistent_supervision_enablement_disabled = $false
   persistent_supervision_prerequisites_proof_observed = $PrerequisitesObserved
   persistent_supervision_required_prerequisites_guard_observed = $RequiredPrerequisiteGuardObserved
   persistent_supervision_service_install_plan_proof_observed = $ServicePlanObserved
@@ -227,7 +237,8 @@ $TransitionSteps = @(
   service_plan_status = $ServicePlanStatus
   service_plan_blocked_by = [string[]]@($ServiceBlockedBy)
   required_before_enable = [string[]]@($RequiredBeforeEnable)
-  disabled_config_toggles = [string[]]@($ConfigToggleBlockers)
+  enabled_config_toggles = [string[]]@($EnabledConfigToggles)
+  disabled_config_toggles = [string[]]@()
   authority_chain = [ordered]@{
     host_supervision_authority = $true
     persistent_supervision_enablement_authority = [bool](Get-PropertyValue -Payload $ResidentClaim -Name 'persistent_supervision_enablement_authority' -Default $false)
@@ -253,10 +264,7 @@ $TransitionSteps = @(
   would_claim_resident = $false
   transition_plan = @($TransitionSteps)
   checks = @($Checks)
-  blockers = [string[]]@(
-    ($PlanBlockers + $ResidentClaimBlockers + $ServiceBlockedBy + @('persistent_supervision_required_prerequisites_missing')) |
-      Sort-Object -Unique
-  )
+  blockers = [string[]]@($CombinedBlockers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
   next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   evidence = @(
     'scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status',
@@ -290,7 +298,7 @@ $TransitionSteps = @(
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'The persistent-supervision enablement transition plan is readable and bounded: prerequisites, service-install plan truth, authority-chain receipts, disabled service config, and resident-claim denial are composed into one non-mutating handoff. The remaining product gap is still disabled persistent supervision enablement.'
+  message = 'The persistent-supervision enablement transition plan is readable and bounded: prerequisites, service-install plan truth, authority-chain receipts, enabled config gate, and resident-claim denial are composed into one non-mutating handoff. The remaining product gap is the missing resident host, tray, hotkey, overlay, and summon prerequisite chain.'
 } | ConvertTo-Json -Depth 10
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

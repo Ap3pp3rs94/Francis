@@ -87,7 +87,7 @@ def test_lens_resident_runtime_service_control_boundary_is_readback_only() -> No
     ]
     assert "service_install_authority_not_granted" in service_control["blockers"]
     assert "service_control_authority_not_granted" in service_control["blockers"]
-    assert "disabled_in_service_config" in service_control["blockers"]
+    assert "disabled_in_service_config" not in service_control["blockers"]
     assert payload["blockers"] == service_control["blockers"]
     assert payload["remaining_authority_families"] == [
         "process_supervision",

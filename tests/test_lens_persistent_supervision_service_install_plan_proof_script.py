@@ -39,7 +39,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_persistent_supervision_service_install_plan_proof_reads_disabled_plan() -> None:
+def test_lens_persistent_supervision_service_install_plan_proof_reads_config_gate() -> None:
     proc = _run_proof("-Mode", "Status")
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -61,15 +61,16 @@ def test_lens_persistent_supervision_service_install_plan_proof_reads_disabled_p
     assert payload["service_plan_ready"] is False
     assert payload["service_plan_would_install"] is False
     assert payload["service_plan_would_start"] is False
-    assert payload["process_supervision_enabled"] is False
-    assert payload["persistent_supervision_enabled"] is False
-    assert payload["persistent_supervision_enablement_disabled"] is True
+    assert payload["process_supervision_enabled"] is True
+    assert payload["persistent_supervision_enabled"] is True
+    assert payload["persistent_supervision_config_gate_enabled"] is True
+    assert payload["persistent_supervision_enablement_disabled"] is False
     assert payload["installable"] is False
     assert payload["install_authority"] is False
     assert payload["service_install_authority"] is False
     assert payload["service_control_authority"] is False
     assert payload["wrapper_created_by_proof"] is False
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["required_before_enable"] == [
         "resident_host_process",
         "tray_presence",
@@ -89,7 +90,7 @@ def test_lens_persistent_supervision_service_install_plan_proof_reads_disabled_p
     assert all(item["passed"] for item in payload["checks"])
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["lens_host_service_config_disabled"]["status"] == "disabled"
+    assert checks["lens_host_service_config_gate"]["status"] == "enabled_config_only"
     expected_plan_check_status = "blocked" if os.name == "nt" else "unsupported_platform"
     expected_governance_check_status = "read_only_bounded" if os.name == "nt" else "unsupported_platform"
     assert checks["service_install_plan_blocked"]["status"] == expected_plan_check_status

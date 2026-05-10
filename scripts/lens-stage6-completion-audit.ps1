@@ -419,9 +419,8 @@ $HostSupervisionAuthorityRequestProofObserved = (
   [bool]$HostSupervisionAuthorityRequestProof.receipt_write_authority -and
   [bool]$HostSupervisionAuthorityRequestProof.resident_claim_authority -and
   -not [bool]$HostSupervisionAuthorityRequestProof.memory_write -and
-  [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
-  $HostSupervisionAuthorityRequestProofBlockers -contains 'persistent_supervision_disabled' -and
-  $HostSupervisionAuthorityRequestProofBlockers -contains 'process_supervision_disabled' -and
+  [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $HostSupervisionAuthorityRequestProofBlockers -contains 'persistent_supervision_required_prerequisites_missing' -and
   -not [bool]$HostSupervisionAuthorityRequestProofRuntimeFiles.lens_host_status -and
   -not [bool]$HostSupervisionAuthorityRequestProofRuntimeFiles.lens_host_pid -and
   -not [bool]$HostSupervisionAuthorityRequestProofRuntimeFiles.lens_host_supervisor_status -and
@@ -563,15 +562,16 @@ $PersistentSupervisionServiceInstallPlanProofObserved = (
     $PersistentSupervisionServiceInstallPlanProofWindowsPlanObserved -or
     $PersistentSupervisionServiceInstallPlanProofUnsupportedPlatformObserved
   ) -and
-  -not [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled -and
-  -not [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled -and
-  [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled -and
+  [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled -and
+  [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled -and
+  [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_config_gate_enabled -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.installable -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof -and
-  [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_enablement_disabled' -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'resident_host_process' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'tray_presence' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
@@ -702,8 +702,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_receipt -and
   -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_write_memory -and
   -not [bool]$PersistentSupervisionResidentClaimBoundaryProof.would_claim_resident -and
-  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'persistent_supervision_disabled' -and
-  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'process_supervision_disabled' -and
+  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
@@ -720,6 +719,9 @@ $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable = Conver
 $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles = ConvertTo-StringArray -Value (
   $PersistentSupervisionEnablementTransitionPlanProof.disabled_config_toggles
 )
+$PersistentSupervisionEnablementTransitionPlanProofEnabledConfigToggles = ConvertTo-StringArray -Value (
+  $PersistentSupervisionEnablementTransitionPlanProof.enabled_config_toggles
+)
 $PersistentSupervisionEnablementTransitionPlanProofServicePlanBlockedBy = ConvertTo-StringArray -Value (
   $PersistentSupervisionEnablementTransitionPlanProof.service_plan_blocked_by
 )
@@ -731,7 +733,8 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
   [string]$PersistentSupervisionEnablementTransitionPlanProof.status -eq 'proof_passed' -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_observed -and
   -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready -and
-  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_config_gate_enabled -and
+  -not [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_required_prerequisites_guard_observed -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_service_install_plan_proof_observed -and
@@ -756,8 +759,8 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
   $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
   $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'overlay_window' -and
   $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable -contains 'summon_binding' -and
-  $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'process_supervision_enabled' -and
-  $PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles -contains 'persistent_supervision_enabled' -and
+  $PersistentSupervisionEnablementTransitionPlanProofEnabledConfigToggles -contains 'process_supervision_enabled' -and
+  $PersistentSupervisionEnablementTransitionPlanProofEnabledConfigToggles -contains 'persistent_supervision_enabled' -and
   [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.diagnostic_only -and
   [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.read_only_transition_plan -and
@@ -1734,7 +1737,7 @@ $SummonAnywhereFamilyChainProofObserved = (
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -and
+  $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
   $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
   $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
   $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and
@@ -3208,6 +3211,7 @@ $Payload = [ordered]@{
     service_plan_would_start = [bool]$PersistentSupervisionServiceInstallPlanProof.service_plan_would_start
     process_supervision_enabled = [bool]$PersistentSupervisionServiceInstallPlanProof.process_supervision_enabled
     persistent_supervision_enabled = [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enabled
+    persistent_supervision_config_gate_enabled = [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_config_gate_enabled
     persistent_supervision_enablement_disabled = [bool]$PersistentSupervisionServiceInstallPlanProof.persistent_supervision_enablement_disabled
     installable = [bool]$PersistentSupervisionServiceInstallPlanProof.installable
     install_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority
@@ -3391,6 +3395,7 @@ $Payload = [ordered]@{
     evidence = [string[]]@(ConvertTo-StringArray -Value $PersistentSupervisionEnablementTransitionPlanProof.evidence)
     transition_plan_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_observed
     transition_plan_ready = [bool]$PersistentSupervisionEnablementTransitionPlanProof.transition_plan_ready
+    persistent_supervision_config_gate_enabled = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_config_gate_enabled
     persistent_supervision_enablement_disabled = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_enablement_disabled
     persistent_supervision_prerequisites_proof_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_prerequisites_proof_observed
     persistent_supervision_required_prerequisites_guard_observed = [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_required_prerequisites_guard_observed
@@ -3402,6 +3407,7 @@ $Payload = [ordered]@{
     service_plan_status = [string]$PersistentSupervisionEnablementTransitionPlanProof.service_plan_status
     service_plan_blocked_by = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofServicePlanBlockedBy)
     required_before_enable = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable)
+    enabled_config_toggles = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofEnabledConfigToggles)
     disabled_config_toggles = [string[]]@($PersistentSupervisionEnablementTransitionPlanProofDisabledConfigToggles)
     authority_chain = $PersistentSupervisionEnablementTransitionPlanProof.authority_chain
     side_effects_denied = [bool]$PersistentSupervisionEnablementTransitionPlanProof.side_effects_denied

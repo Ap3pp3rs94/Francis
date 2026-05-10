@@ -52,7 +52,8 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["ok"] is True
     assert payload["transition_plan_observed"] is True
     assert payload["transition_plan_ready"] is False
-    assert payload["persistent_supervision_enablement_disabled"] is True
+    assert payload["persistent_supervision_config_gate_enabled"] is True
+    assert payload["persistent_supervision_enablement_disabled"] is False
     assert payload["persistent_supervision_prerequisites_proof_observed"] is True
     assert payload["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert payload["persistent_supervision_service_install_plan_proof_observed"] is True
@@ -78,10 +79,11 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
         "overlay_window",
         "summon_binding",
     ]
-    assert payload["disabled_config_toggles"] == [
+    assert payload["enabled_config_toggles"] == [
         "process_supervision_enabled",
         "persistent_supervision_enabled",
     ]
+    assert payload["disabled_config_toggles"] == []
 
     authority_chain = payload["authority_chain"]
     assert authority_chain["host_supervision_authority"] is True
@@ -113,13 +115,13 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
         "read_required_prerequisites",
         "verify_service_install_plan_boundary",
         "consume_persistent_supervision_authority_chain",
-        "verify_disabled_enablement_config",
+        "verify_required_prerequisite_guard",
         "keep_runtime_mutation_denied",
     ]
     assert steps["read_required_prerequisites"]["status"] == "readback_ready"
     assert steps["verify_service_install_plan_boundary"]["status"] == payload["service_plan_status"]
     assert steps["consume_persistent_supervision_authority_chain"]["status"] == "resident_claim_boundary_observed"
-    assert steps["verify_disabled_enablement_config"]["status"] == "blocked_disabled"
+    assert steps["verify_required_prerequisite_guard"]["status"] == "blocked_prerequisites"
     assert steps["keep_runtime_mutation_denied"]["status"] == "no_side_effects"
     assert all(step["would_execute"] is False for step in steps.values())
     assert all(step["would_mutate"] is False for step in steps.values())
@@ -128,12 +130,10 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert checks["persistent_supervision_prerequisites_proof"]["status"] == "proof_observed"
     assert checks["service_install_plan_boundary"]["status"] == payload["service_plan_status"]
     assert checks["persistent_supervision_authority_chain"]["status"] == "resident_claim_boundary_observed"
-    assert checks["disabled_enablement_config_readback"]["status"] == "blocked_disabled"
+    assert checks["required_prerequisite_guard_readback"]["status"] == "blocked_prerequisites"
     assert checks["transition_side_effects_denied"]["status"] == "no_side_effects"
     assert all(item["passed"] for item in payload["checks"])
 
-    assert "process_supervision_disabled" in payload["blockers"]
-    assert "persistent_supervision_disabled" in payload["blockers"]
     assert "persistent_supervision_required_prerequisites_missing" in payload["blockers"]
     assert "resident_claim_authority_not_granted" in payload["blockers"]
 

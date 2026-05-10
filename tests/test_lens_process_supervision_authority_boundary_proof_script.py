@@ -116,7 +116,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert proof["host_supervision_status"] == "proof_passed"
     assert proof["host_supervision_ready"] is False
     assert proof["host_ready_for_resident_claim"] is False
-    assert proof["process_supervision_status"] == "blocked"
+    assert proof["process_supervision_status"] == "enabled"
     assert proof["service_control_status"] == "blocked"
     assert proof["service_plan_status"] == "blocked"
     assert proof["service_plan_ready"] is False

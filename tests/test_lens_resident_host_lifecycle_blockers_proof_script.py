@@ -72,7 +72,7 @@ def test_lens_resident_host_lifecycle_blockers_proof_consumes_preflight_groups()
     groups = payload["lifecycle_blocker_groups"]
     assert groups["runtime"]["status"] == "blocked"
     assert groups["runtime"]["route"] == "/lens/host/manifest"
-    assert "lens_host_runtime_not_implemented" in groups["runtime"]["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in groups["runtime"]["blockers"]
 
     assert groups["process_readback"]["status"] in {"blocked", "clear"}
     assert groups["process_readback"]["route"] == "/lens/host/manifest"
@@ -86,8 +86,9 @@ def test_lens_resident_host_lifecycle_blockers_proof_consumes_preflight_groups()
 
     assert groups["supervision"]["status"] == "blocked"
     assert groups["supervision"]["route"] == "/lens/host/supervision/authority/readiness"
-    assert "process_supervision_enabled" in groups["supervision"]["blockers"]
-    assert "persistent_supervision_enabled" in groups["supervision"]["blockers"]
+    assert "process_supervision_enabled" not in groups["supervision"]["blockers"]
+    assert "process_restart_authority" in groups["supervision"]["blockers"]
+    assert "persistent_supervision_enabled" not in groups["supervision"]["blockers"]
     assert "process_restart_authority" in groups["supervision"]["blockers"]
     assert "receipt_write_authority" in groups["supervision"]["blockers"]
     assert "resident_claim_authority" in groups["supervision"]["blockers"]

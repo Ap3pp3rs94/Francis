@@ -104,14 +104,13 @@ $PlanObserved = (
   [bool](Get-PropertyValue -Payload $Plan -Name 'plan_available' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Plan -Name 'persistent_supervision_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Plan -Name 'resident_claim_allowed' -Default $true) -and
-  $PlanBlockers -contains 'persistent_supervision_disabled' -and
-  $PlanBlockers -contains 'process_supervision_disabled'
+  -not [bool](Get-PropertyValue -Payload $Plan -Name 'required_before_enable_ready' -Default $true) -and
+  $PlanBlockers -contains 'persistent_supervision_required_prerequisites_missing'
 )
 $ResidentClaimBoundaryObserved = (
   $ExecutionAuthorityObserved -and
   $PlanObserved -and
-  $ExecutionBlockers -contains 'persistent_supervision_disabled' -and
-  $ExecutionBlockers -contains 'process_supervision_disabled' -and
+  $ExecutionBlockers -contains 'persistent_supervision_required_prerequisites_missing' -and
   $ExecutionBlockers -contains 'resident_claim_authority_not_granted' -and
   -not ($ExecutionBlockers -contains 'service_config_write_authority_not_granted') -and
   -not ($ExecutionBlockers -contains 'persistent_supervision_execution_authority_not_granted') -and
@@ -197,7 +196,14 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
       '/lens/host/persistent-supervision/enablement/execution/readiness',
       'scripts/lens-persistent-supervision-plan.ps1 -Mode Status'
     )
-    required_before = @('process_supervision_enabled', 'persistent_supervision_enabled')
+    required_before = @(
+      'resident_host_process',
+      'tray_presence',
+      'global_hotkey_binding',
+      'overlay_window',
+      'summon_binding',
+      'resident_claim_authority'
+    )
     blockers = [string[]]@($ExecutionBlockers)
   }
   checks = @($Checks)
@@ -256,7 +262,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'The persistent-supervision resident-claim boundary is consumed as diagnostic readback: execution authority is proven, but persistent supervision remains blocked by process/persistent supervision readiness and resident-claim authority without service config mutation, runtime launch, memory writes, receipts, or resident claim.'
+  message = 'The persistent-supervision resident-claim boundary is consumed as diagnostic readback: execution authority is proven, but persistent supervision remains blocked by resident host, tray, hotkey, overlay, summon, and resident-claim authority without service config mutation, runtime launch, memory writes, receipts, or resident claim.'
 } | ConvertTo-Json -Depth 8
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

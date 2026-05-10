@@ -102,6 +102,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     # audit decision below remains strict.
     assert payload["checkpoint_next_smallest_truthful_gap"] in {
         "resident_overlay_activation_or_process_supervision_authority_boundary",
+        "live_operator_experience_proof",
         "stage6_lens_completion_audit",
     }
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
@@ -189,11 +190,14 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "would_execute": False,
         "would_mutate": False,
     }
-    expected_checkpoint_required_blockers = {
+    expected_checkpoint_runtime_blockers = {
         "lens_host_runtime_not_implemented",
-        "local_process_launch_authority_not_granted",
+        "lens_host_persistent_supervision_prerequisites_pending",
     }
-    expected_checkpoint_allowed_blockers = expected_checkpoint_required_blockers | {"resident_host_process_missing"}
+    expected_checkpoint_required_blockers = {"local_process_launch_authority_not_granted"}
+    expected_checkpoint_allowed_blockers = (
+        expected_checkpoint_required_blockers | expected_checkpoint_runtime_blockers | {"resident_host_process_missing"}
+    )
     assert payload["checkpoint_summon_enablement_gate_handoff_observed"] is True
     checkpoint_summon_handoff = payload["checkpoint_summon_enablement_gate_handoff"]
     assert checkpoint_summon_handoff["status"] == "blocked"
@@ -209,8 +213,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert {key: value for key, value in checkpoint_first_summon_handoff.items() if key != "blockers"} == (
         expected_checkpoint_first_summon_handoff
     )
-    assert expected_checkpoint_required_blockers <= set(checkpoint_first_summon_handoff["blockers"])
-    assert set(checkpoint_first_summon_handoff["blockers"]) <= expected_checkpoint_allowed_blockers
+    checkpoint_first_summon_handoff_blockers = set(checkpoint_first_summon_handoff["blockers"])
+    assert expected_checkpoint_required_blockers <= checkpoint_first_summon_handoff_blockers
+    assert checkpoint_first_summon_handoff_blockers & expected_checkpoint_runtime_blockers
+    assert checkpoint_first_summon_handoff_blockers <= expected_checkpoint_allowed_blockers
     assert checkpoint_summon_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert "/lens/status" in checkpoint_summon_handoff["evidence"]
     assert "summon_authority_not_granted" in checkpoint_summon_handoff["blockers"]
@@ -225,7 +231,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert checkpoint_summon_handoff["receipt_write_authority"] is False
     assert checkpoint_summon_handoff["resident_claim_authority"] is False
     summon_blocker_groups = payload["summon_anywhere_blocker_groups"]
-    assert "lens_host_runtime_not_implemented" in summon_blocker_groups["resident_host"]
+    assert set(summon_blocker_groups["resident_host"]) & expected_checkpoint_runtime_blockers
     assert "local_process_launch_authority_not_granted" in summon_blocker_groups["resident_host"]
     assert "tray_host_missing" in summon_blocker_groups["tray_presence"]
     assert "overlay_window_missing" in summon_blocker_groups["overlay_window"]
@@ -247,10 +253,16 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     ]
 
     blocked = {item["id"]: item for item in payload["blocked_criteria"]}
-    assert blocked["helpful_not_noisy"]["blockers"] == [
+    helpful_not_noisy_blockers = set(blocked["helpful_not_noisy"]["blockers"])
+    assert {
         "resident_surface_not_resident",
         "resident_surface_runtime_not_supervised",
-    ]
+    } <= helpful_not_noisy_blockers
+    assert helpful_not_noisy_blockers <= {
+        "operator_experience_proof_missing",
+        "resident_surface_not_resident",
+        "resident_surface_runtime_not_supervised",
+    }
     assert "global_hotkey_binding_missing" in blocked["summon_anywhere"]["blockers"]
     assert "os_level_command_palette_missing" in payload["closure_blockers"]["command_palette"]
     assert "summon_anywhere_missing" in payload["closure_blockers"]["command_palette"]
@@ -442,13 +454,18 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "lens_host_pid": False,
         "lens_host_supervisor_status": False,
     }
-    assert "persistent_supervision_disabled" in host_authority_request_proof["blockers"]
-    assert "process_supervision_disabled" in host_authority_request_proof["blockers"]
-    assert host_authority_request_proof["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
-    assert (
-        "persistent_supervision_disabled" in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
+    assert "persistent_supervision_required_prerequisites_missing" in host_authority_request_proof["blockers"]
+    assert "process_supervision_disabled" not in host_authority_request_proof["blockers"]
+    assert host_authority_request_proof["next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
     )
-    assert "process_supervision_disabled" in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
+    assert (
+        "persistent_supervision_required_prerequisites_missing"
+        in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
+    )
+    assert (
+        "process_supervision_disabled" not in (payload["closure_blockers"]["host_supervision_authority_request_proof"])
+    )
     helpful_authority_handoff = payload["helpful_not_noisy_runtime_authority_readiness_handoff"]
     assert helpful_authority_handoff["status"] == "blocked"
     assert helpful_authority_handoff["audit_status"] == "complete"
@@ -504,7 +521,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         in (payload["closure_blockers"]["helpful_not_noisy_runtime_authority_readiness_handoff"])
     )
     assert "service_control_authority_not_granted" in payload["closure_blockers"]["service_activation"]
-    assert "persistent_supervision_disabled" in payload["closure_blockers"]["persistent_supervision"]
+    assert (
+        "persistent_supervision_required_prerequisites_missing" in payload["closure_blockers"]["persistent_supervision"]
+    )
     assert "receipt_write_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
     assert "resident_claim_authority_not_granted" in payload["closure_blockers"]["persistent_supervision"]
     if os.name == "nt":
@@ -566,11 +585,12 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         in payload["closure_blockers"]["persistent_supervision_execution_authority_proof"]
     )
     assert (
-        "persistent_supervision_disabled"
+        "persistent_supervision_required_prerequisites_missing"
         in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
     )
     assert (
-        "process_supervision_disabled" in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
+        "process_supervision_disabled"
+        not in payload["closure_blockers"]["persistent_supervision_resident_claim_boundary"]
     )
     assert (
         "resident_claim_authority_not_granted"
@@ -770,8 +790,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_resident_claim_boundary["would_write_memory"] is False
     assert persistent_resident_claim_boundary["would_claim_resident"] is False
     assert persistent_resident_claim_boundary["resident_claim"]["status"] == "blocked"
-    assert "persistent_supervision_disabled" in persistent_resident_claim_boundary["blockers"]
-    assert "process_supervision_disabled" in persistent_resident_claim_boundary["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in persistent_resident_claim_boundary["blockers"]
+    assert "process_supervision_disabled" not in persistent_resident_claim_boundary["blockers"]
     assert "resident_claim_authority_not_granted" in persistent_resident_claim_boundary["blockers"]
     assert persistent_resident_claim_boundary["remaining_authority_families_after_this_boundary"] == []
     assert persistent_resident_claim_boundary["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
@@ -786,7 +806,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     )
     assert transition_plan["transition_plan_observed"] is True
     assert transition_plan["transition_plan_ready"] is False
-    assert transition_plan["persistent_supervision_enablement_disabled"] is True
+    assert transition_plan["persistent_supervision_config_gate_enabled"] is True
+    assert transition_plan["persistent_supervision_enablement_disabled"] is False
     assert transition_plan["persistent_supervision_prerequisites_proof_observed"] is True
     assert transition_plan["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert transition_plan["persistent_supervision_service_install_plan_proof_observed"] is True
@@ -811,10 +832,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "overlay_window",
         "summon_binding",
     ]
-    assert transition_plan["disabled_config_toggles"] == [
+    assert transition_plan["enabled_config_toggles"] == [
         "process_supervision_enabled",
         "persistent_supervision_enabled",
     ]
+    assert transition_plan["disabled_config_toggles"] == []
     transition_authority_chain = transition_plan["authority_chain"]
     assert transition_authority_chain["host_supervision_authority"] is True
     assert transition_authority_chain["persistent_supervision_enablement_authority"] is True
@@ -841,12 +863,12 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "read_required_prerequisites",
         "verify_service_install_plan_boundary",
         "consume_persistent_supervision_authority_chain",
-        "verify_disabled_enablement_config",
+        "verify_required_prerequisite_guard",
         "keep_runtime_mutation_denied",
     ]
     assert all(item["passed"] for item in transition_plan["checks"])
-    assert "process_supervision_disabled" in transition_plan["blockers"]
-    assert "persistent_supervision_disabled" in transition_plan["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in transition_plan["blockers"]
+    assert "process_supervision_disabled" not in transition_plan["blockers"]
     assert "resident_claim_authority_not_granted" in transition_plan["blockers"]
     assert transition_plan["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     transition_governance = transition_plan["governance"]
@@ -1548,7 +1570,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         family_chain_resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     )
-    assert "lens_host_runtime_not_implemented" in family_chain_resident_host["runtime_blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in family_chain_resident_host["runtime_blockers"]
     assert "tray_host_missing" in family_chain_resident_host["surface_blockers"]
     assert "overlay_window_missing" in family_chain_resident_host["surface_blockers"]
     assert "global_hotkey_binding_missing" in family_chain_resident_host["surface_blockers"]
@@ -1635,7 +1657,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_boundary["overlay_window"] is False
     assert runtime_boundary["summon_anywhere"] is False
     assert "resident_host_runtime_blocker_boundary_consumed" in runtime_boundary["blockers"]
-    assert "lens_host_runtime_not_implemented" in runtime_boundary["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in runtime_boundary["blockers"]
     assert "resident_host_process_not_supervised" in runtime_boundary["blockers"]
     assert "process_supervision_authority_not_granted" in runtime_boundary["blockers"]
     assert "process_restart_authority_not_granted" in runtime_boundary["blockers"]
@@ -1704,11 +1726,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_plan["persistent_supervision_ready"] is False
     assert persistent_plan["resident_claim_allowed"] is False
     assert persistent_plan["requirements_total"] >= 10
-    assert persistent_plan["requirements_blocked_total"] >= 7
-    assert "persistent_supervision_enabled" in persistent_plan["blocked_requirements"]
+    assert persistent_plan["requirements_blocked_total"] >= 5
+    assert "persistent_supervision_enabled" not in persistent_plan["blocked_requirements"]
     assert "receipt_write_authority" in persistent_plan["blocked_requirements"]
     assert "resident_claim_authority" in persistent_plan["blocked_requirements"]
-    assert "persistent_supervision_disabled" in persistent_plan["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in persistent_plan["blockers"]
     assert "receipt_write_authority_not_granted" in persistent_plan["blockers"]
     assert persistent_plan["would_install_service"] is False
     assert persistent_plan["would_start_service"] is False
@@ -1834,9 +1856,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert service_install_plan["service_plan_ready"] is False
     assert service_install_plan["service_plan_would_install"] is False
     assert service_install_plan["service_plan_would_start"] is False
-    assert service_install_plan["process_supervision_enabled"] is False
-    assert service_install_plan["persistent_supervision_enabled"] is False
-    assert service_install_plan["persistent_supervision_enablement_disabled"] is True
+    assert service_install_plan["process_supervision_enabled"] is True
+    assert service_install_plan["persistent_supervision_enabled"] is True
+    assert service_install_plan["persistent_supervision_config_gate_enabled"] is True
+    assert service_install_plan["persistent_supervision_enablement_disabled"] is False
     assert service_install_plan["installable"] is False
     assert service_install_plan["install_authority"] is False
     assert service_install_plan["service_install_authority"] is False
@@ -1853,7 +1876,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     else:
         assert service_install_plan["blocked_by"] == ["unsupported_platform"]
     assert all(item["passed"] for item in service_install_plan["checks"])
-    assert service_install_plan["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert service_install_plan["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     service_install_governance = service_install_plan["governance"]
     assert service_install_governance["diagnostic_only"] is True
     assert service_install_governance["read_only_contract"] is True

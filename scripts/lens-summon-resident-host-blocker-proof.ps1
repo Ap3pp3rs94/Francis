@@ -167,9 +167,10 @@ $ResidentRuntimeCandidateAvailable = (
   $ServicePlanRuntimeMode -eq $ResidentMode -and
   [bool](Get-PropertyValue -Payload $ServiceConfig -Name 'resident_session_enabled' -Default $false)
 )
-$ResidentRuntimeCandidateSupervised = [bool](
+$ResidentRuntimeProcessSupervisionEnabled = [bool](
   Get-PropertyValue -Payload $ServiceConfig -Name 'process_supervision_enabled' -Default $true
 )
+$ResidentRuntimeCandidateSupervised = $false
 $ResidentRuntimeServiceControlAuthority = [bool](
   Get-PropertyValue -Payload $ServiceConfig -Name 'service_control_authority' -Default $true
 )
@@ -431,7 +432,7 @@ $Payload = [ordered]@{
     host_script = if ($ResidentRuntimeCandidateAvailable) { "$ServiceEntrypoint -Mode $ServicePlanRuntimeMode" } else { '' }
     resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
     resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised
-    process_supervision_enabled = $ResidentRuntimeCandidateSupervised
+    process_supervision_enabled = $ResidentRuntimeProcessSupervisionEnabled
     service_control_authority = $ResidentRuntimeServiceControlAuthority
     service_install_authority = $ResidentRuntimeServiceInstallAuthority
     resident_claim_authority = $ResidentRuntimeCandidateClaimAuthority
@@ -508,7 +509,7 @@ $Payload = [ordered]@{
     read_only_contract = $true
     resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
     resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised
-    resident_runtime_candidate_process_supervision_enabled = $ResidentRuntimeCandidateSupervised
+    resident_runtime_candidate_process_supervision_enabled = $ResidentRuntimeProcessSupervisionEnabled
     resident_candidate_service_control_authority = $ResidentRuntimeServiceControlAuthority
     resident_candidate_service_install_authority = $ResidentRuntimeServiceInstallAuthority
     resident_candidate_supervision_authority = $false

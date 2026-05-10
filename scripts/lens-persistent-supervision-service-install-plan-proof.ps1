@@ -234,7 +234,7 @@ $ExpectedRequiredBeforeEnable = @(
   'summon_binding'
 )
 
-$ConfigObserved = (
+$ConfigGateObserved = (
   $null -ne $Config -and
   [string](Get-PropertyValue -Payload $Config -Name 'kind' -Default '') -eq 'lens.host.service_config' -and
   [string](Get-PropertyValue -Payload $Config -Name 'service_name' -Default '') -eq 'Francis-LensHost' -and
@@ -243,12 +243,12 @@ $ConfigObserved = (
   -not [bool](Get-PropertyValue -Payload $Config -Name 'install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Config -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Config -Name 'service_control_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Config -Name 'process_supervision_enabled' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Config -Name 'persistent_supervision_enabled' -Default $true)
+  [bool](Get-PropertyValue -Payload $Config -Name 'process_supervision_enabled' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Config -Name 'persistent_supervision_enabled' -Default $false)
 )
 foreach ($Item in $ExpectedRequiredBeforeEnable) {
   if ($RequiredBeforeEnable -notcontains $Item) {
-    $ConfigObserved = $false
+    $ConfigGateObserved = $false
   }
 }
 
@@ -294,7 +294,7 @@ $WrapperDenied = (
 )
 
 $Checks = @(
-  (New-Check -Id 'lens_host_service_config_disabled' -Status $(if ($ConfigObserved) { 'disabled' } else { 'missing_or_unexpected' }) -Passed $ConfigObserved -Evidence 'config/runtime/services/lens-host.json' -Reason 'Persistent supervision cannot be enabled until the service config explicitly allows the resident host and supervision path.')
+  (New-Check -Id 'lens_host_service_config_gate' -Status $(if ($ConfigGateObserved) { 'enabled_config_only' } else { 'missing_or_unexpected' }) -Passed $ConfigGateObserved -Evidence 'config/runtime/services/lens-host.json' -Reason 'Persistent supervision config toggles are enabled, while service install/control and resident prerequisites remain blocked.')
   (New-Check -Id 'service_install_plan_blocked' -Status $(if ($PlanBlocked) { 'blocked' } elseif (-not $WindowsServiceSupported) { 'unsupported_platform' } else { 'missing_or_unexpected' }) -Passed ($PlanBlocked -or -not $WindowsServiceSupported) -Evidence 'scripts/service-install.ps1 -Mode Plan -ConfigPath config/runtime/services/lens-host.json' -Reason 'The Windows service manager plan must remain blocked while install/control authority is false.')
   (New-Check -Id 'service_install_plan_governance' -Status $(if ($PlanGovernanceObserved -and $WindowsServiceSupported) { 'read_only_bounded' } elseif ($PlanGovernanceObserved) { 'unsupported_platform' } else { 'unexpected_authority' }) -Passed $PlanGovernanceObserved -Evidence 'service_install.plan.governance' -Reason 'The plan proof must not grant execution, service-install, service-control, memory, or approval-decision authority.')
   (New-Check -Id 'service_wrapper_not_created' -Status $(if ($WrapperDenied) { 'not_created' } else { 'unexpected_wrapper_write' }) -Passed $WrapperDenied -Evidence 'data/runtime/services/Francis-LensHost/run.cmd' -Reason 'Plan mode must not create the service wrapper or mutate runtime state.')
@@ -319,7 +319,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   service_plan_would_start = [bool](Get-PropertyValue -Payload $Plan -Name 'would_start' -Default $false)
   process_supervision_enabled = [bool](Get-PropertyValue -Payload $Config -Name 'process_supervision_enabled' -Default $false)
   persistent_supervision_enabled = [bool](Get-PropertyValue -Payload $Config -Name 'persistent_supervision_enabled' -Default $false)
-  persistent_supervision_enablement_disabled = $ConfigObserved -and ($PlanBlocked -or -not $WindowsServiceSupported)
+  persistent_supervision_config_gate_enabled = $ConfigGateObserved -and ($PlanBlocked -or -not $WindowsServiceSupported)
+  persistent_supervision_enablement_disabled = $false
   installable = [bool](Get-PropertyValue -Payload $Config -Name 'installable' -Default $false)
   install_authority = [bool](Get-PropertyValue -Payload $Config -Name 'install_authority' -Default $false)
   service_install_authority = [bool](Get-PropertyValue -Payload $Config -Name 'service_install_authority' -Default $false)
@@ -330,7 +331,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   checks = @($Checks)
   blocked_by = [string[]]@($BlockedBy)
   required_before_enable = [string[]]@($RequiredBeforeEnable)
-  next_smallest_truthful_gap = 'persistent_supervision_enablement_disabled'
+  next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   evidence = [string[]]@(
     'scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status',
     'scripts/service-install.ps1 -Mode Plan -ConfigPath config/runtime/services/lens-host.json',
@@ -342,7 +343,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     wraps_service_install_plan = $WindowsServiceSupported
     windows_service_supported = $WindowsServiceSupported
     service_install_plan_supported = $WindowsServiceSupported
-    service_config_readback = $ConfigObserved
+    service_config_readback = $ConfigGateObserved
     execution_authority = $false
     approval_decision_authority = $false
     local_process_launch_authority = $false
@@ -358,7 +359,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'The persistent Lens host service install plan is present but disabled and authority-blocked; plan mode does not install, start, write a wrapper, mutate service config, write memory, or claim residency.'
+  message = 'The persistent Lens host service install plan is present with the config gate enabled, but service install/control and resident prerequisites are still blocked; plan mode does not install, start, write a wrapper, mutate service config, write memory, or claim residency.'
 } | ConvertTo-Json -Depth 12
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

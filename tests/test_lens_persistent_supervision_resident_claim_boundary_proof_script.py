@@ -85,11 +85,14 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
     assert "/lens/host/persistent-supervision/enablement/execution" in resident_claim["evidence"]
     assert "/lens/host/persistent-supervision/enablement/execution/readiness" in resident_claim["evidence"]
     assert resident_claim["required_before"] == [
-        "process_supervision_enabled",
-        "persistent_supervision_enabled",
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+        "resident_claim_authority",
     ]
-    assert "persistent_supervision_disabled" in resident_claim["blockers"]
-    assert "process_supervision_disabled" in resident_claim["blockers"]
+    assert "persistent_supervision_required_prerequisites_missing" in resident_claim["blockers"]
     assert "resident_claim_authority_not_granted" in resident_claim["blockers"]
     assert "service_config_write_authority_not_granted" not in resident_claim["blockers"]
     assert "persistent_supervision_execution_authority_not_granted" not in resident_claim["blockers"]

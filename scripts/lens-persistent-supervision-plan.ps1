@@ -413,8 +413,11 @@ $Blockers = @(
     }
   }
 ) | Sort-Object -Unique
+if (-not $RequiredBeforeEnableReady) {
+  $Blockers = @($Blockers + @('persistent_supervision_required_prerequisites_missing') | Sort-Object -Unique)
+}
 
-$Ready = $BlockedRequirements.Count -eq 0
+$Ready = $BlockedRequirements.Count -eq 0 -and $RequiredBeforeEnableReady
 $AuthorityRequirementIds = @(
   'process_restart_authority',
   'service_install_authority',
@@ -425,8 +428,10 @@ $AuthorityRequirementIds = @(
 $AuthorityBlocked = @($BlockedRequirementIds | Where-Object { $AuthorityRequirementIds -contains $_ }).Count -gt 0
 $NextSmallestTruthfulGap = if ($Ready) {
   'persistent_supervision_execution_boundary'
+} elseif (-not $RequiredBeforeEnableReady) {
+  'persistent_supervision_required_prerequisites_missing'
 } elseif (-not $AuthorityBlocked) {
-  'persistent_supervision_enablement_disabled'
+  'persistent_supervision_execution_boundary'
 } else {
   'persistent_supervision_authority_not_granted'
 }

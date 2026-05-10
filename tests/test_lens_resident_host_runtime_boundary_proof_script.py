@@ -159,7 +159,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert proof["resident_candidate_status"] == "supervised_session_completed"
     assert proof["resident_candidate_next_gap"] == "resident_supervision_not_persistent"
     assert proof["resident_candidate_supervised"] is True
-    assert proof["process_supervision_status"] == "blocked"
+    assert proof["process_supervision_status"] == "enabled"
     assert proof["service_control_status"] == "blocked"
     assert proof["host_ready_for_resident_claim"] is False
 

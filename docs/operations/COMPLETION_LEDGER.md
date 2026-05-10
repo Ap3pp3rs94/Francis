@@ -23683,6 +23683,46 @@ config-gate slice:
 - `git diff --check`
   Result: `passed with existing PowerShell/JSON line-ending normalization warnings`
 
+### 2026-05-10 - Stage 6/Lens persistent-supervision proof contracts stabilized after config gate
+
+The post-config-gate persistent-supervision proof layer has been stabilized
+after the `process_supervision_enabled=true` and
+`persistent_supervision_enabled=true` config change. The persistent-supervision
+plan now blocks on
+`persistent_supervision_required_prerequisites_missing` when resident host
+process, tray, global hotkey, overlay, and summon prerequisites are still
+missing; the plan no longer treats enabled config toggles as sufficient for
+runtime readiness.
+
+The Stage 6 completion audit now promotes the child proof readback fields for
+the enabled persistent-supervision config gate and preserves the corrected
+handoff to `persistent_supervision_required_prerequisites_missing`. Nested
+checkpoint readback remains allowed to report its earlier live diagnostic
+vocabulary, but the completion audit's top-level next smallest truthful gap is
+the required prerequisite chain. This repaired the CI-failing Lens proof
+contract without granting process supervision, restart, service install/control,
+tray, hotkey, overlay, summon, resident-claim, memory-write, or approval
+authority.
+
+Stage 6 remains active and not ready to close. The next concrete gap remains
+the first required prerequisite handoff:
+`resident_host_process_not_supervised`, validated through
+`scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`.
+
+Latest validation for the `2026-05-10` Stage 6/Lens post-config-gate proof
+contract repair:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_preflight_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_preflight_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_service_install_plan_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_host_preflight_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_service_control_boundary_proof_script.py tests\test_lens_resident_host_lifecycle_blockers_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warnings`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

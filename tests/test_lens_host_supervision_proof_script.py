@@ -82,7 +82,7 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert checks["host_runtime_heartbeat"]["status"] == "heartbeat_observed"
     assert checks["service_plan_no_install"]["status"] == "blocked_no_install"
     assert checks["service_not_installed"]["status"] == "not_installed"
-    assert checks["process_supervision_disabled"]["status"] == "blocked"
+    assert checks["process_supervision_config_gate"]["status"] == "enabled_config_only"
     assert checks["service_control_denied"]["status"] == "blocked"
     assert checks["install_authority_denied"]["status"] == "blocked"
     assert all(item["passed"] for item in payload["checks"])
@@ -110,7 +110,7 @@ def test_lens_host_supervision_proof_composes_blocked_readiness_without_authorit
     assert "service_install_authority_false" in proof["service_plan_blocked_by"]
     assert "service_control_authority_false" in proof["service_plan_blocked_by"]
     assert proof["service_status"] in {"not_installed", "unsupported_platform"}
-    assert proof["process_supervision_status"] == "blocked"
+    assert proof["process_supervision_status"] == "enabled"
     assert proof["service_control_status"] == "blocked"
     assert "resident_host_process_not_supervised" in payload["blockers"]
     assert "resident_supervision_disabled" in payload["blockers"]
