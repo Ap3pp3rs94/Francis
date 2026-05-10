@@ -23424,6 +23424,49 @@ handoff consumption slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens runtime boundary carries process-supervision handoff
+
+The resident-host runtime boundary proof now returns the concrete handoff it was
+already proving. When `scripts/lens-resident-host-runtime-boundary-proof.ps1
+-Mode Status` consumes the resident-host runtime blocker boundary and observes a
+bounded foreground host process that is not supervised, the payload now exposes:
+
+- `recommended_handoff_source=runtime_boundary_process_supervision_handoff`
+- `recommended_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure`
+- `recommended_proof_script=scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+- `authority_required=process_supervision_authority`
+- `recommended_handoff`
+
+This keeps the Stage 6 handoff chain explicit from resident-host runtime
+boundary to process-supervision blocker proof instead of requiring the next
+operator/session to infer the next script from `next_smallest_truthful_gap`.
+
+This is a Stage 6/Lens readback-only and diagnostic-only proof-script/test
+slice. It grants no UI behavior, execution authority, approval decision
+authority, production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, persistent resident
+process lifetime, resident claim, or Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens runtime-boundary handoff
+readback slice:
+
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds 2 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_proof_script=scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed after formatting tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
