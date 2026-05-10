@@ -13,6 +13,7 @@ from francis.lens import (
     deny_lens_resident_runtime_activation_execution,
     execute_lens_host_activation,
     execute_lens_host_persistent_supervision_enablement,
+    execute_lens_host_supervision_once,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
@@ -46,6 +47,7 @@ from francis.lens import (
     lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_preflight,
     lens_host_supervision_authority_readiness_audit,
+    lens_host_supervision_execution_receipts,
     lens_host_supervision_gate,
     lens_os_binding_authority_grant_receipts,
     lens_os_binding_authority_request_contract,
@@ -134,6 +136,13 @@ class LensHostSupervisionAuthorityGrantIn(BaseModel):
 class LensHostSupervisionAuthorityRequestIn(BaseModel):
     actor: str | None = None
     reason: str = "request Lens host supervision authority review"
+
+
+class LensHostSupervisionExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt bounded Lens resident host supervision"
+    run_seconds: int = Field(default=2, ge=1, le=10)
 
 
 class LensHostPersistentSupervisionEnablementIn(BaseModel):
@@ -374,6 +383,28 @@ def host_runtime_loop_readiness(
 @router.get("/host/supervision")
 def host_supervision() -> dict[str, Any]:
     return lens_host_supervision_gate()
+
+
+@router.post("/host/supervision/execute")
+def host_supervision_execute(request: Request, payload: LensHostSupervisionExecuteIn) -> dict[str, Any]:
+    return execute_lens_host_supervision_once(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        run_seconds=payload.run_seconds,
+    )
+
+
+@router.get("/host/supervision/executions")
+def host_supervision_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_host_supervision_execution_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
 @router.get("/host/persistent-supervision")

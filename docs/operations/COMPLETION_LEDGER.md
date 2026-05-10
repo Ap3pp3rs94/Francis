@@ -23723,6 +23723,47 @@ contract repair:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warnings`
 
+### 2026-05-10 - Stage 6/Lens bounded resident-candidate supervision execution
+
+The Lens host supervision path now has a governed bounded execution route:
+`POST /lens/host/supervision/execute`. The route requires an active exact host
+supervision authority grant, system-write scope, and process supervision /
+restart / receipt authority before it runs a bounded `SuperviseResidentOnce`
+session through `scripts/lens-host-supervisor.ps1`.
+
+The execution writes a receipt under `data/lens/host_supervision_executions`
+and exposes readback through `GET /lens/host/supervision/executions`. A
+successful bounded run records a resident runtime candidate as supervised but
+not persistent, then hands off to
+`next_smallest_truthful_gap=resident_supervision_not_persistent`. This moves
+the Stage 6 chain past the unsupervised-process boundary without claiming
+resident presence.
+
+This is a Stage 6/Lens backend route/API, bounded execution, receipt
+persistence, and readback slice. It grants no approval decision authority, no
+general local-process-launch authority, no service install/start/control
+execution, no tray registration, no hotkey registration, no overlay control, no
+summon authority, no capture authority, no memory-write behavior, no resident
+claim, and no Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens bounded resident-candidate
+supervision execution slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch tests\test_api_lens.py::test_lens_host_supervision_authority_grant_requires_approved_request_before_grant_receipt tests\test_api_lens.py::test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\activation.py and tests\test_api_lens.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,authority_required,resident_runtime_candidate_handoff_observed | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_supervision_not_persistent; recommended_handoff_source=resident_runtime_candidate_handoff`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
