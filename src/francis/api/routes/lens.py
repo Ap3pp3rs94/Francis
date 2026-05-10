@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field
 from francis.lens import (
     deny_lens_os_binding_execution,
     deny_lens_host_persistent_supervision_enablement,
-    deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
     deny_lens_resident_runtime_activation_execution,
     execute_lens_host_activation,
+    execute_lens_host_persistent_supervision_enablement,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
@@ -26,6 +26,7 @@ from francis.lens import (
     lens_host_activation_readback,
     lens_host_launch_manifest,
     lens_host_persistent_supervision_enablement_execution_authority_grant_receipts,
+    lens_host_persistent_supervision_enablement_execution_receipts,
     lens_host_persistent_supervision_enablement_execution_readiness_audit,
     lens_host_persistent_supervision_enablement_execution_request_readback,
     lens_host_persistent_supervision_enablement_authority_readiness_audit,
@@ -475,16 +476,30 @@ def host_persistent_supervision_enablement_execution(
 
 
 @router.post("/host/persistent-supervision/enablement/execution")
-def host_persistent_supervision_enablement_execution_denial(
+def host_persistent_supervision_enablement_execution_apply(
     request: Request,
     payload: LensHostPersistentSupervisionEnablementExecutionIn,
 ) -> dict[str, Any]:
-    return deny_lens_host_persistent_supervision_enablement_execution(
+    return execute_lens_host_persistent_supervision_enablement(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
+        record_receipt=True,
+    )
+
+
+@router.get("/host/persistent-supervision/enablement/executions")
+def host_persistent_supervision_enablement_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_enablement_execution_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
     )
 
 

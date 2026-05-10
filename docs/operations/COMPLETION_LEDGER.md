@@ -23197,6 +23197,56 @@ process handoff slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens persistent supervision execution writes bounded service config receipt
+
+The persistent-supervision execution route now performs the next bounded
+service-config step after the full existing authority chain is satisfied:
+
+- exact approved persistent-supervision execution authority request
+- active persistent-supervision enablement authority grant
+- active persistent-supervision execution authority grant
+- `system.write` actor scope
+
+When those gates are present, `POST
+/lens/host/persistent-supervision/enablement/execution` updates only the Lens
+host service config fields that make process supervision and persistent
+supervision enabled for the next prerequisite check, then writes a receipt under
+`data/lens/pse_executions`. The receipt is readable from
+`GET /lens/host/persistent-supervision/enablement/executions` and is projected
+into `/lens/status` and the Stage 6 readiness criteria.
+
+This removes the purely-denied service-config mutation boundary after explicit
+authority without claiming Stage 6 completion. The post-execution state remains
+blocked on resident prerequisites and resident claim authority.
+
+This is a Stage 6/Lens backend route/API, receipt-persistence, and readback
+slice. It changes no UI files and grants no approval decision authority,
+production approval-write behavior, product local-process-launch authority, API
+local-process-launch authority, process-supervision authority, process-restart
+authority, service-install authority, service-control authority, tray
+registration authority, hotkey registration authority, overlay control
+authority, summon authority, capture authority, new sensing authority,
+memory-write behavior, resident-claim authority, resident host process lifetime,
+or Stage 6 transition state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens persistent supervision
+service-config execution receipt slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `failed before fix on missing import; passed after importing the existing persistent supervision plan readback`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,authority_required | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\status.py src\francis\api\routes\lens.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
