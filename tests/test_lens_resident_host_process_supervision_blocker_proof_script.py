@@ -61,6 +61,38 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_handoff_source"] == "process_supervision_boundary_completion_audit_handoff"
+    assert (
+        payload["recommended_next_slice"]
+        == "run_stage6_lens_completion_audit_after_process_supervision_handoff_readback"
+    )
+    assert payload["recommended_proof_script"] == ("scripts/lens-stage6-completion-audit.ps1 -Mode Status")
+    assert payload["authority_required"] == "none_new_stage6_completion_audit"
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["status"] == "audit_needed"
+    assert recommended_handoff["previous_next_smallest_truthful_gap"] == ("resident_host_process_not_supervised")
+    assert recommended_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["next_step"] == (
+        "run_stage6_lens_completion_audit_after_process_supervision_handoff_readback"
+    )
+    assert recommended_handoff["proof_script"] == ("scripts/lens-stage6-completion-audit.ps1 -Mode Status")
+    assert recommended_handoff["route"] == "/lens/status"
+    assert recommended_handoff["readiness_route"] == "/lens/status"
+    assert recommended_handoff["acceptance_criterion"] == "summon_anywhere"
+    assert recommended_handoff["blocker"] == "process_supervision_authority_not_granted"
+    assert recommended_handoff["requirement_state"] == ("process_supervision_boundary_observed_without_authority")
+    assert recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_restart_process"] is False
+    assert recommended_handoff["would_install_service"] is False
+    assert recommended_handoff["would_start_service"] is False
+    assert recommended_handoff["would_claim_resident"] is False
     assert payload["resident_host_process_handoff_observed"] is True
     assert payload["process_supervision_boundary_observed"] is True
     assert payload["handoff_consumed"] is True

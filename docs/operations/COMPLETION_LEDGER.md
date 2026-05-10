@@ -23467,6 +23467,51 @@ readback slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning`
 
+### 2026-05-10 - Stage 6/Lens process-supervision proof carries completion-audit handoff
+
+The resident-host process-supervision blocker proof now returns the concrete
+downstream handoff it was already implying. When
+`scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+consumes the runtime-boundary process-supervision handoff and proves the
+process-supervision authority boundary remains denied, the payload now exposes:
+
+- `recommended_handoff_source=process_supervision_boundary_completion_audit_handoff`
+- `recommended_next_slice=run_stage6_lens_completion_audit_after_process_supervision_handoff_readback`
+- `recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+- `authority_required=none_new_stage6_completion_audit`
+- `recommended_handoff`
+
+This keeps the Stage 6 handoff chain explicit from process-supervision proof
+back to the Stage 6 completion audit. It removes a null-handoff readback gap
+without claiming resident supervision, service control, summon-anywhere, or
+Stage 6 closure.
+
+This is a Stage 6/Lens readback-only and diagnostic-only proof-script/test
+slice. It grants no UI behavior, execution authority, approval decision
+authority, production approval-write behavior, memory-write behavior, product
+local-process-launch authority, API local-process-launch authority,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority, capture
+authority, new sensing authority, telemetry behavior, persistent resident
+process lifetime, resident claim, or Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens process-supervision
+completion-audit handoff slice:
+
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 5 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 2 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,previous_next_smallest_truthful_gap,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required,handoff_consumed,authority_denied,child_proof_timeouts | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status; handoff_consumed=true; authority_denied=true; child_proof_timeouts=[]`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed after formatting tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
