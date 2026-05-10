@@ -6707,6 +6707,7 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "grants_route": "/lens/host/supervision/authority/grants",
         "denials_route": "/lens/host/supervision/authority/denials",
         "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+        "proof_script": "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status",
         "authority_required": "process_supervision_authority",
         "authority_granted": False,
         "blockers": [
@@ -6717,6 +6718,15 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
         "would_execute": False,
         "would_mutate": False,
     }
+    assert body["recommended_handoff_source"] == "runtime_loop_first_blocked_requirement_handoff"
+    assert (
+        body["recommended_next_slice"] == "resolve_host_supervision_authority_readiness_blockers_before_implementation"
+    )
+    assert body["recommended_proof_script"] == "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status"
+    assert body["recommended_route"] == "/lens/host/supervision"
+    assert body["recommended_readiness_route"] == "/lens/host/supervision/authority/readiness"
+    assert body["authority_required"] == "process_supervision_authority"
+    assert body["recommended_handoff"] == body["first_blocked_requirement_handoff"]
     requirements = {item["id"]: item for item in body["requirements"]}
     assert requirements["runtime_implementation_plan"]["ready"] is True
     assert requirements["runtime_loop_contract"]["ready"] is True
@@ -6783,6 +6793,11 @@ def test_lens_host_runtime_loop_readiness_audit_stays_readback_only(
     assert resident_host["runtime_loop_readiness"]["kind"] == "lens.host.runtime_loop.readiness_audit"
     assert resident_host["runtime_loop_readiness"]["status"] == "blocked"
     assert resident_host["runtime_loop_readiness"]["ready"] is False
+    assert resident_host["runtime_loop_readiness"]["recommended_handoff"] == body["first_blocked_requirement_handoff"]
+    assert (
+        resident_host["runtime_loop_readiness"]["recommended_next_slice"]
+        == "resolve_host_supervision_authority_readiness_blockers_before_implementation"
+    )
     assert status_body["runtime_loop_readiness"]["route"] == "/lens/host/runtime-loop/readiness"
     assert status_body["receipts"]["lens_host_runtime_loop_readiness_route"] == "/lens/host/runtime-loop/readiness"
     criterion = _criterion(status_body, "resident_host_runtime_loop_readiness_audit")

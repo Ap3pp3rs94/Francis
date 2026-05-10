@@ -23589,6 +23589,49 @@ prerequisites first-missing handoff slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning`
 
+### 2026-05-10 - Stage 6/Lens runtime-loop readiness carries first-blocked handoff
+
+The Lens resident-host runtime-loop readiness audit now promotes its existing
+first blocked requirement handoff into top-level continuation readback fields.
+`/lens/host/runtime-loop/readiness` already exposed
+`first_blocked_requirement_handoff`; it now also exposes:
+
+- `recommended_handoff_source=runtime_loop_first_blocked_requirement_handoff`
+- `recommended_next_slice=resolve_host_supervision_authority_readiness_blockers_before_implementation`
+- `recommended_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status`
+- `recommended_route=/lens/host/supervision`
+- `recommended_readiness_route=/lens/host/supervision/authority/readiness`
+- `authority_required=process_supervision_authority`
+- `recommended_handoff`
+
+This keeps the Stage 6 handoff chain explicit from runtime-loop readiness to
+host-supervision authority readiness without granting host supervision,
+process restart, service control, receipt write, resident claim, tray/hotkey,
+overlay, summon, or execution authority. The same readback remains visible
+through `/lens/status` under `resident_host.runtime_loop_readiness`.
+
+This is a Stage 6/Lens route/API readback-only and test slice. It changes no UI
+files, execution authority, approval decision authority, memory-write behavior,
+process-supervision authority, process-restart authority, service-install
+authority, service-control authority, tray registration authority, hotkey
+registration authority, overlay control authority, summon authority,
+telemetry behavior, persistent resident process lifetime, resident claim, or
+Stage 6 transition state.
+
+Latest validation for the `2026-05-10` Stage 6/Lens runtime-loop readiness
+handoff readback slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_runtime_loop_readiness_audit_stays_readback_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_runtime_plan.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_runtime_plan.py tests\test_api_lens.py`
+  Result: `passed after formatting tests\test_api_lens.py`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

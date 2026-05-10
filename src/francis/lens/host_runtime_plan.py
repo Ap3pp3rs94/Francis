@@ -279,6 +279,7 @@ def _runtime_loop_operator_handoff(requirement: dict[str, Any]) -> dict[str, Any
             "grants_route": "/lens/host/supervision/authority/grants",
             "denials_route": "/lens/host/supervision/authority/denials",
             "next_step": "resolve_host_supervision_authority_readiness_blockers_before_implementation",
+            "proof_script": "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status",
         },
         "resident_loop_service_lifecycle": {
             "readiness_route": "/lens/host/persistent-supervision/enablement/authority/readiness",
@@ -724,6 +725,15 @@ def lens_host_runtime_loop_readiness_audit(
         ]
     )
     ready = not blocked_requirements and not blockers
+    next_gap = "resident_host_supervision_authority_readiness_blockers"
+    recommended_handoff_source = (
+        "runtime_loop_first_blocked_requirement_handoff" if first_blocked_requirement_handoff else ""
+    )
+    recommended_next_slice = str(first_blocked_requirement_handoff.get("next_step") or "").strip() or next_gap
+    recommended_proof_script = str(first_blocked_requirement_handoff.get("proof_script") or "").strip()
+    recommended_route = str(first_blocked_requirement_handoff.get("route") or "").strip()
+    recommended_readiness_route = str(first_blocked_requirement_handoff.get("readiness_route") or "").strip()
+    authority_required = str(first_blocked_requirement_handoff.get("authority_required") or "").strip()
 
     return {
         "ok": True,
@@ -765,6 +775,13 @@ def lens_host_runtime_loop_readiness_audit(
         "first_blocked_requirement": first_blocked_requirement,
         "first_blocked_requirement_handoff": first_blocked_requirement_handoff,
         "blocked_requirement_handoffs": blocked_requirement_handoffs,
+        "recommended_handoff_source": recommended_handoff_source,
+        "recommended_next_slice": recommended_next_slice,
+        "recommended_proof_script": recommended_proof_script,
+        "recommended_route": recommended_route,
+        "recommended_readiness_route": recommended_readiness_route,
+        "authority_required": authority_required,
+        "recommended_handoff": first_blocked_requirement_handoff,
         "blockers": blockers,
         "source_readbacks": {
             "runtime_plan_status": str(implementation_plan.get("status") or "").strip(),
@@ -809,7 +826,7 @@ def lens_host_runtime_loop_readiness_audit(
             "tray_registration_authority": False,
             "mutation_authority_granted": False,
         },
-        "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers",
+        "next_smallest_truthful_gap": next_gap,
         "message": (
             "Lens can audit resident host runtime loop readiness and point each blocked requirement to the "
             "operator review surface, but the loop remains blocked by resident host supervision authority, "
