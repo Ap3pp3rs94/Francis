@@ -23290,6 +23290,53 @@ slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-09 - Stage 6/Lens resident-surface proof stabilizes readback windows
+
+The CI run for `fix(lens): surface stage6 audit handoff` failed only on
+`windows-latest, 3.12` in
+`tests/test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority`.
+The resident-surface proof returned `proof_failed` after the full Windows 3.12
+suite, while Ubuntu 3.12, Ubuntu 3.13, and Windows 3.13 passed.
+
+The resident-surface proof now isolates its direct resident-surface readback,
+live-operator proof, tray preflight, overlay preflight, and summon preflight
+under a temporary proof data root instead of reading from whatever runtime state
+earlier tests left in repo-local data. The bounded foreground runtime readback
+also retries inside its observation window until the expected
+`foreground_runtime_observed` contract appears or the window expires. The
+resident-surface test assertion now includes proof stdout on failure so future
+CI failures expose the proof JSON instead of a truncated `CompletedProcess`
+repr.
+
+This is a Stage 6/Lens proof-stability and diagnostic-output correction. It is
+not a product runtime change. It grants no UI behavior, execution authority,
+approval decision authority, production approval-write behavior, memory-write
+behavior, product local-process-launch authority, API local-process-launch
+authority, process-supervision authority, process-restart authority,
+service-install authority, service-control authority, tray registration
+authority, hotkey registration authority, overlay control authority, summon
+authority, capture authority, new sensing authority, telemetry behavior,
+persistent resident process lifetime, resident claim, or Stage 6 transition
+state.
+
+Latest validation for the `2026-05-09` Stage 6/Lens resident-surface proof
+stability slice:
+
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

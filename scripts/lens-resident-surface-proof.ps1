@@ -293,6 +293,27 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
   }
 }
 
+function Test-ForegroundSurfaceReadbackObserved {
+  param([object]$SurfaceReadback)
+
+  $SurfacePayload = Get-PropertyValue -Payload $SurfaceReadback -Name 'payload'
+  $Runtime = Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_runtime'
+  $RuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Runtime -Name 'blockers' -Default @())
+
+  return (
+    [bool](Get-PropertyValue -Payload $SurfaceReadback -Name 'ok' -Default $false) -and
+    [int](Get-PropertyValue -Payload $SurfaceReadback -Name 'status_code' -Default 0) -eq 200 -and
+    [string](Get-PropertyValue -Payload $SurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
+    [string](Get-PropertyValue -Payload $Runtime -Name 'status' -Default '') -eq 'foreground_runtime_observed' -and
+    [bool](Get-PropertyValue -Payload $Runtime -Name 'foreground_runtime_observed' -Default $false) -and
+    ($RuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
+    ($RuntimeBlockers -contains 'resident_surface_not_resident') -and
+    -not ($RuntimeBlockers -contains 'resident_surface_runtime_missing') -and
+    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_ready' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_claim_allowed' -Default $true)
+  )
+}
+
 function Invoke-ForegroundResidentSurfaceReadback {
   param(
     [string]$PowerShellPath,
@@ -363,7 +384,14 @@ function Invoke-ForegroundResidentSurfaceReadback {
 
     $RunningState = Wait-ForRuntimeState -StatePath $StatePath -Status 'foreground_running' -TimeoutSeconds 20
     $RunningPid = Wait-ForForegroundPid -PidPath $PidPath -TimeoutSeconds 20
-    $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
+    $ReadbackDeadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $ReadbackDeadline) {
+      $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
+      if (Test-ForegroundSurfaceReadbackObserved -SurfaceReadback $SurfaceReadback) {
+        break
+      }
+      Start-Sleep -Milliseconds 250
+    }
 
     $WaitTimeoutMs = [int](($RunSeconds + 30) * 1000)
     $Completed = $ForegroundProcess.WaitForExit($WaitTimeoutMs)
@@ -409,18 +437,7 @@ function Invoke-ForegroundResidentSurfaceReadback {
     [int](Get-PropertyValue -Payload $RunningPid -Name 'pid' -Default 0) -gt 0 -and
     [bool](Get-PropertyValue -Payload $RunningPid -Name 'process_alive' -Default $false)
   )
-  $ReadbackObserved = (
-    [bool](Get-PropertyValue -Payload $SurfaceReadback -Name 'ok' -Default $false) -and
-    [int](Get-PropertyValue -Payload $SurfaceReadback -Name 'status_code' -Default 0) -eq 200 -and
-    [string](Get-PropertyValue -Payload $SurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readback' -and
-    [string](Get-PropertyValue -Payload $Runtime -Name 'status' -Default '') -eq 'foreground_runtime_observed' -and
-    [bool](Get-PropertyValue -Payload $Runtime -Name 'foreground_runtime_observed' -Default $false) -and
-    ($RuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
-    ($RuntimeBlockers -contains 'resident_surface_not_resident') -and
-    -not ($RuntimeBlockers -contains 'resident_surface_runtime_missing') -and
-    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_ready' -Default $true) -and
-    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_claim_allowed' -Default $true)
-  )
+  $ReadbackObserved = Test-ForegroundSurfaceReadbackObserved -SurfaceReadback $SurfaceReadback
   $ForegroundCompleted = (
     $ForegroundExitCode -eq 0 -and
     [string](Get-PropertyValue -Payload $FinalPayload -Name 'status' -Default '') -eq 'foreground_completed' -and
@@ -473,14 +490,18 @@ $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $OverlayPreflightPath = Join-Path $PSScriptRoot 'lens-overlay-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
+$ReadbackDataRoot = [System.IO.Path]::GetFullPath(
+  (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-proof\" + [guid]::NewGuid().ToString('N') + "\data"))
+)
+New-Item -ItemType Directory -Force -Path $ReadbackDataRoot | Out-Null
 
-$ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback
+$ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
 $ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
-$LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status')
-$TrayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status')
-$OverlayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $OverlayPreflightPath -ScriptArgs @('-Mode', 'Status')
-$SummonPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonPreflightPath -ScriptArgs @('-Mode', 'Status')
+$LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
+$TrayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
+$OverlayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $OverlayPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
+$SummonPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
 
 $HostPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
 $LiveOperatorPayload = Get-PropertyValue -Payload $LiveOperatorProof -Name 'payload'

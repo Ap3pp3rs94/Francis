@@ -40,7 +40,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
     proc = _run_proof("-Mode", "Status")
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.resident_surface.readiness_proof"
     assert payload["status"] == "proof_passed"
