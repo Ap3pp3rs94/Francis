@@ -2490,6 +2490,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "host_service_plan",
         "host_process_readback",
         "host_activation_execution_receipts",
+        "host_supervision_execution_receipts",
         "host_supervisor_readback",
         "host_readiness",
         "tray_presence",
