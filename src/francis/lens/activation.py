@@ -7694,8 +7694,6 @@ def _persistent_supervision_enablement_service_config_update(
         "supervision_ready": False,
         "supervision_blocked_reason": "resident_supervision_prerequisites_pending",
         "blocked_reason": "lens_host_persistent_supervision_prerequisites_pending",
-        "last_persistent_supervision_enablement_actor": _redact_free_text(actor),
-        "last_persistent_supervision_enablement_updated_ts": _now_s(),
     }
     before = {key: current.get(key) for key in updates}
     updated = dict(current)

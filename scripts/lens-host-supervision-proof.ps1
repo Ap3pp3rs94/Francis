@@ -291,7 +291,8 @@ $ServicePlanBlocked = (
   -not [bool](Get-PropertyValue -Payload $ServicePlan -Name 'wrapper_would_write' -Default $true)
 )
 $ServiceNotInstalled = -not [bool](Get-PropertyValue -Payload $Service -Name 'installed' -Default $true)
-$SupervisionDisabled = [string](Get-PropertyValue -Payload $ProcessSupervisionCheck -Name 'status' -Default '') -eq 'blocked'
+$ProcessSupervisionStatus = [string](Get-PropertyValue -Payload $ProcessSupervisionCheck -Name 'status' -Default '')
+$SupervisionConfigGateObserved = @('blocked', 'enabled', 'ready') -contains $ProcessSupervisionStatus
 $ServiceControlDenied = (
   [string](Get-PropertyValue -Payload $ServiceControlCheck -Name 'status' -Default '') -eq 'blocked' -and
   -not [bool](Get-PropertyValue -Payload $PreflightGovernance -Name 'service_control_authority' -Default $true)
@@ -308,7 +309,7 @@ $Checks = @(
   (New-Check -Id 'host_runtime_heartbeat' -Status $(if ($HostLaunchHeartbeatObserved) { 'heartbeat_observed' } else { 'missing' }) -Passed $HostLaunchHeartbeatObserved -Evidence 'lens-host-launch-proof runtime heartbeat readback' -Reason 'Supervision readiness must preserve the bounded host launch heartbeat proof.')
   (New-Check -Id 'service_plan_no_install' -Status $(if ($ServicePlanBlocked) { 'blocked_no_install' } else { 'failed' }) -Passed $ServicePlanBlocked -Evidence 'service_plan' -Reason 'Service plan must remain read-only and non-installing.')
   (New-Check -Id 'service_not_installed' -Status $(if ($ServiceNotInstalled) { 'not_installed' } else { 'installed' }) -Passed $ServiceNotInstalled -Evidence 'service.status' -Reason 'Resident host service is not installed by this proof.')
-  (New-Check -Id 'process_supervision_disabled' -Status $(if ($SupervisionDisabled) { 'blocked' } else { 'unexpected' }) -Passed $SupervisionDisabled -Evidence 'process_supervision_enabled' -Reason 'Process supervision remains disabled until a later authority-changing slice.')
+  (New-Check -Id 'process_supervision_config_gate' -Status $(if ($ProcessSupervisionStatus -eq 'enabled') { 'enabled_config_only' } elseif ($SupervisionConfigGateObserved) { 'blocked' } else { 'unexpected' }) -Passed $SupervisionConfigGateObserved -Evidence 'process_supervision_enabled' -Reason 'Process supervision config is readable; service control and resident claim still remain denied.')
   (New-Check -Id 'service_control_denied' -Status $(if ($ServiceControlDenied) { 'blocked' } else { 'unexpected' }) -Passed $ServiceControlDenied -Evidence 'service_control_authority' -Reason 'Service start/stop/restart authority remains denied.')
   (New-Check -Id 'install_authority_denied' -Status $(if ($NoInstallAuthority) { 'blocked' } else { 'unexpected' }) -Passed $NoInstallAuthority -Evidence 'service_install_authority' -Reason 'Service install and service-plan launch authority remain denied.')
 )

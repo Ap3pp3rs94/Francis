@@ -267,12 +267,14 @@ def _run() -> tuple[int, dict[str, Any]]:
         _check(
             "persistent_enablement_boundary",
             str(enablement.get("status")),
-            persistent_plan.get("next_smallest_truthful_gap") == "persistent_supervision_enablement_disabled"
-            and enablement.get("next_smallest_truthful_gap") == "persistent_supervision_enablement_disabled"
+            persistent_plan.get("next_smallest_truthful_gap") == "persistent_supervision_required_prerequisites_missing"
+            and enablement.get("next_smallest_truthful_gap") == "persistent_supervision_required_prerequisites_missing"
             and _as_dict(enablement_requirements.get("active_host_supervision_authority_grant")).get("ready") is True
-            and _as_dict(persistent_requirements.get("process_supervision_enabled")).get("ready") is False,
+            and _as_dict(enablement_requirements.get("required_before_enable")).get("ready") is False
+            and _as_dict(persistent_requirements.get("process_supervision_enabled")).get("ready") is True
+            and _as_dict(persistent_requirements.get("persistent_supervision_enabled")).get("ready") is True,
             "/lens/host/persistent-supervision/enablement",
-            "host supervision authority grant must advance only to the persistent-supervision enablement boundary",
+            "host supervision authority grant must now advance to the persistent-supervision prerequisite boundary",
         ),
         _check(
             "lens_status_readback",
@@ -333,8 +335,8 @@ def _run() -> tuple[int, dict[str, Any]]:
         "memory_write": bool(_as_dict(receipt.get("governance")).get("memory_write")),
         "previous_next_smallest_truthful_gap": "host_supervision_authority_exact_approval_request",
         "next_smallest_truthful_gap": str(persistent_plan.get("next_smallest_truthful_gap") or ""),
-        "recommended_next_slice": "review_persistent_supervision_enablement_boundary_without_runtime_start",
-        "recommended_proof_script": "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+        "recommended_next_slice": "resolve_persistent_supervision_required_prerequisites_without_resident_claim",
+        "recommended_proof_script": "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
         "readiness_route": "/lens/host/supervision/authority/readiness",
         "request_route": "/lens/host/supervision/authority/request",
         "requests_route": "/lens/host/supervision/authority/requests",
@@ -353,11 +355,11 @@ def _run() -> tuple[int, dict[str, Any]]:
             "status": "blocked",
             "previous_next_smallest_truthful_gap": "host_supervision_authority_exact_approval_request",
             "next_smallest_truthful_gap": str(persistent_plan.get("next_smallest_truthful_gap") or ""),
-            "next_step": "review_persistent_supervision_enablement_boundary_without_runtime_start",
-            "proof_script": "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+            "next_step": "resolve_persistent_supervision_required_prerequisites_without_resident_claim",
+            "proof_script": "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
             "route": "/lens/host/persistent-supervision",
             "readiness_route": "/lens/host/persistent-supervision/enablement",
-            "authority_required": "persistent_supervision_enablement_authority",
+            "authority_required": "resident_host_process_tray_hotkey_overlay_summon_prerequisites",
             "authority_granted": False,
             "read_only_contract": True,
             "diagnostic_only": True,

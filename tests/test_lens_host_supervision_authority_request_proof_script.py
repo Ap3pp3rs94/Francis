@@ -64,13 +64,14 @@ def test_lens_host_supervision_authority_request_proof_consumes_exact_request(
     assert payload["resident_claim_authority"] is True
     assert payload["memory_write"] is False
     assert payload["previous_next_smallest_truthful_gap"] == "host_supervision_authority_exact_approval_request"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert (
-        payload["recommended_next_slice"] == "review_persistent_supervision_enablement_boundary_without_runtime_start"
+        payload["recommended_next_slice"]
+        == "resolve_persistent_supervision_required_prerequisites_without_resident_claim"
     )
     assert (
         payload["recommended_proof_script"]
-        == "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+        == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
     )
     assert payload["readiness_route"] == "/lens/host/supervision/authority/readiness"
     assert payload["request_route"] == "/lens/host/supervision/authority/request"
@@ -85,12 +86,12 @@ def test_lens_host_supervision_authority_request_proof_consumes_exact_request(
     assert handoff == {
         "status": "blocked",
         "previous_next_smallest_truthful_gap": "host_supervision_authority_exact_approval_request",
-        "next_smallest_truthful_gap": "persistent_supervision_enablement_disabled",
-        "next_step": "review_persistent_supervision_enablement_boundary_without_runtime_start",
-        "proof_script": "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+        "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+        "next_step": "resolve_persistent_supervision_required_prerequisites_without_resident_claim",
+        "proof_script": "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
         "route": "/lens/host/persistent-supervision",
         "readiness_route": "/lens/host/persistent-supervision/enablement",
-        "authority_required": "persistent_supervision_enablement_authority",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_summon_prerequisites",
         "authority_granted": False,
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -127,17 +128,16 @@ def test_lens_host_supervision_authority_request_proof_consumes_exact_request(
     assert proof["readiness_after_status"] == "blocked"
     assert proof["readiness_after_active_grant_receipt_id"] == payload["host_supervision_authority_grant_receipt_id"]
     assert proof["persistent_plan_status"] == "blocked"
-    assert proof["persistent_plan_next_gap"] == "persistent_supervision_enablement_disabled"
+    assert proof["persistent_plan_next_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert proof["enablement_status"] == "blocked"
-    assert proof["enablement_next_gap"] == "persistent_supervision_enablement_disabled"
+    assert proof["enablement_next_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert proof["status_grants_authority_granted"] is True
     assert proof["status_active_grant_receipt_id"] == payload["host_supervision_authority_grant_receipt_id"]
     assert proof["status_readiness_request_readback_ready"] is True
     assert proof["status_readiness_resident_claim_allowed"] is False
     assert proof["status_stage6_requirement_ready"] is False
 
-    assert "process_supervision_disabled" in payload["blockers"]
-    assert "persistent_supervision_disabled" in payload["blockers"]
+    assert payload["blockers"] == ["persistent_supervision_required_prerequisites_missing"]
     assert payload["runtime_files"] == {
         "lens_host_status": False,
         "lens_host_pid": False,

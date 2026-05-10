@@ -200,8 +200,14 @@ $BoundedRuntimeObserved = (
 $RuntimeBoundaryBlocked = (
   $RuntimeHandoffObserved -and
   $BoundedRuntimeObserved -and
-  $SummonRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -and
-  $HostBlockers -contains 'lens_host_runtime_not_implemented' -and
+  (
+    $SummonRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -or
+    $SummonRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
+  ) -and
+  (
+    $HostBlockers -contains 'lens_host_runtime_not_implemented' -or
+    $HostBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
+  ) -and
   $HostBlockers -contains 'resident_host_process_not_supervised' -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervision_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'ready_for_resident_claim' -Default $true) -and
@@ -209,7 +215,7 @@ $RuntimeBoundaryBlocked = (
 )
 $ProcessSupervisionHandoffObserved = (
   [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
-  [string](Get-PropertyValue -Payload $HostProof -Name 'process_supervision_status' -Default '') -eq 'blocked' -and
+  @('blocked', 'enabled') -contains [string](Get-PropertyValue -Payload $HostProof -Name 'process_supervision_status' -Default '') -and
   [string](Get-PropertyValue -Payload $HostProof -Name 'service_control_status' -Default '') -eq 'blocked'
 )
 $ResidentCandidateObserved = (

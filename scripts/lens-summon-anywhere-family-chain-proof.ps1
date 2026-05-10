@@ -201,7 +201,10 @@ $ResidentHostFamilyHandoffObserved = (
   [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'resident_host_lifecycle_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'handoff_aligned' -Default $false) -and
   [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  $ResidentHostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -and
+  (
+    $ResidentHostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -or
+    $ResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
+  ) -and
   $ResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
   $ResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
   $ResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and

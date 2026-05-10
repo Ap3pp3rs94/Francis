@@ -348,14 +348,28 @@ $HostSupervisionAuthorityRequirementsBlockedTotal = [int](Get-PropertyValue -Pay
 $HostSupervisionAuthorityBlockedRequirements = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'blocked_requirements' -Default @())
 $HostSupervisionAuthorityEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'evidence' -Default @())
 $HostSupervisionAuthorityBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityCriterion -Name 'blockers' -Default @())
+$HostSupervisionAuthorityGrantBoundaryObserved = (
+  (
+    -not $HostSupervisionAuthorityAuthorityReady -and
+    $HostSupervisionAuthorityBlockedRequirements -contains 'process_supervision_authority' -and
+    $HostSupervisionAuthorityBlockers -contains 'resident_host_supervision_authority_not_granted'
+  ) -or
+  (
+    (
+      $HostSupervisionAuthorityBlockedRequirements -contains 'resident_supervision_gate' -or
+      $HostSupervisionAuthorityBlockedRequirements -contains 'service_plan_ready' -or
+      $HostSupervisionAuthorityBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -or
+      $HostSupervisionAuthorityBlockers -contains 'resident_host_process_missing'
+    ) -and
+    -not $HostSupervisionAuthorityReady
+  )
+)
 $HostSupervisionAuthorityObserved = (
   $HostSupervisionAuthorityStatus -eq 'blocked' -and
   $HostSupervisionAuthorityPreflightReady -and
   -not $HostSupervisionAuthorityReady -and
-  -not $HostSupervisionAuthorityAuthorityReady -and
   $HostSupervisionAuthorityEvidence -contains '/lens/host/supervision/authority' -and
-  $HostSupervisionAuthorityBlockedRequirements -contains 'process_supervision_authority' -and
-  $HostSupervisionAuthorityBlockers -contains 'resident_host_supervision_authority_not_granted'
+  $HostSupervisionAuthorityGrantBoundaryObserved
 )
 $HostSupervisionAuthorityDenialStatus = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityDenialCriterion -Name 'status' -Default 'missing')
 $HostSupervisionAuthorityDenialBoundaryReady = [bool](Get-PropertyValue -Payload $HostSupervisionAuthorityDenialCriterion -Name 'boundary_ready' -Default $false)
@@ -431,12 +445,26 @@ $HostSupervisionAuthorityReadinessFirstHandoffApprovalAction = [string](Get-Prop
 $HostSupervisionAuthorityReadinessNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'next_smallest_truthful_gap' -Default '')
 $HostSupervisionAuthorityReadinessEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'evidence' -Default @())
 $HostSupervisionAuthorityReadinessBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionAuthorityReadinessCriterion -Name 'blockers' -Default @())
+$HostSupervisionAuthorityReadinessAuthorityBoundaryObserved = (
+  (
+    -not $HostSupervisionAuthorityReadinessAuthorityReady -and
+    $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'process_supervision_authority' -and
+    $HostSupervisionAuthorityReadinessBlockers -contains 'process_supervision_authority_not_granted'
+  ) -or
+  (
+    $HostSupervisionAuthorityReadinessAuthorityReady -and
+    (
+      $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'resident_supervision_gate' -or
+      $HostSupervisionAuthorityReadinessBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -or
+      $HostSupervisionAuthorityReadinessBlockers -contains 'resident_host_process_missing'
+    )
+  )
+)
 $HostSupervisionAuthorityReadinessObserved = (
   $HostSupervisionAuthorityReadinessStatus -ne 'missing' -and
   $HostSupervisionAuthorityReadinessAuditStatus -eq 'complete' -and
   -not $HostSupervisionAuthorityReadinessReady -and
   $HostSupervisionAuthorityReadinessPreflightReady -and
-  -not $HostSupervisionAuthorityReadinessAuthorityReady -and
   -not $HostSupervisionAuthorityReadinessSupervisionReady -and
   -not $HostSupervisionAuthorityReadinessResidentClaimAllowed -and
   $HostSupervisionAuthorityReadinessBoundaryObserved -and
@@ -455,9 +483,8 @@ $HostSupervisionAuthorityReadinessObserved = (
   $HostSupervisionAuthorityReadinessFirstHandoffRequestsRoute -eq '/lens/host/supervision/authority/requests' -and
   $HostSupervisionAuthorityReadinessFirstHandoffApprovalAction -eq 'lens.host.supervision_authority' -and
   $HostSupervisionAuthorityReadinessNextSmallestTruthfulGap -eq 'host_supervision_authority_exact_approval_request' -and
-  $HostSupervisionAuthorityReadinessBlockedRequirements -contains 'process_supervision_authority' -and
   $HostSupervisionAuthorityReadinessBlockers -notcontains 'host_supervision_authority_grant_not_implemented' -and
-  $HostSupervisionAuthorityReadinessBlockers -contains 'process_supervision_authority_not_granted'
+  $HostSupervisionAuthorityReadinessAuthorityBoundaryObserved
 )
 $SummonEnablementGateStatus = [string](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'status' -Default 'missing')
 $SummonEnablementGateReady = [bool](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'ready' -Default $true)

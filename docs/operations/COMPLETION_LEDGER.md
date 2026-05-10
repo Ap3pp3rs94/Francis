@@ -23632,6 +23632,57 @@ handoff readback slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens persistent-supervision config gate enabled
+
+The governed persistent-supervision enablement path has advanced from
+proof-only readback into the first durable config-gate change:
+`config/runtime/services/lens-host.json` now has
+`process_supervision_enabled=true` and `persistent_supervision_enabled=true`.
+The service remains not installed, not controllable, not resident, and not
+ready; its blocked reason now points at
+`lens_host_persistent_supervision_prerequisites_pending`.
+
+This removes the stale "persistent supervision is explicitly disabled" blocker
+without granting runtime residence. The updated proof contracts now recognize
+the post-enablement posture and hand off to the concrete prerequisite chain:
+resident host process, tray presence, global hotkey binding, overlay window,
+and summon binding. The direct prerequisite proof identifies the first missing
+requirement as `resident_host_process` and recommends
+`scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`.
+
+Stage 6 remains active and not ready to close. The Stage 6 checkpoint still
+reports `ready_total=2/5`, `blocked_total=3/5`, and
+`enablement_gate_ready_total=0/4`; this slice does not claim summon-anywhere,
+helpful/not-noisy residence, system-resident presence, persistent service
+installation/control, tray registration, hotkey registration, overlay control,
+summon authority, receipt-write authority, memory-write behavior, approval
+decision authority, or Stage 6 transition readiness.
+
+This is a Stage 6/Lens config-gate, proof-script, backend-route, and test
+slice. It changes no UI files, no product execution authority, no API
+local-process-launch authority, no service-install authority, no
+service-control authority, no process-restart authority, no tray/hotkey/overlay
+registration authority, no summon authority, no resident claim, and no memory
+write behavior.
+
+Latest validation for the `2026-05-10` Stage 6/Lens persistent-supervision
+config-gate slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervision_authority_request_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 25 -SupervisorRunSeconds 12`
+  Result: `passed; status=blocked; ready_total=2; blocked_total=3; enablement_gate_ready_total=0`
+- `python -m ruff check src\francis\lens\activation.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_host_supervision_authority_request_proof_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_checkpoint_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell/JSON line-ending normalization warnings`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

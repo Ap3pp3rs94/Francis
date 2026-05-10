@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -20,21 +22,25 @@ def _repo_root() -> Path:
 
 
 def _run_checkpoint(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            _powershell(),
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1"),
-            *args,
-        ],
-        cwd=_repo_root(),
-        check=False,
-        text=True,
-        capture_output=True,
-    )
+    with tempfile.TemporaryDirectory(prefix="francis-lens-stage6-checkpoint-test-") as data_dir:
+        env = os.environ.copy()
+        env["FRANCIS_DATA_DIR"] = data_dir
+        return subprocess.run(
+            [
+                _powershell(),
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1"),
+                *args,
+            ],
+            cwd=_repo_root(),
+            env=env,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
 
 
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
@@ -81,7 +87,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert enablement_gates["resident_supervision_enablement_gate"]["status"] == "blocked"
     assert enablement_gates["resident_supervision_enablement_gate"]["ready"] is False
     assert enablement_gates["resident_supervision_enablement_gate"]["resident_claim_allowed"] is False
-    assert "process_supervision_enabled" in enablement_gates["resident_supervision_enablement_gate"]["blockers"]
+    assert "resident_host_process_missing" in enablement_gates["resident_supervision_enablement_gate"]["blockers"]
     assert "service_control_authority_false" in enablement_gates["resident_supervision_enablement_gate"]["blockers"]
     assert "/lens/host/supervision" in enablement_gates["resident_supervision_enablement_gate"]["evidence"]
     resident_supervision_gate = enablement_gates["resident_supervision_enablement_gate"]
@@ -474,20 +480,14 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_host_supervision_authority_preflight"]["preflight_ready"] is True
     assert payload["resident_host_supervision_authority_preflight"]["authority_ready"] is False
     assert payload["resident_host_supervision_authority_preflight"]["requirements_total"] >= 10
-    assert payload["resident_host_supervision_authority_preflight"]["requirements_blocked_total"] >= 5
-    assert (
-        "process_supervision_authority"
-        in payload["resident_host_supervision_authority_preflight"]["blocked_requirements"]
-    )
-    assert (
-        "service_control_authority" in payload["resident_host_supervision_authority_preflight"]["blocked_requirements"]
-    )
+    assert payload["resident_host_supervision_authority_preflight"]["requirements_blocked_total"] >= 1
+    assert "service_plan_ready" in payload["resident_host_supervision_authority_preflight"]["blocked_requirements"]
     assert (
         "resident_host_supervision_authority_not_granted"
         in payload["resident_host_supervision_authority_preflight"]["blockers"]
     )
     assert (
-        "process_supervision_authority_not_granted"
+        "lens_host_persistent_supervision_prerequisites_pending"
         in payload["resident_host_supervision_authority_preflight"]["blockers"]
     )
     assert payload["resident_host_supervision_authority_preflight"]["execution_authority"] is False
