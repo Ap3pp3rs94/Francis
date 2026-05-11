@@ -24423,6 +24423,42 @@ Latest validation for the third follow-up correction:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
   Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
 
+Fourth follow-up CI correction for the same `2026-05-11` leased resident host
+session runner slice:
+
+- GitHub Actions run `25687304071` for commit
+  `ce78d515163b8b86fca1abc43353cdd1cd394e93` proved the previous Linux PID
+  race fix on Ubuntu Python 3.12 and 3.13, but failed on Windows Python 3.12
+  in
+  `tests/test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback`.
+- The failure was still in the Stage 6 proof layer. The persistence-boundary
+  proof observed the persistent-supervision route/readback handoff, but its
+  nested `lens-resident-host-runtime-boundary-proof.ps1` child proof returned
+  failed under the shortest 2/3/2 second observation windows.
+- `scripts/lens-resident-supervision-persistence-boundary-proof.ps1` now invokes
+  the nested resident-host runtime boundary proof with 5/5/5 second foreground,
+  host-launch, and resident-candidate windows. This stabilizes the composed
+  proof without changing product execution authority, approval-decision
+  authority, memory-write behavior, persistent process supervision authority,
+  process restart authority, service control authority, tray registration,
+  global hotkey registration, overlay control, summon authority, or resident
+  claim authority.
+
+Latest validation for the fourth follow-up correction:
+
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed; nested resident-host runtime boundary child exit_code=0`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_host_supervision_proof_script.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-resident-supervision-persistence-boundary-proof.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
