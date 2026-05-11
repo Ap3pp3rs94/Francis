@@ -651,6 +651,52 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
             "authority_grants_route": "/lens/host/supervision/authority/grants",
             "authority_denials_route": "/lens/host/supervision/authority/denials",
             "approval_action": "lens.host.supervision_authority",
+            "persistent_supervision_route": "/lens/host/persistent-supervision",
+            "persistent_supervision_enablement_route": "/lens/host/persistent-supervision/enablement",
+            "persistent_supervision_enablement_authority_route": (
+                "/lens/host/persistent-supervision/enablement/authority"
+            ),
+            "persistent_supervision_enablement_authority_request_route": (
+                "/lens/host/persistent-supervision/enablement/authority/request"
+            ),
+            "persistent_supervision_enablement_authority_requests_route": (
+                "/lens/host/persistent-supervision/enablement/authority/requests"
+            ),
+            "persistent_supervision_enablement_authority_readiness_route": (
+                "/lens/host/persistent-supervision/enablement/authority/readiness"
+            ),
+            "persistent_supervision_enablement_authority_grants_route": (
+                "/lens/host/persistent-supervision/enablement/authority/grants"
+            ),
+            "persistent_supervision_enablement_execution_route": (
+                "/lens/host/persistent-supervision/enablement/execution"
+            ),
+            "persistent_supervision_enablement_execution_request_route": (
+                "/lens/host/persistent-supervision/enablement/execution/request"
+            ),
+            "persistent_supervision_enablement_execution_requests_route": (
+                "/lens/host/persistent-supervision/enablement/execution/requests"
+            ),
+            "persistent_supervision_enablement_execution_readiness_route": (
+                "/lens/host/persistent-supervision/enablement/execution/readiness"
+            ),
+            "persistent_supervision_enablement_execution_authority_route": (
+                "/lens/host/persistent-supervision/enablement/execution/authority"
+            ),
+            "persistent_supervision_enablement_execution_authority_grants_route": (
+                "/lens/host/persistent-supervision/enablement/execution/authority/grants"
+            ),
+            "persistent_supervision_enablement_executions_route": (
+                "/lens/host/persistent-supervision/enablement/executions"
+            ),
+            "persistent_supervision_next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
+            "persistent_supervision_enablement_authority_action": (
+                "lens.host.persistent_supervision_enablement_authority"
+            ),
+            "persistent_supervision_enablement_execution_action": (
+                "lens.host.persistent_supervision_enablement_execution_authority"
+            ),
+            "persistent_supervision_authority_scope": "system.write",
         }
     elif requirement_id == "resident_host_process":
         next_gap = next_gaps.get(requirement_id, blocker)

@@ -7357,6 +7357,54 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     assert plan_handoff["authority_grants_route"] == "/lens/host/supervision/authority/grants"
     assert plan_handoff["authority_denials_route"] == "/lens/host/supervision/authority/denials"
     assert plan_handoff["approval_action"] == "lens.host.supervision_authority"
+    assert plan_handoff["persistent_supervision_route"] == "/lens/host/persistent-supervision"
+    assert plan_handoff["persistent_supervision_enablement_route"] == "/lens/host/persistent-supervision/enablement"
+    assert plan_handoff["persistent_supervision_enablement_authority_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority"
+    )
+    assert plan_handoff["persistent_supervision_enablement_authority_request_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/request"
+    )
+    assert plan_handoff["persistent_supervision_enablement_authority_requests_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/requests"
+    )
+    assert plan_handoff["persistent_supervision_enablement_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/readiness"
+    )
+    assert plan_handoff["persistent_supervision_enablement_authority_grants_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/grants"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_request_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/request"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_requests_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/requests"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_authority_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/authority"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_authority_grants_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/authority/grants"
+    )
+    assert plan_handoff["persistent_supervision_enablement_executions_route"] == (
+        "/lens/host/persistent-supervision/enablement/executions"
+    )
+    assert plan_handoff["persistent_supervision_next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert plan_handoff["persistent_supervision_enablement_authority_action"] == (
+        "lens.host.persistent_supervision_enablement_authority"
+    )
+    assert plan_handoff["persistent_supervision_enablement_execution_action"] == (
+        "lens.host.persistent_supervision_enablement_execution_authority"
+    )
+    assert plan_handoff["persistent_supervision_authority_scope"] == "system.write"
     assert plan_handoff["read_only_contract"] is True
     assert plan_handoff["would_execute"] is False
     assert plan_handoff["would_mutate"] is False
@@ -7369,6 +7417,15 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     assert enablement_handoff["authority_required"] == "persistent_process_supervision_authority"
     assert enablement_handoff["authority_request_route"] == "/lens/host/supervision/authority/request"
     assert enablement_handoff["approval_action"] == "lens.host.supervision_authority"
+    assert enablement_handoff["persistent_supervision_next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert enablement_handoff["persistent_supervision_enablement_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/readiness"
+    )
+    assert enablement_handoff["persistent_supervision_enablement_execution_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
     assert persistent_enablement["governance"]["process_supervision_authority"] is False
     assert persistent_enablement["governance"]["service_config_write_authority"] is False
 

@@ -24459,6 +24459,51 @@ Latest validation for the fourth follow-up correction:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
   Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
 
+Stage 6 persistent-supervision authority handoff readback slice on
+`2026-05-11`:
+
+- The resident-candidate persistent-supervision prerequisite handoff now carries
+  the next authority chain for persistent-supervision enablement and execution:
+  `/lens/host/persistent-supervision`, `/lens/host/persistent-supervision/enablement`,
+  the enablement authority request/readiness/grant routes, and the execution
+  request/readiness/authority/execution routes.
+- This removes a readback ambiguity after the resident-supervision persistence
+  boundary is consumed: the operator can now see that the resident candidate is
+  still not persistent and that the next route-level blocker is
+  `persistent_supervision_authority_not_granted`.
+- This is readback-only. It does not add API execution authority,
+  approval-decision authority, memory-write behavior, service install/control
+  authority, tray registration, global hotkey registration, overlay control,
+  summon authority, persistent process supervision, process restart authority,
+  persistent-supervision enablement authority, persistent-supervision execution
+  authority, or resident claim authority.
+
+Latest validation for the Stage 6 persistent-supervision authority handoff
+readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_host_supervisor_readback_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_supervision_not_persistent; persistent-supervision authority route chain present in first_missing_requirement_handoff`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=71`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
