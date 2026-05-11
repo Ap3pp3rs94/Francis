@@ -67,6 +67,8 @@ export type LensCommandPalette = {
   status?: string;
   availability?: string;
   summon_anywhere?: boolean;
+  url_entrypoint_ready?: boolean;
+  url_entrypoint: Record<string, unknown>;
   message?: string;
   route?: string;
   local_surface?: string;
@@ -398,6 +400,27 @@ function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function paramsFromLocationPart(value: string): URLSearchParams {
+  const cleaned = safeString(value).trim().replace(/^[?#]/, "");
+  if (!cleaned) return new URLSearchParams();
+  return new URLSearchParams(cleaned.startsWith("?") ? cleaned.slice(1) : cleaned);
+}
+
+export function shouldOpenLensCommandPalette(search: string, hash = ""): boolean {
+  const searchParams = paramsFromLocationPart(search);
+  const hashText = safeString(hash).trim().replace(/^#/, "");
+  const hashQuery = hashText.includes("?") ? hashText.slice(hashText.indexOf("?") + 1) : hashText;
+  const hashParams = paramsFromLocationPart(hashQuery);
+
+  const francisLens = (searchParams.get("francis_lens") || hashParams.get("francis_lens") || "")
+    .trim()
+    .toLowerCase();
+  const lensPalette = (searchParams.get("lens_palette") || hashParams.get("lens_palette") || "")
+    .trim()
+    .toLowerCase();
+  return francisLens === "command_palette" || lensPalette === "open" || lensPalette === "command_palette";
+}
+
 function safeNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -537,6 +560,8 @@ function parseCommandPalette(value: unknown): LensCommandPalette {
     status: safeString(raw.status).trim(),
     availability: safeString(raw.availability).trim(),
     summon_anywhere: safeBoolean(raw.summon_anywhere, false),
+    url_entrypoint_ready: safeBoolean(raw.url_entrypoint_ready, false),
+    url_entrypoint: safeRecord(raw.url_entrypoint),
     message: safeString(raw.message).trim(),
     route: safeString(raw.route).trim(),
     local_surface: safeString(raw.local_surface).trim(),

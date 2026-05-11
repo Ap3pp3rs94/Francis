@@ -50,6 +50,18 @@ def test_lens_command_palette_shell_bridge_reads_status_without_os_binding(tmp_p
                     "status": "readback_ready",
                     "availability": "chat_ui_only",
                     "summon_anywhere": False,
+                    "url_entrypoint_ready": True,
+                    "url_entrypoint": {
+                        "kind": "lens.command_palette.url_entrypoint",
+                        "status": "ready",
+                        "route": "/?francis_lens=command_palette",
+                        "local_surface": "chat_ui.command_palette",
+                        "opens_palette_in_chat_ui": True,
+                        "requires_running_chat_ui": True,
+                        "os_level_command_palette": False,
+                        "summon_anywhere": False,
+                        "global_hotkey": False,
+                    },
                     "route": "/lens/status",
                     "local_surface": "chat_ui.command_palette",
                     "command_total": 2,
@@ -95,6 +107,10 @@ def test_lens_command_palette_shell_bridge_reads_status_without_os_binding(tmp_p
     assert payload["readback_ready"] is True
     assert payload["os_level_command_palette"] is False
     assert payload["summon_anywhere"] is False
+    assert payload["url_entrypoint_ready"] is True
+    assert payload["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
+    assert payload["url_entrypoint"]["opens_palette_in_chat_ui"] is True
+    assert payload["url_entrypoint"]["os_level_command_palette"] is False
     assert payload["availability"] == "chat_ui_only"
     assert payload["route"] == "/lens/status"
     assert payload["local_surface"] == "chat_ui.command_palette"
@@ -151,6 +167,8 @@ def test_lens_command_palette_shell_bridge_uses_python_readback_without_api(tmp_
     assert payload["readback_ready"] is True
     assert payload["availability"] == "chat_ui_only"
     assert payload["command_total"] > 0
+    assert payload["url_entrypoint_ready"] is True
+    assert payload["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
     assert payload["os_level_command_palette"] is False
     assert payload["summon_anywhere"] is False
     assert "os_level_command_palette_missing" in payload["blockers"]

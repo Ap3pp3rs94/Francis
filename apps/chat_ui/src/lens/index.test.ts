@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LensApiError, LensClient, parseLensStatus } from "./index.ts";
+import { LensApiError, LensClient, parseLensStatus, shouldOpenLensCommandPalette } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
+
+test("shouldOpenLensCommandPalette accepts governed URL intents", () => {
+  assert.equal(shouldOpenLensCommandPalette("?francis_lens=command_palette"), true);
+  assert.equal(shouldOpenLensCommandPalette("?lens_palette=open"), true);
+  assert.equal(shouldOpenLensCommandPalette("", "#francis_lens=command_palette"), true);
+  assert.equal(shouldOpenLensCommandPalette("", "#/console?lens_palette=command_palette"), true);
+  assert.equal(shouldOpenLensCommandPalette("?francis_lens=status"), false);
+  assert.equal(shouldOpenLensCommandPalette("?lens_palette=closed"), false);
+});
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -217,7 +226,20 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
         status: "readback_ready",
         availability: "chat_ui_only",
         summon_anywhere: false,
-        message: "Palette command readback exists; OS-wide summon and overlay binding are not implemented here.",
+        url_entrypoint_ready: true,
+        url_entrypoint: {
+          kind: "lens.command_palette.url_entrypoint",
+          status: "ready",
+          route: "/?francis_lens=command_palette",
+          local_surface: "chat_ui.command_palette",
+          opens_palette_in_chat_ui: true,
+          requires_running_chat_ui: true,
+          os_level_command_palette: false,
+          summon_anywhere: false,
+          global_hotkey: false,
+        },
+        message:
+          "Palette command readback and chat-UI URL entrypoint exist; OS-wide summon, global hotkey, tray, and overlay binding are not implemented here.",
         route: "/lens/status",
         local_surface: "chat_ui.command_palette",
         command_total: "3",
@@ -609,6 +631,10 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.command_palette.status, "readback_ready");
     assert.equal(snapshot.command_palette.availability, "chat_ui_only");
     assert.equal(snapshot.command_palette.summon_anywhere, false);
+    assert.equal(snapshot.command_palette.url_entrypoint_ready, true);
+    assert.equal(snapshot.command_palette.url_entrypoint.route, "/?francis_lens=command_palette");
+    assert.equal(snapshot.command_palette.url_entrypoint.opens_palette_in_chat_ui, true);
+    assert.equal(snapshot.command_palette.url_entrypoint.os_level_command_palette, false);
     assert.equal(snapshot.command_palette.command_total, 3);
     assert.equal(snapshot.command_palette.groups.Navigation, 1);
     assert.equal(snapshot.command_palette.groups.Control, 2);

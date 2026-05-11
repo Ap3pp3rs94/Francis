@@ -185,6 +185,8 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert plan["command_palette_contract"]["authority_granted"] is True
     assert plan["command_palette_contract"]["active_grant_receipt_id"] == receipt["receipt_id"]
     assert plan["command_palette_contract"]["os_level_command_palette"] is False
+    assert plan["command_palette_contract"]["url_entrypoint_ready"] is True
+    assert plan["command_palette_contract"]["url_entrypoint_route"] == "/?francis_lens=command_palette"
     steps = {item["id"]: item for item in plan["plan"]["steps"]}
     palette_step = steps["os_level_command_palette_contract"]
     assert palette_step["ready"] is False
@@ -212,6 +214,7 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert readiness["command_palette_contract"]["readback_ready"] is True
     assert readiness["command_palette_contract"]["authority_granted"] is True
     assert readiness["command_palette_contract"]["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert readiness["command_palette_contract"]["url_entrypoint_ready"] is True
     requirements = {item["id"]: item for item in readiness["requirements"]}
     assert requirements["authority_request_readback"]["authority_granted"] is True
     assert requirements["authority_request_readback"]["active_grant_receipt_id"] == receipt["receipt_id"]

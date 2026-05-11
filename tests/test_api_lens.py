@@ -586,6 +586,8 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert command_palette_contract["bridge_script"] == "scripts/lens-command-palette.ps1"
     assert command_palette_contract["proof_script"] == "scripts/lens-command-palette-os-binding-proof.ps1"
     assert command_palette_contract["availability"] == "chat_ui_only"
+    assert command_palette_contract["url_entrypoint_ready"] is True
+    assert command_palette_contract["url_entrypoint_route"] == "/?francis_lens=command_palette"
     assert command_palette_contract["authority_granted"] is False
     assert command_palette_contract["os_level_command_palette"] is False
     assert command_palette_contract["would_open_palette"] is False
@@ -1314,6 +1316,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["command_palette"]["status"] == "readback_ready"
     assert body["command_palette"]["summon_anywhere"] is False
     assert body["command_palette"]["availability"] == "chat_ui_only"
+    assert body["command_palette"]["url_entrypoint_ready"] is True
+    assert body["command_palette"]["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
+    assert body["command_palette"]["url_entrypoint"]["opens_palette_in_chat_ui"] is True
+    assert body["command_palette"]["url_entrypoint"]["os_level_command_palette"] is False
+    assert body["command_palette"]["url_entrypoint"]["summon_anywhere"] is False
     assert body["command_palette"]["command_total"] == len(body["command_palette"]["commands"])
     assert body["command_palette"]["command_total"] >= 15
     assert body["command_palette"]["groups"]["Navigation"] >= 8
@@ -2917,6 +2924,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "resident_overlay_runtime_missing" in _criterion(body, "hud_layer_runtime")["blockers"]
     assert _criterion(body, "command_palette_commands")["status"] == "readback_ready"
     assert _criterion(body, "command_palette_commands")["command_count"] == body["command_palette"]["command_total"]
+    assert _criterion(body, "command_palette_commands")["url_entrypoint_ready"] is True
+    assert _criterion(body, "command_palette_commands")["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
     os_binding_criterion = _criterion(body, "os_binding_readiness")
     assert os_binding_criterion["status"] == "blocked"
     assert os_binding_criterion["audit_status"] == "complete"

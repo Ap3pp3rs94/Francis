@@ -799,6 +799,30 @@ def _palette_command(
 
 def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
     pending_approvals = _safe_int(approvals.get("pending_count"))
+    url_entrypoint = {
+        "kind": "lens.command_palette.url_entrypoint",
+        "status": "ready",
+        "route": "/?francis_lens=command_palette",
+        "accepted_query": {
+            "francis_lens": "command_palette",
+            "lens_palette": "open",
+        },
+        "local_surface": "chat_ui.command_palette",
+        "opens_palette_in_chat_ui": True,
+        "requires_running_chat_ui": True,
+        "os_level_command_palette": False,
+        "summon_anywhere": False,
+        "global_hotkey": False,
+        "tray_presence": False,
+        "overlay_window": False,
+        "execution_authority": False,
+        "approval_decision_authority": False,
+        "memory_write": False,
+        "message": (
+            "A running chat UI can open the command palette from this URL intent; "
+            "global hotkey, tray, overlay, and summon-anywhere are still blocked."
+        ),
+    }
     commands = [
         _palette_command(
             "nav.briefing",
@@ -1047,7 +1071,12 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
         "status": "readback_ready",
         "availability": "chat_ui_only",
         "summon_anywhere": False,
-        "message": "Palette command readback exists; OS-wide summon and overlay binding are not implemented here.",
+        "url_entrypoint_ready": True,
+        "url_entrypoint": url_entrypoint,
+        "message": (
+            "Palette command readback and chat-UI URL entrypoint exist; OS-wide summon, global hotkey, "
+            "tray, and overlay binding are not implemented here."
+        ),
         "route": "/lens/status",
         "local_surface": "chat_ui.command_palette",
         "command_total": len(commands),
@@ -1780,6 +1809,8 @@ def _stage6_readiness(
                 "status": "readback_ready" if _as_list(command_palette.get("commands")) else "missing",
                 "evidence": ["/lens/status"],
                 "command_count": _safe_int(command_palette.get("command_total")),
+                "url_entrypoint_ready": bool(command_palette.get("url_entrypoint_ready")),
+                "url_entrypoint": _as_dict(command_palette.get("url_entrypoint")),
             },
             {
                 "id": "os_binding_readiness",

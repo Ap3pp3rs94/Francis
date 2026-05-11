@@ -1080,6 +1080,8 @@ def _os_binding_command_palette_contract(
         "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1",
         "local_surface": "chat_ui.command_palette",
         "availability": "chat_ui_only",
+        "url_entrypoint_ready": True,
+        "url_entrypoint_route": "/?francis_lens=command_palette",
         "authority_required": "os_level_command_palette_binding_authority",
         "authority_granted": authority_granted,
         "active_grant_receipt_id": active_grant_receipt_id,

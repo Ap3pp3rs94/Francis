@@ -47,6 +47,18 @@ def _write_lens_status(path: Path) -> None:
                     "status": "readback_ready",
                     "availability": "chat_ui_only",
                     "summon_anywhere": False,
+                    "url_entrypoint_ready": True,
+                    "url_entrypoint": {
+                        "kind": "lens.command_palette.url_entrypoint",
+                        "status": "ready",
+                        "route": "/?francis_lens=command_palette",
+                        "local_surface": "chat_ui.command_palette",
+                        "opens_palette_in_chat_ui": True,
+                        "requires_running_chat_ui": True,
+                        "os_level_command_palette": False,
+                        "summon_anywhere": False,
+                        "global_hotkey": False,
+                    },
                     "route": "/lens/status",
                     "local_surface": "chat_ui.command_palette",
                     "command_total": 2,
@@ -265,6 +277,10 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert command_palette["availability"] == "chat_ui_only"
     assert command_palette["os_level_command_palette"] is False
     assert command_palette["summon_anywhere"] is False
+    assert command_palette["url_entrypoint_ready"] is True
+    assert command_palette["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
+    assert command_palette["url_entrypoint"]["opens_palette_in_chat_ui"] is True
+    assert command_palette["url_entrypoint"]["os_level_command_palette"] is False
     assert command_palette["command_total"] == 2
     assert command_palette["route"] == "/lens/status"
     assert command_palette["local_surface"] == "chat_ui.command_palette"
@@ -350,6 +366,8 @@ def test_lens_command_palette_os_binding_proof_uses_repo_readback_without_api(tm
     assert payload["command_palette"]["status"] == "blocked"
     assert payload["command_palette"]["availability"] == "chat_ui_only"
     assert payload["command_palette"]["command_total"] > 0
+    assert payload["command_palette"]["url_entrypoint_ready"] is True
+    assert payload["command_palette"]["url_entrypoint"]["route"] == "/?francis_lens=command_palette"
     assert payload["os_binding_candidate"]["local_surface"] == "chat_ui.command_palette"
     execution_readiness = payload["execution_readiness"]
     assert execution_readiness["source"] == "python"

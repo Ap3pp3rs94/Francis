@@ -24173,6 +24173,47 @@ proof repo fallback slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-command-palette.ps1 and scripts/lens-command-palette-os-binding-proof.ps1`
 
+### 2026-05-11 - Stage 6/Lens command-palette URL entrypoint
+
+The Lens command palette now exposes a truthful browser URL entrypoint contract
+through `/lens/status` and the existing shell/readback proofs. The chat UI opens
+the existing command palette when loaded with
+`/?francis_lens=command_palette`, `?lens_palette=open`, or the same intent in a
+hash query. This is a local chat-UI entrypoint only: it requires the chat UI to
+already be running and does not register a global hotkey, create tray presence,
+open an overlay, launch a local process, write memory, or grant OS-level summon
+authority.
+
+This moves the Stage 6 `summon_anywhere` path one prerequisite forward by
+making the palette target externally addressable before a later governed
+OS-level binding can safely invoke it. The Stage 6 checkpoint remains
+`status=blocked`, `ready_total=2/5`, and `ready_to_close=false`; Stage 7 is not
+started.
+
+Latest validation for the `2026-05-11` Stage 6/Lens command-palette URL
+entrypoint slice:
+
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_api_lens.py -k "command_palette or os_binding" -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette.ps1 -Mode Status`
+  Result: `passed; status=blocked; url_entrypoint_ready=true; os_level_command_palette=false; summon_anywhere=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; url_entrypoint_ready=true; next_smallest_truthful_gap=os_level_command_palette_binding`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false`
+- `python -m ruff check src\francis\lens\status.py src\francis\lens\preflight.py tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py src\francis\lens\preflight.py tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-command-palette.ps1 and scripts/lens-command-palette-os-binding-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
