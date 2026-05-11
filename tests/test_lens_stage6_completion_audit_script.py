@@ -105,61 +105,63 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "live_operator_experience_proof",
         "stage6_lens_completion_audit",
     }
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_execution_authority_handoff"
     assert (
-        payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_authority_or_resident_claim_boundary"
-    )
-    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_authority_handoff"
-    assert payload["recommended_next_slice"] == (
-        "review_persistent_supervision_execution_and_resident_claim_boundary_without_runtime_start"
+        payload["recommended_next_slice"]
+        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
     )
     assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status"
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
     )
-    assert payload["authority_required"] == "persistent_supervision_execution_authority_and_resident_claim_authority"
+    assert payload["authority_required"] == "resident_claim_authority"
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["status"] == "blocked"
-    assert recommended_handoff["previous_next_smallest_truthful_gap"] == "persistent_supervision_enablement_disabled"
     assert (
-        recommended_handoff["consumed_audit_next_smallest_truthful_gap"]
-        == "persistent_supervision_authority_not_granted"
-    )
-    assert (
-        recommended_handoff["next_smallest_truthful_gap"]
+        recommended_handoff["previous_next_smallest_truthful_gap"]
         == "persistent_supervision_execution_authority_or_resident_claim_boundary"
     )
-    assert recommended_handoff["next_step"] == (
-        "review_persistent_supervision_execution_and_resident_claim_boundary_without_runtime_start"
+    assert (
+        recommended_handoff["consumed_audit_next_smallest_truthful_gap"]
+        == "persistent_supervision_execution_authority_or_resident_claim_boundary"
+    )
+    assert (
+        recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    )
+    assert (
+        recommended_handoff["next_step"]
+        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
     )
     assert recommended_handoff["proof_script"] == (
-        "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status"
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
     )
-    assert recommended_handoff["route"] == "/lens/host/persistent-supervision/enablement"
+    assert recommended_handoff["route"] == "/lens/host/persistent-supervision/enablement/execution"
     assert recommended_handoff["readiness_route"] == (
         "/lens/host/persistent-supervision/enablement/execution/readiness"
     )
-    assert (
-        recommended_handoff["authority_required"]
-        == "persistent_supervision_execution_authority_and_resident_claim_authority"
-    )
+    assert recommended_handoff["authority_required"] == "resident_claim_authority"
     assert recommended_handoff["authority_granted"] is False
     assert recommended_handoff["persistent_supervision_enablement_authority"] is True
-    assert recommended_handoff["service_config_write_authority"] is False
-    assert recommended_handoff["persistent_supervision_execution_authority"] is False
+    assert recommended_handoff["service_config_write_authority"] is True
+    assert recommended_handoff["persistent_supervision_execution_authority"] is True
+    assert recommended_handoff["receipt_write_authority"] is True
     assert recommended_handoff["resident_claim_allowed"] is False
     assert recommended_handoff["grant_applied"] is True
     assert recommended_handoff["enablement_applied"] is False
+    assert recommended_handoff["applied"] is False
     assert recommended_handoff["executed"] is False
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
-    assert "persistent_supervision_execution_authority_not_granted" in recommended_handoff["blockers"]
-    assert "service_config_write_authority_not_granted" in recommended_handoff["blockers"]
+    assert "resident_claim_authority_not_granted" in recommended_handoff["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" not in recommended_handoff["blockers"]
+    assert "service_config_write_authority_not_granted" not in recommended_handoff["blockers"]
     assert "persistent_supervision_enablement_authority_not_granted" not in recommended_handoff["blockers"]
     assert payload["stage6_completion_reviewed"] is True
-    assert "persistent-supervision enablement authority proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "bounded enablement authority grant is readable" in payload["next_smallest_truthful_gap_basis"]
-    assert "resident-claim authority remain denied" in payload["next_smallest_truthful_gap_basis"]
+    assert "persistent-supervision execution authority proof" in (payload["next_smallest_truthful_gap_basis"])
+    assert "bounded execution grant is readable" in payload["next_smallest_truthful_gap_basis"]
+    assert "resident-claim/runtime readiness" in payload["next_smallest_truthful_gap_basis"]
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

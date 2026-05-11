@@ -1982,6 +1982,16 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
+  $PersistentSupervisionExecutionAuthorityProofObserved -and
+  [string]$PersistentSupervisionExecutionAuthorityProof.next_smallest_truthful_gap -eq 'persistent_supervision_resident_claim_authority_boundary' -and
+  $PersistentSupervisionExecutionAuthorityProofBlockers -contains 'resident_claim_authority_not_granted'
+) {
+  'persistent_supervision_resident_claim_authority_boundary'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $PersistentSupervisionEnablementAuthorityProofObserved -and
   [string]$PersistentSupervisionEnablementAuthorityProof.next_smallest_truthful_gap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary' -and
   $PersistentSupervisionEnablementAuthorityProofBlockers -contains 'persistent_supervision_execution_authority_not_granted'
@@ -2064,6 +2074,40 @@ $RecommendedProofScript = ''
 $RecommendedAuthorityRequired = ''
 $RecommendedHandoff = [ordered]@{}
 if (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary' -and
+  $PersistentSupervisionExecutionAuthorityProofObserved
+) {
+  $RecommendedHandoffSource = 'persistent_supervision_execution_authority_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = [string]$PersistentSupervisionExecutionAuthorityProof.previous_next_smallest_truthful_gap
+    consumed_audit_next_smallest_truthful_gap = 'persistent_supervision_execution_authority_or_resident_claim_boundary'
+    next_smallest_truthful_gap = [string]$PersistentSupervisionExecutionAuthorityProof.next_smallest_truthful_gap
+    next_step = [string]$PersistentSupervisionExecutionAuthorityProof.recommended_next_slice
+    proof_script = [string]$PersistentSupervisionExecutionAuthorityProof.recommended_proof_script
+    route = [string]$PersistentSupervisionExecutionAuthorityProof.persistent_supervision_execution_route
+    readiness_route = [string]$PersistentSupervisionExecutionAuthorityProof.persistent_supervision_execution_readiness_route
+    authority_required = [string]$PersistentSupervisionExecutionAuthorityProof.handoff.authority_required
+    authority_granted = $false
+    persistent_supervision_enablement_authority = [bool]$PersistentSupervisionExecutionAuthorityProof.persistent_supervision_enablement_authority
+    service_config_write_authority = [bool]$PersistentSupervisionExecutionAuthorityProof.service_config_write_authority
+    persistent_supervision_execution_authority = [bool]$PersistentSupervisionExecutionAuthorityProof.persistent_supervision_execution_authority
+    receipt_write_authority = [bool]$PersistentSupervisionExecutionAuthorityProof.receipt_write_authority
+    resident_claim_allowed = [bool]$PersistentSupervisionExecutionAuthorityProof.resident_claim_allowed
+    grant_applied = [bool]$PersistentSupervisionExecutionAuthorityProof.grant_applied
+    enablement_applied = [bool]$PersistentSupervisionExecutionAuthorityProof.enablement_applied
+    applied = [bool]$PersistentSupervisionExecutionAuthorityProof.applied
+    executed = [bool]$PersistentSupervisionExecutionAuthorityProof.executed
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    blockers = [string[]]@($PersistentSupervisionExecutionAuthorityProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_execution_authority_or_resident_claim_boundary' -and
   $PersistentSupervisionEnablementAuthorityProofObserved
 ) {
