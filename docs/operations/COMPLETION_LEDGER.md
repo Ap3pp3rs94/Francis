@@ -24385,6 +24385,44 @@ Latest validation for the second follow-up correction:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-host.ps1 and scripts/lens-resident-session.ps1`
 
+Third follow-up CI correction for the same `2026-05-11` leased resident host
+session runner slice:
+
+- GitHub Actions run `25684635981` for commit
+  `f3728b83d447dae9e11f0a55e75fdc5f8c37b771` failed on Ubuntu Python 3.12
+  and Python 3.13 after proving that path normalization alone was
+  insufficient. The start receipt still reported `pid_present=true`,
+  `pid>0`, `process_alive=true`, and `resident_session_active=true`, while the
+  later Python-side filesystem assertion for `data/runtime/lens-host/lens-host.pid`
+  could observe the bounded leased host after it had already removed the PID
+  file.
+- The test now treats the `process_readback` embedded in the start receipt as
+  the authoritative process snapshot for PID and liveness proof. A subsequent
+  status readback may truthfully observe either the still-active leased
+  resident session or the already-stopped bounded resident session.
+- This is a test-contract stabilization only. It does not add API execution
+  authority, approval-decision authority, memory-write behavior, service
+  install/control authority, tray registration, global hotkey registration,
+  overlay control, summon authority, persistent process supervision, process
+  restart authority, or resident claim authority.
+
+Latest validation for the third follow-up correction:
+
+- `python -m pytest tests\test_lens_resident_session_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_manifest_process_readback.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_session_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_session_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

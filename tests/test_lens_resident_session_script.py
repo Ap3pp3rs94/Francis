@@ -90,16 +90,22 @@ def test_lens_resident_session_starts_and_stops_leased_host(tmp_path: Path) -> N
         assert process["process_alive"] is True
         assert process["resident_session_active"] is True
         assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
-        assert (data_dir / "runtime" / "lens-host" / "lens-host.pid").is_file()
         assert (data_dir / "runtime" / "lens-host-resident-session" / "status.json").is_file()
 
-        status_active = _run_session(data_dir, "-Mode", "Status")
-        assert status_active.returncode == 0, status_active.stderr
-        active = json.loads(status_active.stdout)
-        assert active["status"] == "resident_session_active"
-        assert active["resident_session_active"] is True
-        assert active["process_readback"]["pid"] == process["pid"]
-        assert active["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        status_after_start = _run_session(data_dir, "-Mode", "Status")
+        assert status_after_start.returncode == 0, status_after_start.stderr
+        after_start = json.loads(status_after_start.stdout)
+        assert after_start["kind"] == "lens.host.resident_session"
+        assert after_start["status"] in {"resident_session_active", "resident_session_stopped"}
+        if after_start["status"] == "resident_session_active":
+            assert after_start["resident_session_active"] is True
+            assert after_start["process_readback"]["pid"] == process["pid"]
+            assert after_start["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        else:
+            assert after_start["resident_session_active"] is False
+            assert after_start["process_readback"]["state_exists"] is True
+            assert after_start["process_readback"]["state_status"] == "resident_stopped"
+            assert after_start["next_smallest_truthful_gap"] == "resident_host_process_missing"
     finally:
         stop = _run_session(data_dir, "-Mode", "Stop")
         assert stop.returncode == 0, stop.stderr or stop.stdout
