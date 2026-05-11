@@ -105,63 +105,55 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "live_operator_experience_proof",
         "stage6_lens_completion_audit",
     }
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
-    assert payload["recommended_handoff_source"] == "persistent_supervision_execution_authority_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert (
-        payload["recommended_next_slice"]
-        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+        payload["recommended_handoff_source"]
+        == "persistent_supervision_prerequisites_first_missing_requirement_handoff"
     )
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
-    )
-    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["recommended_next_slice"] == "resolve_resident_host_process_before_persistent_supervision_enablement"
+    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     recommended_handoff = payload["recommended_handoff"]
-    assert recommended_handoff["status"] == "blocked"
+    assert recommended_handoff["id"] == "resident_host_process"
+    assert recommended_handoff["family"] == "resident_host"
+    assert recommended_handoff["route"] == "/lens/host"
+    assert recommended_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert recommended_handoff["proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert recommended_handoff["blocker"] == "resident_host_process_missing"
+    assert recommended_handoff["requirement_state"] == "missing"
+    assert recommended_handoff["blocked_reason"] == "resident_host_process_missing"
+    assert recommended_handoff["next_step"] == "resolve_resident_host_process_before_persistent_supervision_enablement"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert (
-        recommended_handoff["previous_next_smallest_truthful_gap"]
-        == "persistent_supervision_execution_authority_or_resident_claim_boundary"
+        recommended_handoff["authority_required"]
+        == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     )
-    assert (
-        recommended_handoff["consumed_audit_next_smallest_truthful_gap"]
-        == "persistent_supervision_execution_authority_or_resident_claim_boundary"
-    )
-    assert (
-        recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
-    )
-    assert (
-        recommended_handoff["next_step"]
-        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
-    )
-    assert recommended_handoff["proof_script"] == (
-        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
-    )
-    assert recommended_handoff["route"] == "/lens/host/persistent-supervision/enablement/execution"
-    assert recommended_handoff["readiness_route"] == (
-        "/lens/host/persistent-supervision/enablement/execution/readiness"
-    )
-    assert recommended_handoff["authority_required"] == "resident_claim_authority"
-    assert recommended_handoff["authority_granted"] is False
-    assert recommended_handoff["persistent_supervision_enablement_authority"] is True
-    assert recommended_handoff["service_config_write_authority"] is True
-    assert recommended_handoff["persistent_supervision_execution_authority"] is True
-    assert recommended_handoff["receipt_write_authority"] is True
-    assert recommended_handoff["resident_claim_allowed"] is False
-    assert recommended_handoff["grant_applied"] is True
-    assert recommended_handoff["enablement_applied"] is False
-    assert recommended_handoff["applied"] is False
-    assert recommended_handoff["executed"] is False
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
-    assert "resident_claim_authority_not_granted" in recommended_handoff["blockers"]
-    assert "persistent_supervision_execution_authority_not_granted" not in recommended_handoff["blockers"]
-    assert "service_config_write_authority_not_granted" not in recommended_handoff["blockers"]
-    assert "persistent_supervision_enablement_authority_not_granted" not in recommended_handoff["blockers"]
+    assert recommended_handoff["resident_runtime_candidate_supervised"] is False
+    assert recommended_handoff["fresh_resident_runtime_candidate_supervised"] is False
+    assert recommended_handoff["supervision_execution_receipt_observed"] is False
+    assert recommended_handoff["supervision_execution_receipt_id"] == ""
+    assert recommended_handoff["authority_route"] == "/lens/host/activation/authority"
+    assert recommended_handoff["authority_request_route"] == "/lens/host/activation/request"
+    assert recommended_handoff["authority_readback_route"] == "/lens/host/activation"
+    assert recommended_handoff["authority_preflight_route"] == "/lens/host/activation/preflight"
+    assert recommended_handoff["authority_plan_route"] == "/lens/host/activation/plan"
+    assert recommended_handoff["authority_execute_route"] == "/lens/host/activation/execute"
+    assert recommended_handoff["authority_executions_route"] == "/lens/host/activation/executions"
+    assert recommended_handoff["authority_grants_route"] == "/lens/host/activation/authority/grants"
+    assert recommended_handoff["execution_denials_route"] == "/lens/host/activation/denials"
+    assert recommended_handoff["approval_action"] == "lens.host.foreground_activation"
+    assert recommended_handoff["authority_scope"] == "system.write"
     assert payload["stage6_completion_reviewed"] is True
-    assert "persistent-supervision execution authority proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "bounded execution grant is readable" in payload["next_smallest_truthful_gap_basis"]
-    assert "resident-claim/runtime readiness" in payload["next_smallest_truthful_gap_basis"]
+    assert "resident-claim boundary proof" in payload["next_smallest_truthful_gap_basis"]
+    assert "Persistent supervision remains blocked" in payload["next_smallest_truthful_gap_basis"]
+    assert (
+        "resident-host process, tray, global hotkey, overlay, and summon-binding"
+        in (payload["next_smallest_truthful_gap_basis"])
+    )
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

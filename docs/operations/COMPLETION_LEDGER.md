@@ -24012,6 +24012,49 @@ execution-authority handoff slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
 
+### 2026-05-11 - Stage 6/Lens resident-claim audit handoff consumption
+
+The Stage 6 completion audit now consumes the persistent-supervision
+resident-claim boundary proof after the execution-authority handoff has been
+consumed. When the audit observes the full persistent-supervision authority
+chain, resident-claim boundary proof, and enablement transition-plan proof, it
+reports `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+with
+`recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff`.
+
+The recommended handoff now points to the first concrete missing prerequisite:
+`resident_host_process`, with
+`recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`
+and
+`recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`.
+This moves the rolling audit handoff out of the already-proven resident-claim
+boundary and back to the concrete system-resident prerequisite chain.
+
+Stage 6 remains active and not ready to close. The remaining Stage 6 acceptance
+blockers are still `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`.
+
+This is a completion-audit/readback handoff correction only. It adds no UI
+surface, execution authority, approval decision authority, local process-launch
+authority, resident-claim authority, service install/control authority, tray
+registration, hotkey registration, overlay control, summon authority,
+memory-write behavior, receipt-write authority, live resident runtime claim, or
+Stage 7 transition.
+
+Latest validation for the `2026-05-11` Stage 6/Lens resident-claim audit
+handoff consumption slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed after test reformat; asserts next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

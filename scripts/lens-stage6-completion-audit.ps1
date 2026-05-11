@@ -1981,6 +1981,22 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $PersistentSupervisionServiceInstallPlanProofObserved -and
+  $PersistentSupervisionEnablementAuthorityProofObserved -and
+  $PersistentSupervisionExecutionAuthorityProofObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $PersistentSupervisionEnablementTransitionPlanProofObserved -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
+) {
+  'persistent_supervision_required_prerequisites_missing'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
   [string]$PersistentSupervisionExecutionAuthorityProof.next_smallest_truthful_gap -eq 'persistent_supervision_resident_claim_authority_boundary' -and
@@ -2006,22 +2022,6 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted'
 ) {
   'persistent_supervision_authority_not_granted'
-} elseif (
-  $Stage6CompletionReviewed -and
-  -not $ReadyToClose -and
-  $BlockedCriterionIds -contains 'summon_anywhere' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
-  $HostSupervisionAuthorityRequestProofObserved -and
-  $PersistentSupervisionPrerequisitesProofObserved -and
-  $PersistentSupervisionServiceInstallPlanProofObserved -and
-  $PersistentSupervisionEnablementAuthorityProofObserved -and
-  $PersistentSupervisionExecutionAuthorityProofObserved -and
-  $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $PersistentSupervisionEnablementTransitionPlanProofObserved -and
-  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
-) {
-  'persistent_supervision_required_prerequisites_missing'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
