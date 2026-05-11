@@ -24214,6 +24214,39 @@ entrypoint slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-command-palette.ps1 and scripts/lens-command-palette-os-binding-proof.ps1`
 
+### 2026-05-11 - Stage 6/Lens completion-audit startup-window stabilization
+
+The Stage 6 completion audit now separates the operator-requested top-level
+startup timeout from the effective timeout used by nested process-supervision
+child proofs. The audit keeps the requested value visible, clamps the nested
+process-supervision startup window to at least 30 seconds, and exposes both
+`requested_startup_timeout_seconds` and `child_startup_timeout_seconds` in the
+audit payload.
+
+This is a diagnostic/readback stabilization only. It addresses the Windows
+Python 3.13 CI failure where
+`process_supervision_authority_boundary_proof.status` fell back to
+`missing_or_failed` under a 5-second nested startup window. It does not grant
+execution authority, approval decision authority, memory-write behavior,
+promotion authority, process supervision authority, service control authority,
+tray registration, hotkey registration, overlay control, summon authority, or
+resident claim authority.
+
+The Stage 6 checkpoint remains `status=blocked`, `ready_total=2/5`, and
+`ready_to_close=false`; Stage 7 is not started.
+
+Latest validation for the `2026-05-11` Stage 6/Lens completion-audit
+startup-window stabilization slice:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed with a non-blocking Ruff cache write warning: access denied`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

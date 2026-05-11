@@ -66,6 +66,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["transition_allowed"] is False
     assert payload["closure_decision"] == "do_not_close_stage6"
     assert payload["next_stage"] == "Stage 7 / Telemetry"
+    assert payload["requested_startup_timeout_seconds"] == 5
+    assert payload["child_startup_timeout_seconds"] >= 30
     assert payload["requested_child_host_launch_run_seconds"] == 2
     assert payload["child_host_launch_run_seconds"] >= 5
     assert payload["child_proof_timeout_seconds"] == 420

@@ -239,6 +239,7 @@ $PowerShell = (Get-Command pwsh -ErrorAction SilentlyContinue)
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 
 $CheckpointJson = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $CheckpointScript -Mode Status `
@@ -292,7 +293,7 @@ $ResidentHostRuntimeBoundaryProofObserved = (
 )
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+  '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
@@ -309,7 +310,7 @@ $ProcessSupervisionBoundaryObserved = (
 )
 $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+  '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
@@ -2239,6 +2240,8 @@ $Payload = [ordered]@{
   transition_allowed = $ReadyToClose
   closure_decision = if ($ReadyToClose) { 'stage6_ready_for_ledger_closure' } else { 'do_not_close_stage6' }
   next_stage = 'Stage 7 / Telemetry'
+  requested_startup_timeout_seconds = $StartupTimeoutSeconds
+  child_startup_timeout_seconds = $ChildStartupTimeoutSeconds
   requested_child_host_launch_run_seconds = $HostLaunchRunSeconds
   child_host_launch_run_seconds = $ChildHostLaunchRunSeconds
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
