@@ -24303,10 +24303,15 @@ runner slice:
   `6695d84c6ecc3c1d3eae3c16c212581948516dc8` was cancelled after the Ubuntu
   Python 3.13 job exposed a real cross-platform launch bug:
   `Start-Process -WindowStyle` is not supported by PowerShell on Linux.
+- GitHub Actions run `25677627539` for commit
+  `f92c8c54e4cb20adbf9520eb0727e3ecee472dc1` was cancelled after both Ubuntu
+  pytest jobs proved that PowerShell can expose the `WindowStyle` parameter in
+  command metadata while still rejecting it at runtime on Linux.
 - `scripts/lens-resident-session.ps1` now builds the `Start-Process` argument
-  map dynamically and only requests `WindowStyle=Hidden` when the current
-  PowerShell edition exposes that parameter. This preserves the hidden-window
-  behavior on Windows without failing Linux CI.
+  map dynamically and only requests `WindowStyle=Hidden` when the current host
+  is Windows and the cmdlet exposes the parameter. This preserves the
+  hidden-window behavior on Windows without requesting an unsupported Linux
+  launch option.
 - This is a launcher portability fix only. It does not add API execution
   authority, approval-decision authority, memory-write behavior, service
   install/control authority, tray registration, global hotkey registration,

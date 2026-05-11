@@ -343,7 +343,13 @@ if ($Mode -eq 'Start') {
       WorkingDirectory = $RepoRoot
       PassThru = $true
     }
-    if ((Get-Command Start-Process -ErrorAction Stop).Parameters.ContainsKey('WindowStyle')) {
+    $IsWindowsHost = $false
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+      $IsWindowsHost = $true
+    } else {
+      $IsWindowsHost = $true -eq (Get-Variable -Name IsWindows -ValueOnly -ErrorAction SilentlyContinue)
+    }
+    if ($IsWindowsHost -and (Get-Command Start-Process -ErrorAction Stop).Parameters.ContainsKey('WindowStyle')) {
       $StartArgs['WindowStyle'] = 'Hidden'
     }
     $Process = Start-Process @StartArgs
