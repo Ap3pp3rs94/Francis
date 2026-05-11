@@ -23811,6 +23811,15 @@ child proof scripts through a timeout-aware process wrapper and reports
 The completion audit preserves those nested fields in its
 `summon_anywhere_family_chain_proof` readback.
 
+Follow-up CI evidence on GitHub Actions run `25642431487` showed the initial
+test observation windows were too tight for Windows runners: the direct
+family-chain proof timed out `summon_authority_blocker` at 60 seconds, and the
+completion audit timed out heavy persistent-supervision child proofs at 120
+seconds. The tests now use the family-chain script's default 120-second child
+window and the completion audit's established 420-second bounded child window,
+while preserving the audit's existing 240-second caps for the heaviest nested
+resident/persistent-supervision proofs.
+
 This is a Stage 6/Lens diagnostic/audit-harness and test slice. It changes no
 UI files, execution authority, approval decision authority, memory-write
 behavior, process-supervision authority, process-restart authority, service
@@ -23826,15 +23835,15 @@ Latest validation for the `2026-05-10` Stage 6/Lens completion audit
 child-proof timeout slice:
 
 - `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py -q`
-  Result: `passed`
-- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 60 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,child_proof_timeout_seconds,child_proof_timeouts | ConvertTo-Json -Depth 6`
-  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; child_proof_timeout_seconds=60; child_proof_timeouts=[]`
+  Result: `passed with ChildProofTimeoutSeconds=120`
 - `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
-  Result: `passed after audit projection fix`
+  Result: `passed with ChildProofTimeoutSeconds=420 and no child proof timeouts`
 - `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 - `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
-  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 ## 6. Update rule
 

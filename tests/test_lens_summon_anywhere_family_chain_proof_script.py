@@ -34,7 +34,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
-        timeout=120,
+        timeout=240,
     )
 
 
@@ -45,7 +45,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
         "-DataDir",
         str(tmp_path / "data"),
         "-ChildProofTimeoutSeconds",
-        "60",
+        "120",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -64,7 +64,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["all_summon_blocker_families_consumed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
-    assert payload["child_proof_timeout_seconds"] == 60
+    assert payload["child_proof_timeout_seconds"] == 120
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
@@ -74,7 +74,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     }
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 60
+        assert run["timeout_seconds"] == 120
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
 
