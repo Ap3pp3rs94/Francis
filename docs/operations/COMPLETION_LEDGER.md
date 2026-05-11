@@ -24296,6 +24296,42 @@ session runner slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
   Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
 
+Follow-up CI correction for the same `2026-05-11` leased resident host session
+runner slice:
+
+- GitHub Actions run `25674927610` for commit
+  `6695d84c6ecc3c1d3eae3c16c212581948516dc8` was cancelled after the Ubuntu
+  Python 3.13 job exposed a real cross-platform launch bug:
+  `Start-Process -WindowStyle` is not supported by PowerShell on Linux.
+- `scripts/lens-resident-session.ps1` now builds the `Start-Process` argument
+  map dynamically and only requests `WindowStyle=Hidden` when the current
+  PowerShell edition exposes that parameter. This preserves the hidden-window
+  behavior on Windows without failing Linux CI.
+- This is a launcher portability fix only. It does not add API execution
+  authority, approval-decision authority, memory-write behavior, service
+  install/control authority, tray registration, global hotkey registration,
+  overlay control, summon authority, persistent process supervision, process
+  restart authority, or resident claim authority.
+
+Latest validation for the follow-up correction:
+
+- `python -m pytest tests\test_lens_resident_session_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_manifest_process_readback.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Start -LeaseSeconds 10 -StartupTimeoutSeconds 10 -DataDir data\tmp-lens-resident-session-smoke3`
+  Result: `passed; status=resident_session_started; resident_session_active=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Stop -DataDir data\tmp-lens-resident-session-smoke3`
+  Result: `passed; status=resident_session_stopped; resident_session_active=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

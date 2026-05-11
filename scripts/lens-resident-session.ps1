@@ -337,12 +337,16 @@ if ($Mode -eq 'Start') {
     (Quote-PowerShellString -Value $StderrPath)
   )
   try {
-    $Process = Start-Process `
-      -FilePath $PowerShellPath `
-      -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $Command) `
-      -WorkingDirectory $RepoRoot `
-      -PassThru `
-      -WindowStyle Hidden
+    $StartArgs = @{
+      FilePath = $PowerShellPath
+      ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $Command)
+      WorkingDirectory = $RepoRoot
+      PassThru = $true
+    }
+    if ((Get-Command Start-Process -ErrorAction Stop).Parameters.ContainsKey('WindowStyle')) {
+      $StartArgs['WindowStyle'] = 'Hidden'
+    }
+    $Process = Start-Process @StartArgs
   } catch {
     $Payload = New-BasePayload -ProcessReadback $InitialState -Governance $Governance
     $Payload.ok = $false
