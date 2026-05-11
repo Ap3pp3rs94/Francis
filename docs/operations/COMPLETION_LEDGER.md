@@ -24055,6 +24055,56 @@ handoff consumption slice:
 - `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
 
+### 2026-05-11 - Stage 6/Lens process-supervision audit handoff consumption
+
+The Stage 6 completion audit now consumes the resident-host
+process-supervision blocker proof before reporting the persistent-supervision
+prerequisite gap. After the resident-host runtime boundary proof points to
+`resident_host_process_not_supervised` and the process-supervision blocker
+proof returns to `stage6_lens_completion_audit`, the audit reports
+`next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+with
+`recommended_handoff_source=resident_host_process_supervision_handoff_consumed`.
+
+The recommended audit handoff now preserves that process supervision has been
+read back as blocked and non-mutating, then points to the broader prerequisite
+chain through
+`recommended_next_slice=resolve_persistent_supervision_required_prerequisites_before_enablement`
+and
+`recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`.
+This prevents the rolling audit handoff from cycling back to the already
+consumed resident-host runtime boundary as the top-level next action.
+
+Stage 6 remains active and not ready to close. The remaining Stage 6 acceptance
+blockers are still `summon_anywhere`, `helpful_not_noisy`, and
+`system_resident_presence`.
+
+This is a completion-audit/readback handoff correction only. It adds no UI
+surface, execution authority, approval decision authority, API local
+process-launch authority, process-supervision authority, process-restart
+authority, service install/control authority, tray registration, hotkey
+registration, overlay control, summon authority, memory-write behavior,
+receipt-write authority, resident-claim authority, live resident runtime claim,
+or Stage 7 transition.
+
+Latest validation for the `2026-05-11` Stage 6/Lens process-supervision audit
+handoff consumption slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_proof_script=scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff before this slice`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed after formatting; asserts recommended_handoff_source=resident_host_process_supervision_handoff_consumed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

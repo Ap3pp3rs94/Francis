@@ -2170,6 +2170,51 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved
+) {
+  $RecommendedHandoffSource = 'resident_host_process_supervision_handoff_consumed'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.previous_next_smallest_truthful_gap
+    consumed_process_supervision_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
+    next_step = 'resolve_persistent_supervision_required_prerequisites_before_enablement'
+    proof_script = 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision'
+    readiness_route = '/lens/host/persistent-supervision/enablement'
+    process_supervision_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.route
+    process_supervision_readiness_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.readiness_route
+    authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
+    authority_granted = $false
+    process_supervision_boundary_observed = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_boundary_observed
+    process_supervision_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
+    resident_host_process_state = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_state
+    resident_host_process_blocker = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_blocker
+    process_supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_ready
+    service_activation_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.service_activation_ready
+    supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.supervision_ready
+    resident_host_supervised = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_supervised
+    service_installed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_installed
+    service_managed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_managed
+    first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_supervise_process
+    would_restart_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_restart_process
+    would_install_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_install_service
+    would_start_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_start_service
+    would_write_memory = [bool]$ResidentHostProcessSupervisionBlockerProof.would_write_memory
+    would_decide_approval = [bool]$ResidentHostProcessSupervisionBlockerProof.would_decide_approval
+    blockers = [string[]]@($ResidentHostProcessSupervisionBlockerProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved
 ) {
   $RecommendedHandoffSource = 'persistent_supervision_prerequisites_first_missing_requirement_handoff'
@@ -2252,7 +2297,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_transition_plan_proof_readback') {
     'The audit must consume the persistent-supervision enablement transition-plan proof before treating prerequisite, service-plan, authority-chain, disabled-config, and side-effect readback as one audited Stage 6 handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing') {
-    'The completion audit consumes the resident-supervision persistence boundary proof, persistent-supervision prerequisite guard proof, service-install plan proof, persistent-supervision authority proof chain, resident-claim boundary proof, and persistent-supervision enablement transition-plan proof. Persistent supervision remains blocked because resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing; the first concrete handoff is the persistent-supervision prerequisites first missing requirement. No runtime launch, service-config mutation, memory write, or resident claim is made.'
+    'The completion audit consumes the resident-host process-supervision handoff proof, resident-supervision persistence boundary proof, persistent-supervision prerequisite guard proof, service-install plan proof, persistent-supervision authority proof chain, resident-claim boundary proof, and persistent-supervision enablement transition-plan proof. Persistent supervision remains blocked because resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing; the next concrete handoff is the persistent-supervision prerequisite chain rather than the already-consumed resident-host runtime boundary. No runtime launch, service-config mutation, memory write, or resident claim is made.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_disabled') {
     'The completion audit consumes the host-supervision approval proof, the persistent-supervision prerequisite proof, the service-install plan proof, the persistent-supervision authority proof chain, and the persistent-supervision enablement transition-plan proof: prerequisites, disabled service plan, enablement authority, execution authority, resident-claim boundary, disabled config toggles, and side-effect denial are all read back as bounded and non-mutating. The remaining product gap is that persistent supervision enablement is still disabled, with no runtime launch, service-config mutation, memory write, or resident claim.'
   } elseif ($NextSmallestTruthfulGap -eq 'command_palette_shell_bridge_readback') {
