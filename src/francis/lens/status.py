@@ -2526,6 +2526,18 @@ def _stage6_readiness(
                 "request_readback_ready": bool(
                     persistent_supervision_enablement_authority_readiness.get("request_readback_ready")
                 ),
+                "request_pending_count": _safe_int(
+                    persistent_supervision_enablement_authority_readiness.get("request_pending_count")
+                ),
+                "request_approved_count": _safe_int(
+                    persistent_supervision_enablement_authority_readiness.get("request_approved_count")
+                ),
+                "request_total_count": _safe_int(
+                    persistent_supervision_enablement_authority_readiness.get("request_total_count")
+                ),
+                "latest_request_approval_id": _safe_str(
+                    persistent_supervision_enablement_authority_readiness.get("latest_request_approval_id")
+                ).strip(),
                 "boundary_observed": bool(
                     persistent_supervision_enablement_authority_readiness.get("boundary_observed")
                 ),
@@ -2582,6 +2594,21 @@ def _stage6_readiness(
                 "blocked_requirements": _as_list(
                     persistent_supervision_enablement_authority_readiness.get("blocked_requirements")
                 ),
+                "operator_surface_readback_ready": bool(
+                    persistent_supervision_enablement_authority_readiness.get("operator_surface_readback_ready")
+                ),
+                "first_blocked_requirement": _safe_str(
+                    persistent_supervision_enablement_authority_readiness.get("first_blocked_requirement")
+                ).strip(),
+                "first_blocked_requirement_handoff": _as_dict(
+                    persistent_supervision_enablement_authority_readiness.get("first_blocked_requirement_handoff")
+                ),
+                "blocked_requirement_handoffs": _as_list(
+                    persistent_supervision_enablement_authority_readiness.get("blocked_requirement_handoffs")
+                ),
+                "next_smallest_truthful_gap": _safe_str(
+                    persistent_supervision_enablement_authority_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
                 "blockers": _as_list(persistent_supervision_enablement_authority_readiness.get("blockers")),
                 "execution_authority": False,
                 "approval_decision_authority": False,
@@ -2661,6 +2688,18 @@ def _stage6_readiness(
                 "request_readback_ready": bool(
                     persistent_supervision_enablement_execution_readiness.get("request_readback_ready")
                 ),
+                "request_pending_count": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("request_pending_count")
+                ),
+                "request_approved_count": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("request_approved_count")
+                ),
+                "request_total_count": _safe_int(
+                    persistent_supervision_enablement_execution_readiness.get("request_total_count")
+                ),
+                "latest_request_approval_id": _safe_str(
+                    persistent_supervision_enablement_execution_readiness.get("latest_request_approval_id")
+                ).strip(),
                 "boundary_observed": bool(
                     persistent_supervision_enablement_execution_readiness.get("boundary_observed")
                 ),
@@ -2714,6 +2753,21 @@ def _stage6_readiness(
                 "blocked_requirements": _as_list(
                     persistent_supervision_enablement_execution_readiness.get("blocked_requirements")
                 ),
+                "operator_surface_readback_ready": bool(
+                    persistent_supervision_enablement_execution_readiness.get("operator_surface_readback_ready")
+                ),
+                "first_blocked_requirement": _safe_str(
+                    persistent_supervision_enablement_execution_readiness.get("first_blocked_requirement")
+                ).strip(),
+                "first_blocked_requirement_handoff": _as_dict(
+                    persistent_supervision_enablement_execution_readiness.get("first_blocked_requirement_handoff")
+                ),
+                "blocked_requirement_handoffs": _as_list(
+                    persistent_supervision_enablement_execution_readiness.get("blocked_requirement_handoffs")
+                ),
+                "next_smallest_truthful_gap": _safe_str(
+                    persistent_supervision_enablement_execution_readiness.get("next_smallest_truthful_gap")
+                ).strip(),
                 "blockers": _as_list(persistent_supervision_enablement_execution_readiness.get("blockers")),
                 "execution_authority": False,
                 "approval_decision_authority": False,

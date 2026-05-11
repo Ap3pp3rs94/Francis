@@ -4999,6 +4999,17 @@ def test_lens_persistent_supervision_enablement_authority_request_creates_approv
     assert pending_readiness_body["governance"]["memory_write"] is False
     assert "persistent_supervision_enablement_authority_approval_not_approved" in pending_readiness_body["blockers"]
     assert "service_config_write_authority" in pending_readiness_body["blocked_requirements"]
+    assert pending_readiness_body["operator_surface_readback_ready"] is True
+    assert pending_readiness_body["first_blocked_requirement"] == (
+        "exact_persistent_supervision_enablement_authority_approval"
+    )
+    assert (
+        pending_readiness_body["next_smallest_truthful_gap"]
+        == "persistent_supervision_enablement_authority_exact_approval_request"
+    )
+    pending_handoff = pending_readiness_body["first_blocked_requirement_handoff"]
+    assert pending_handoff["request_route"] == "/lens/host/persistent-supervision/enablement/authority/request"
+    assert pending_handoff["approval_action"] == "lens.host.persistent_supervision_enablement_authority"
 
     decided = client.post(
         "/approvals/decision",
@@ -5042,6 +5053,14 @@ def test_lens_persistent_supervision_enablement_authority_request_creates_approv
     assert approved_requirements["persistent_supervision_enablement_authority_request_readback"]["ready"] is True
     assert approved_requirements["service_config_write_authority"]["ready"] is False
     assert approved_requirements["persistent_supervision_execution_authority"]["ready"] is False
+    assert approved_readiness_body["first_blocked_requirement"] == "active_host_supervision_authority_grant"
+    approved_handoff = approved_readiness_body["first_blocked_requirement_handoff"]
+    assert approved_handoff["host_supervision_authority_readiness_route"] == (
+        "/lens/host/supervision/authority/readiness"
+    )
+    assert approved_readiness_body["next_smallest_truthful_gap"] == (
+        "grant_active_host_supervision_authority_before_persistent_supervision_enablement_authority"
+    )
     assert approved_readiness_body["governance"]["service_config_write_authority"] is False
     assert approved_readiness_body["governance"]["persistent_supervision_execution_authority"] is False
     assert approved_readiness_body["governance"]["receipt_write_authority"] is False
@@ -5062,6 +5081,18 @@ def test_lens_persistent_supervision_enablement_authority_request_creates_approv
     assert criterion["boundary_observed"] is True
     assert criterion["service_config_write_authority"] is False
     assert criterion["persistent_supervision_execution_authority"] is False
+    assert criterion["operator_surface_readback_ready"] is True
+    assert criterion["request_pending_count"] == 0
+    assert criterion["request_approved_count"] == 1
+    assert criterion["request_total_count"] == 1
+    assert criterion["latest_request_approval_id"] == approval_id
+    assert criterion["first_blocked_requirement"] == "exact_persistent_supervision_enablement_authority_approval"
+    assert criterion["first_blocked_requirement_handoff"]["request_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/request"
+    )
+    assert criterion["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_authority_exact_approval_request"
+    )
     command = next(
         item
         for item in status_body["command_palette"]["commands"]
@@ -5289,6 +5320,14 @@ def test_lens_persistent_supervision_enablement_authority_grant_requires_approve
     assert readiness_requirements["persistent_supervision_enablement_authority"]["ready"] is True
     assert readiness_requirements["service_config_write_authority"]["ready"] is False
     assert readiness_requirements["persistent_supervision_execution_authority"]["ready"] is False
+    assert readiness_body["operator_surface_readback_ready"] is True
+    assert readiness_body["first_blocked_requirement"] == "service_config_write_authority"
+    assert readiness_body["first_blocked_requirement_handoff"]["execution_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
+    assert readiness_body["next_smallest_truthful_gap"] == (
+        "grant_persistent_supervision_execution_authority_before_service_config_write"
+    )
     assert readiness_body["governance"]["persistent_supervision_enablement_authority"] is True
     assert readiness_body["governance"]["service_config_write_authority"] is False
     assert readiness_body["governance"]["persistent_supervision_execution_authority"] is False
@@ -5338,6 +5377,17 @@ def test_lens_persistent_supervision_enablement_authority_grant_requires_approve
     assert criterion["active_enablement_authority_grant_receipt_id"] == receipt["receipt_id"]
     assert criterion["service_config_write_authority"] is False
     assert criterion["persistent_supervision_execution_authority"] is False
+    assert criterion["request_pending_count"] == 0
+    assert criterion["request_approved_count"] == 1
+    assert criterion["request_total_count"] == 1
+    assert criterion["latest_request_approval_id"] == approval_id
+    assert criterion["first_blocked_requirement"] == "exact_persistent_supervision_enablement_authority_approval"
+    assert criterion["first_blocked_requirement_handoff"]["request_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/request"
+    )
+    assert criterion["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_authority_exact_approval_request"
+    )
     grant_readback_criterion = _criterion(
         status_body,
         "persistent_supervision_enablement_authority_grant_receipt_readback",
@@ -5554,6 +5604,20 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert "persistent_supervision_enablement_execution_approval_not_approved" in pending_readiness_body["blockers"]
     assert pending_readiness_body["service_config_write_authority"] is False
     assert pending_readiness_body["persistent_supervision_execution_authority"] is False
+    assert pending_readiness_body["operator_surface_readback_ready"] is True
+    assert pending_readiness_body["first_blocked_requirement"] == (
+        "exact_persistent_supervision_enablement_execution_approval"
+    )
+    assert pending_readiness_body["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_execution_exact_approval_request"
+    )
+    pending_execution_handoff = pending_readiness_body["first_blocked_requirement_handoff"]
+    assert pending_execution_handoff["request_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/request"
+    )
+    assert pending_execution_handoff["approval_action"] == (
+        "lens.host.persistent_supervision_enablement_execution_authority"
+    )
 
     pending_denial = client.post(
         "/lens/host/persistent-supervision/enablement/execution",
@@ -5653,6 +5717,13 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert requirements["persistent_supervision_enablement_execution_denial_boundary"]["ready"] is True
     assert requirements["service_config_write_authority"]["ready"] is False
     assert requirements["persistent_supervision_execution_authority"]["ready"] is False
+    assert approved_readiness_body["first_blocked_requirement"] == "service_config_write_authority"
+    assert approved_readiness_body["first_blocked_requirement_handoff"]["grant_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/authority"
+    )
+    assert approved_readiness_body["next_smallest_truthful_gap"] == (
+        "grant_exact_approved_persistent_supervision_execution_authority_request"
+    )
 
     approved_readback = client.get("/lens/host/persistent-supervision/enablement/execution/requests?limit=10")
     assert approved_readback.status_code == 200
@@ -5782,6 +5853,13 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert granted_requirements["persistent_supervision_execution_authority"]["ready"] is True
     assert granted_requirements["receipt_write_authority"]["ready"] is True
     assert granted_requirements["resident_claim_authority"]["ready"] is False
+    assert granted_readiness_body["first_blocked_requirement"] == "resident_claim_authority"
+    assert granted_readiness_body["first_blocked_requirement_handoff"]["execution_apply_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/apply"
+    )
+    assert granted_readiness_body["next_smallest_truthful_gap"] == (
+        "review_resident_claim_boundary_before_persistent_supervision_claim"
+    )
 
     granted_denial = client.post(
         "/lens/host/persistent-supervision/enablement/execution",
@@ -5961,6 +6039,24 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert criterion["service_config_updated"] is True
     assert criterion["service_config_write_authority"] is True
     assert criterion["persistent_supervision_execution_authority"] is True
+    assert criterion["operator_surface_readback_ready"] is True
+    assert criterion["request_pending_count"] == 0
+    assert criterion["request_approved_count"] == 1
+    assert criterion["request_total_count"] == 1
+    assert criterion["latest_request_approval_id"] == approval_id
+    assert criterion["first_blocked_requirement"] == "exact_persistent_supervision_enablement_execution_approval"
+    assert criterion["first_blocked_requirement_handoff"]["request_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/request"
+    )
+    assert criterion["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_execution_exact_approval_request"
+    )
+    resident_claim_handoff = next(
+        item for item in criterion["blocked_requirement_handoffs"] if item["id"] == "resident_claim_authority"
+    )
+    assert resident_claim_handoff["execution_apply_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/apply"
+    )
     execution_receipt_criterion = _criterion(
         status_body,
         "persistent_supervision_enablement_execution_receipt_readback",
