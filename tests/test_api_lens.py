@@ -8078,6 +8078,208 @@ def test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt
     assert dependencies["resident_host_process"]["blocker"] == "resident_supervision_not_persistent"
 
 
+def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.activation as activation_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    def fake_supervise_once(*, run_seconds: int) -> dict[str, Any]:
+        _write_lens_host_supervisor_state(
+            data_root,
+            observed_pid=5432,
+            mode="supervise_resident_once",
+            host_mode="resident",
+            observed_state="resident_stopped",
+        )
+        return {
+            "ok": True,
+            "status": "supervised_session_completed",
+            "returncode": 0,
+            "run_seconds": run_seconds,
+            "script": "scripts/lens-host-supervisor.ps1",
+            "runner": {
+                "ok": True,
+                "status": "supervised_session_completed",
+                "bounded_supervised_session": True,
+                "temporary_host_process_observed": True,
+                "resident_runtime_candidate_supervised": True,
+                "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+            },
+            "blockers": [
+                "resident_runtime_candidate_not_persistent",
+                "resident_supervision_not_persistent",
+                "tray_host_missing",
+                "global_hotkey_binding_missing",
+                "overlay_window_missing",
+                "summon_binding_missing",
+            ],
+        }
+
+    monkeypatch.setattr(activation_module, "_run_bounded_lens_host_supervision_once", fake_supervise_once)
+
+    client = TestClient(create_app())
+    host_requested = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants bounded host supervision authority",
+        },
+    )
+    assert host_requested.status_code == 200
+    host_approval_id = str(host_requested.json()["approval_id"])
+    host_decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": host_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved host supervision execution boundary review",
+        },
+    )
+    assert host_decided.status_code == 200
+    assert host_decided.json()["status"] == "approved"
+    host_grant = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": host_approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants host supervision authority for bounded execution",
+            "lease_seconds": 600,
+        },
+    )
+    assert host_grant.status_code == 200
+    assert host_grant.json()["status"] == "authority_granted"
+
+    runtime_requested = client.post(
+        "/lens/resident-runtime/authority-grant/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants resident runtime execution authority",
+        },
+    )
+    assert runtime_requested.status_code == 200
+    runtime_approval_id = str(runtime_requested.json()["approval_id"])
+    runtime_decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": runtime_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved resident runtime execution boundary review",
+        },
+    )
+    assert runtime_decided.status_code == 200
+    assert runtime_decided.json()["status"] == "approved"
+    runtime_grant = client.post(
+        "/lens/resident-runtime/authority-grant",
+        json={
+            "approval_id": runtime_approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants resident runtime execution authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert runtime_grant.status_code == 200
+    assert runtime_grant.json()["status"] == "authority_granted"
+
+    plan = client.get(f"/lens/resident-runtime/plan?approval_id={runtime_approval_id}&actor=test.system.write")
+    assert plan.status_code == 200
+    plan_body = plan.json()
+    assert plan_body["bounded_resident_candidate_ready"] is True
+    assert plan_body["host_supervision_authority"] is True
+    assert plan_body["process_supervision_authority"] is True
+    assert plan_body["process_restart_authority"] is True
+    assert plan_body["runtime_ready"] is False
+    assert plan_body["resident_claim_allowed"] is False
+    plan_steps = {step["id"]: step for step in plan_body["plan"]["steps"]}
+    assert plan_steps["activate_supervised_resident_host"]["status"] == "ready"
+    assert plan_body["plan"]["would_launch_process"] is True
+    assert plan_body["plan"]["would_supervise_process"] is True
+    assert plan_body["plan"]["would_register_tray"] is False
+    assert plan_body["plan"]["would_register_hotkey"] is False
+    assert plan_body["plan"]["would_open_overlay"] is False
+    assert plan_body["plan"]["would_claim_resident"] is False
+
+    executed = client.post(
+        "/lens/resident-runtime/execute",
+        json={
+            "approval_id": runtime_approval_id,
+            "actor": "test.system.write",
+            "reason": "prove resident runtime consumes bounded supervision authority",
+            "run_seconds": 1,
+        },
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["kind"] == "lens.resident_runtime.activation.execution"
+    assert executed_body["status"] == "bounded_resident_candidate_supervised_not_persistent"
+    assert executed_body["approval_id"] == runtime_approval_id
+    assert executed_body["host_supervision_approval_id"] == host_approval_id
+    assert executed_body["executed"] is True
+    assert executed_body["bounded_resident_candidate_ready"] is True
+    assert executed_body["bounded_supervised_session"] is True
+    assert executed_body["temporary_host_process_observed"] is True
+    assert executed_body["resident_runtime_candidate_supervised"] is True
+    assert executed_body["resident_supervised_runtime"] is False
+    assert executed_body["resident_claim_allowed"] is False
+    assert executed_body["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert executed_body["host_supervision_authority"]["process_supervision_authority"] is True
+    assert executed_body["host_supervision_authority"]["process_restart_authority"] is True
+    assert executed_body["governance"]["gate"] == "lens_resident_runtime_activation_execution"
+    assert executed_body["governance"]["execution_authority"] is True
+    assert executed_body["governance"]["resident_runtime_execution_authority"] is True
+    assert executed_body["governance"]["bounded_supervision_process_launch_authority"] is True
+    assert executed_body["governance"]["process_supervision_authority"] is True
+    assert executed_body["governance"]["process_restart_authority"] is True
+    assert executed_body["governance"]["service_install_authority"] is False
+    assert executed_body["governance"]["service_control_authority"] is False
+    assert executed_body["governance"]["tray_registration_authority"] is False
+    assert executed_body["governance"]["hotkey_registration_authority"] is False
+    assert executed_body["governance"]["overlay_control_authority"] is False
+    assert executed_body["governance"]["summon_authority"] is False
+    assert executed_body["governance"]["memory_write"] is False
+    assert executed_body["governance"]["resident_claim_authority"] is False
+    assert executed_body["receipt_written"] is True
+    receipt = executed_body["receipt"]
+    assert receipt["kind"] == "lens.host.supervision.execution.receipt"
+    assert receipt["route"] == "/lens/resident-runtime/execute"
+    assert receipt["approval_id"] == host_approval_id
+    assert receipt["execution"]["resident_runtime_candidate_supervised"] is True
+    assert receipt["execution"]["resident_supervised_runtime"] is False
+    receipt_path = data_root / "lens" / "host_supervision_executions" / f"{receipt['receipt_id']}.json"
+    assert receipt_path.exists()
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    next_handoff = status.json()["stage6_readiness"]["next_handoff"]
+    assert next_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert next_handoff["resident_runtime_candidate_handoff_observed"] is True
+
+
 def test_lens_host_supervision_authority_request_requires_system_write_without_grant(
     monkeypatch,
     tmp_path: Path,

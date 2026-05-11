@@ -10,10 +10,10 @@ from francis.lens import (
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
-    deny_lens_resident_runtime_activation_execution,
     execute_lens_host_activation,
     execute_lens_host_persistent_supervision_enablement,
     execute_lens_host_supervision_once,
+    execute_lens_resident_runtime_activation,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
@@ -106,6 +106,7 @@ class LensResidentRuntimeExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime activation"
+    run_seconds: int = Field(default=2, ge=1, le=10)
 
 
 class LensHostRuntimeLoopExecuteIn(BaseModel):
@@ -856,13 +857,14 @@ def resident_runtime_authority_grant(
 
 @router.post("/resident-runtime/execute")
 def resident_runtime_execute(request: Request, payload: LensResidentRuntimeExecuteIn) -> dict[str, Any]:
-    return deny_lens_resident_runtime_activation_execution(
+    return execute_lens_resident_runtime_activation(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
         record_receipt=True,
+        run_seconds=payload.run_seconds,
     )
 
 

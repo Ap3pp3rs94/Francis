@@ -23845,6 +23845,54 @@ child-proof timeout slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-10 - Stage 6/Lens resident-runtime bounded execution bridge
+
+The `/lens/resident-runtime/execute` route now has a real governed bounded
+execution path instead of remaining denial-only. When an exact active
+resident-runtime execution authority grant and an active host-supervision
+authority grant are both present, the route consumes the existing bounded host
+supervision executor, records the host-supervision execution receipt, and
+returns a resident-runtime activation execution result with
+`next_smallest_truthful_gap=resident_supervision_not_persistent`.
+
+The resident-runtime plan now shows when the bounded resident candidate is
+ready to execute under those two active grants, while preserving the broader
+Stage 6 truth: this does not install or start a service, create persistent
+supervision, register tray presence, register a global hotkey, open/control an
+overlay, summon Francis anywhere, write memory, decide approvals, or claim
+resident status.
+
+Stage 6 remains active and not ready to close. The live Stage 6 checkpoint
+still reports `ready_total=2` and `blocked_total=3`, with blockers
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`. The
+next-handoff proof can point to `resident_supervision_not_persistent` when a
+fresh or receipt-backed resident candidate exists; the full completion audit
+still reports `persistent_supervision_required_prerequisites_missing` until the
+resident host, tray, global hotkey, overlay, and summon prerequisites are
+actually satisfied.
+
+Latest validation for the `2026-05-10` Stage 6/Lens resident-runtime bounded
+execution bridge slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_consumes_bounded_supervision_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -k "resident_runtime or host_supervision_execute" -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\__init__.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\activation.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_supervision_not_persistent; recommended_next_slice=resolve_resident_supervision_persistence_before_persistent_supervision_enablement`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3`
+  Result: `passed; status=blocked; ready_total=2; blocked_total=3`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
