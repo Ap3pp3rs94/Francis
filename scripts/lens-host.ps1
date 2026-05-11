@@ -14,7 +14,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
 $modeName = $Mode.ToLowerInvariant()
-$ServiceConfigPath = Join-Path $RepoRoot 'config\runtime\services\lens-host.json'
+$ServiceConfigPath = Join-Path (Join-Path (Join-Path (Join-Path $RepoRoot 'config') 'runtime') 'services') 'lens-host.json'
 $ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
 $ServiceName = 'Francis-LensHost'
 if ($ServiceConfigExists) {
@@ -156,7 +156,7 @@ function Wait-ForRuntimeState {
 }
 
 $DataRoot = Get-DataRoot
-$RuntimeDir = Join-Path $DataRoot 'runtime\lens-host'
+$RuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-host'
 $ProcessStatePath = Join-Path $RuntimeDir 'status.json'
 $PidPath = Join-Path $RuntimeDir 'lens-host.pid'
 $ProcessStateExists = Test-Path -LiteralPath $ProcessStatePath -PathType Leaf

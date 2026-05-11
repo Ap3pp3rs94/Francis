@@ -278,8 +278,8 @@ function New-BasePayload {
 $ModeName = $Mode.ToLowerInvariant()
 $DataRoot = Get-DataRoot
 $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
-$HostRuntimeDir = Join-Path $DataRoot 'runtime\lens-host'
-$SessionRuntimeDir = Join-Path $DataRoot 'runtime\lens-host-resident-session'
+$HostRuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-host'
+$SessionRuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-host-resident-session'
 $HostStatePath = Join-Path $HostRuntimeDir 'status.json'
 $HostPidPath = Join-Path $HostRuntimeDir 'lens-host.pid'
 $SessionStatePath = Join-Path $SessionRuntimeDir 'status.json'

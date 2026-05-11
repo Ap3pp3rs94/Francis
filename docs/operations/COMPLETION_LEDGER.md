@@ -24343,6 +24343,48 @@ Latest validation for the follow-up correction:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Stop -DataDir data\tmp-lens-resident-session-smoke3`
   Result: `passed; status=resident_session_stopped; resident_session_active=false`
 
+Second follow-up CI correction for the same `2026-05-11` leased resident host
+session runner slice:
+
+- GitHub Actions run `25681940262` for commit
+  `835ae0c0d31a273a03335d66481abefb82611ca2` was cancelled after Ubuntu
+  pytest exposed that the resident-session start receipt could report
+  `pid_present=true` while the public `data/runtime/lens-host/lens-host.pid`
+  path checked by the test was missing.
+- The root cause was cross-platform path construction in
+  `scripts/lens-host.ps1` and `scripts/lens-resident-session.ps1`: runtime
+  directories were built with `runtime\lens-host`-style child paths. On
+  non-Windows hosts those backslashes can become literal path characters instead
+  of path separators, so the receipt contract and the filesystem proof can
+  diverge.
+- The scripts now build the Lens host runtime directory, resident-session
+  runtime directory, and Lens host service config path with nested `Join-Path`
+  segments. This preserves the existing Windows behavior while making the
+  receipt-backed runtime paths match the public `data/runtime/...` contract on
+  Unix-like CI hosts.
+- This is a path portability fix only. It does not add API execution authority,
+  approval-decision authority, memory-write behavior, service install/control
+  authority, tray registration, global hotkey registration, overlay control,
+  summon authority, persistent process supervision, process restart authority,
+  or resident claim authority.
+
+Latest validation for the second follow-up correction:
+
+- `python -m pytest tests\test_lens_resident_session_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_manifest_process_readback.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Start -LeaseSeconds 10 -StartupTimeoutSeconds 10 -DataDir data\tmp-lens-resident-session-path-smoke`
+  Result: `passed; status=resident_session_started; resident_session_active=true; public runtime paths matched data/runtime/...`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Stop -DataDir data\tmp-lens-resident-session-path-smoke`
+  Result: `passed; status=resident_session_not_running after bounded lease completed naturally`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-host.ps1 and scripts/lens-resident-session.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
