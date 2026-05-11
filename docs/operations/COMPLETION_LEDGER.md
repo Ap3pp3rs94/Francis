@@ -24105,6 +24105,35 @@ handoff consumption slice:
 - `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
 
+### 2026-05-11 - Stage 6/Lens transition-plan proof timeout recovery
+
+GitHub Actions run `25660167922` for
+`ef271c609113a4fdca294cef9fa9d4c451fd3a99` failed only on
+`test (windows-latest, 3.13)` during Pytest. The failing focused test was
+`tests/test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only`.
+The proof subprocess completed on other matrix jobs but timed out at the
+test harness limit of 180 seconds on the slower Windows Python 3.13 runner.
+
+The test harness timeout for this composed transition-plan proof is now 360
+seconds. This is a CI recovery/test-stability change only. It changes no Lens
+runtime behavior, no UI surface, no execution authority, no approval decision
+authority, no local process launch authority, no process supervision/restart
+authority, no service install/control authority, no tray/hotkey/overlay/summon
+authority, no memory-write behavior, no receipt-write authority, no resident
+claim, and no Stage 7 transition.
+
+Latest validation for the `2026-05-11` Stage 6/Lens transition-plan proof
+timeout recovery slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
