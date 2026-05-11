@@ -48,7 +48,7 @@ def _read_state(data_dir: Path) -> dict[str, object]:
         return {}
     try:
         payload = json.loads(state_path.read_text(encoding="utf-8-sig"))
-    except json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
 

@@ -24247,6 +24247,55 @@ startup-window stabilization slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
 
+### 2026-05-11 - Stage 6/Lens leased resident host session runner
+
+Stage 6/Lens now has a bounded operator script for starting, reading, and
+stopping the existing Lens host resident runtime candidate as a leased local
+process. `scripts/lens-resident-session.ps1` supports `Status`, `Start`, and
+`Stop` modes over `scripts/lens-host.ps1 -Mode Resident`, writes a separate
+resident-session receipt under `data/runtime/lens-host-resident-session`, and
+verifies the runtime state plus PID file before claiming the leased resident
+session is active.
+
+This is a local resident-host runtime step, not a Stage 6 closure. It grants no
+API execution authority, approval-decision authority, memory-write behavior,
+service install/control authority, tray registration, global hotkey
+registration, overlay control, summon authority, persistent process supervision,
+or resident claim authority. It only gives the next Stage 6 slice a truthful
+leased resident process to supervise.
+
+The resident-host test read helper now tolerates transient Windows
+`PermissionError`/`OSError` while the PowerShell host rewrites `status.json`.
+That is test-only flake stabilization and does not change product behavior.
+
+The latest Stage 6 handoff remains `stage_state=active` and
+`ready_to_close=false`. After the resident candidate proof, the next handoff now
+points at `resident_supervision_not_persistent`; the checkpoint criteria remain
+blocked until persistent supervision, tray/presence, global hotkey, overlay
+window, and summon binding are truthful.
+
+Latest validation for the `2026-05-11` Stage 6/Lens leased resident host
+session runner slice:
+
+- `python -m pytest tests\test_lens_resident_session_script.py -q`
+  Result: `passed after replacing blocking Start-Process stream redirection with detached child-command redirection`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Start -LeaseSeconds 10 -StartupTimeoutSeconds 10 -DataDir data\tmp-lens-resident-session-smoke2`
+  Result: `passed; status=resident_session_started; resident_session_active=true; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Stop -DataDir data\tmp-lens-resident-session-smoke2`
+  Result: `passed; session was already naturally stopped by the bounded lease`
+- `python -m pytest tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py tests\test_lens_host_manifest_process_readback.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `failed before the test helper fix with PermissionError reading status.json during PowerShell rewrite; passed after the test helper fix`
+- `python -m ruff check tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_session_script.py tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-session.ps1 -Mode Status`
+  Result: `passed; status=resident_session_stopped; resident_session_active=false; no resident claim`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
