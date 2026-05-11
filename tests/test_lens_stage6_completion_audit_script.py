@@ -105,35 +105,45 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "live_operator_experience_proof",
         "stage6_lens_completion_audit",
     }
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
-    assert payload["recommended_handoff_source"] == (
-        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["recommended_handoff_source"] == "resident_supervision_persistence_boundary_handoff"
+    assert payload["recommended_next_slice"] == "review_persistent_supervision_authority_without_runtime_start"
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
     )
-    assert payload["recommended_next_slice"] == (
-        "resolve_resident_host_process_before_persistent_supervision_enablement"
-    )
-    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
-    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["authority_required"] == "persistent_process_supervision_authority"
     recommended_handoff = payload["recommended_handoff"]
-    assert recommended_handoff["id"] == "resident_host_process"
-    assert recommended_handoff["blocker"] == "resident_host_process_missing"
-    assert recommended_handoff["requirement_state"] == "missing"
-    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert recommended_handoff["status"] == "blocked"
+    assert recommended_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert (
+        recommended_handoff["consumed_resident_candidate_next_smallest_truthful_gap"]
+        == "resident_supervision_not_persistent"
+    )
+    assert recommended_handoff["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert recommended_handoff["next_step"] == "review_persistent_supervision_authority_without_runtime_start"
+    assert recommended_handoff["proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert recommended_handoff["route"] == "/lens/host/persistent-supervision"
+    assert recommended_handoff["enablement_route"] == "/lens/host/persistent-supervision/enablement"
+    assert recommended_handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["resident_runtime_candidate_supervised"] is True
+    assert recommended_handoff["resident_supervised_runtime"] is False
+    assert recommended_handoff["resident_host_process_requirement_state"] == (
+        "resident_candidate_observed_not_persistent"
+    )
+    assert recommended_handoff["resident_host_process_blocker"] == "resident_supervision_not_persistent"
     assert payload["stage6_completion_reviewed"] is True
     assert "resident-supervision persistence boundary proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent-supervision prerequisite guard proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "service-install plan proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent-supervision authority proof chain" in (payload["next_smallest_truthful_gap_basis"])
-    assert "persistent-supervision enablement transition-plan proof" in (payload["next_smallest_truthful_gap_basis"])
-    assert "resident-claim boundary" in (payload["next_smallest_truthful_gap_basis"])
-    assert (
-        "resident-host process, tray, global hotkey, overlay, and summon-binding prerequisites are still missing"
-        in (payload["next_smallest_truthful_gap_basis"])
-    )
-    assert "first concrete handoff" in payload["next_smallest_truthful_gap_basis"]
+    assert "bounded resident candidate" in payload["next_smallest_truthful_gap_basis"]
+    assert "persistent process supervision authority" in payload["next_smallest_truthful_gap_basis"]
+    assert "Stage 6 still cannot close" in payload["next_smallest_truthful_gap_basis"]
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

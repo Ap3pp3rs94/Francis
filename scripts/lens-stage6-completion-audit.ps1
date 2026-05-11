@@ -1981,6 +1981,15 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted'
+) {
+  'persistent_supervision_authority_not_granted'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
@@ -2045,6 +2054,35 @@ $RecommendedProofScript = ''
 $RecommendedAuthorityRequired = ''
 $RecommendedHandoff = [ordered]@{}
 if (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted' -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved
+) {
+  $RecommendedHandoffSource = 'resident_supervision_persistence_boundary_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.previous_next_smallest_truthful_gap
+    consumed_resident_candidate_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.consumed_resident_candidate_next_smallest_truthful_gap
+    route_next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap
+    next_step = 'review_persistent_supervision_authority_without_runtime_start'
+    proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
+    route = [string]$ResidentSupervisionPersistenceBoundaryProof.plan_route
+    enablement_route = [string]$ResidentSupervisionPersistenceBoundaryProof.enablement_route
+    authority_required = [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    resident_runtime_candidate_supervised = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_runtime_candidate_supervised
+    resident_supervised_runtime = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_supervised_runtime
+    resident_host_process_requirement_state = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_requirement_state
+    resident_host_process_blocker = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_blocker
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved
 ) {
@@ -2146,7 +2184,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
     'The checkpoint must observe the persistent-supervision execution denial boundary before the completion audit can make an authority-gap read.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted') {
-    'The audit now has a persistent-supervision plan proof; it shows the blocker is explicit process-supervision, restart, service-control, receipt-write, and resident-claim authority, not another bounded supervisor proof.'
+    'The audit consumes the resident-supervision persistence boundary proof: a bounded resident candidate has been promoted through persistent-supervision plan and enablement readback, and the remaining handoff is explicit persistent process supervision authority rather than another bounded supervisor proof. Stage 6 still cannot close because summon-anywhere, helpful-not-noisy, and system-resident presence remain blocked.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_supervision_not_persistent') {
     'The checkpoint observed one bounded supervisor-owned host session, so the next blocker is persistent resident supervision rather than another bounded supervision proof.'
   } elseif ($NextSmallestTruthfulGap -eq 'resident_host_process_not_supervised') {

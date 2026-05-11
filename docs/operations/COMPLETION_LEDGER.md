@@ -23893,6 +23893,43 @@ execution bridge slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
   Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
 
+### 2026-05-10 - Stage 6/Lens completion audit resident-persistence handoff
+
+The Stage 6 completion audit now consumes the
+`resident_supervision_persistence_boundary` proof as a top-level rolling
+handoff. When the audit observes that a bounded resident candidate has been
+promoted through persistent-supervision plan and enablement readback, the
+audit reports `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+with `recommended_handoff_source=resident_supervision_persistence_boundary_handoff`.
+
+This keeps the audit from sending the next build session back to another
+bounded supervisor proof after the resident-candidate persistence boundary has
+already been proven. It does not close Stage 6 and does not make persistent
+supervision ready. The remaining Stage 6 acceptance blockers are still
+`summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`.
+
+This is a completion-audit/readback handoff correction only. It adds no UI
+surface, execution authority, approval decision authority, local process-launch
+authority, persistent supervision authority, service install/control authority,
+tray registration, hotkey registration, overlay control, summon authority,
+memory-write behavior, receipt-write authority, or resident claim.
+
+Latest validation for the `2026-05-10` Stage 6/Lens completion audit
+resident-persistence handoff slice:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; recommended_handoff_source=resident_supervision_persistence_boundary_handoff; child_proof_timeouts=[]`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
