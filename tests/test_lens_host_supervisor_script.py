@@ -89,6 +89,7 @@ def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None
         "overlay_control_authority": False,
         "window_management_authority": False,
         "summon_authority": False,
+        "resident_claim_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
         "hotkey_registration_authority": False,
@@ -183,6 +184,7 @@ def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp
         "overlay_control_authority": False,
         "window_management_authority": False,
         "summon_authority": False,
+        "resident_claim_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
         "hotkey_registration_authority": False,
@@ -266,6 +268,7 @@ def test_lens_host_supervisor_supervises_one_bounded_host_without_resident_claim
         "overlay_control_authority": False,
         "window_management_authority": False,
         "summon_authority": False,
+        "resident_claim_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
         "hotkey_registration_authority": False,
@@ -349,6 +352,7 @@ def test_lens_host_supervisor_supervises_bounded_resident_candidate_without_clai
         "overlay_control_authority": False,
         "window_management_authority": False,
         "summon_authority": False,
+        "resident_claim_authority": False,
         "capture_authority": False,
         "new_sensing_authority": False,
         "hotkey_registration_authority": False,
@@ -365,3 +369,65 @@ def test_lens_host_supervisor_supervises_bounded_resident_candidate_without_clai
     assert supervisor_state["observed_state"] == "resident_stopped"
     assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervisor_probes_supervised_resident_runtime_without_claim(tmp_path: Path) -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Lens resident supervision proof is Windows-hosted.")
+
+    data_dir = tmp_path / "data"
+    proc = _run_script(
+        "lens-host-supervisor.ps1",
+        "-Mode",
+        "SuperviseResident",
+        "-RunSeconds",
+        "2",
+        "-DataDir",
+        str(data_dir),
+        timeout=90,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.host.supervisor_runner"
+    assert payload["status"] == "resident_supervision_probe_completed"
+    assert payload["ok"] is True
+    assert payload["supervisor_started_process"] is True
+    assert payload["resident_host_process"] is True
+    assert payload["resident_supervised_runtime"] is True
+    assert payload["resident_runtime_candidate_supervised"] is True
+    assert payload["resident_claim_allowed"] is False
+    assert payload["service_managed"] is False
+    assert payload["tray_presence"] is False
+    assert payload["global_hotkey"] is False
+    assert payload["overlay_window"] is False
+    assert payload["summon_anywhere"] is False
+    assert payload["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert "tray_host_missing" in payload["blockers"]
+    assert "global_hotkey_binding_missing" in payload["blockers"]
+    assert "overlay_window_missing" in payload["blockers"]
+    assert "summon_binding_missing" in payload["blockers"]
+
+    proof = payload["proof"]
+    assert proof["running_state_status"] == "resident_running"
+    assert proof["running_pid"] > 0
+    assert proof["running_process_alive"] is True
+    assert proof["stopped_state_status"] == "resident_stopped"
+    assert proof["stopped_process_alive"] is False
+    assert proof["same_process_observed"] is True
+    assert proof["pid_file_present_after_stop"] is False
+
+    governance = payload["governance"]
+    assert governance["product_execution_authority"] is False
+    assert governance["approval_decision_authority"] is False
+    assert governance["local_process_launch_authority"] is True
+    assert governance["process_supervision_authority"] is True
+    assert governance["process_restart_authority"] is False
+    assert governance["service_install_authority"] is False
+    assert governance["service_control_authority"] is False
+    assert governance["tray_registration_authority"] is False
+    assert governance["hotkey_registration_authority"] is False
+    assert governance["overlay_control_authority"] is False
+    assert governance["summon_authority"] is False
+    assert governance["memory_write"] is False
+    assert governance["resident_claim_authority"] is False

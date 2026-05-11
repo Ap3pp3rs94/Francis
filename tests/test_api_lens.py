@@ -396,7 +396,13 @@ def _write_lens_host_service_config(repo_root: Path) -> None:
     )
 
 
-def _write_lens_host_runtime_state(data_root: Path, *, pid: int, status: str = "foreground_running") -> None:
+def _write_lens_host_runtime_state(
+    data_root: Path,
+    *,
+    pid: int,
+    status: str = "foreground_running",
+    mode: str = "foreground",
+) -> None:
     runtime_root = data_root / "runtime" / "lens-host"
     runtime_root.mkdir(parents=True, exist_ok=True)
     (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
@@ -405,10 +411,10 @@ def _write_lens_host_runtime_state(data_root: Path, *, pid: int, status: str = "
             {
                 "kind": "lens.host.runtime_state",
                 "status": status,
-                "mode": "foreground",
+                "mode": mode,
                 "pid": pid,
-                "process_alive": status == "foreground_running",
-                "resident": False,
+                "process_alive": status in {"foreground_running", "resident_running"},
+                "resident": mode == "resident",
                 "service_managed": False,
                 "tray_presence": False,
                 "global_hotkey": False,
@@ -435,6 +441,10 @@ def _write_lens_host_supervisor_state(
     host_mode: str = "",
     observed_state: str = "foreground_stopped",
     updated_at: str | None = None,
+    resident_supervised_runtime: bool = False,
+    process_supervision_authority: bool = False,
+    process_restart_authority: bool = False,
+    service_control_authority: bool = False,
 ) -> None:
     runtime_root = data_root / "runtime" / "lens-host-supervisor"
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -450,10 +460,15 @@ def _write_lens_host_supervisor_state(
                 "observed_state": observed_state,
                 "restarted_process": False,
                 "managed_service": False,
+                "resident_supervised_runtime": resident_supervised_runtime,
+                "resident_claim_allowed": False,
+                "process_supervision_authority": process_supervision_authority,
+                "process_restart_authority": process_restart_authority,
+                "service_control_authority": service_control_authority,
                 "updated_at": observed_at,
                 "governance": {
                     "memory_write": False,
-                    "service_control_authority": False,
+                    "service_control_authority": service_control_authority,
                     "local_process_launch_authority": False,
                 },
             }
@@ -7654,6 +7669,96 @@ def test_lens_api_marks_stale_host_supervisor_readback_without_authority(monkeyp
     assert manifest_body["governance"]["execution_authority"] is False
     assert manifest_body["governance"]["service_control_authority"] is False
     assert manifest_body["governance"]["mutation_authority_granted"] is False
+
+
+def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    _write_lens_host_runtime_state(
+        data_root,
+        pid=6789,
+        status="resident_running",
+        mode="resident",
+    )
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=6789,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        updated_at="2026-05-01T00:00:00Z",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (pid == 6789, "test"))
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    supervisor_readback = resident_host["supervisor_readback"]
+    assert supervisor_readback["status"] == "resident_supervising"
+    assert supervisor_readback["freshness_status"] == "fresh"
+    assert supervisor_readback["resident_supervised_runtime"] is True
+    assert supervisor_readback["process_supervision_authority"] is True
+    assert supervisor_readback["service_control_authority"] is False
+    assert resident_host["process_readback"]["process_alive"] is True
+    assert resident_host["process_readback"]["state_status"] == "resident_running"
+
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    resident_process_dependency = plan_dependencies["resident_host_process"]
+    assert resident_process_dependency["ready"] is True
+    assert resident_process_dependency["requirement_state"] == "ready"
+    assert resident_process_dependency["resident_supervised_runtime"] is True
+    assert resident_process_dependency["process_alive"] is True
+
+    tray_dependency = plan_dependencies["tray_presence"]
+    assert tray_dependency["ready"] is False
+    assert tray_dependency["blocker"] == "tray_host_missing"
+    handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert handoff["id"] == "tray_presence"
+    assert handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert handoff["route"] == "/lens/tray"
+    assert handoff["read_only_contract"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert persistent_plan["governance"]["execution_authority"] is False
+    assert persistent_plan["governance"]["resident_claim_authority"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:

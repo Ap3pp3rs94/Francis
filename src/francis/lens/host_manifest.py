@@ -570,12 +570,20 @@ def _lens_host_missing_required_before_enable(
     process_blockers = set(_as_str_list(blocker_groups.get("process_readback")))
     surface_blockers = set(_as_str_list(blocker_groups.get("surface_dependencies")))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
+    resident_supervised_runtime = (
+        bool(process_readback.get("process_alive"))
+        and bool(supervisor_readback.get("fresh_readback"))
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
+    resident_host_process_blocked = bool(
+        {"resident_host_process_missing", "resident_host_not_supervised"} & process_blockers
+    )
+    resident_host_process_ready = bool(process_readback.get("process_alive")) and (
+        resident_supervised_runtime or not resident_host_process_blocked
+    )
     missing_by_requirement = {
-        "resident_host_process": (
-            "resident_host_process_missing" in process_blockers
-            or "resident_host_not_supervised" in process_blockers
-            or not bool(process_readback.get("process_alive"))
-        ),
+        "resident_host_process": not resident_host_process_ready,
         "tray_presence": "tray_host_missing" in surface_blockers,
         "global_hotkey_binding": "global_hotkey_binding_missing" in surface_blockers,
         "overlay_window": "overlay_window_missing" in surface_blockers,
@@ -805,6 +813,11 @@ def _lens_host_resident_process_requirement_readback(
     blocked_reason = str(process_readback.get("blocked_reason") or "")
     resident_candidate_supervised = bool(supervisor_readback.get("resident_runtime_candidate_supervised"))
     fresh_resident_candidate_supervised = bool(supervisor_readback.get("fresh_resident_runtime_candidate_supervised"))
+    resident_supervised_runtime = (
+        process_alive
+        and bool(supervisor_readback.get("fresh_readback"))
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
     supervision_execution_candidate_observed = bool(
         supervision_execution_readback.get("supervision_execution_receipt_observed")
     )
@@ -820,7 +833,9 @@ def _lens_host_resident_process_requirement_readback(
             "blocked_reason": "",
             "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
-            "resident_supervised_runtime": False,
+            "resident_supervised_runtime": resident_supervised_runtime,
+            "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
+            "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
         }
     if (
         fresh_resident_candidate_supervised and resident_candidate_supervised
@@ -1280,6 +1295,8 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "observation_completed",
         "supervising",
         "supervised_session_completed",
+        "resident_supervising",
+        "resident_supervision_probe_completed",
     }
     supervised_session_completed = state_status == "supervised_session_completed"
     observation_completed = state_status == "observation_completed"
@@ -1297,7 +1314,15 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         freshness_status = "stale"
     state_stale = freshness_status == "stale"
     fresh_readback = freshness_status == "fresh"
-    if resident_runtime_candidate_supervised:
+    resident_supervised_runtime = (
+        state_status == "resident_supervising"
+        and host_mode == "resident"
+        and bool(state_payload.get("resident_supervised_runtime"))
+        and fresh_readback
+    )
+    if resident_supervised_runtime:
+        blocked_reason = ""
+    elif resident_runtime_candidate_supervised:
         blocked_reason = "resident_runtime_candidate_not_persistent"
     elif supervised_session_completed:
         blocked_reason = "resident_supervision_not_persistent"
@@ -1332,11 +1357,14 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "fresh_resident_runtime_candidate_supervised": resident_runtime_candidate_supervised and fresh_readback,
         "restarted_process": bool(state_payload.get("restarted_process")),
         "managed_service": bool(state_payload.get("managed_service")),
-        "resident_supervised_runtime": False,
+        "resident_supervised_runtime": resident_supervised_runtime,
         "resident_claim_allowed": False,
-        "process_supervision_authority": False,
-        "process_restart_authority": False,
-        "service_control_authority": False,
+        "process_supervision_authority": bool(state_payload.get("process_supervision_authority"))
+        and resident_supervised_runtime,
+        "process_restart_authority": bool(state_payload.get("process_restart_authority"))
+        and resident_supervised_runtime,
+        "service_control_authority": bool(state_payload.get("service_control_authority"))
+        and resident_supervised_runtime,
         "blocked_reason": blocked_reason,
         "governance": {
             "read_only_contract": True,

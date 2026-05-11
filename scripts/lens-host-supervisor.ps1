@@ -1,9 +1,9 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Status', 'Observe', 'SuperviseOnce', 'SuperviseResidentOnce')]
+  [ValidateSet('Status', 'Observe', 'SuperviseOnce', 'SuperviseResidentOnce', 'SuperviseResident')]
   [string]$Mode = 'Status',
 
-  [ValidateRange(1, 30)]
+  [ValidateRange(0, 30)]
   [int]$RunSeconds = 5,
 
   [string]$DataDir = ''
@@ -443,6 +443,7 @@ $Payload = [ordered]@{
     overlay_control_authority = $false
     window_management_authority = $false
     summon_authority = $false
+    resident_claim_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
     hotkey_registration_authority = $false
@@ -455,6 +456,141 @@ $Payload = [ordered]@{
 if ($Mode -eq 'Status') {
   $Payload | ConvertTo-Json -Depth 8
   exit 0
+}
+
+if ($Mode -eq 'SuperviseResident') {
+  $PowerShellPath = Get-PowerShellPath
+  $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
+  $Payload.governance.read_only_contract = $false
+  $Payload.governance.bounded_supervisor_observation = $RunSeconds -gt 0
+  $Payload.governance.temporary_runtime_state_write = $true
+  $Payload.governance.local_process_launch_authority = $true
+  $Payload.governance.process_supervision_authority = $true
+  $Payload.next_smallest_truthful_gap = 'summon_tray_presence_blocker_boundary'
+
+  $StartedProcess = Start-BoundedHostProcess `
+    -PowerShellPath $PowerShellPath `
+    -HostScriptPath $HostScriptPath `
+    -DataRoot $DataRoot `
+    -RunSeconds $RunSeconds `
+    -SupervisorRuntimeDir $SupervisorRuntimeDir `
+    -HostMode 'Resident'
+  $HostStarted = [bool](Get-PropertyValue -Payload $StartedProcess -Name 'started' -Default $false)
+  $Payload.supervisor_started_process = $HostStarted
+
+  $RunningObservationTimeout = if ($RunSeconds -gt 0) { [Math]::Max(45, $RunSeconds + 45) } else { 45 }
+  $RunningState = Wait-ForHostStatus -StatePath $HostStatePath -PidPath $HostPidPath -Status 'resident_running' -TimeoutSeconds $RunningObservationTimeout
+  $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Default 0)
+  $RunningObserved = (
+    $HostStarted -and
+    [string](Get-PropertyValue -Payload $RunningState -Name 'state_status' -Default '') -eq 'resident_running' -and
+    [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false) -and
+    $RunningPid -gt 0
+  )
+
+  if ($RunningObserved) {
+    $ObservedAt = (Get-Date).ToUniversalTime().ToString('o')
+    Write-JsonFile -Path $SupervisorStatePath -Payload ([ordered]@{
+        kind = 'lens.host.supervisor_state'
+        status = 'resident_supervising'
+        mode = 'supervise_resident'
+        host_mode = 'resident'
+        observed_pid = $RunningPid
+        observed_state = 'resident_running'
+        restarted_process = $false
+        managed_service = $false
+        resident_supervised_runtime = $true
+        resident_claim_allowed = $false
+        process_supervision_authority = $true
+        process_restart_authority = $false
+        service_control_authority = $false
+        updated_at = $ObservedAt
+        governance = $Payload.governance
+      })
+  }
+
+  if ($RunSeconds -eq 0) {
+    $Process = Get-PropertyValue -Payload $StartedProcess -Name 'process'
+    if ($null -ne $Process) {
+      while (-not $Process.HasExited) {
+        Start-Sleep -Milliseconds 500
+      }
+    }
+  }
+
+  $Completion = Complete-BoundedHostProcess -StartedProcess $StartedProcess -TimeoutSeconds ([Math]::Max(45, $RunSeconds + 45))
+  $StoppedState = Wait-ForHostStoppedState `
+    -StatePath $HostStatePath `
+    -PidPath $HostPidPath `
+    -ExpectedPid $RunningPid `
+    -Status 'resident_stopped' `
+    -TimeoutSeconds ([Math]::Max(60, $RunSeconds + 60))
+  $StoppedPid = [int](Get-PropertyValue -Payload $StoppedState -Name 'pid' -Default 0)
+  $StoppedObserved = (
+    $RunningObserved -and
+    [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '') -eq 'resident_stopped' -and
+    -not [bool](Get-PropertyValue -Payload $StoppedState -Name 'process_alive' -Default $true) -and
+    $StoppedPid -eq $RunningPid -and
+    -not (Test-LeafPathPresent -Path $HostPidPath)
+  )
+  $HostCompleted = [bool](Get-PropertyValue -Payload $Completion -Name 'exited' -Default $false) -and [int](Get-PropertyValue -Payload $Completion -Name 'exit_code' -Default -1) -eq 0
+  $ProofPassed = $RunningObserved -and $StoppedObserved -and $HostCompleted
+  $CompletedAt = (Get-Date).ToUniversalTime().ToString('o')
+
+  Write-JsonFile -Path $SupervisorStatePath -Payload ([ordered]@{
+      kind = 'lens.host.supervisor_state'
+      status = if ($ProofPassed) { 'resident_supervision_probe_completed' } else { 'resident_supervision_probe_failed' }
+      mode = 'supervise_resident'
+      host_mode = 'resident'
+      observed_pid = $RunningPid
+      observed_state = [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '')
+      restarted_process = $false
+      managed_service = $false
+      resident_supervised_runtime = $false
+      resident_claim_allowed = $false
+      process_supervision_authority = $true
+      process_restart_authority = $false
+      service_control_authority = $false
+      updated_at = $CompletedAt
+      governance = $Payload.governance
+    })
+
+  $Payload.ok = $ProofPassed
+  $Payload.status = if ($ProofPassed) { 'resident_supervision_probe_completed' } else { 'resident_supervision_probe_failed' }
+  $Payload.bounded_supervisor_observed = $ProofPassed
+  $Payload.bounded_supervised_session = $ProofPassed
+  $Payload.temporary_host_process_observed = $RunningObserved
+  $Payload.supervisor_observed_running_state = $RunningObserved
+  $Payload.supervisor_observed_stopped_state = $StoppedObserved
+  $Payload.resident_runtime_candidate_supervised = $ProofPassed
+  $Payload.resident_supervised_runtime = $RunningObserved
+  $Payload.resident_host_process = $RunningObserved
+  $Payload.supervised = $RunningObserved
+  $Payload.host_readback = $StoppedState
+  $Payload.blockers = @(
+    'tray_host_missing',
+    'global_hotkey_binding_missing',
+    'overlay_window_missing',
+    'summon_binding_missing',
+    'service_control_authority_not_granted'
+  ) | Sort-Object -Unique
+  $Payload.proof.running_state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'state_status' -Default '')
+  $Payload.proof.running_pid = $RunningPid
+  $Payload.proof.running_process_alive = [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false)
+  $Payload.proof.stopped_state_status = [string](Get-PropertyValue -Payload $StoppedState -Name 'state_status' -Default '')
+  $Payload.proof.stopped_pid = $StoppedPid
+  $Payload.proof.stopped_process_alive = [bool](Get-PropertyValue -Payload $StoppedState -Name 'process_alive' -Default $true)
+  $Payload.proof.same_process_observed = ($RunningPid -gt 0 -and $RunningPid -eq $StoppedPid)
+  $Payload.proof.pid_file_present_after_stop = Test-LeafPathPresent -Path $HostPidPath
+  $Payload.proof.supervisor_owned_launch = $HostStarted
+  $Payload.proof.host_mode = 'resident'
+  $Payload.proof.host_exit_code = [int](Get-PropertyValue -Payload $Completion -Name 'exit_code' -Default -1)
+
+  $Payload | ConvertTo-Json -Depth 8
+  if ($ProofPassed) {
+    exit 0
+  }
+  exit 1
 }
 
 if ($Mode -eq 'SuperviseOnce' -or $Mode -eq 'SuperviseResidentOnce') {
