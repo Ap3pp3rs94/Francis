@@ -24307,11 +24307,17 @@ runner slice:
   `f92c8c54e4cb20adbf9520eb0727e3ecee472dc1` was cancelled after both Ubuntu
   pytest jobs proved that PowerShell can expose the `WindowStyle` parameter in
   command metadata while still rejecting it at runtime on Linux.
+- GitHub Actions run `25679838525` for commit
+  `35c81b8aea68864a098b87fe59f4ded5075a966b` was cancelled after Ubuntu
+  Python 3.12 proved the Linux child process could be observed during the start
+  receipt but lose its PID file immediately after the launcher exited.
 - `scripts/lens-resident-session.ps1` now builds the `Start-Process` argument
   map dynamically and only requests `WindowStyle=Hidden` when the current host
   is Windows and the cmdlet exposes the parameter. This preserves the
   hidden-window behavior on Windows without requesting an unsupported Linux
-  launch option.
+  launch option. On non-Windows hosts, the leased child process is launched via
+  `nohup` when available so the resident candidate can outlive the launcher long
+  enough for truthful status/readback checks.
 - This is a launcher portability fix only. It does not add API execution
   authority, approval-decision authority, memory-write behavior, service
   install/control authority, tray registration, global hotkey registration,

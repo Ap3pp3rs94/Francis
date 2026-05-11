@@ -337,17 +337,26 @@ if ($Mode -eq 'Start') {
     (Quote-PowerShellString -Value $StderrPath)
   )
   try {
-    $StartArgs = @{
-      FilePath = $PowerShellPath
-      ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $Command)
-      WorkingDirectory = $RepoRoot
-      PassThru = $true
-    }
     $IsWindowsHost = $false
     if ($PSVersionTable.PSEdition -eq 'Desktop') {
       $IsWindowsHost = $true
     } else {
       $IsWindowsHost = $true -eq (Get-Variable -Name IsWindows -ValueOnly -ErrorAction SilentlyContinue)
+    }
+    $StartFilePath = $PowerShellPath
+    $StartArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $Command)
+    if (-not $IsWindowsHost) {
+      $NoHupCommand = Get-Command nohup -ErrorAction SilentlyContinue
+      if ($null -ne $NoHupCommand -and -not [string]::IsNullOrWhiteSpace([string]$NoHupCommand.Source)) {
+        $StartFilePath = [string]$NoHupCommand.Source
+        $StartArgumentList = @($PowerShellPath) + $StartArgumentList
+      }
+    }
+    $StartArgs = @{
+      FilePath = $StartFilePath
+      ArgumentList = $StartArgumentList
+      WorkingDirectory = $RepoRoot
+      PassThru = $true
     }
     if ($IsWindowsHost -and (Get-Command Start-Process -ErrorAction Stop).Parameters.ContainsKey('WindowStyle')) {
       $StartArgs['WindowStyle'] = 'Hidden'
