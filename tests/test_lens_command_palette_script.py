@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,7 +20,7 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _run_palette(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_palette(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             _powershell(),
@@ -35,6 +36,7 @@ def _run_palette(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=30,
+        env=env,
     )
 
 
@@ -122,6 +124,39 @@ def test_lens_command_palette_shell_bridge_reads_status_without_os_binding(tmp_p
         "local_process_launch_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_command_palette_shell_bridge_uses_python_readback_without_api(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["FRANCIS_ROOT"] = str(_repo_root())
+    env["FRANCIS_DATA_DIR"] = str(tmp_path / "data")
+
+    proc = _run_palette(
+        "-Mode",
+        "Status",
+        "-ApiBaseUrl",
+        "http://127.0.0.1:1",
+        "-TimeoutSeconds",
+        "1",
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.command_palette.shell_bridge"
+    assert payload["status"] == "blocked"
+    assert payload["ok"] is True
+    assert payload["backend_source"] == "python"
+    assert payload["backend_evidence"] == "francis.lens.status.lens_status"
+    assert payload["readback_ready"] is True
+    assert payload["availability"] == "chat_ui_only"
+    assert payload["command_total"] > 0
+    assert payload["os_level_command_palette"] is False
+    assert payload["summon_anywhere"] is False
+    assert "os_level_command_palette_missing" in payload["blockers"]
+    assert payload["governance"]["opens_palette"] is False
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False
 
 
 def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> None:

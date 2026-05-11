@@ -55,6 +55,72 @@ function Get-ScriptCommand {
     return (Get-Command powershell -ErrorAction Stop).Source
 }
 
+function Read-PythonJsonReadback {
+    param([string]$Route)
+
+    $Python = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $Python) {
+        return [pscustomobject]@{
+            ok = $false
+            source = "python"
+            evidence = "python"
+            payload = $null
+            error = "python_unavailable"
+        }
+    }
+
+    $Source = ""
+    $Evidence = ""
+    if ($Route -eq "/lens/os-binding/execution/readiness?limit=5") {
+        $Source = @'
+import json
+from francis.lens.os_binding_authority import lens_os_binding_execution_readiness_audit
+print(json.dumps(lens_os_binding_execution_readiness_audit(limit=5)))
+'@
+        $Evidence = "francis.lens.os_binding_authority.lens_os_binding_execution_readiness_audit"
+    } else {
+        return [pscustomobject]@{
+            ok = $false
+            source = "python"
+            evidence = "unsupported_route"
+            payload = $null
+            error = "python_readback_route_unsupported"
+        }
+    }
+
+    $Output = & $Python.Source -c $Source 2>$null
+    $ExitCode = $LASTEXITCODE
+    $Text = [string]::Join("`n", @($Output))
+    if ($ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($Text)) {
+        return [pscustomobject]@{
+            ok = $false
+            source = "python"
+            evidence = $Evidence
+            payload = $null
+            error = "python_readback_failed"
+        }
+    }
+
+    try {
+        $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+        return [pscustomobject]@{
+            ok = $true
+            source = "python"
+            evidence = $Evidence
+            payload = $Payload
+            error = ""
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            source = "python"
+            evidence = $Evidence
+            payload = $null
+            error = [string]$_.Exception.Message
+        }
+    }
+}
+
 function Invoke-JsonScript {
     param(
         [string]$Path,
@@ -124,12 +190,17 @@ function Read-JsonReadback {
             error = ""
         }
     } catch {
+        $ApiError = [string]$_.Exception.Message
+        $Fallback = Read-PythonJsonReadback -Route $Route
+        if ($Fallback.ok) {
+            return $Fallback
+        }
         return [pscustomobject]@{
             ok = $false
             source = "api"
             evidence = $Url
             payload = $null
-            error = [string]$_.Exception.Message
+            error = $ApiError
         }
     }
 }

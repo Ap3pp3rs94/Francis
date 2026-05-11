@@ -24134,6 +24134,45 @@ timeout recovery slice:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-11 - Stage 6/Lens command-palette OS-binding proof repo fallback
+
+The Lens command-palette shell bridge and OS-binding blockers proof now have a
+repo-derived fallback when the local HTTP API is not running. If
+`scripts/lens-command-palette.ps1 -Mode Status` cannot reach `/lens/status`, it
+falls back to `francis.lens.status.lens_status` readback and reports
+`backend_source=python`. If
+`scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status` cannot reach
+`/lens/os-binding/execution/readiness`, it falls back to
+`francis.lens.os_binding_authority.lens_os_binding_execution_readiness_audit`.
+
+This keeps the Stage 6 `summon_anywhere` proof path usable from repo truth in a
+fresh continuation session without requiring a separately running API process.
+It preserves the current Stage 6 truth: command palette, global hotkey,
+summon-anywhere, tray, overlay, resident host, and OS-binding execution are all
+still blocked. This is script/readback and test coverage only. It adds no UI
+surface, execution authority, approval decision authority, local process-launch
+authority, hotkey registration, tray registration, overlay control, summon
+authority, memory-write behavior, receipt-write authority, resident claim, or
+Stage 7 transition.
+
+Latest validation for the `2026-05-11` Stage 6/Lens command-palette OS-binding
+proof repo fallback slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status -ApiBaseUrl http://127.0.0.1:1 -TimeoutSeconds 1`
+  Result: `passed; status=proof_passed; execution_readiness.source=python; next_smallest_truthful_gap=os_level_command_palette_binding`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; execution_readiness.source=python; next_smallest_truthful_gap=os_level_command_palette_binding`
+- `python -m pytest tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -k "os_binding or command_palette" -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed after formatting tests\test_lens_command_palette_os_binding_proof_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warnings for scripts/lens-command-palette.ps1 and scripts/lens-command-palette-os-binding-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,7 +20,7 @@ def _powershell() -> str:
     return exe
 
 
-def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             _powershell(),
@@ -34,6 +35,7 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
 
 
@@ -319,3 +321,49 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "new_sensing_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_command_palette_os_binding_proof_uses_repo_readback_without_api(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["FRANCIS_ROOT"] = str(REPO_ROOT)
+    env["FRANCIS_DATA_DIR"] = str(tmp_path / "data")
+
+    result = _run_script(
+        "-Mode",
+        "Status",
+        "-ApiBaseUrl",
+        "http://127.0.0.1:1",
+        "-TimeoutSeconds",
+        "1",
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "lens.command_palette.os_binding_blockers.proof"
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["os_level_command_palette_binding_observed"] is True
+    assert payload["os_binding_candidate_observed"] is True
+    assert payload["os_binding_execution_readiness_observed"] is True
+    assert payload["side_effects_denied"] is True
+    assert payload["command_palette"]["status"] == "blocked"
+    assert payload["command_palette"]["availability"] == "chat_ui_only"
+    assert payload["command_palette"]["command_total"] > 0
+    assert payload["os_binding_candidate"]["local_surface"] == "chat_ui.command_palette"
+    execution_readiness = payload["execution_readiness"]
+    assert execution_readiness["source"] == "python"
+    assert (
+        execution_readiness["evidence"] == "francis.lens.os_binding_authority.lens_os_binding_execution_readiness_audit"
+    )
+    assert execution_readiness["status"] == "blocked"
+    assert execution_readiness["route"] == "/lens/os-binding/execution/readiness"
+    assert execution_readiness["ready"] is False
+    assert execution_readiness["execution_ready"] is False
+    assert "os_binding_execution_boundary_not_implemented" in execution_readiness["blockers"]
+    assert "global_hotkey_binding" in execution_readiness["blocked_requirements"]
+    assert "summon_binding" in execution_readiness["blocked_requirements"]
+    assert payload["governance"]["read_only_contract"] is True
+    assert payload["governance"]["opens_palette"] is False
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False

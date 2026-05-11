@@ -106,6 +106,55 @@ function ConvertTo-CommandItems {
   return @($Items.ToArray())
 }
 
+function Read-LensStatusFromPython {
+  $Python = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -eq $Python) {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'python'
+      payload = $null
+      error = 'python_unavailable'
+    }
+  }
+
+  $Source = @'
+import json
+from francis.lens.status import lens_status
+print(json.dumps(lens_status(limit=5)))
+'@
+  $Output = & $Python.Source -c $Source 2>$null
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  if ($ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($Text)) {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = 'python_lens_status_failed'
+    }
+  }
+
+  try {
+    return [ordered]@{
+      ok = $true
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $Text | ConvertFrom-Json -ErrorAction Stop
+      error = ''
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = [string]$_.Exception.Message
+    }
+  }
+}
+
 function Read-LensStatus {
   param(
     [string]$StatusPath,
@@ -135,12 +184,18 @@ function Read-LensStatus {
       error = ''
     }
   } catch {
+    $ApiError = [string]$_.Exception.Message
+    $Fallback = Read-LensStatusFromPython
+    if ([bool](Get-PropertyValue -Payload $Fallback -Name 'ok' -Default $false)) {
+      return $Fallback
+    }
     return [ordered]@{
       ok = $false
       source = 'api'
       evidence = $Url
       payload = $null
-      error = [string]$_.Exception.Message
+      error = $ApiError
+      fallback_error = [string](Get-PropertyValue -Payload $Fallback -Name 'error' -Default '')
     }
   }
 }
