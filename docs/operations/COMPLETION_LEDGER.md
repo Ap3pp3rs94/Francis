@@ -23930,6 +23930,48 @@ resident-persistence handoff slice:
 - `git diff --check`
   Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
 
+### 2026-05-10 - Stage 6/Lens completion audit enablement-authority handoff
+
+The Stage 6 completion audit now consumes the
+`persistent_supervision_enablement_authority` proof as a top-level rolling
+handoff after the resident-persistence handoff has been consumed. When the
+audit observes a bounded persistent-supervision enablement authority grant
+receipt and readback, it reports
+`next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary`
+with `recommended_handoff_source=persistent_supervision_enablement_authority_handoff`.
+
+This moves the Stage 6 handoff from "persistent supervision authority not
+granted" to the next bounded authority boundary: persistent-supervision
+execution and resident-claim review, without starting a runtime or enabling
+service configuration mutation. Stage 6 remains active and not ready to close.
+The remaining Stage 6 acceptance blockers are still `summon_anywhere`,
+`helpful_not_noisy`, and `system_resident_presence`.
+
+This is a completion-audit/readback handoff correction only. It adds no UI
+surface, execution authority, approval decision authority, local process-launch
+authority, persistent-supervision execution authority, service-config write
+authority, service install/control authority, tray registration, hotkey
+registration, overlay control, summon authority, memory-write behavior, or
+resident claim.
+
+Latest validation for the `2026-05-10` Stage 6/Lens completion audit
+enablement-authority handoff slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary; recommended_proof_script=scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420`
+  Result: `passed; status=blocked; audit_status=complete; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary; recommended_handoff_source=persistent_supervision_enablement_authority_handoff; child_proof_timeouts=[]`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+- `git diff --check`
+  Result: `passed with existing PowerShell line-ending normalization warning for scripts/lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
