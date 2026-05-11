@@ -24590,6 +24590,47 @@ slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
   Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
 
+Stage 6 live resident-supervision lease slice on `2026-05-11`:
+
+- `scripts/lens-host-supervisor.ps1` now has explicit `StartResident` and
+  `StopResident` modes for a live supervised resident-host lease. `StartResident`
+  launches the existing `SuperviseResident -RunSeconds 0` supervisor in a
+  detached hidden PowerShell process, waits for a fresh `resident_supervising`
+  supervisor state plus live `resident_running` host readback, and then returns
+  a truthful lease receipt. `StopResident` tears down the observed supervisor
+  and host pids, removes the resident pid file, and writes stopped host and
+  supervisor readback.
+- The live lease removes the script-level "proof only" gap for observing an
+  actively supervised resident host while the lease is running. It does not
+  install a service, persist across reboot, register tray or global hotkey
+  surfaces, create an overlay window, implement summon-anywhere, write memory,
+  add API execution authority, make approval decisions, grant process restart
+  authority, or allow a resident claim.
+- Stage 6 remains active and blocked. The checkpoint still reports
+  `ready_total=2/5`, `ready_to_close=false`; the blocked criteria remain
+  `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`.
+
+Latest validation for the Stage 6 live resident-supervision lease slice:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py::test_lens_host_supervisor_starts_and_stops_live_resident_lease -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_lens_host_supervisor_script.py tests\test_lens_host_supervision_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-host-supervisor.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=resident_supervision_not_persistent; recommended_next_slice=resolve_resident_supervision_persistence_before_persistent_supervision_enablement`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

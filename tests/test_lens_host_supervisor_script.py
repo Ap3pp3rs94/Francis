@@ -431,3 +431,105 @@ def test_lens_host_supervisor_probes_supervised_resident_runtime_without_claim(t
     assert governance["summon_authority"] is False
     assert governance["memory_write"] is False
     assert governance["resident_claim_authority"] is False
+
+
+def test_lens_host_supervisor_starts_and_stops_live_resident_lease(tmp_path: Path) -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Lens resident supervision lease is Windows-hosted.")
+
+    data_dir = tmp_path / "data"
+    started = _run_script(
+        "lens-host-supervisor.ps1",
+        "-Mode",
+        "StartResident",
+        "-DataDir",
+        str(data_dir),
+        timeout=90,
+    )
+
+    stopped: subprocess.CompletedProcess[str] | None = None
+    try:
+        assert started.returncode == 0, started.stderr or started.stdout
+        payload = json.loads(started.stdout)
+        assert payload["kind"] == "lens.host.supervisor_runner"
+        assert payload["status"] == "resident_supervision_started"
+        assert payload["ok"] is True
+        assert payload["supervisor_started_process"] is True
+        assert payload["supervisor_pid"] > 0
+        assert payload["supervisor_process_alive"] is True
+        assert payload["bounded_supervised_session"] is False
+        assert payload["temporary_host_process_observed"] is True
+        assert payload["resident_host_process"] is True
+        assert payload["resident_supervised_runtime"] is True
+        assert payload["resident_runtime_candidate_supervised"] is True
+        assert payload["resident_claim_allowed"] is False
+        assert payload["service_managed"] is False
+        assert payload["tray_presence"] is False
+        assert payload["global_hotkey"] is False
+        assert payload["overlay_window"] is False
+        assert payload["summon_anywhere"] is False
+        assert payload["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+        assert "tray_host_missing" in payload["blockers"]
+        assert "global_hotkey_binding_missing" in payload["blockers"]
+        assert "overlay_window_missing" in payload["blockers"]
+        assert "summon_binding_missing" in payload["blockers"]
+        assert "service_control_authority_not_granted" in payload["blockers"]
+
+        host_readback = payload["host_readback"]
+        assert host_readback["state_status"] == "resident_running"
+        assert host_readback["process_alive"] is True
+        assert host_readback["pid"] > 0
+        assert (data_dir / "runtime" / "lens-host" / "lens-host.pid").is_file()
+
+        supervisor_state = json.loads(
+            (data_dir / "runtime" / "lens-host-supervisor" / "status.json").read_text(encoding="utf-8-sig")
+        )
+        assert supervisor_state["status"] == "resident_supervising"
+        assert supervisor_state["host_mode"] == "resident"
+        assert supervisor_state["supervisor_pid"] == payload["supervisor_pid"]
+        assert supervisor_state["supervisor_process_alive"] is True
+        assert supervisor_state["resident_supervised_runtime"] is True
+        assert supervisor_state["resident_claim_allowed"] is False
+        assert supervisor_state["lease_mode"] == "explicit_stop"
+
+        governance = payload["governance"]
+        assert governance["product_execution_authority"] is False
+        assert governance["approval_decision_authority"] is False
+        assert governance["local_process_launch_authority"] is True
+        assert governance["process_supervision_authority"] is True
+        assert governance["process_restart_authority"] is False
+        assert governance["service_install_authority"] is False
+        assert governance["service_control_authority"] is False
+        assert governance["tray_registration_authority"] is False
+        assert governance["hotkey_registration_authority"] is False
+        assert governance["overlay_control_authority"] is False
+        assert governance["summon_authority"] is False
+        assert governance["memory_write"] is False
+        assert governance["resident_claim_authority"] is False
+    finally:
+        stopped = _run_script(
+            "lens-host-supervisor.ps1",
+            "-Mode",
+            "StopResident",
+            "-DataDir",
+            str(data_dir),
+            timeout=90,
+        )
+
+    assert stopped.returncode == 0, stopped.stderr or stopped.stdout
+    stop_payload = json.loads(stopped.stdout)
+    assert stop_payload["status"] == "resident_supervision_stopped"
+    assert stop_payload["ok"] is True
+    assert stop_payload["resident_host_process"] is False
+    assert stop_payload["resident_supervised_runtime"] is False
+    assert stop_payload["supervisor_process_alive"] is False
+    assert stop_payload["proof"]["stopped_state_status"] == "resident_stopped"
+    assert stop_payload["proof"]["stopped_process_alive"] is False
+    assert stop_payload["proof"]["pid_file_present_after_stop"] is False
+    assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+    stopped_supervisor_state = json.loads(
+        (data_dir / "runtime" / "lens-host-supervisor" / "status.json").read_text(encoding="utf-8-sig")
+    )
+    assert stopped_supervisor_state["status"] == "resident_supervision_stopped"
+    assert stopped_supervisor_state["resident_supervised_runtime"] is False
