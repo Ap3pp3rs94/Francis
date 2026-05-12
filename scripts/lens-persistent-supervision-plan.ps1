@@ -160,6 +160,100 @@ function Test-TruthyProperty {
   return [bool](Get-PropertyValue -Payload $Payload -Name $Name -Default $false)
 }
 
+function ConvertTo-EpochSeconds {
+  param([AllowNull()][object]$Value)
+
+  if ($null -eq $Value) {
+    return 0.0
+  }
+  try {
+    return [double]$Value
+  } catch {
+  }
+  try {
+    return [double]([System.DateTimeOffset]::Parse([string]$Value)).ToUnixTimeSeconds()
+  } catch {
+    return 0.0
+  }
+}
+
+function Get-LatestHostSupervisionExecutionReceipt {
+  param([string]$DataRoot)
+
+  $ReceiptRoot = Join-Path $DataRoot 'lens/host_supervision_executions'
+  if (-not (Test-Path -LiteralPath $ReceiptRoot -PathType Container)) {
+    return $null
+  }
+
+  $Latest = $null
+  $LatestTs = 0.0
+  foreach ($File in Get-ChildItem -LiteralPath $ReceiptRoot -Filter '*.json' -File -ErrorAction SilentlyContinue) {
+    $Receipt = Read-JsonFile -Path $File.FullName
+    if ($null -eq $Receipt) {
+      continue
+    }
+    if ([string](Get-PropertyValue -Payload $Receipt -Name 'kind' -Default '') -ne 'lens.host.supervision.execution.receipt') {
+      continue
+    }
+    $Ts = ConvertTo-EpochSeconds -Value (Get-PropertyValue -Payload $Receipt -Name 'created_ts' -Default 0)
+    if ($null -eq $Latest -or $Ts -ge $LatestTs) {
+      $Latest = $Receipt
+      $LatestTs = $Ts
+    }
+  }
+  return $Latest
+}
+
+function Get-ResidentCandidateReadback {
+  param([string]$DataRoot)
+
+  $SupervisorStatusPath = Join-Path $DataRoot 'runtime/lens-host-supervisor/status.json'
+  $SupervisorStatus = Read-JsonFile -Path $SupervisorStatusPath
+  $SupervisorKind = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'kind' -Default '')
+  $SupervisorState = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'status' -Default '')
+  $SupervisorMode = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'mode' -Default '')
+  $SupervisorHostMode = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'host_mode' -Default '')
+  $SupervisorUpdatedAt = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'updated_at' -Default '')
+  $UpdatedTs = ConvertTo-EpochSeconds -Value $SupervisorUpdatedAt
+  $FreshWindowSeconds = 900
+  $NowTs = [double]([System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+  $FreshSupervisorCandidate = (
+    $SupervisorKind -eq 'lens.host.supervisor_state' -and
+    $SupervisorState -eq 'supervised_session_completed' -and
+    $SupervisorMode -eq 'supervise_resident_once' -and
+    $SupervisorHostMode -eq 'resident' -and
+    $UpdatedTs -gt 0 -and
+    (($NowTs - $UpdatedTs) -le $FreshWindowSeconds)
+  )
+
+  $Receipt = Get-LatestHostSupervisionExecutionReceipt -DataRoot $DataRoot
+  $ReceiptExecution = Get-PropertyValue -Payload $Receipt -Name 'execution' -Default $null
+  $ReceiptStatus = [string](Get-PropertyValue -Payload $Receipt -Name 'status' -Default '')
+  $ReceiptCandidate = (
+    $null -ne $Receipt -and
+    $ReceiptStatus -eq 'resident_candidate_supervised_not_persistent' -and
+    (Test-TruthyProperty -Payload $ReceiptExecution -Name 'bounded_supervised_session') -and
+    (Test-TruthyProperty -Payload $ReceiptExecution -Name 'temporary_host_process_observed') -and
+    (Test-TruthyProperty -Payload $ReceiptExecution -Name 'resident_runtime_candidate_supervised') -and
+    -not (Test-TruthyProperty -Payload $ReceiptExecution -Name 'resident_supervised_runtime')
+  )
+
+  return [ordered]@{
+    resident_runtime_candidate_supervised = [bool]($FreshSupervisorCandidate -or $ReceiptCandidate)
+    fresh_resident_runtime_candidate_supervised = [bool]$FreshSupervisorCandidate
+    supervision_execution_receipt_observed = [bool]$ReceiptCandidate
+    supervision_execution_receipt_id = [string](Get-PropertyValue -Payload $Receipt -Name 'receipt_id' -Default '')
+    supervision_execution_readback_status = if ($ReceiptCandidate) { 'receipt_observed' } else { 'empty' }
+    supervision_execution_next_smallest_truthful_gap = if ($ReceiptCandidate) {
+      [string](Get-PropertyValue -Payload $ReceiptExecution -Name 'next_smallest_truthful_gap' -Default 'resident_supervision_not_persistent')
+    } else {
+      ''
+    }
+    supervisor_freshness_status = if ($FreshSupervisorCandidate) { 'fresh' } elseif ($null -ne $SupervisorStatus) { 'stale_or_not_candidate' } else { 'missing' }
+    supervisor_state_age_seconds = if ($UpdatedTs -gt 0) { [int]([Math]::Max(0, $NowTs - $UpdatedTs)) } else { $null }
+  }
+}
+
 function Get-HostProcessReadback {
   param([string]$DataRoot)
 
@@ -194,6 +288,31 @@ function Get-HostProcessReadback {
     }
   }
 
+  $CandidateReadback = Get-ResidentCandidateReadback -DataRoot $DataRoot
+  $CandidateObserved = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'resident_runtime_candidate_supervised' -Default $false)
+  $BlockedReason = if ($ProcessAlive) {
+    'resident_host_not_supervised'
+  } elseif ($CandidateObserved) {
+    'resident_supervision_not_persistent'
+  } else {
+    'resident_host_process_missing'
+  }
+  $Blocker = if ($ProcessAlive) {
+    'resident_host_process_not_supervised'
+  } elseif ($CandidateObserved) {
+    'resident_supervision_not_persistent'
+  } else {
+    'resident_host_process_missing'
+  }
+  $RequirementState = if ($ProcessAlive) {
+    'foreground_observed_not_supervised'
+  } elseif ($CandidateObserved) {
+    'resident_candidate_observed_not_persistent'
+  } else {
+    'missing'
+  }
+  $NextGap = if ($CandidateObserved) { 'resident_supervision_not_persistent' } else { 'resident_host_process_not_supervised' }
+
   return [ordered]@{
     process_alive = $ProcessAlive
     pid = $HostPid
@@ -202,9 +321,18 @@ function Get-HostProcessReadback {
     runtime_status = $StatusValue
     runtime_status_kind = $StatusKind
     runtime_status_pid = $StatusPid
-    blocked_reason = if ($ProcessAlive) { 'resident_host_not_supervised' } else { 'resident_host_process_missing' }
-    blocker = if ($ProcessAlive) { 'resident_host_process_not_supervised' } else { 'resident_host_process_missing' }
-    requirement_state = if ($ProcessAlive) { 'foreground_observed_not_supervised' } else { 'missing' }
+    blocked_reason = $BlockedReason
+    blocker = $Blocker
+    requirement_state = $RequirementState
+    next_smallest_truthful_gap = $NextGap
+    resident_runtime_candidate_supervised = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'resident_runtime_candidate_supervised' -Default $false)
+    fresh_resident_runtime_candidate_supervised = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'fresh_resident_runtime_candidate_supervised' -Default $false)
+    supervision_execution_receipt_observed = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_execution_receipt_observed' -Default $false)
+    supervision_execution_receipt_id = [string](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_execution_receipt_id' -Default '')
+    supervision_execution_readback_status = [string](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_execution_readback_status' -Default '')
+    supervision_execution_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_execution_next_smallest_truthful_gap' -Default '')
+    supervisor_freshness_status = [string](Get-PropertyValue -Payload $CandidateReadback -Name 'supervisor_freshness_status' -Default '')
+    supervisor_state_age_seconds = Get-PropertyValue -Payload $CandidateReadback -Name 'supervisor_state_age_seconds' -Default $null
   }
 }
 
@@ -319,6 +447,11 @@ $Requirements = @(
 )
 
 $HostProcessReadback = Get-HostProcessReadback -DataRoot $DataRoot
+$HostProcessProofScript = if ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
+  'scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status'
+} else {
+  'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status'
+}
 $TrayReady = (
   (Test-TruthyProperty -Payload $TrayConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_host_enabled') -and
@@ -356,11 +489,19 @@ $RequiredBeforeEnable = @(
   'summon_binding'
 )
 $EnablementDependencyReadback = @(
-  (New-EnablementDependency -Id 'resident_host_process' -Family 'resident_host' -Route '/lens/host' -ReadinessRoute '/lens/host/runtime-loop/readiness' -Ready $false -Blocker ([string]$HostProcessReadback.blocker) -RequirementState ([string]$HostProcessReadback.requirement_state) -BlockedReason ([string]$HostProcessReadback.blocked_reason) -ProofScript 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'resident_host_process' -Family 'resident_host' -Route '/lens/host' -ReadinessRoute '/lens/host/runtime-loop/readiness' -Ready $false -Blocker ([string]$HostProcessReadback.blocker) -RequirementState ([string]$HostProcessReadback.requirement_state) -BlockedReason ([string]$HostProcessReadback.blocked_reason) -ProofScript $HostProcessProofScript -Extra ([pscustomobject]@{
         process_alive = [bool]$HostProcessReadback.process_alive
         pid = [int]$HostProcessReadback.pid
         runtime_status = [string]$HostProcessReadback.runtime_status
-        next_smallest_truthful_gap = 'resident_host_process_not_supervised'
+        next_smallest_truthful_gap = [string]$HostProcessReadback.next_smallest_truthful_gap
+        resident_runtime_candidate_supervised = [bool]$HostProcessReadback.resident_runtime_candidate_supervised
+        fresh_resident_runtime_candidate_supervised = [bool]$HostProcessReadback.fresh_resident_runtime_candidate_supervised
+        supervision_execution_receipt_observed = [bool]$HostProcessReadback.supervision_execution_receipt_observed
+        supervision_execution_receipt_id = [string]$HostProcessReadback.supervision_execution_receipt_id
+        supervision_execution_readback_status = [string]$HostProcessReadback.supervision_execution_readback_status
+        supervision_execution_next_smallest_truthful_gap = [string]$HostProcessReadback.supervision_execution_next_smallest_truthful_gap
+        supervisor_freshness_status = [string]$HostProcessReadback.supervisor_freshness_status
+        supervisor_state_age_seconds = $HostProcessReadback.supervisor_state_age_seconds
       })),
   (New-EnablementDependency -Id 'tray_presence' -Family 'tray_presence' -Route '/lens/tray' -ReadinessRoute '/lens/tray/readiness' -Ready $TrayReady -Blocker 'tray_host_missing' -RequirementState 'tray_host_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $TrayConfig -Name 'blocked_reason' -Default 'lens_tray_presence_disabled_pending_authority')) -PreflightScript 'scripts/lens-tray-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $TrayConfigRelativePath

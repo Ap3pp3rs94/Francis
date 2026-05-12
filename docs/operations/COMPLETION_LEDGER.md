@@ -24860,6 +24860,50 @@ Latest validation for the Stage 6 host runtime blocker truth alignment slice:
 - `python -c "from francis.lens.status import lens_status; ..."`
   Result: `passed; ready_total=2; ready_to_close=false; resident_host_blockers include lens_host_persistent_supervision_prerequisites_pending; next_gap=resident_supervision_not_persistent`
 
+Stage 6 persistent-supervision plan resident-candidate receipt handoff slice on
+`2026-05-12`:
+
+- `scripts/lens-persistent-supervision-plan.ps1` now consumes durable
+  `lens.host.supervision.execution.receipt` evidence, plus fresh supervisor
+  state when present, when building the `resident_host_process` prerequisite
+  handoff. If a bounded resident candidate was supervised but is not
+  persistent, the script reports `resident_candidate_observed_not_persistent`,
+  `resident_supervision_not_persistent`, the receipt id/readback status, and
+  the resident-supervision persistence proof as the next proof instead of
+  falling back to `resident_host_process_missing`.
+- This is readback/proof-handoff alignment only. It does not enable persistent
+  supervision, install or control a service, register tray or hotkey presence,
+  open or control an overlay, add summon-anywhere, grant process supervision or
+  restart authority, write memory, make approval decisions, or allow a resident
+  claim.
+- Stage 6 remains active and blocked. With no fresh or durable supervised
+  candidate in the live repo data after reboot, the current readback still
+  truthfully reports `resident_host_process_missing` and
+  `resident_host_process_not_supervised`; when receipt evidence exists, the
+  plan now preserves the proven handoff to `resident_supervision_not_persistent`.
+
+Latest validation for the Stage 6 persistent-supervision plan receipt handoff
+slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,required_before_enable_ready,missing_required_before_enable,first_missing_required_before_enable,@{Name='handoff_blocker';Expression={$_.first_missing_requirement_handoff.blocker}},@{Name='handoff_state';Expression={$_.first_missing_requirement_handoff.requirement_state}},@{Name='handoff_next';Expression={$_.first_missing_requirement_handoff.next_smallest_truthful_gap}},@{Name='handoff_receipt';Expression={$_.first_missing_requirement_handoff.supervision_execution_receipt_observed}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing_required_before_enable=resident_host_process; handoff_blocker=resident_host_process_missing; handoff_receipt=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,resident_runtime_candidate_handoff_observed | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement; resident_runtime_candidate_handoff_observed=false`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,missing_required_before_enable_observed,first_missing_required_before_enable | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; missing_required_before_enable_observed=true; first_missing_required_before_enable=resident_host_process`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `failed before formatting, then passed after running python -m ruff format tests\test_lens_persistent_supervision_plan_script.py`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

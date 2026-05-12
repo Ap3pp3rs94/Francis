@@ -105,6 +105,12 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert resident_host["blocked_reason"] == "resident_host_process_missing"
     assert resident_host["process_alive"] is False
     assert resident_host["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert resident_host["resident_runtime_candidate_supervised"] is False
+    assert resident_host["fresh_resident_runtime_candidate_supervised"] is False
+    assert resident_host["supervision_execution_receipt_observed"] is False
+    assert resident_host["supervision_execution_receipt_id"] == ""
+    assert resident_host["supervision_execution_readback_status"] == "empty"
+    assert resident_host["supervision_execution_next_smallest_truthful_gap"] == ""
     assert resident_host["read_only_contract"] is True
     assert resident_host["diagnostic_only"] is True
     assert resident_host["would_execute"] is False
@@ -277,6 +283,88 @@ def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receip
     assert plan["would_write_memory"] is False
     assert plan["would_claim_resident"] is False
 
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["approval_decision_authority"] is False
+    assert payload["governance"]["memory_write"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+
+
+def test_lens_persistent_supervision_plan_promotes_supervision_execution_receipt_handoff(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    receipt_root = data_root / "lens" / "host_supervision_executions"
+    receipt_root.mkdir(parents=True)
+    receipt_id = "lens-host-supervision-execution-test"
+    (receipt_root / f"{receipt_id}.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervision.execution.receipt",
+                "receipt_id": receipt_id,
+                "status": "resident_candidate_supervised_not_persistent",
+                "created_ts": int(time.time()),
+                "execution": {
+                    "bounded_supervised_session": True,
+                    "temporary_host_process_observed": True,
+                    "resident_runtime_candidate_supervised": True,
+                    "resident_supervised_runtime": False,
+                    "resident_claim_allowed": False,
+                    "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+                },
+                "resident_claim": {
+                    "resident_host_process_claimed": False,
+                    "resident_runtime_claimed": False,
+                    "resident_claim_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_script("-Mode", "Status", env={**os.environ, "FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["required_before_enable_ready"] is False
+    assert payload["missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert payload["first_missing_required_before_enable"] == "resident_host_process"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+
+    resident_host = {item["id"]: item for item in payload["enablement_dependency_readback"]}["resident_host_process"]
+    assert payload["first_missing_requirement_handoff"] == resident_host
+    assert resident_host["blocker"] == "resident_supervision_not_persistent"
+    assert resident_host["requirement_state"] == "resident_candidate_observed_not_persistent"
+    assert resident_host["blocked_reason"] == "resident_supervision_not_persistent"
+    assert resident_host["proof_script"] == (
+        "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
+    )
+    assert resident_host["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert resident_host["resident_runtime_candidate_supervised"] is True
+    assert resident_host["fresh_resident_runtime_candidate_supervised"] is False
+    assert resident_host["supervision_execution_receipt_observed"] is True
+    assert resident_host["supervision_execution_receipt_id"] == receipt_id
+    assert resident_host["supervision_execution_readback_status"] == "receipt_observed"
+    assert resident_host["supervision_execution_next_smallest_truthful_gap"] == ("resident_supervision_not_persistent")
+    assert resident_host["read_only_contract"] is True
+    assert resident_host["diagnostic_only"] is True
+    assert resident_host["would_execute"] is False
+    assert resident_host["would_mutate"] is False
+
+    plan = payload["plan"]
+    assert plan["would_install_service"] is False
+    assert plan["would_start_service"] is False
+    assert plan["would_restart_process"] is False
+    assert plan["would_supervise_process"] is False
+    assert plan["would_write_receipt"] is False
+    assert plan["would_write_memory"] is False
+    assert plan["would_claim_resident"] is False
     assert payload["governance"]["execution_authority"] is False
     assert payload["governance"]["approval_decision_authority"] is False
     assert payload["governance"]["memory_write"] is False
