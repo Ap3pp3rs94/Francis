@@ -25290,6 +25290,48 @@ Latest validation for the Stage 6 tray-runtime plan-consumption proof slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
 
+Stage 6 Lens global-hotkey runtime primitive on `2026-05-12`:
+
+- `scripts/lens-hotkey-binding.ps1` now provides a bounded Windows runtime
+  primitive for `Ctrl+Alt+Space` global hotkey registration. The default
+  `Status` mode is readback-only. `Start` launches a hidden STA PowerShell host,
+  `Run` registers the OS hotkey through `RegisterHotKey`, and `Stop` tears down
+  the runtime process.
+- Runtime state is written under `data/runtime/lens-hotkey/` with a PID file and
+  `lens.hotkey.runtime_state` readback. The status contract only promotes
+  `global_hotkey_binding=true` when the PID file, runtime JSON, configured
+  hotkey, binding scope, and live process all agree.
+- A bounded local proof in a temp data root registered the Windows global
+  hotkey, reported `status=bound`, then stopped the process and confirmed it was
+  no longer alive. The proof used `-NoLaunch`, so pressing the hotkey was not
+  allowed to open the command palette during validation.
+- This is a runtime primitive and readback contract only. It does not flip the
+  disabled summon/tray/overlay configs, wire the Stage 6 checkpoint or API
+  preflight to consume hotkey runtime, install a resident service, open or
+  control an overlay, register tray presence, grant execution authority, make
+  approval decisions, write memory, write receipts, or claim summon-anywhere.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next truthful gap narrows from
+  `global_hotkey_binding` as a missing primitive toward consuming this runtime
+  in summon preflight / OS-binding readiness, then proving a governed summon
+  binding.
+
+Latest validation for the Stage 6 global-hotkey runtime primitive:
+
+- `python -m pytest tests\test_lens_hotkey_binding_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_hotkey_binding_script.py tests\test_lens_summon_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_command_palette_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- Bounded Windows live proof:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-hotkey-binding.ps1 -Mode Start -DataDir <temp> -RunSeconds 30 -StartupTimeoutSeconds 10 -NoLaunch`,
+  followed by `Status` and `Stop`
+  Result: `passed; start_exit=0; status=bound; global_hotkey_binding=true; process_alive=true before Stop; process_alive=false after Stop`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
