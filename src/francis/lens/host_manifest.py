@@ -1006,9 +1006,13 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
     palette_route = str(config.get("palette_route") or "/lens/status")
     host_preflight = str(config.get("host_preflight") or "scripts/lens-host-preflight.ps1")
     host_status_runner = str(config.get("host_status_runner") or "scripts/lens-host.ps1")
+    summon_runner = str(config.get("summon_runner") or "scripts/lens-summon.ps1")
+    local_palette_launcher = str(
+        config.get("local_palette_launcher") or "scripts/lens-command-palette.ps1 -Mode LocalOpen"
+    )
     launch_target = str(config.get("launch_target") or "lens_host")
     launch_mode = str(config.get("launch_mode") or "Foreground")
-    blocked_reason = str(config.get("blocked_reason") or "lens_summon_binding_not_implemented")
+    blocked_reason = str(config.get("blocked_reason") or "lens_summon_binding_disabled_pending_authority")
     summon_enabled = bool(config.get("enabled"))
     binding_enabled = bool(config.get("binding_enabled"))
     register_hotkey = bool(config.get("register_hotkey"))
@@ -1021,6 +1025,7 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
     local_process_launch_authority = bool(config.get("local_process_launch_authority"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
+    summon_runner_exists = _runtime_file_exists(summon_runner)
     family_blockers = []
     host_dependency_blockers = []
     surface_dependency_blockers = []
@@ -1037,6 +1042,8 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
         host_dependency_blockers.append("lens_host_lifecycle_preflight_missing")
     if not host_status_runner_exists:
         host_dependency_blockers.append("lens_host_status_runner_missing")
+    if not summon_runner_exists:
+        family_blockers.append("lens_summon_runner_missing")
     if not local_process_launch_authority:
         host_dependency_blockers.append("local_process_launch_authority_not_granted")
         authority_blockers.append("local_process_launch_authority_not_granted")
@@ -1055,6 +1062,8 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
             requirement_state = "config_missing"
         elif blocked_reason == "lens_summon_binding_not_implemented":
             requirement_state = "not_implemented"
+        elif blocked_reason == "lens_summon_binding_disabled_pending_authority":
+            requirement_state = "disabled_pending_authority"
         elif not summon_authority:
             requirement_state = "summon_authority_blocked"
         elif not local_process_launch_authority:
@@ -1080,6 +1089,10 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
         "host_preflight_exists": host_preflight_exists,
         "host_status_runner": host_status_runner,
         "host_status_runner_exists": host_status_runner_exists,
+        "summon_runner": summon_runner,
+        "summon_runner_exists": summon_runner_exists,
+        "local_palette_launcher": local_palette_launcher,
+        "local_binding_target_ready": summon_runner_exists,
         "launch_target": launch_target,
         "launch_mode": launch_mode,
         "summon_enabled": summon_enabled,

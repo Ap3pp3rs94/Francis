@@ -197,7 +197,9 @@ def _write_lens_preflight_scripts(repo_root: Path) -> None:
     script_dir.mkdir(parents=True, exist_ok=True)
     for name in (
         "lens-host-preflight.ps1",
+        "lens-summon.ps1",
         "lens-summon-preflight.ps1",
+        "lens-command-palette.ps1",
         "lens-tray-preflight.ps1",
         "lens-overlay-preflight.ps1",
     ):
@@ -224,6 +226,8 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "palette_route": "/lens/status",
   "host_preflight": "scripts/lens-host-preflight.ps1",
   "host_status_runner": "scripts/lens-host.ps1",
+  "summon_runner": "scripts/lens-summon.ps1",
+  "local_palette_launcher": "scripts/lens-command-palette.ps1 -Mode LocalOpen",
   "overlay_required": true,
   "tray_required": true,
   "requires_explicit_enable": true,
@@ -231,7 +235,7 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "hotkey_registration_authority": false,
   "overlay_control_authority": false,
   "local_process_launch_authority": false,
-  "blocked_reason": "lens_summon_binding_not_implemented",
+  "blocked_reason": "lens_summon_binding_disabled_pending_authority",
   "required_before_enable": [
     "resident_host_process",
     "tray_presence",
@@ -567,7 +571,7 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert "summon_anywhere_missing" in blocker_groups["palette_binding"]
     assert "global_hotkey_binding_disabled" in blocker_groups["global_hotkey_binding"]
     assert "global_hotkey_registration_disabled" in blocker_groups["global_hotkey_binding"]
-    assert "lens_summon_binding_not_implemented" in blocker_groups["summon_binding"]
+    assert "lens_summon_binding_disabled_pending_authority" in blocker_groups["summon_binding"]
     assert "resident_host_process_missing" in blocker_groups["resident_host"]
     assert "lens_tray_presence_disabled_pending_authority" in blocker_groups["tray_presence"]
     assert "lens_overlay_window_not_implemented" in blocker_groups["overlay_window"]
@@ -711,7 +715,7 @@ def test_lens_os_binding_plan_blocks_os_palette_without_authority(
     ]
     assert "os_level_command_palette_missing" in body["blocker_groups"]["palette_binding"]
     assert "global_hotkey_binding_disabled" in body["blocker_groups"]["global_hotkey_binding"]
-    assert "lens_summon_binding_not_implemented" in body["blocker_groups"]["summon_binding"]
+    assert "lens_summon_binding_disabled_pending_authority" in body["blocker_groups"]["summon_binding"]
     assert "resident_host_process_missing" in body["blocker_groups"]["resident_host"]
     command_palette_contract = body["command_palette_contract"]
     assert command_palette_contract["readback_ready"] is True
@@ -2599,7 +2603,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "hotkey_registration_authority_not_granted",
     ]
     assert summon_preflight_groups["summon_binding"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
     assert summon_preflight_groups["surface_dependencies"] == [

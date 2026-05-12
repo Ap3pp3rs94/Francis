@@ -177,7 +177,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "hotkey_registration_authority_not_granted",
     ]
     assert blocker_groups["summon_binding"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
     assert blocker_groups["authority"] == [

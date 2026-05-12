@@ -24980,6 +24980,48 @@ slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-command-palette.ps1`
 
+Stage 6 local summon binding launcher slice on `2026-05-12`:
+
+- `scripts/lens-summon.ps1` now exposes a local Lens summon launcher that
+  delegates to the existing command-palette `LocalOpen` bridge. `Status`
+  performs a dry-run readback of the Chat UI command-palette URL entrypoint;
+  `LocalOpen -NoLaunch` proves the launch target without opening a browser.
+- `config/runtime/lens/summon.json` and summon preflight/readback consumers now
+  distinguish the real local launcher from OS-wide summon. The summon-binding
+  blocker is now `lens_summon_binding_disabled_pending_authority` instead of
+  the stale `lens_summon_binding_not_implemented` claim.
+- This is a local launcher/readback capability slice. It does not enable
+  global hotkey registration, OS-wide summon-anywhere, persistent supervision,
+  service install/control, tray registration, overlay control, approval
+  decisions, memory writes, execution authority, or resident-claim authority.
+- Stage 6 remains active and blocked. The local summon target is ready, but
+  `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence` still
+  require authority-bound resident/tray/hotkey/overlay/summon work before Stage
+  6 can close.
+
+Latest validation for the Stage 6 local summon binding launcher slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon.ps1 -Mode Status | ConvertFrom-Json | Select-Object ...`
+  Result: `passed; status=local_binding_ready; local_binding_ready=true; summon_binding_target_ready=true; summon_anywhere=false; next_smallest_truthful_gap=global_hotkey_binding`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object ...`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=summon_anywhere_blockers; summon_runner=scripts/lens-summon.ps1; runner_present=true; binding_blockers include lens_summon_binding_disabled_pending_authority`
+- `python -m pytest tests\test_lens_summon_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority tests\test_api_lens.py::test_lens_os_binding_plan_blocks_os_palette_without_authority tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\host_manifest.py src\francis\lens\activation.py tests\test_lens_summon_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\host_manifest.py src\francis\lens\activation.py tests\test_lens_summon_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_api_lens.py`
+  Result: `failed before formatting src\francis\lens\host_manifest.py, then passed after running python -m ruff format src\francis\lens\host_manifest.py`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `not completed locally; the long audit child-proof run produced no completion output and was stopped to avoid stalling the slice. CI must cover the full audit path.`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warnings on touched scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

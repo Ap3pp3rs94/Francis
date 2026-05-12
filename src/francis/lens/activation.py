@@ -1723,6 +1723,7 @@ _BOUNDED_HOST_ACTIVATION_SOFT_BLOCKERS = {
     "capture_authority_not_granted",
     "summon_binding_missing",
     "lens_summon_binding_not_implemented",
+    "lens_summon_binding_disabled_pending_authority",
     "summon_authority_not_granted",
     "lens_summon_config_missing",
     "lens_summon_config_invalid",

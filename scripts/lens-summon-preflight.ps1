@@ -317,7 +317,9 @@ $BindingScope = Get-StringProperty -Payload $Config -Name 'binding_scope' -Defau
 $PaletteRoute = Get-StringProperty -Payload $Config -Name 'palette_route' -Default '/lens/status'
 $HostPreflight = Get-StringProperty -Payload $Config -Name 'host_preflight' -Default 'scripts/lens-host-preflight.ps1'
 $HostStatusRunner = Get-StringProperty -Payload $Config -Name 'host_status_runner' -Default 'scripts/lens-host.ps1'
-$BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_not_implemented'
+$SummonRunner = Get-StringProperty -Payload $Config -Name 'summon_runner' -Default 'scripts/lens-summon.ps1'
+$LocalPaletteLauncher = Get-StringProperty -Payload $Config -Name 'local_palette_launcher' -Default 'scripts/lens-command-palette.ps1 -Mode LocalOpen'
+$BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
 $Enabled = Get-BoolProperty -Payload $Config -Name 'enabled' -Default $false
 $BindingEnabled = Get-BoolProperty -Payload $Config -Name 'binding_enabled' -Default $false
 $RegisterHotkey = Get-BoolProperty -Payload $Config -Name 'register_hotkey' -Default $false
@@ -336,10 +338,13 @@ $HostPreflightPath = Join-Path $RepoRoot $HostPreflight
 $HostPreflightExists = Test-Path -LiteralPath $HostPreflightPath -PathType Leaf
 $HostStatusRunnerPath = Join-Path $RepoRoot $HostStatusRunner
 $HostStatusRunnerExists = Test-Path -LiteralPath $HostStatusRunnerPath -PathType Leaf
+$SummonRunnerPath = Join-Path $RepoRoot $SummonRunner
+$SummonRunnerExists = Test-Path -LiteralPath $SummonRunnerPath -PathType Leaf
 
 $Checks = [System.Collections.ArrayList]::new()
 Add-Check -Target $Checks -Id 'runtime_root' -Status 'ready' -Reason 'runtime root accepted' -Evidence $RepoRoot
 Add-Check -Target $Checks -Id 'summon_config' -Status $(if ($ConfigExists -and -not $ConfigError) { 'present_disabled' } elseif ($ConfigExists) { 'invalid' } else { 'missing' }) -Reason $(if ($ConfigError) { $ConfigError } elseif ($ConfigExists) { 'disabled summon config is present' } else { 'summon config is missing' }) -Evidence 'config/runtime/lens/summon.json'
+Add-Check -Target $Checks -Id 'summon_runner' -Status $(if ($SummonRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonRunnerExists) { 'local summon launcher is present' } else { 'local summon launcher is missing' }) -Evidence $SummonRunner
 Add-Check -Target $Checks -Id 'hotkey_declared' -Status $(if ($GlobalHotkey) { 'declared' } else { 'missing' }) -Reason $(if ($GlobalHotkey) { 'global hotkey intent is declared but not bound' } else { 'global hotkey intent is missing' }) -Evidence $GlobalHotkey
 Add-Check -Target $Checks -Id 'binding_enabled' -Status $(if ($BindingEnabled) { 'enabled' } else { 'disabled' }) -Reason 'global binding remains disabled until resident Lens host exists' -Evidence $BindingScope
 Add-Check -Target $Checks -Id 'register_hotkey' -Status $(if ($RegisterHotkey) { 'would_register' } else { 'disabled' }) -Reason 'hotkey registration remains disabled' -Evidence 'register_hotkey'
@@ -357,6 +362,7 @@ if ($BlockedReason) { [void]$Blockers.Add($BlockedReason) }
 if (-not $ConfigExists) { [void]$Blockers.Add('lens_summon_config_missing') }
 if ($ConfigError) { [void]$Blockers.Add('lens_summon_config_invalid') }
 if (-not $GlobalHotkey) { [void]$Blockers.Add('global_hotkey_not_declared') }
+if (-not $SummonRunnerExists) { [void]$Blockers.Add('lens_summon_runner_missing') }
 if (-not $BindingEnabled) { [void]$Blockers.Add('global_hotkey_binding_disabled') }
 if (-not $RegisterHotkey) { [void]$Blockers.Add('global_hotkey_registration_disabled') }
 if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_preflight_missing') }
@@ -382,6 +388,8 @@ $BlockerGroups = [ordered]@{
     ))
   summon_binding = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
       'lens_summon_binding_not_implemented',
+      'lens_summon_binding_disabled_pending_authority',
+      'lens_summon_runner_missing',
       'summon_authority_not_granted'
     ))
   host_dependency = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
@@ -465,6 +473,7 @@ foreach ($Requirement in @($RequiredBeforeEnable)) {
     'summon_binding' {
       $RequirementBlockers = [System.Collections.ArrayList]::new()
       if ($BlockedReason) { [void]$RequirementBlockers.Add($BlockedReason) }
+      if (-not $SummonRunnerExists) { [void]$RequirementBlockers.Add('lens_summon_runner_missing') }
       if (-not $SummonAuthority) { [void]$RequirementBlockers.Add('summon_authority_not_granted') }
       [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
             -Id 'summon_binding' `
@@ -524,6 +533,10 @@ $Payload = [ordered]@{
     startup_register = $StartupRegister
     host_preflight = $HostPreflight
     host_status_runner = $HostStatusRunner
+    summon_runner = $SummonRunner
+    summon_runner_present = $SummonRunnerExists
+    local_palette_launcher = $LocalPaletteLauncher
+    local_binding_target_ready = $SummonRunnerExists
   }
   governance = [ordered]@{
     read_only_contract = $true
@@ -536,11 +549,12 @@ $Payload = [ordered]@{
     new_sensing_authority = $false
     local_process_launch_authority = $false
     hotkey_registration_authority = $false
+    summon_runner_readback = $true
     required_before_enable_readback = $true
     resident_host_process_readback = $true
     mutation_authority_granted = $false
   }
-  message = 'Lens summon preflight is read-only; global hotkey binding and summon launch remain blocked.'
+  message = 'Lens summon preflight is read-only; local launcher readback is present but global hotkey binding and summon authority remain blocked.'
 }
 
 if ($Mode -eq 'Status') {

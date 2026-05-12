@@ -526,9 +526,11 @@ $EnablementDependencyReadback = @(
         overlay_control_authority = (Test-TruthyProperty -Payload $OverlayConfig -Name 'overlay_control_authority')
         window_management_authority = (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_management_authority')
       })),
-  (New-EnablementDependency -Id 'summon_binding' -Family 'summon_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $SummonReady -Blocker 'summon_binding_missing' -RequirementState 'not_implemented' -BlockedReason ([string](Get-PropertyValue -Payload $SummonConfig -Name 'blocked_reason' -Default 'lens_summon_binding_not_implemented')) -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'summon_binding' -Family 'summon_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $SummonReady -Blocker 'summon_binding_missing' -RequirementState 'disabled_pending_authority' -BlockedReason ([string](Get-PropertyValue -Payload $SummonConfig -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority')) -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath
         config_exists = $null -ne $SummonConfig
+        summon_runner = [string](Get-PropertyValue -Payload $SummonConfig -Name 'summon_runner' -Default 'scripts/lens-summon.ps1')
+        local_palette_launcher = [string](Get-PropertyValue -Payload $SummonConfig -Name 'local_palette_launcher' -Default 'scripts/lens-command-palette.ps1 -Mode LocalOpen')
         summon_enabled = (Test-TruthyProperty -Payload $SummonConfig -Name 'enabled')
         binding_enabled = (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled')
         summon_authority = (Test-TruthyProperty -Payload $SummonConfig -Name 'summon_authority')

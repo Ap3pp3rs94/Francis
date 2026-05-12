@@ -179,7 +179,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "hotkey_registration_authority_not_granted",
     ]
     assert blocker_groups["summon_binding"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
     assert blocker_groups["tray_presence"] == [
@@ -230,7 +230,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
         "hotkey_registration_authority_not_granted",
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
         "local_process_launch_authority_not_granted",
     ]

@@ -70,7 +70,7 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     ]
     assert payload["direct_summon_preflight_authority_blockers"] == payload["summon_authority_blockers"]
     assert payload["direct_summon_preflight_binding_blockers"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
 
@@ -84,7 +84,7 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
         "handoff_aligned": True,
         "side_effects_denied": True,
         "blockers": [
-            "lens_summon_binding_not_implemented",
+            "lens_summon_binding_disabled_pending_authority",
             "summon_authority_not_granted",
         ],
     }

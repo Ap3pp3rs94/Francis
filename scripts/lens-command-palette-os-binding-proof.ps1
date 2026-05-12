@@ -319,7 +319,7 @@ $GlobalHotkeyBlockers = Select-Blockers -Blockers $SummonBlockers -Names @(
     "hotkey_registration_authority_not_granted"
 )
 $SummonBindingBlockers = Select-Blockers -Blockers $SummonBlockers -Names @(
-    "lens_summon_binding_not_implemented",
+    "lens_summon_binding_disabled_pending_authority",
     "summon_authority_not_granted"
 )
 $TrayPresenceBlockers = Select-Blockers -Blockers $TrayBlockers -Names @(
@@ -370,7 +370,7 @@ $SummonPreflightObserved = (
     (Test-ContainsAll -Actual $SummonBlockers -Expected @(
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
         "hotkey_registration_authority_not_granted"
     ))
@@ -435,7 +435,7 @@ $OsBindingCandidateObserved = (
     (Test-ContainsAll -Actual $OsBindingCandidateBlockedBy -Expected @(
         "os_level_command_palette_missing",
         "global_hotkey_binding_disabled",
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
         "hotkey_registration_authority_not_granted",
         "local_process_launch_authority_not_granted"

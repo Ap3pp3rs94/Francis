@@ -443,7 +443,12 @@ def _summon_preflight() -> dict[str, Any]:
     palette_route = _safe_str(payload.get("palette_route"), "/lens/status")
     host_preflight = _safe_str(payload.get("host_preflight"), "scripts/lens-host-preflight.ps1")
     host_status_runner = _safe_str(payload.get("host_status_runner"), "scripts/lens-host.ps1")
-    blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_summon_binding_not_implemented")
+    summon_runner = _safe_str(payload.get("summon_runner"), "scripts/lens-summon.ps1")
+    local_palette_launcher = _safe_str(
+        payload.get("local_palette_launcher"),
+        "scripts/lens-command-palette.ps1 -Mode LocalOpen",
+    )
+    blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_summon_binding_disabled_pending_authority")
     enabled = _bool(payload.get("enabled"))
     binding_enabled = _bool(payload.get("binding_enabled"))
     register_hotkey = _bool(payload.get("register_hotkey"))
@@ -457,6 +462,7 @@ def _summon_preflight() -> dict[str, Any]:
     required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
+    summon_runner_exists = _runtime_file_exists(summon_runner)
     blockers: list[str] = []
     if blocked_reason:
         blockers.append(blocked_reason)
@@ -466,6 +472,8 @@ def _summon_preflight() -> dict[str, Any]:
         blockers.append("lens_summon_config_invalid")
     if not global_hotkey:
         blockers.append("global_hotkey_not_declared")
+    if not summon_runner_exists:
+        blockers.append("lens_summon_runner_missing")
     if not binding_enabled:
         blockers.append("global_hotkey_binding_disabled")
     if not register_hotkey:
@@ -499,6 +507,8 @@ def _summon_preflight() -> dict[str, Any]:
         "summon_binding": _select_blockers(
             blockers,
             "lens_summon_binding_not_implemented",
+            "lens_summon_binding_disabled_pending_authority",
+            "lens_summon_runner_missing",
             "summon_authority_not_granted",
         ),
         "host_dependency": _select_blockers(
@@ -531,6 +541,12 @@ def _summon_preflight() -> dict[str, Any]:
                 _config_status(exists=exists, error=error),
                 error or ("disabled summon config is present" if exists else "summon config is missing"),
                 config_path,
+            ),
+            _check(
+                "summon_runner",
+                "present" if summon_runner_exists else "missing",
+                "local summon launcher is present" if summon_runner_exists else "local summon launcher is missing",
+                summon_runner,
             ),
             _check(
                 "hotkey_declared",
@@ -576,9 +592,19 @@ def _summon_preflight() -> dict[str, Any]:
             "startup_register": startup_register,
             "host_preflight": host_preflight,
             "host_status_runner": host_status_runner,
+            "summon_runner": summon_runner,
+            "summon_runner_present": summon_runner_exists,
+            "local_palette_launcher": local_palette_launcher,
+            "local_binding_target_ready": summon_runner_exists,
         },
-        "governance": _base_governance(hotkey_registration_authority=False),
-        "message": "Lens summon API preflight is read-only; global hotkey binding and summon launch remain blocked.",
+        "governance": {
+            **_base_governance(hotkey_registration_authority=False),
+            "summon_runner_readback": True,
+        },
+        "message": (
+            "Lens summon API preflight is read-only; local launcher readback is present but global hotkey "
+            "binding and summon authority remain blocked."
+        ),
     }
 
 
@@ -1004,6 +1030,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "summon_binding": _select_blockers(
             blockers,
             "lens_summon_binding_not_implemented",
+            "lens_summon_binding_disabled_pending_authority",
             "summon_binding_missing",
             "summon_authority_not_granted",
         ),

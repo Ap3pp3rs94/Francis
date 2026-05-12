@@ -70,12 +70,15 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert dependencies["tray_presence"]["blockers"] == ["tray_host_missing"]
     assert dependencies["overlay_window"]["blockers"] == ["overlay_window_missing"]
     assert "global_hotkey_binding_disabled" in dependencies["global_hotkey_binding"]["blockers"]
-    assert "lens_summon_binding_not_implemented" in dependencies["summon_binding"]["blockers"]
+    assert "lens_summon_binding_disabled_pending_authority" in dependencies["summon_binding"]["blockers"]
     resident_process = payload["resident_host_process_readback"]
     assert resident_process["process_alive"] is False
     assert resident_process["requirement_state"] in {"missing", "stale_or_unverified"}
     assert resident_process["blocker"] == "resident_host_process_missing"
     assert payload["binding"]["binding_enabled"] is False
+    assert payload["binding"]["summon_runner"] == "scripts/lens-summon.ps1"
+    assert payload["binding"]["summon_runner_present"] is True
+    assert payload["binding"]["local_binding_target_ready"] is True
     assert "global_hotkey_binding_disabled" in payload["blockers"]
     assert "summon_authority_not_granted" in payload["blockers"]
     blocker_groups = payload["blocker_groups"]
@@ -85,7 +88,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
         "hotkey_registration_authority_not_granted",
     ]
     assert blocker_groups["summon_binding"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
     assert blocker_groups["surface_dependencies"] == [
@@ -95,6 +98,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert "local_process_launch_authority_not_granted" in blocker_groups["host_dependency"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_config"]["status"] == "present_disabled"
+    assert checks["summon_runner"]["status"] == "present"
     assert checks["hotkey_declared"]["status"] == "declared"
     assert checks["binding_enabled"]["status"] == "disabled"
     assert checks["register_hotkey"]["status"] == "disabled"
@@ -111,6 +115,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
         "new_sensing_authority": False,
         "local_process_launch_authority": False,
         "hotkey_registration_authority": False,
+        "summon_runner_readback": True,
         "required_before_enable_readback": True,
         "resident_host_process_readback": True,
         "mutation_authority_granted": False,

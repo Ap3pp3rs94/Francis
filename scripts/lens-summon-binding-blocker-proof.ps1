@@ -172,7 +172,7 @@ $SummonBindingFamilyObserved = (
   @($SummonBlockedFamilies).Count -ge 5 -and
   [string]$SummonBlockedFamilies[3] -eq 'global_hotkey_binding' -and
   [string]$SummonBlockedFamilies[4] -eq 'summon_binding' -and
-  $SummonBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonBindingBlockers -contains 'summon_authority_not_granted'
 )
 $PreviousGlobalHotkeyBridgeObserved = (
@@ -200,18 +200,18 @@ $SummonPreflightObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'binding_enabled' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'register_hotkey' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'startup_register' -Default $true) -and
-  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
-  $SummonPreflightBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonPreflightBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBlockers -contains 'summon_authority_not_granted'
 )
 $HandoffAligned = (
   $SummonBindingFamilyObserved -and
   $PreviousGlobalHotkeyBridgeObserved -and
   $SummonPreflightObserved -and
-  $SummonBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonBindingBlockers -contains 'summon_authority_not_granted' -and
-  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonPreflightRequiredBefore -contains 'summon_binding'
 )

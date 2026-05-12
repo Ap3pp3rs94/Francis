@@ -218,7 +218,7 @@ $HandoffAligned = (
   $SummonPreflightAuthorityObserved -and
   ($RequiredAuthorityBlockers | Where-Object { $SummonAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
   ($RequiredAuthorityBlockers | Where-Object { $SummonPreflightAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
-  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonPreflightRequiredBefore -contains 'summon_binding'
 )

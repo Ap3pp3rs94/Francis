@@ -13,6 +13,8 @@
   "palette_route": "/lens/status",
   "host_preflight": "scripts/lens-host-preflight.ps1",
   "host_status_runner": "scripts/lens-host.ps1",
+  "summon_runner": "scripts/lens-summon.ps1",
+  "local_palette_launcher": "scripts/lens-command-palette.ps1 -Mode LocalOpen",
   "overlay_required": true,
   "tray_required": true,
   "requires_explicit_enable": true,
@@ -20,7 +22,7 @@
   "hotkey_registration_authority": false,
   "overlay_control_authority": false,
   "local_process_launch_authority": false,
-  "blocked_reason": "lens_summon_binding_not_implemented",
+  "blocked_reason": "lens_summon_binding_disabled_pending_authority",
   "required_before_enable": [
     "resident_host_process",
     "tray_presence",

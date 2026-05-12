@@ -309,7 +309,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "global_hotkey_binding_missing" in payload["closure_blockers"]["command_palette"]
     assert "os_level_command_palette_missing" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "global_hotkey_binding_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
-    assert "lens_summon_binding_not_implemented" in payload["closure_blockers"]["command_palette_os_binding"]
+    assert "lens_summon_binding_disabled_pending_authority" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "tray_host_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "overlay_window_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "summon_authority_not_granted" in payload["closure_blockers"]["command_palette_os_binding"]
@@ -1337,7 +1337,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "global_hotkey_binding_disabled" in os_binding_groups["global_hotkey_binding"]
     assert "global_hotkey_registration_disabled" in os_binding_groups["global_hotkey_binding"]
     assert "hotkey_registration_authority_not_granted" in os_binding_groups["global_hotkey_binding"]
-    assert "lens_summon_binding_not_implemented" in os_binding_groups["summon_binding"]
+    assert "lens_summon_binding_disabled_pending_authority" in os_binding_groups["summon_binding"]
     assert "summon_authority_not_granted" in os_binding_groups["summon_binding"]
     assert "tray_host_disabled" in os_binding_groups["tray_presence"]
     assert "tray_registration_authority_not_granted" in os_binding_groups["tray_presence"]
@@ -1368,7 +1368,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "authority" in os_binding_candidate["required_preflight_families"]
     assert "os_level_command_palette_missing" in os_binding_candidate["blocked_by"]
     assert "global_hotkey_binding_disabled" in os_binding_candidate["blocked_by"]
-    assert "lens_summon_binding_not_implemented" in os_binding_candidate["blocked_by"]
+    assert "lens_summon_binding_disabled_pending_authority" in os_binding_candidate["blocked_by"]
     assert "summon_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert "hotkey_registration_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert "local_process_launch_authority_not_granted" in os_binding_candidate["blocked_by"]
@@ -1458,7 +1458,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "global_hotkey_binding_disabled" in summon_anywhere_groups["global_hotkey_binding"]
     assert "global_hotkey_registration_disabled" in summon_anywhere_groups["global_hotkey_binding"]
     assert "hotkey_registration_authority_not_granted" in summon_anywhere_groups["global_hotkey_binding"]
-    assert "lens_summon_binding_not_implemented" in summon_anywhere_groups["summon_binding"]
+    assert "lens_summon_binding_disabled_pending_authority" in summon_anywhere_groups["summon_binding"]
     assert "summon_authority_not_granted" in summon_anywhere_groups["summon_binding"]
     assert "summon_authority_not_granted" in summon_anywhere_groups["authority"]
     assert "hotkey_registration_authority_not_granted" in summon_anywhere_groups["authority"]
@@ -1526,7 +1526,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         == summon_authority_blocker_proof["summon_authority_blockers"]
     )
     assert summon_authority_blocker_proof["direct_summon_preflight_binding_blockers"] == [
-        "lens_summon_binding_not_implemented",
+        "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
 

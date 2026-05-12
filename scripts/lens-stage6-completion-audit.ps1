@@ -1397,7 +1397,7 @@ $CommandPaletteOsBindingCandidateObserved = (
   $CommandPaletteOsBindingCandidateRequiredFamilies -contains 'authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'os_level_command_palette_missing' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_binding_disabled' -and
-  $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'local_process_launch_authority_not_granted' -and
@@ -1437,7 +1437,7 @@ $CommandPaletteOsBindingObserved = (
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingSummonBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_host_disabled' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_registration_authority_not_granted' -and
@@ -1574,7 +1574,7 @@ $SummonAnywhereBlockersProofObserved = (
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAnywhereBlockersProofSummonBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonAnywhereBlockersProofSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonAnywhereBlockersProofSummonBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
@@ -1635,7 +1635,7 @@ $SummonAuthorityBlockerProofObserved = (
   $DirectSummonPreflightAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $DirectSummonPreflightAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
   $DirectSummonPreflightAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
-  $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $DirectSummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   [string]$SummonAuthorityBoundary.status -eq 'blocked' -and
   -not [bool]$SummonAuthorityBoundary.ready -and
@@ -1656,7 +1656,7 @@ $SummonAuthorityBlockerProofObserved = (
   $SummonAuthorityBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAuthorityBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
   $SummonAuthorityBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
-  $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_not_implemented' -and
+  $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonAuthorityBoundaryBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonAuthorityBoundaryAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAuthorityBoundaryAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and

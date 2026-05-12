@@ -352,6 +352,7 @@ $Stage6BlockerGroups = [ordered]@{
     ))
   summon_binding = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
       'lens_summon_binding_not_implemented',
+      'lens_summon_binding_disabled_pending_authority',
       'summon_authority_not_granted'
     ))
   authority = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
