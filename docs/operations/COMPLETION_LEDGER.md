@@ -25250,6 +25250,46 @@ stabilization slice:
 - `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
   Result: `passed`
 
+Stage 6 Lens tray-runtime plan-consumption proof on `2026-05-12`:
+
+- `scripts/lens-tray-plan-consumption-proof.ps1` now proves the next
+  persistent-supervision prerequisite handoff without enabling product
+  authority. In an isolated temp data root, it starts a bounded supervised
+  resident host, writes a synthetic tray runtime readback tied to the live
+  proof process, verifies `/lens/tray` readback through
+  `scripts/lens-tray-presence.ps1`, runs
+  `scripts/lens-persistent-supervision-plan.ps1`, and confirms the plan moves
+  from `tray_presence` to `global_hotkey_binding`.
+- `scripts/lens-persistent-supervision-plan.ps1` now exposes the
+  `global_hotkey_binding` handoff proof and OS-binding review routes when
+  tray runtime readback is consumed. This is readback-only; it does not grant
+  OS-binding authority, register a hotkey, open the command palette, mutate
+  config, install or control a service, enable persistent supervision, register
+  a tray icon, open an overlay, write memory, write receipts, or allow a
+  resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. This slice does not close a Stage 6 criterion.
+  It narrows the next concrete prerequisite after live resident host and tray
+  readback to `global_hotkey_binding` / OS-level command-palette binding.
+
+Latest validation for the Stage 6 tray-runtime plan-consumption proof slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; persistent_supervision_plan_consumed_tray_runtime=true; first_missing_required_before_enable=global_hotkey_binding`
+- `python -m pytest tests\test_lens_tray_plan_consumption_proof_script.py -q`
+  Result: `failed before fixing hotkey handoff proof-route readback; passed after`
+- `python -m pytest tests\test_lens_tray_plan_consumption_proof_script.py tests\test_lens_resident_host_plan_consumption_proof_script.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_tray_presence_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_tray_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_tray_plan_consumption_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=2/5; blocked criteria remain summon_anywhere, helpful_not_noisy, and system_resident_presence`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

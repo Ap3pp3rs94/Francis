@@ -659,13 +659,23 @@ $EnablementDependencyReadback = @(
         tray_runtime_state_exists = [bool]$TrayRuntimeReadback.runtime_state_exists
         tray_runtime_status_pid_matches_pid_file = [bool]$TrayRuntimeReadback.runtime_status_pid_matches_pid_file
       })),
-  (New-EnablementDependency -Id 'global_hotkey_binding' -Family 'global_hotkey_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $GlobalHotkeyReady -Blocker 'global_hotkey_binding_missing' -RequirementState 'binding_disabled' -BlockedReason 'global_hotkey_binding_disabled' -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'global_hotkey_binding' -Family 'global_hotkey_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $GlobalHotkeyReady -Blocker 'global_hotkey_binding_missing' -RequirementState 'binding_disabled' -BlockedReason 'global_hotkey_binding_disabled' -ProofScript 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath
         config_exists = $null -ne $SummonConfig
         global_hotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default '')
         binding_enabled = (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled')
         register_hotkey = (Test-TruthyProperty -Payload $SummonConfig -Name 'register_hotkey')
         hotkey_registration_authority = (Test-TruthyProperty -Payload $SummonConfig -Name 'hotkey_registration_authority')
+        os_binding_readiness_route = '/lens/os-binding/readiness'
+        os_binding_plan_route = '/lens/os-binding/plan'
+        os_binding_authority_route = '/lens/os-binding/authority'
+        os_binding_authority_request_route = '/lens/os-binding/authority/request'
+        os_binding_authority_requests_route = '/lens/os-binding/authority/requests'
+        os_binding_authority_grants_route = '/lens/os-binding/authority/grants'
+        os_binding_execution_readiness_route = '/lens/os-binding/execution/readiness'
+        os_binding_execution_denials_route = '/lens/os-binding/denials'
+        approval_action = 'lens.os_binding.command_palette_binding_authority'
+        authority_scope = 'system.write'
       })),
   (New-EnablementDependency -Id 'overlay_window' -Family 'overlay_window' -Route '/lens/overlay' -ReadinessRoute '/lens/overlay/readiness' -Ready $OverlayReady -Blocker 'overlay_window_missing' -RequirementState 'window_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $OverlayConfig -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented')) -PreflightScript 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $OverlayConfigRelativePath
