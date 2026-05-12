@@ -29,10 +29,10 @@ function Get-DataRoot {
 function Read-JsonFile {
   param([string]$Path)
 
-  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    return $null
-  }
   try {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)) {
+      return $null
+    }
     return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $null

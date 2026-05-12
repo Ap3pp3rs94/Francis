@@ -24746,6 +24746,39 @@ Latest validation for the Stage 6 tray runtime presence readback slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-tray-preflight.ps1`
 
+Stage 6 supervisor runtime readback hardening slice on `2026-05-11`:
+
+- GitHub Actions run `25711426442` for commit `3a5fc20` failed only on
+  `windows-latest, 3.13` in
+  `tests/test_lens_host_supervisor_script.py::test_lens_host_supervisor_observes_existing_bounded_host_without_restart`.
+  The failure was a transient Windows file access race while
+  `scripts/lens-host-supervisor.ps1` called `Test-Path` against
+  `runtime/lens-host/status.json` during active host writes.
+- `scripts/lens-host-supervisor.ps1` now treats transient `Test-Path`,
+  `Get-Content`, or JSON parse failures in `Read-JsonFile` as "runtime state
+  not readable yet" and lets the existing bounded observe loop retry instead
+  of terminating the supervisor proof process.
+- This is proof/readback hardening only. It does not change execution
+  authority, approval-decision authority, memory writes, service install or
+  control, process restart authority, tray registration, hotkey registration,
+  overlay control, summon authority, resident claim authority, or UI claims.
+- Stage 6 remains active and blocked. This repair keeps the existing
+  supervisor observation proof stable; it does not move the checkpoint beyond
+  `ready_total=2/5`.
+
+Latest validation for the Stage 6 supervisor runtime readback hardening slice:
+
+- `python -m pytest tests\test_lens_host_supervisor_script.py::test_lens_host_supervisor_observes_existing_bounded_host_without_restart -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_presence_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3`
+  Result: `passed; status=blocked; stage_state=active; stage_claim=backend_readback_contract_only; ready_to_close=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
