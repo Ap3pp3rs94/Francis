@@ -436,6 +436,25 @@ def _write_lens_host_runtime_state(
     )
 
 
+def _write_lens_tray_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-tray"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-tray.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+                "updated_at": "2026-05-01T00:00:00Z",
+                "message": "Francis Lens tray presence is running.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_host_supervisor_state(
     data_root: Path,
     *,
@@ -7758,6 +7777,93 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     assert handoff["id"] == "tray_presence"
     assert handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
     assert handoff["route"] == "/lens/tray"
+    assert handoff["read_only_contract"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert persistent_plan["governance"]["execution_authority"] is False
+    assert persistent_plan["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_status_promotes_live_tray_runtime_before_hotkey(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    _write_lens_host_runtime_state(
+        data_root,
+        pid=6789,
+        status="resident_running",
+        mode="resident",
+    )
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=6789,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        updated_at="2026-05-01T00:00:00Z",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    _write_lens_tray_runtime_state(data_root, pid=4321)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (pid in {4321, 6789}, "test"))
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    assert resident_host["tray_runtime_readback"]["ready"] is True
+    assert resident_host["tray_runtime_readback"]["process_alive"] is True
+    assert resident_host["tray_runtime_readback"]["tray_icon_visible"] is True
+
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == [
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    tray_dependency = plan_dependencies["tray_presence"]
+    assert tray_dependency["ready"] is True
+    assert tray_dependency["blocker"] == ""
+    assert tray_dependency["requirement_state"] == "ready"
+    assert tray_dependency["blocked_reason"] == ""
+    assert tray_dependency["tray_presence_source"] == "live_runtime_readback"
+    assert tray_dependency["tray_runtime_ready"] is True
+    assert tray_dependency["tray_runtime_process_alive"] is True
+    assert tray_dependency["tray_runtime_icon_visible"] is True
+    assert tray_dependency["tray_runtime_pid"] == 4321
+
+    handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert handoff["id"] == "global_hotkey_binding"
+    assert handoff["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert handoff["route"] == "/lens/summon"
     assert handoff["read_only_contract"] is True
     assert handoff["would_execute"] is False
     assert handoff["would_mutate"] is False

@@ -25130,6 +25130,50 @@ Latest validation for the Stage 6 resident-host plan-consumption proof slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens tray-runtime plan-consumption readback slice on `2026-05-12`:
+
+- `scripts/lens-persistent-supervision-plan.ps1` now reads
+  `data/runtime/lens-tray/status.json` and `lens-tray.pid` through the same
+  PID/status consistency checks used by the tray presence runtime. If a live
+  tray runtime reports `kind=lens.tray.runtime_state`, `status=tray_running`,
+  a matching live PID, and `tray_icon_visible=true`, the persistent-supervision
+  plan consumes `tray_presence` as ready and moves the first missing
+  prerequisite to `global_hotkey_binding`.
+- `src/francis/lens/host_manifest.py` now carries the same tray runtime
+  readback into `/lens/host/manifest`, `/lens/host/persistent-supervision`, and
+  `/lens/host/persistent-supervision/enablement`. `src/francis/lens/status.py`
+  exposes the tray runtime readback on `/lens/status` so operator surfaces can
+  distinguish real live tray evidence from the disabled tray config.
+- This is backend/readback-only. It does not enable tray config, register tray
+  startup, start a tray process, grant tray-registration or tray-icon
+  authority, bind a hotkey, open or control an overlay, enable persistent
+  supervision, install or control a service, grant execution authority, make
+  approval decisions, write memory, write receipts, or allow a resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The new truth is narrower: once a live supervised
+  resident host and live tray runtime are both present, the persistent
+  supervision prerequisite handoff advances to `global_hotkey_binding`.
+
+Latest validation for the Stage 6 tray-runtime plan-consumption readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray tests\test_api_lens.py::test_lens_status_promotes_live_tray_runtime_before_hotkey -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_tray_presence_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed after formatting src/francis/lens/host_manifest.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=2/5; blocked criteria remain summon_anywhere, helpful_not_noisy, and system_resident_presence`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

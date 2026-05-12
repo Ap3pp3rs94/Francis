@@ -401,9 +401,11 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_readback = _as_dict(launch_manifest.get("service_readback"))
     service_plan = _as_dict(launch_manifest.get("service_plan"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
+    tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
+    tray_runtime_ready = bool(tray_runtime_readback.get("ready"))
     service_blocked_reason = (
         _safe_str(service_plan.get("blocked_reason")).strip()
         or _safe_str(service_install.get("blocked_reason")).strip()
@@ -474,7 +476,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         {
             "id": "tray_presence",
             "label": "Tray or equivalent presence",
-            "status": "missing",
+            "status": "running" if tray_runtime_ready else "missing",
             "required_for": ["operator_visibility", "lifecycle_control"],
         },
         {
@@ -660,6 +662,8 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "service_plan_ready": bool(service_plan.get("ready")),
         "process_readback": process_readback,
         "process_readback_ready": bool(process_readback.get("readback_ready")),
+        "tray_runtime_readback": tray_runtime_readback,
+        "tray_runtime_readback_ready": tray_runtime_ready,
         "supervisor_readback": supervisor_readback,
         "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
         "supervisor_freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
@@ -680,7 +684,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "resident": False,
         "process_supervision": False,
         "startup_integration": False,
-        "tray_presence": False,
+        "tray_presence": tray_runtime_ready,
         "global_hotkey": False,
         "always_on_top_overlay": False,
         "overlay_window": False,

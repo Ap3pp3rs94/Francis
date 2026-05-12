@@ -370,6 +370,86 @@ function Get-HostProcessReadback {
   }
 }
 
+function Get-ProcessAlive {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0) {
+    return $false
+  }
+  try {
+    return $null -ne (Get-Process -Id $ProcessId -ErrorAction Stop)
+  } catch {
+    return $false
+  }
+}
+
+function Get-TrayRuntimeReadback {
+  param([string]$DataRoot)
+
+  $RuntimeRoot = Join-Path $DataRoot 'runtime/lens-tray'
+  $PidPath = Join-Path $RuntimeRoot 'lens-tray.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = [string](Get-PropertyValue -Payload $Status -Name 'kind' -Default '')
+  $StatusValue = [string](Get-PropertyValue -Payload $Status -Name 'status' -Default '')
+  $StatusPid = [int](Get-PropertyValue -Payload $Status -Name 'pid' -Default 0)
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsRunningTray = (
+    $StatusKind -eq 'lens.tray.runtime_state' -and
+    $StatusValue -eq 'tray_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningTray) {
+    $ProcessAlive = Get-ProcessAlive -ProcessId $RuntimePid
+  }
+  $TrayIconVisible = $ProcessAlive -and (Test-TruthyProperty -Payload $Status -Name 'tray_icon_visible')
+  $RequirementState = if ($TrayIconVisible) {
+    'ready'
+  } elseif ($ProcessAlive) {
+    'process_running_no_icon_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($TrayIconVisible) {
+    ''
+  } elseif ($ProcessAlive) {
+    'tray_icon_not_observed'
+  } else {
+    'tray_presence_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $TrayIconVisible
+    process_alive = $ProcessAlive
+    tray_icon_visible = $TrayIconVisible
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = 'data/runtime/lens-tray/status.json'
+    pid_path = 'data/runtime/lens-tray/lens-tray.pid'
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
 function New-EnablementDependency {
   param(
     [string]$Id,
@@ -481,6 +561,7 @@ $Requirements = @(
 )
 
 $HostProcessReadback = Get-HostProcessReadback -DataRoot $DataRoot
+$TrayRuntimeReadback = Get-TrayRuntimeReadback -DataRoot $DataRoot
 $HostProcessProofScript = if ([bool]$HostProcessReadback.resident_supervised_runtime) {
   ''
 } elseif ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
@@ -489,7 +570,7 @@ $HostProcessProofScript = if ([bool]$HostProcessReadback.resident_supervised_run
   'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status'
 }
 $ResidentHostProcessReady = [bool]$HostProcessReadback.resident_supervised_runtime
-$TrayReady = (
+$TrayConfigReady = (
   (Test-TruthyProperty -Payload $TrayConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_host_enabled') -and
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_icon_enabled') -and
@@ -497,6 +578,22 @@ $TrayReady = (
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_registration_authority') -and
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_icon_authority')
 )
+$TrayRuntimeReady = [bool]$TrayRuntimeReadback.ready
+$TrayReady = $TrayConfigReady -or $TrayRuntimeReady
+$TrayRequirementState = if ($TrayRuntimeReady) {
+  'ready'
+} elseif ([string]$TrayRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$TrayRuntimeReadback.requirement_state
+} else {
+  'tray_host_disabled'
+}
+$TrayBlocker = if ($TrayRuntimeReady) {
+  ''
+} elseif ([string]$TrayRuntimeReadback.blocker -and [string]$TrayRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$TrayRuntimeReadback.blocker
+} else {
+  'tray_host_missing'
+}
 $GlobalHotkeyReady = (
   (Test-TruthyProperty -Payload $SummonConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled') -and
@@ -542,13 +639,25 @@ $EnablementDependencyReadback = @(
         supervisor_freshness_status = [string]$HostProcessReadback.supervisor_freshness_status
         supervisor_state_age_seconds = $HostProcessReadback.supervisor_state_age_seconds
       })),
-  (New-EnablementDependency -Id 'tray_presence' -Family 'tray_presence' -Route '/lens/tray' -ReadinessRoute '/lens/tray/readiness' -Ready $TrayReady -Blocker 'tray_host_missing' -RequirementState 'tray_host_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $TrayConfig -Name 'blocked_reason' -Default 'lens_tray_presence_disabled_pending_authority')) -PreflightScript 'scripts/lens-tray-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'tray_presence' -Family 'tray_presence' -Route '/lens/tray' -ReadinessRoute '/lens/tray/readiness' -Ready $TrayReady -Blocker $TrayBlocker -RequirementState $TrayRequirementState -BlockedReason ([string](Get-PropertyValue -Payload $TrayConfig -Name 'blocked_reason' -Default 'lens_tray_presence_disabled_pending_authority')) -PreflightScript 'scripts/lens-tray-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $TrayConfigRelativePath
         config_exists = $null -ne $TrayConfig
         tray_host_enabled = (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_host_enabled')
         tray_icon_enabled = (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_icon_enabled')
         tray_registration_authority = (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_registration_authority')
         tray_icon_authority = (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_icon_authority')
+        tray_config_ready = $TrayConfigReady
+        tray_runtime_ready = $TrayRuntimeReady
+        tray_presence_source = if ($TrayRuntimeReady) { 'live_runtime_readback' } elseif ($TrayConfigReady) { 'enabled_config' } else { 'blocked_config' }
+        tray_runtime_requirement_state = [string]$TrayRuntimeReadback.requirement_state
+        tray_runtime_blocker = [string]$TrayRuntimeReadback.blocker
+        tray_runtime_process_alive = [bool]$TrayRuntimeReadback.process_alive
+        tray_runtime_icon_visible = [bool]$TrayRuntimeReadback.tray_icon_visible
+        tray_runtime_pid = [int]$TrayRuntimeReadback.pid
+        tray_runtime_status = [string]$TrayRuntimeReadback.runtime_status
+        tray_runtime_status_kind = [string]$TrayRuntimeReadback.runtime_status_kind
+        tray_runtime_state_exists = [bool]$TrayRuntimeReadback.runtime_state_exists
+        tray_runtime_status_pid_matches_pid_file = [bool]$TrayRuntimeReadback.runtime_status_pid_matches_pid_file
       })),
   (New-EnablementDependency -Id 'global_hotkey_binding' -Family 'global_hotkey_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $GlobalHotkeyReady -Blocker 'global_hotkey_binding_missing' -RequirementState 'binding_disabled' -BlockedReason 'global_hotkey_binding_disabled' -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath

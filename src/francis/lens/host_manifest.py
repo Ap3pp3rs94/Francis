@@ -303,6 +303,69 @@ def _lens_host_process_readback() -> dict[str, Any]:
     }
 
 
+def _lens_tray_runtime_readback() -> dict[str, Any]:
+    state_file = data_dir() / "runtime" / "lens-tray" / "status.json"
+    pid_file = data_dir() / "runtime" / "lens-tray" / "lens-tray.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = str(state_payload.get("kind") or "")
+    state_status = str(state_payload.get("status") or "")
+    state_pid = _safe_pid(state_payload.get("pid"))
+    state_claims_running_tray = (
+        state_kind == "lens.tray.runtime_state"
+        and state_status == "tray_running"
+        and state_pid > 0
+        and state_pid == pid
+    )
+    if state_claims_running_tray:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.tray.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "tray_running":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_running"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_mismatch"
+
+    tray_icon_visible = process_alive and bool(state_payload.get("tray_icon_visible"))
+    requirement_state = (
+        "ready"
+        if tray_icon_visible
+        else "process_running_no_icon_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    blocker = (
+        "" if tray_icon_visible else "tray_icon_not_observed" if process_alive else "tray_presence_runtime_missing"
+    )
+    return {
+        "ready": tray_icon_visible,
+        "status": "running" if tray_icon_visible else "missing",
+        "runtime_state_path": "data/runtime/lens-tray/status.json",
+        "state_exists": state_exists,
+        "state_kind": state_kind,
+        "state_status": state_status,
+        "state_pid": state_pid,
+        "state_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "state_updated_at": str(state_payload.get("updated_at") or ""),
+        "pid_path": "data/runtime/lens-tray/lens-tray.pid",
+        "pid_present": pid_present,
+        "pid": pid,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "tray_icon_visible": tray_icon_visible,
+        "requirement_state": requirement_state,
+        "blocker": blocker,
+    }
+
+
 def _lens_host_activation_execution_receipt_root() -> Path:
     return data_dir() / "lens" / "host_activation_executions"
 
@@ -571,6 +634,7 @@ def _lens_host_missing_required_before_enable(
     surface_blockers = set(_as_str_list(blocker_groups.get("surface_dependencies")))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
+    tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     resident_supervised_runtime = (
         bool(process_readback.get("process_alive"))
         and bool(supervisor_readback.get("fresh_readback"))
@@ -582,9 +646,10 @@ def _lens_host_missing_required_before_enable(
     resident_host_process_ready = bool(process_readback.get("process_alive")) and (
         resident_supervised_runtime or not resident_host_process_blocked
     )
+    tray_presence_ready = bool(tray_runtime_readback.get("ready")) or "tray_host_missing" not in surface_blockers
     missing_by_requirement = {
         "resident_host_process": not resident_host_process_ready,
-        "tray_presence": "tray_host_missing" in surface_blockers,
+        "tray_presence": not tray_presence_ready,
         "global_hotkey_binding": "global_hotkey_binding_missing" in surface_blockers,
         "overlay_window": "overlay_window_missing" in surface_blockers,
         "summon_binding": "summon_binding_missing" in surface_blockers,
@@ -880,9 +945,14 @@ def _lens_host_resident_process_requirement_readback(
     }
 
 
-def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str, Any]:
+def _lens_host_tray_presence_requirement_readback(
+    *,
+    launch_manifest: dict[str, Any],
+    missing: bool,
+) -> dict[str, Any]:
     config_path = "config/runtime/lens/tray.json"
     config = _runtime_json_dict(config_path)
+    tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     config_exists = bool(config)
     tray_host_enabled = bool(config.get("tray_host_enabled"))
     tray_icon_enabled = bool(config.get("tray_icon_enabled"))
@@ -890,6 +960,7 @@ def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str,
     tray_registration_authority = bool(config.get("tray_registration_authority"))
     tray_icon_authority = bool(config.get("tray_icon_authority"))
     notification_authority = bool(config.get("notification_authority"))
+    tray_runtime_ready = bool(tray_runtime_readback.get("ready"))
     blocked_reason = str(config.get("blocked_reason") or "lens_tray_presence_disabled_pending_authority")
     family_blockers = []
     if not config_exists:
@@ -908,11 +979,15 @@ def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str,
         family_blockers.append("tray_icon_authority_not_granted")
     if not notification_authority:
         family_blockers.append("notification_authority_not_granted")
+    if missing and tray_runtime_readback and not tray_runtime_ready:
+        family_blockers.append(str(tray_runtime_readback.get("blocker") or "tray_presence_runtime_missing"))
 
     requirement_state = "ready"
     if missing:
         if not config_exists:
             requirement_state = "config_missing"
+        elif tray_runtime_readback and str(tray_runtime_readback.get("requirement_state") or "") != "missing":
+            requirement_state = str(tray_runtime_readback.get("requirement_state") or "stale_or_unverified")
         elif not tray_host_enabled:
             requirement_state = "tray_host_disabled"
         elif not tray_registration_authority:
@@ -934,6 +1009,35 @@ def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str,
         "tray_registration_authority": tray_registration_authority,
         "tray_icon_authority": tray_icon_authority,
         "notification_authority": notification_authority,
+        "tray_config_ready": (
+            config_exists
+            and bool(config.get("enabled"))
+            and tray_host_enabled
+            and tray_icon_enabled
+            and startup_register
+            and tray_registration_authority
+            and tray_icon_authority
+        ),
+        "tray_runtime_ready": tray_runtime_ready,
+        "tray_presence_source": "live_runtime_readback"
+        if tray_runtime_ready
+        else "enabled_config"
+        if bool(config.get("enabled"))
+        and tray_host_enabled
+        and tray_icon_enabled
+        and startup_register
+        and tray_registration_authority
+        and tray_icon_authority
+        else "blocked_config",
+        "tray_runtime_requirement_state": str(tray_runtime_readback.get("requirement_state") or "missing"),
+        "tray_runtime_blocker": str(tray_runtime_readback.get("blocker") or ""),
+        "tray_runtime_process_alive": bool(tray_runtime_readback.get("process_alive")),
+        "tray_runtime_icon_visible": bool(tray_runtime_readback.get("tray_icon_visible")),
+        "tray_runtime_pid": int(tray_runtime_readback.get("pid") or 0),
+        "tray_runtime_status": str(tray_runtime_readback.get("state_status") or ""),
+        "tray_runtime_status_kind": str(tray_runtime_readback.get("state_kind") or ""),
+        "tray_runtime_state_exists": bool(tray_runtime_readback.get("state_exists")),
+        "tray_runtime_status_pid_matches_pid_file": bool(tray_runtime_readback.get("state_pid_matches_pid_file")),
         "family_blockers": _ordered_unique(family_blockers) if missing else [],
     }
 
@@ -1236,7 +1340,10 @@ def _lens_host_enablement_dependency_readback(
             )
             blocker = str(extra_readback.get("blocker") or blocker) if item_missing else ""
         elif item == "tray_presence":
-            extra_readback = _lens_host_tray_presence_requirement_readback(missing=item_missing)
+            extra_readback = _lens_host_tray_presence_requirement_readback(
+                launch_manifest=launch_manifest,
+                missing=item_missing,
+            )
         elif item == "global_hotkey_binding":
             extra_readback = _lens_host_global_hotkey_requirement_readback(missing=item_missing)
         elif item == "overlay_window":
@@ -2353,6 +2460,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         service_config_payload=service_config_payload,
     )
     process_readback = _lens_host_process_readback()
+    tray_runtime_readback = _lens_tray_runtime_readback()
     supervisor_readback = _lens_host_supervisor_readback()
     supervision_execution_readback = _lens_host_supervision_execution_readback()
     supervision_readiness = _lens_host_supervision_readiness(
@@ -2523,6 +2631,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         },
         "service_readback": service_readback,
         "process_readback": process_readback,
+        "tray_runtime_readback": tray_runtime_readback,
         "activation_execution_readback": activation_execution_readback,
         "supervision_execution_readback": supervision_execution_readback,
         "supervisor_readback": supervisor_readback,

@@ -27,6 +27,7 @@ def _manifest(
     activation_execution_readback: dict[str, Any] | None = None,
     supervision_execution_readback: dict[str, Any] | None = None,
     supervisor_readback: dict[str, Any] | None = None,
+    tray_runtime_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     process_blockers = [process_blocker] if process_blocker else []
     return {
@@ -50,6 +51,7 @@ def _manifest(
         "activation_execution_readback": activation_execution_readback or {},
         "supervision_execution_readback": supervision_execution_readback or {},
         "supervisor_readback": supervisor_readback or {},
+        "tray_runtime_readback": tray_runtime_readback or {},
         "blocker_groups": {
             "process_readback": process_blockers,
             "surface_dependencies": surface_dependencies
@@ -374,6 +376,58 @@ def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate
             "tray_icon_authority_not_granted",
             "notification_authority_not_granted",
         ]
+
+
+def test_persistent_supervision_prerequisite_readback_consumes_live_tray_runtime() -> None:
+    manifest = _manifest(
+        process_alive=True,
+        process_blocker="",
+        surface_dependencies=[
+            "tray_host_missing",
+            "global_hotkey_binding_missing",
+            "overlay_window_missing",
+            "summon_binding_missing",
+        ],
+        tray_runtime_readback={
+            "ready": True,
+            "process_alive": True,
+            "tray_icon_visible": True,
+            "pid": 4321,
+            "state_status": "tray_running",
+            "state_kind": "lens.tray.runtime_state",
+            "state_exists": True,
+            "state_pid_matches_pid_file": True,
+            "requirement_state": "ready",
+            "blocker": "",
+        },
+    )
+
+    for body in (
+        lens_host_persistent_supervision_plan(manifest=manifest),
+        lens_host_persistent_supervision_enablement_preflight(manifest=manifest),
+    ):
+        assert body["missing_required_before_enable"] == [
+            "global_hotkey_binding",
+            "overlay_window",
+            "summon_binding",
+        ]
+        assert body["first_missing_required_before_enable"] == "global_hotkey_binding"
+        dependency = _dependency_by_id(body)["tray_presence"]
+        assert dependency["ready"] is True
+        assert dependency["status"] == "ready"
+        assert dependency["blocker"] == ""
+        assert dependency["requirement_state"] == "ready"
+        assert dependency["blocked_reason"] == ""
+        assert dependency["tray_presence_source"] == "live_runtime_readback"
+        assert dependency["tray_runtime_ready"] is True
+        assert dependency["tray_runtime_process_alive"] is True
+        assert dependency["tray_runtime_icon_visible"] is True
+        assert dependency["tray_runtime_pid"] == 4321
+        assert dependency["tray_runtime_status"] == "tray_running"
+        assert dependency["tray_runtime_status_kind"] == "lens.tray.runtime_state"
+        assert dependency["tray_runtime_state_exists"] is True
+        assert dependency["tray_runtime_status_pid_matches_pid_file"] is True
+        assert dependency["family_blockers"] == []
 
 
 @pytest.mark.parametrize(
