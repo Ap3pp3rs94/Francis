@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -79,6 +80,9 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["binding"]["summon_runner"] == "scripts/lens-summon.ps1"
     assert payload["binding"]["summon_runner_present"] is True
     assert payload["binding"]["local_binding_target_ready"] is True
+    assert payload["binding"]["global_hotkey_runtime_bound"] is False
+    assert payload["hotkey_runtime_readback"]["ready"] is False
+    assert payload["hotkey_runtime_readback"]["requirement_state"] == "missing"
     assert "global_hotkey_binding_disabled" in payload["blockers"]
     assert "summon_authority_not_granted" in payload["blockers"]
     blocker_groups = payload["blocker_groups"]
@@ -102,6 +106,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert checks["hotkey_declared"]["status"] == "declared"
     assert checks["binding_enabled"]["status"] == "disabled"
     assert checks["register_hotkey"]["status"] == "disabled"
+    assert checks["hotkey_runtime"]["status"] == "missing"
     assert checks["host_preflight"]["status"] == "present"
     assert checks["hotkey_registration_authority"]["status"] == "blocked"
     assert payload["governance"] == {
@@ -115,6 +120,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
         "new_sensing_authority": False,
         "local_process_launch_authority": False,
         "hotkey_registration_authority": False,
+        "hotkey_runtime_readback": True,
         "summon_runner_readback": True,
         "required_before_enable_readback": True,
         "resident_host_process_readback": True,
@@ -157,6 +163,56 @@ def test_lens_summon_preflight_rejects_stale_resident_host_process_state(tmp_pat
     assert dependencies["resident_host_process"]["ready"] is False
     assert dependencies["resident_host_process"]["blockers"] == ["resident_host_process_missing"]
     assert payload["first_missing_requirement_handoff"]["id"] == "resident_host_process"
+
+
+def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-hotkey"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-hotkey.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    hotkey_runtime = payload["hotkey_runtime_readback"]
+    assert hotkey_runtime["ready"] is True
+    assert hotkey_runtime["hotkey_bound"] is True
+    assert hotkey_runtime["requirement_state"] == "bound"
+    assert hotkey_runtime["blocker"] == ""
+    assert payload["binding"]["global_hotkey_runtime_bound"] is True
+    assert payload["binding"]["hotkey_runtime_requirement_state"] == "bound"
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    hotkey_dependency = dependencies["global_hotkey_binding"]
+    assert hotkey_dependency["runtime_ready"] is True
+    assert hotkey_dependency["runtime_requirement_state"] == "bound"
+    assert hotkey_dependency["runtime_blocker"] == ""
+    assert hotkey_dependency["ready"] is False
+    assert "global_hotkey_binding_disabled" in hotkey_dependency["blockers"]
+    assert "hotkey_registration_authority_not_granted" in hotkey_dependency["blockers"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["hotkey_runtime"]["status"] == "bound"
+    assert payload["ready"] is False
+    assert payload["governance"]["hotkey_runtime_readback"] is True
+    assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["summon_authority"] is False
 
 
 def test_lens_summon_preflight_refuses_bind_actions() -> None:

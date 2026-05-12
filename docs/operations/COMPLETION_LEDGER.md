@@ -25332,6 +25332,61 @@ Latest validation for the Stage 6 global-hotkey runtime primitive:
   followed by `Status` and `Stop`
   Result: `passed; start_exit=0; status=bound; global_hotkey_binding=true; process_alive=true before Stop; process_alive=false after Stop`
 
+Stage 6 Lens hotkey-runtime preflight/readiness consumption on `2026-05-12`:
+
+- `scripts/lens-summon-preflight.ps1` now consumes
+  `data/runtime/lens-hotkey/status.json` plus `lens-hotkey.pid` through a
+  bounded runtime readback. The readback only promotes the hotkey runtime when
+  the state kind is `lens.hotkey.runtime_state`, status is `hotkey_bound`, the
+  PID file matches the state payload, the configured hotkey/scope match, and
+  the process is alive.
+- `src/francis/lens/preflight.py` now carries the same hotkey runtime readback
+  into `/lens/preflight`, the summon enablement gate, and
+  `/lens/os-binding/readiness`. A live bound runtime removes only the
+  `global_hotkey_binding_missing` blocker from the OS-binding/global-hotkey
+  readiness view; disabled binding config, disabled registration, and missing
+  hotkey-registration authority remain blockers.
+- A bounded Windows proof in a temp data root started the global-hotkey runtime,
+  confirmed summon preflight consumed it as `bound`, confirmed the
+  `global_hotkey_binding` dependency still remained blocked by config and
+  authority, then stopped the runtime and confirmed the process was no longer
+  alive.
+- This is backend/readback/diagnostic/test work only. It does not enable summon
+  config, register startup hotkeys by default, open the command palette, grant
+  hotkey-registration authority, grant execution authority, make approval
+  decisions, write memory, write receipts, install or control a service, open or
+  control an overlay, or claim summon-anywhere.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next truthful gap remains a governed
+  OS-level command-palette/summon binding path with explicit authority, not a
+  fake promotion of the new runtime primitive.
+
+Latest validation for the Stage 6 hotkey-runtime preflight/readiness
+consumption slice:
+
+- `python -m pytest tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_consumes_live_hotkey_runtime_without_authority tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority -q`
+  Result: `failed before filtering only the missing-runtime blocker; passed after`
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_summon_preflight_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py tests\test_api_lens.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status`
+  Result: `passed; status=blocked; hotkey_runtime_readback.ready=false on repo data; remaining global-hotkey blockers are disabled config, disabled registration, and missing authority`
+- Bounded Windows live proof:
+  `scripts\lens-hotkey-binding.ps1 -Mode Start -DataDir <temp> -RunSeconds 30 -StartupTimeoutSeconds 10 -NoLaunch`,
+  followed by `scripts\lens-summon-preflight.ps1 -Mode Status -DataDir <temp>`
+  and `scripts\lens-hotkey-binding.ps1 -Mode Stop -DataDir <temp>`
+  Result: `passed; runtime_ready=true; runtime_state=bound; dependency_runtime_ready=true; dependency_ready=false; dependency blockers remained global_hotkey_binding_disabled, global_hotkey_registration_disabled, and hotkey_registration_authority_not_granted; stop_status=stopped`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=2/5; blocked criteria remain summon_anywhere, helpful_not_noisy, and system_resident_presence`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-summon-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

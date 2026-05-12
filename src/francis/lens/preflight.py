@@ -165,6 +165,75 @@ def _tray_runtime_readback() -> dict[str, Any]:
     }
 
 
+def _hotkey_runtime_readback(*, global_hotkey: str, binding_scope: str) -> dict[str, Any]:
+    runtime_root = data_dir() / "runtime" / "lens-hotkey"
+    state_file = runtime_root / "status.json"
+    pid_file = runtime_root / "lens-hotkey.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = _safe_str(state_payload.get("kind"))
+    state_status = _safe_str(state_payload.get("status"))
+    state_pid = _int_value(state_payload.get("pid"))
+    state_claims_bound_hotkey = (
+        state_kind == "lens.hotkey.runtime_state"
+        and state_status == "hotkey_bound"
+        and state_pid > 0
+        and state_pid == pid
+        and _bool(state_payload.get("hotkey_bound"))
+        and _safe_str(state_payload.get("global_hotkey")) == global_hotkey
+        and _safe_str(state_payload.get("binding_scope")) == binding_scope
+    )
+    if state_claims_bound_hotkey:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.hotkey.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "hotkey_bound":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_bound"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_or_binding_mismatch"
+    ready = process_alive and state_claims_bound_hotkey
+    requirement_state = (
+        "bound"
+        if ready
+        else "process_running_no_bound_hotkey_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    return {
+        "ready": ready,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "hotkey_bound": ready,
+        "pid": pid,
+        "pid_present": pid_present,
+        "status_path": "data/runtime/lens-hotkey/status.json",
+        "pid_path": "data/runtime/lens-hotkey/lens-hotkey.pid",
+        "runtime_state_exists": state_exists,
+        "runtime_status": state_status,
+        "runtime_status_kind": state_kind,
+        "runtime_status_pid": state_pid,
+        "runtime_status_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "runtime_state_updated_at": _safe_str(state_payload.get("updated_at")),
+        "global_hotkey": _safe_str(state_payload.get("global_hotkey")),
+        "expected_global_hotkey": global_hotkey,
+        "binding_scope": _safe_str(state_payload.get("binding_scope")),
+        "expected_binding_scope": binding_scope,
+        "launch_on_hotkey": _bool(state_payload.get("launch_on_hotkey")),
+        "summon_runner": _safe_str(state_payload.get("summon_runner")),
+        "press_count": _int_value(state_payload.get("press_count")),
+        "requirement_state": requirement_state,
+        "blocker": "" if ready else "global_hotkey_binding_runtime_missing",
+    }
+
+
 def _config_status(*, exists: bool, error: str) -> str:
     if exists and not error:
         return "present_disabled"
@@ -463,6 +532,8 @@ def _summon_preflight() -> dict[str, Any]:
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     summon_runner_exists = _runtime_file_exists(summon_runner)
+    hotkey_runtime = _hotkey_runtime_readback(global_hotkey=global_hotkey, binding_scope=binding_scope)
+    hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
     blockers: list[str] = []
     if blocked_reason:
         blockers.append(blocked_reason)
@@ -569,6 +640,18 @@ def _summon_preflight() -> dict[str, Any]:
                 "register_hotkey",
             ),
             _check(
+                "hotkey_runtime",
+                "bound"
+                if hotkey_runtime_ready
+                else "stale_or_unverified"
+                if hotkey_runtime.get("runtime_state_exists") or hotkey_runtime.get("pid_present")
+                else "missing",
+                "global hotkey runtime reports a live bound hotkey"
+                if hotkey_runtime_ready
+                else "global hotkey runtime is not live",
+                "data/runtime/lens-hotkey/status.json",
+            ),
+            _check(
                 "host_preflight",
                 "present" if host_preflight_exists else "missing",
                 "host lifecycle preflight is present"
@@ -585,6 +668,7 @@ def _summon_preflight() -> dict[str, Any]:
         ],
         "blockers": blockers,
         "blocker_groups": blocker_groups,
+        "hotkey_runtime_readback": hotkey_runtime,
         "binding": {
             "enabled": enabled,
             "binding_enabled": binding_enabled,
@@ -596,9 +680,12 @@ def _summon_preflight() -> dict[str, Any]:
             "summon_runner_present": summon_runner_exists,
             "local_palette_launcher": local_palette_launcher,
             "local_binding_target_ready": summon_runner_exists,
+            "global_hotkey_runtime_bound": hotkey_runtime_ready,
+            "hotkey_runtime_requirement_state": _safe_str(hotkey_runtime.get("requirement_state"), "missing"),
         },
         "governance": {
             **_base_governance(hotkey_registration_authority=False),
+            "hotkey_runtime_readback": True,
             "summon_runner_readback": True,
         },
         "message": (
@@ -986,6 +1073,10 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         *_blockers(overlay),
     }
     blockers = sorted(blocker_set)
+    hotkey_runtime = _dict_value(summon, "hotkey_runtime_readback")
+    hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
+    if hotkey_runtime_ready:
+        blockers = [blocker for blocker in blockers if blocker != "global_hotkey_binding_missing"]
     summon_ready = bool(summon.get("ready"))
     resident_host_ready = bool(host.get("ready"))
     tray_ready = bool(tray.get("ready"))
@@ -1073,6 +1164,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "binding_scope": _safe_str(summon.get("binding_scope"), "global"),
         "palette_route": _safe_str(summon.get("palette_route"), "/lens/status"),
         "required_before_enable": _string_list(summon.get("required_before_enable")),
+        "global_hotkey_runtime_ready": hotkey_runtime_ready,
+        "hotkey_runtime_readback": hotkey_runtime,
         "blockers": blockers,
         "blocker_groups": blocker_groups,
         "blocker_family_readback": blocker_family_readback,
@@ -1474,6 +1567,9 @@ def lens_os_binding_readiness(
     authority_granted = bool(authority_request_summary.get("authority_granted"))
     active_grant_receipt_id = _safe_str(authority_request_summary.get("active_grant_receipt_id")).strip()
     blocker_groups = _dict_value(summon_gate, "blocker_groups")
+    summon_preflight = _dict_value(_dict_value(lens_preflight_payload, "surfaces"), "summon")
+    hotkey_runtime = _dict_value(summon_preflight, "hotkey_runtime_readback")
+    hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
     palette_blockers = ["os_level_command_palette_missing"]
     if not bool(summon_gate.get("summon_anywhere")):
@@ -1558,6 +1654,15 @@ def lens_os_binding_readiness(
         ),
     ]
     for requirement in requirements:
+        if _safe_str(requirement.get("id")).strip() == "global_hotkey_binding":
+            requirement.update(
+                {
+                    "runtime_ready": hotkey_runtime_ready,
+                    "runtime_requirement_state": _safe_str(hotkey_runtime.get("requirement_state"), "missing"),
+                    "runtime_blocker": _safe_str(hotkey_runtime.get("blocker")),
+                    "hotkey_runtime_readback": hotkey_runtime,
+                }
+            )
         if _safe_str(requirement.get("id")).strip() == "os_level_command_palette":
             requirement.update(
                 {

@@ -202,6 +202,86 @@ function Get-HostProcessReadback {
   }
 }
 
+function Get-HotkeyRuntimeReadback {
+  param(
+    [string]$Root,
+    [string]$ExpectedHotkey,
+    [string]$ExpectedBindingScope
+  )
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-hotkey'
+  $PidPath = Join-Path $RuntimeRoot 'lens-hotkey.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsBoundHotkey = (
+    $StatusKind -eq 'lens.hotkey.runtime_state' -and
+    $StatusValue -eq 'hotkey_bound' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid -and
+    (Get-BoolProperty -Payload $Status -Name 'hotkey_bound' -Default $false) -and
+    (Get-StringProperty -Payload $Status -Name 'global_hotkey' -Default '') -eq $ExpectedHotkey -and
+    (Get-StringProperty -Payload $Status -Name 'binding_scope' -Default '') -eq $ExpectedBindingScope
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsBoundHotkey -and $RuntimePid -gt 0) {
+    try {
+      $ProcessAlive = $null -ne (Get-Process -Id $RuntimePid -ErrorAction Stop)
+    } catch {
+      $ProcessAlive = $false
+    }
+  }
+
+  $Ready = $ProcessAlive -and $StatusClaimsBoundHotkey
+  $RequirementState = if ($Ready) {
+    'bound'
+  } elseif ($ProcessAlive) {
+    'process_running_no_bound_hotkey_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($Ready) { '' } else { 'global_hotkey_binding_runtime_missing' }
+
+  return [ordered]@{
+    ready = $Ready
+    process_alive = $ProcessAlive
+    hotkey_bound = $Ready
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    global_hotkey = Get-StringProperty -Payload $Status -Name 'global_hotkey' -Default ''
+    expected_global_hotkey = $ExpectedHotkey
+    binding_scope = Get-StringProperty -Payload $Status -Name 'binding_scope' -Default ''
+    expected_binding_scope = $ExpectedBindingScope
+    launch_on_hotkey = Get-BoolProperty -Payload $Status -Name 'launch_on_hotkey' -Default $false
+    summon_runner = Get-StringProperty -Payload $Status -Name 'summon_runner' -Default ''
+    press_count = Get-IntegerProperty -Payload $Status -Name 'press_count' -Default 0
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
 function Select-Blockers {
   param(
     [object[]]$Blockers,
@@ -333,6 +413,7 @@ $LocalProcessLaunchAuthority = Get-BoolProperty -Payload $Config -Name 'local_pr
 $RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_before_enable'
 $DataRoot = Get-DataRoot -Override $DataDir
 $ResidentHostProcessReadback = Get-HostProcessReadback -Root $DataRoot
+$HotkeyRuntimeReadback = Get-HotkeyRuntimeReadback -Root $DataRoot -ExpectedHotkey $GlobalHotkey -ExpectedBindingScope $BindingScope
 
 $HostPreflightPath = Join-Path $RepoRoot $HostPreflight
 $HostPreflightExists = Test-Path -LiteralPath $HostPreflightPath -PathType Leaf
@@ -349,6 +430,7 @@ Add-Check -Target $Checks -Id 'hotkey_declared' -Status $(if ($GlobalHotkey) { '
 Add-Check -Target $Checks -Id 'binding_enabled' -Status $(if ($BindingEnabled) { 'enabled' } else { 'disabled' }) -Reason 'global binding remains disabled until resident Lens host exists' -Evidence $BindingScope
 Add-Check -Target $Checks -Id 'register_hotkey' -Status $(if ($RegisterHotkey) { 'would_register' } else { 'disabled' }) -Reason 'hotkey registration remains disabled' -Evidence 'register_hotkey'
 Add-Check -Target $Checks -Id 'startup_registration' -Status $(if ($StartupRegister) { 'would_register' } else { 'disabled' }) -Reason 'startup hotkey registration remains disabled' -Evidence 'startup_register'
+Add-Check -Target $Checks -Id 'hotkey_runtime' -Status $(if ([bool]$HotkeyRuntimeReadback.ready) { 'bound' } elseif ([bool]$HotkeyRuntimeReadback.runtime_state_exists -or [bool]$HotkeyRuntimeReadback.pid_present) { 'stale_or_unverified' } else { 'missing' }) -Reason $(if ([bool]$HotkeyRuntimeReadback.ready) { 'global hotkey runtime reports a live bound hotkey' } else { 'global hotkey runtime is not live' }) -Evidence 'data/runtime/lens-hotkey/status.json'
 Add-Check -Target $Checks -Id 'host_preflight' -Status $(if ($HostPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($HostPreflightExists) { 'host lifecycle preflight is present' } else { 'host lifecycle preflight is missing' }) -Evidence $HostPreflight
 Add-Check -Target $Checks -Id 'host_status_runner' -Status $(if ($HostStatusRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($HostStatusRunnerExists) { 'host status runner is present' } else { 'host status runner is missing' }) -Evidence $HostStatusRunner
 Add-Check -Target $Checks -Id 'palette_route' -Status 'declared' -Reason 'summon target route is declared for later UI/host binding' -Evidence $PaletteRoute
@@ -458,7 +540,7 @@ foreach ($Requirement in @($RequiredBeforeEnable)) {
       if (-not $BindingEnabled) { [void]$RequirementBlockers.Add('global_hotkey_binding_disabled') }
       if (-not $RegisterHotkey) { [void]$RequirementBlockers.Add('global_hotkey_registration_disabled') }
       if (-not $HotkeyRegistrationAuthority) { [void]$RequirementBlockers.Add('hotkey_registration_authority_not_granted') }
-      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+      $HotkeyDependency = New-PrerequisiteReadback `
             -Id 'global_hotkey_binding' `
             -Family 'global_hotkey_binding' `
             -Ready ($RequirementBlockers.Count -eq 0) `
@@ -468,7 +550,12 @@ foreach ($Requirement in @($RequiredBeforeEnable)) {
             -ProofScript 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' `
             -NextStep 'resolve_global_hotkey_binding_before_summon_enablement' `
             -NextSmallestTruthfulGap 'summon_binding_blocker_boundary' `
-            -AuthorityRequired 'hotkey_registration_authority'))
+            -AuthorityRequired 'hotkey_registration_authority'
+      $HotkeyDependency.hotkey_runtime_readback = $HotkeyRuntimeReadback
+      $HotkeyDependency.runtime_ready = [bool]$HotkeyRuntimeReadback.ready
+      $HotkeyDependency.runtime_requirement_state = [string]$HotkeyRuntimeReadback.requirement_state
+      $HotkeyDependency.runtime_blocker = [string]$HotkeyRuntimeReadback.blocker
+      [void]$RequiredBeforeEnableDependencies.Add($HotkeyDependency)
     }
     'summon_binding' {
       $RequirementBlockers = [System.Collections.ArrayList]::new()
@@ -520,6 +607,7 @@ $Payload = [ordered]@{
   first_missing_requirement_handoff = $FirstMissingRequirementHandoff
   enablement_dependency_readback = @($RequiredBeforeEnableDependencyArray)
   resident_host_process_readback = $ResidentHostProcessReadback
+  hotkey_runtime_readback = $HotkeyRuntimeReadback
   global_hotkey = $GlobalHotkey
   binding_scope = $BindingScope
   palette_route = $PaletteRoute
@@ -537,6 +625,8 @@ $Payload = [ordered]@{
     summon_runner_present = $SummonRunnerExists
     local_palette_launcher = $LocalPaletteLauncher
     local_binding_target_ready = $SummonRunnerExists
+    global_hotkey_runtime_bound = [bool]$HotkeyRuntimeReadback.ready
+    hotkey_runtime_requirement_state = [string]$HotkeyRuntimeReadback.requirement_state
   }
   governance = [ordered]@{
     read_only_contract = $true
@@ -549,6 +639,7 @@ $Payload = [ordered]@{
     new_sensing_authority = $false
     local_process_launch_authority = $false
     hotkey_registration_authority = $false
+    hotkey_runtime_readback = $true
     summon_runner_readback = $true
     required_before_enable_readback = $true
     resident_host_process_readback = $true

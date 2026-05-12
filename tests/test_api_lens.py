@@ -455,6 +455,30 @@ def _write_lens_tray_runtime_state(data_root: Path, *, pid: int) -> None:
     )
 
 
+def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-hotkey"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-hotkey.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+                "updated_at": "2026-05-12T22:30:00Z",
+                "message": "Francis Lens global hotkey binding is running.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_host_supervisor_state(
     data_root: Path,
     *,
@@ -680,6 +704,60 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert governance["overlay_control_authority"] is False
     assert governance["process_supervision_authority"] is False
     assert governance["resident_claim_authority"] is False
+
+
+def test_lens_os_binding_readiness_consumes_live_hotkey_runtime_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    _write_lens_hotkey_runtime_state(data_root, pid=os.getpid())
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/os-binding/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.readiness"
+    assert body["status"] == "blocked"
+    assert body["ready"] is False
+    assert body["summon_anywhere"] is False
+    requirements = {item["id"]: item for item in body["requirements"]}
+    hotkey_requirement = requirements["global_hotkey_binding"]
+    assert hotkey_requirement["ready"] is False
+    assert hotkey_requirement["runtime_ready"] is True
+    assert hotkey_requirement["runtime_requirement_state"] == "bound"
+    assert hotkey_requirement["runtime_blocker"] == ""
+    assert hotkey_requirement["hotkey_runtime_readback"]["process_alive"] is True
+    assert hotkey_requirement["hotkey_runtime_readback"]["hotkey_bound"] is True
+    assert "global_hotkey_binding_disabled" in hotkey_requirement["blockers"]
+    assert "hotkey_registration_authority_not_granted" in hotkey_requirement["blockers"]
+    assert body["blocker_groups"]["global_hotkey_binding"] == [
+        "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
+        "hotkey_registration_authority_not_granted",
+    ]
+    summon_preflight = body["implementation_plan"]["command_palette_contract"]
+    assert summon_preflight["would_register_hotkey"] is False
+    gate = body["summon_enablement_gate"]
+    assert gate["summon_anywhere"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["execution_authority"] is False
 
 
 def test_lens_os_binding_plan_blocks_os_palette_without_authority(
