@@ -25022,6 +25022,27 @@ Latest validation for the Stage 6 local summon binding launcher slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warnings on touched scripts`
 
+Stage 6 Lens observation-window stabilization slice on `2026-05-12`:
+
+- The host-supervisor observation proof test and resident-overlay runtime proof
+  test now use shorter explicit eight-second live observation windows instead
+  of twenty-five-second windows. The proofs still observe running and stopped
+  bounded foreground host states, but the local and CI validation window is
+  less timing-sensitive.
+- This is a test-harness/validation stabilization only. It does not enable
+  persistent supervision, install or control a service, register tray or
+  hotkey presence, open or control an overlay, add summon-anywhere, grant
+  execution authority, make approval decisions, write memory, or allow a
+  resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`. Remaining blocked
+  Stage 6 criteria are `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`.
+
+Latest validation for the Stage 6 Lens observation-window stabilization slice:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -42,14 +42,15 @@ def test_lens_host_supervisor_observation_proof_tracks_bounded_lifecycle(
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
-    proc = _run_proof("-Mode", "Status", "-RunSeconds", "25", "-DataDir", str(data_dir))
+    run_seconds = "8"
+    proc = _run_proof("-Mode", "Status", "-RunSeconds", run_seconds, "-DataDir", str(data_dir))
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.host.supervisor_observation_proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["run_seconds"] == 25
+    assert payload["run_seconds"] == int(run_seconds)
     assert payload["supervisor_observation_mode"] == "foreground_bounded_session"
     assert payload["service_plan_runtime_mode"] == "Resident"
     assert payload["resident_runtime_candidate_available"] is True

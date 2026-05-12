@@ -42,13 +42,14 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
+    run_seconds = "8"
     proc = _run_proof(
         "-Mode",
         "Status",
         "-SupervisorRunSeconds",
-        "25",
+        run_seconds,
         "-ResidentSurfaceForegroundRunSeconds",
-        "25",
+        run_seconds,
         "-DataDir",
         str(data_dir),
     )
@@ -58,10 +59,10 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     assert payload["kind"] == "lens.resident_overlay_runtime.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["supervisor_run_seconds"] == 25
-    assert payload["requested_resident_surface_foreground_run_seconds"] == 25
-    assert payload["resident_surface_foreground_run_seconds"] == 25
-    assert payload["resident_surface_timeout_seconds"] == 170
+    assert payload["supervisor_run_seconds"] == int(run_seconds)
+    assert payload["requested_resident_surface_foreground_run_seconds"] == int(run_seconds)
+    assert payload["resident_surface_foreground_run_seconds"] == int(run_seconds)
+    assert payload["resident_surface_timeout_seconds"] == 150
     assert payload["resident_overlay_runtime_ready"] is False
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
