@@ -25212,6 +25212,44 @@ Latest validation for the Stage 6 proof-window stabilization slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-summon-resident-host-blocker-proof.ps1`
 
+Stage 6 Lens checkpoint activation-boundary proof-window stabilization on
+`2026-05-12`:
+
+- The CI run for `0d99a3d4 fix(lens): stabilize resident host handoff proof
+  windows` cleared the prior summon-resident-host bridge failure but failed
+  `tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`
+  on `test (windows-latest, 3.13)`. The checkpoint reported
+  `system_resident_presence.status=resident_overlay_boundary_observed` instead
+  of the stronger `resident_overlay_activation_boundary_observed`.
+- The failure was in the checkpoint proof composition window, not product
+  authority. The checkpoint now runs the nested activation-boundary proof with
+  the same stable minimums proven by the standalone activation-boundary proof:
+  `startup=20s`, `supervisor=25s`, and resident-surface foreground `25s`.
+  The checkpoint readback also exposes the effective activation-boundary
+  windows and the nested proof's startup/supervisor values.
+- This is proof/readback-only. It does not enable persistent supervision,
+  install or control a service, register tray or hotkey presence, open or
+  control an overlay, add summon-anywhere, grant execution authority, make
+  approval decisions, write memory, write receipts, or allow a resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. No readiness percentage or acceptance criterion
+  moved from this recovery slice.
+
+Latest validation for the Stage 6 checkpoint activation-boundary proof-window
+stabilization slice:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
