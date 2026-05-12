@@ -25034,12 +25034,21 @@ Stage 6 Lens observation-window stabilization slice on `2026-05-12`:
   hotkey presence, open or control an overlay, add summon-anywhere, grant
   execution authority, make approval decisions, write memory, or allow a
   resident claim.
+- The persistent-supervision plan test now expects the summon-binding
+  prerequisite readback to report `disabled_pending_authority` with
+  `scripts/lens-summon.ps1` and the local command-palette launcher, matching
+  the current summon launcher contract instead of the stale `not_implemented`
+  state.
 - Stage 6 remains active and blocked at `ready_total=2/5`. Remaining blocked
   Stage 6 criteria are `summon_anywhere`, `helpful_not_noisy`, and
   `system_resident_presence`.
 
 Latest validation for the Stage 6 Lens observation-window stabilization slice:
 
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_stays_blocked_without_authority -q`
+  Result: `failed in CI before stale expectation fix, then passed locally`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
 - `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
   Result: `passed`
 

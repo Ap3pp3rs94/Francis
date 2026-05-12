@@ -145,7 +145,10 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert summon["route"] == "/lens/summon"
     assert summon["readiness_route"] == "/lens/summon/readiness"
     assert summon["blocker"] == "summon_binding_missing"
-    assert summon["requirement_state"] == "not_implemented"
+    assert summon["requirement_state"] == "disabled_pending_authority"
+    assert summon["blocked_reason"] == "lens_summon_binding_disabled_pending_authority"
+    assert summon["summon_runner"] == "scripts/lens-summon.ps1"
+    assert summon["local_palette_launcher"] == "scripts/lens-command-palette.ps1 -Mode LocalOpen"
     assert summon["summon_authority"] is False
     assert summon["local_process_launch_authority"] is False
 
