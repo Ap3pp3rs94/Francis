@@ -1,11 +1,13 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Status', 'Open')]
+  [ValidateSet('Status', 'Open', 'LocalOpen')]
   [string]$Mode = 'Status',
   [string]$ApiBaseUrl = 'http://127.0.0.1:8000',
+  [string]$ChatUiBaseUrl = 'http://127.0.0.1:5173',
   [string]$StatusPath = '',
   [string]$ExecutionReadinessPath = '',
-  [int]$TimeoutSeconds = 5
+  [int]$TimeoutSeconds = 5,
+  [switch]$NoLaunch
 )
 
 Set-StrictMode -Version 2
@@ -82,10 +84,11 @@ function ConvertTo-CommandItems {
   param([object]$Value)
 
   $Items = [System.Collections.ArrayList]::new()
-  if ($null -eq $Value -or -not ($Value -is [System.Array])) {
+  if ($null -eq $Value) {
     return @($Items.ToArray())
   }
-  foreach ($Item in $Value) {
+  $RawItems = if ($Value -is [System.Array]) { @($Value) } else { @($Value) }
+  foreach ($Item in $RawItems) {
     $Id = [string](Get-PropertyValue -Payload $Item -Name 'id' -Default '')
     if ([string]::IsNullOrWhiteSpace($Id)) {
       continue
@@ -104,6 +107,30 @@ function ConvertTo-CommandItems {
       })
   }
   return @($Items.ToArray())
+}
+
+function Join-LocalUrl {
+  param(
+    [string]$BaseUrl,
+    [string]$Route
+  )
+
+  $CleanRoute = [string]$Route
+  if ($CleanRoute -match '^https?://') {
+    return $CleanRoute
+  }
+
+  $CleanBase = ([string]$BaseUrl).TrimEnd('/')
+  if ([string]::IsNullOrWhiteSpace($CleanBase)) {
+    $CleanBase = 'http://127.0.0.1:5173'
+  }
+  if ([string]::IsNullOrWhiteSpace($CleanRoute)) {
+    $CleanRoute = '/'
+  }
+  if (-not $CleanRoute.StartsWith('/')) {
+    $CleanRoute = '/' + $CleanRoute
+  }
+  return $CleanBase + $CleanRoute
 }
 
 function Read-LensStatusFromPython {
@@ -248,6 +275,9 @@ $PaletteRoute = [string](Get-PropertyValue -Payload $Palette -Name 'route' -Defa
 $LocalSurface = [string](Get-PropertyValue -Payload $Palette -Name 'local_surface' -Default '')
 $UrlEntrypoint = Get-PropertyValue -Payload $Palette -Name 'url_entrypoint'
 $UrlEntrypointReady = [bool](Get-PropertyValue -Payload $Palette -Name 'url_entrypoint_ready' -Default $false)
+$UrlEntrypointRoute = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'route' -Default '')
+$UrlEntrypointLocalSurface = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'local_surface' -Default '')
+$UrlEntrypointOpensPalette = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'opens_palette_in_chat_ui' -Default $false)
 $Commands = ConvertTo-CommandItems -Value (Get-PropertyValue -Payload $Palette -Name 'commands' -Default @())
 $CommandTotal = [int](Get-PropertyValue -Payload $Palette -Name 'command_total' -Default @($Commands).Count)
 $SummonAnywhere = [bool](Get-PropertyValue -Payload $Palette -Name 'summon_anywhere' -Default $false)
@@ -257,6 +287,13 @@ $ReadbackReady = (
   @($Commands).Count -gt 0
 )
 $OsLevelReady = $ReadbackReady -and $PaletteAvailability -eq 'os_level' -and $SummonAnywhere
+$LocalOpenTargetUrl = Join-LocalUrl -BaseUrl $ChatUiBaseUrl -Route $UrlEntrypointRoute
+$LocalOpenReady = (
+  $ReadbackReady -and
+  $UrlEntrypointReady -and
+  $UrlEntrypointOpensPalette -and
+  $UrlEntrypointLocalSurface -eq 'chat_ui.command_palette'
+)
 
 $Blockers = [System.Collections.ArrayList]::new()
 if (-not [bool](Get-PropertyValue -Payload $StatusRead -Name 'ok' -Default $false)) {
@@ -295,14 +332,19 @@ $Payload = [ordered]@{
   url_entrypoint = [ordered]@{
     kind = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'kind' -Default '')
     status = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'status' -Default '')
-    route = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'route' -Default '')
-    local_surface = [string](Get-PropertyValue -Payload $UrlEntrypoint -Name 'local_surface' -Default '')
-    opens_palette_in_chat_ui = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'opens_palette_in_chat_ui' -Default $false)
+    route = $UrlEntrypointRoute
+    local_surface = $UrlEntrypointLocalSurface
+    opens_palette_in_chat_ui = $UrlEntrypointOpensPalette
     requires_running_chat_ui = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'requires_running_chat_ui' -Default $true)
     os_level_command_palette = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'os_level_command_palette' -Default $false)
     summon_anywhere = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'summon_anywhere' -Default $false)
     global_hotkey = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'global_hotkey' -Default $false)
   }
+  local_open_mode = 'LocalOpen'
+  local_open_available = $LocalOpenReady
+  chat_ui_base_url = $ChatUiBaseUrl
+  local_open_target_url = $LocalOpenTargetUrl
+  local_open_requires_running_chat_ui = [bool](Get-PropertyValue -Payload $UrlEntrypoint -Name 'requires_running_chat_ui' -Default $true)
   availability = $PaletteAvailability
   route = $PaletteRoute
   local_surface = $LocalSurface
@@ -330,6 +372,50 @@ $Payload = [ordered]@{
 if ($Mode -eq 'Status') {
   $Payload | ConvertTo-Json -Depth 10
   exit 0
+}
+
+if ($Mode -eq 'LocalOpen') {
+  $Payload.would_open_palette = $true
+  $Payload.opened = $false
+  $Payload.no_launch = [bool]$NoLaunch
+  $Payload.governance.read_only_contract = $false
+  $Payload.governance.opens_palette = $true
+
+  if (-not $LocalOpenReady) {
+    $Payload.ok = $false
+    $Payload.status = 'refused'
+    $Payload.error = 'lens_command_palette_local_open_not_ready'
+    $Payload.refusal_blockers = @(
+      @($Payload.blockers) + @('chat_ui_command_palette_url_entrypoint_not_ready') | Sort-Object -Unique
+    )
+    $Payload.message = 'The local Chat UI command palette URL entrypoint is not ready; refusing to open a local Lens surface.'
+    $Payload | ConvertTo-Json -Depth 10
+    exit 2
+  }
+
+  if ($NoLaunch) {
+    $Payload.status = 'local_open_ready'
+    $Payload.message = 'The local Chat UI command palette URL entrypoint is ready; dry-run mode did not launch a browser.'
+    $Payload | ConvertTo-Json -Depth 10
+    exit 0
+  }
+
+  try {
+    Start-Process -FilePath $LocalOpenTargetUrl
+    $Payload.status = 'opened'
+    $Payload.opened = $true
+    $Payload.governance.local_process_launch_authority = $true
+    $Payload.message = 'Opened the local Chat UI command palette URL entrypoint without registering hotkeys, controlling overlay/tray surfaces, or claiming OS-level summon.'
+    $Payload | ConvertTo-Json -Depth 10
+    exit 0
+  } catch {
+    $Payload.ok = $false
+    $Payload.status = 'open_failed'
+    $Payload.error = [string]$_.Exception.Message
+    $Payload.message = 'Failed to open the local Chat UI command palette URL entrypoint.'
+    $Payload | ConvertTo-Json -Depth 10
+    exit 1
+  }
 }
 
 $ExecutionReadinessRead = Read-ExecutionReadiness -ExecutionReadinessPath $ExecutionReadinessPath -ApiBaseUrl $ApiBaseUrl -TimeoutSeconds $TimeoutSeconds

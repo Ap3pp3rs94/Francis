@@ -24942,6 +24942,44 @@ authority handoff slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-resident-supervision-persistence-boundary-proof.ps1 and scripts/lens-stage6-completion-audit.ps1`
 
+Stage 6 command-palette local-open shell bridge slice on `2026-05-12`:
+
+- `scripts/lens-command-palette.ps1` now exposes a separate `LocalOpen` mode
+  that targets the existing Chat UI Lens command-palette URL entrypoint
+  (`/?francis_lens=command_palette`). `LocalOpen -NoLaunch` returns a
+  verifiable dry-run receipt with the target URL, local-open readiness, and
+  explicit governance flags before any browser launch.
+- The existing `Open` mode remains the OS-level command-palette path and still
+  refuses when summon-anywhere/OS-binding execution authority is not ready.
+  This preserves the truthful boundary between a local Chat UI opener and
+  system-wide summon.
+- The command-palette shell bridge now preserves a single command-object
+  readback payload as well as command arrays, preventing valid readback from
+  looking empty when only one command is present.
+- This is a shell bridge/client-local capability slice. It does not enable
+  persistent supervision, install or control a service, register tray or hotkey
+  presence, open or control an overlay, add summon-anywhere, grant execution
+  authority, make approval decisions, write memory, or allow a resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`. Remaining blocked
+  Stage 6 criteria are `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`.
+
+Latest validation for the Stage 6 command-palette local-open shell bridge
+slice:
+
+- `python -m pytest tests\test_lens_command_palette_script.py -q`
+  Result: `failed before fixing single-command readback parsing, then passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette.ps1 -Mode LocalOpen -NoLaunch | ConvertFrom-Json | Select-Object status,readback_ready,local_open_available,local_open_target_url,opened,no_launch,os_level_command_palette,summon_anywhere,@{Name='opens_palette';Expression={$_.governance.opens_palette}},@{Name='local_process_launch_authority';Expression={$_.governance.local_process_launch_authority}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=local_open_ready; local_open_available=true; opened=false; no_launch=true; os_level_command_palette=false; summon_anywhere=false`
+- `python -m ruff check tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_command_palette_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-command-palette.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -177,6 +177,79 @@ def test_lens_command_palette_shell_bridge_uses_python_readback_without_api(tmp_
     assert payload["governance"]["hotkey_registration_authority"] is False
 
 
+def test_lens_command_palette_shell_bridge_local_open_dry_run_uses_chat_ui_entrypoint(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.status",
+                "command_palette": {
+                    "status": "readback_ready",
+                    "availability": "chat_ui_only",
+                    "summon_anywhere": False,
+                    "url_entrypoint_ready": True,
+                    "url_entrypoint": {
+                        "kind": "lens.command_palette.url_entrypoint",
+                        "status": "ready",
+                        "route": "/?francis_lens=command_palette",
+                        "local_surface": "chat_ui.command_palette",
+                        "opens_palette_in_chat_ui": True,
+                        "requires_running_chat_ui": True,
+                        "os_level_command_palette": False,
+                        "summon_anywhere": False,
+                        "global_hotkey": False,
+                    },
+                    "route": "/lens/status",
+                    "local_surface": "chat_ui.command_palette",
+                    "command_total": 1,
+                    "commands": [{"id": "nav.orb", "label": "Open ORB", "group": "Navigation"}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_palette(
+        "-Mode",
+        "LocalOpen",
+        "-StatusPath",
+        str(status_path),
+        "-ChatUiBaseUrl",
+        "http://127.0.0.1:5173",
+        "-NoLaunch",
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.command_palette.shell_bridge"
+    assert payload["status"] == "local_open_ready"
+    assert payload["ok"] is True
+    assert payload["readback_ready"] is True
+    assert payload["local_open_mode"] == "LocalOpen"
+    assert payload["local_open_available"] is True
+    assert payload["local_open_target_url"] == "http://127.0.0.1:5173/?francis_lens=command_palette"
+    assert payload["chat_ui_base_url"] == "http://127.0.0.1:5173"
+    assert payload["would_open_palette"] is True
+    assert payload["opened"] is False
+    assert payload["no_launch"] is True
+    assert payload["os_level_command_palette"] is False
+    assert payload["summon_anywhere"] is False
+    assert "os_level_command_palette_missing" in payload["blockers"]
+    assert payload["governance"]["read_only_contract"] is False
+    assert payload["governance"]["opens_palette"] is True
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["approval_decision_authority"] is False
+    assert payload["governance"]["memory_write"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["tray_registration_authority"] is False
+    assert payload["governance"]["overlay_control_authority"] is False
+    assert payload["governance"]["summon_authority"] is False
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+
+
 def test_lens_command_palette_shell_bridge_refuses_open_mode(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
     execution_readiness_path = tmp_path / "execution-readiness.json"
