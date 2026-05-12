@@ -25052,6 +25052,43 @@ Latest validation for the Stage 6 Lens observation-window stabilization slice:
 - `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
   Result: `passed`
 
+Stage 6 Lens persistent-supervision prerequisite readback slice on
+`2026-05-12`:
+
+- `scripts/lens-persistent-supervision-plan.ps1` now recognizes a fresh
+  `lens.host.supervisor_state` with `status=resident_supervising`,
+  `mode=supervise_resident`, `host_mode=resident`,
+  `resident_supervised_runtime=true`, and a live matching resident host PID as
+  satisfying the `resident_host_process` prerequisite.
+- This is readback-only. It does not start a resident process, enable
+  persistent supervision, install or control a service, register tray or
+  hotkey presence, open or control an overlay, grant execution authority, make
+  approval decisions, write memory, or allow a resident claim.
+- With the current local runtime state, Stage 6 remains active and blocked at
+  `ready_total=2/5`; blocked criteria remain `summon_anywhere`,
+  `helpful_not_noisy`, and `system_resident_presence`. The next concrete
+  action is still to produce a real governed resident-host supervision state,
+  after which this plan can move the first persistent-supervision prerequisite
+  from `resident_host_process` to `tray_presence`.
+
+Latest validation for the Stage 6 persistent-supervision prerequisite
+readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,first_missing_required_before_enable,missing_required_before_enable,required_before_enable_ready | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; first_missing_required_before_enable=resident_host_process; current runtime still lacks a live supervised resident host`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ready_total,total,ready_to_close,next_smallest_truthful_gap,stage_state | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; ready_to_close=false; next_smallest_truthful_gap=stage6_lens_completion_audit; stage_state=active`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

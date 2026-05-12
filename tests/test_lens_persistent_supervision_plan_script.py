@@ -189,6 +189,90 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     }
 
 
+def test_lens_persistent_supervision_plan_accepts_supervised_resident_host_readback(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    host_root = data_root / "runtime" / "lens-host"
+    supervisor_root = data_root / "runtime" / "lens-host-supervisor"
+    host_root.mkdir(parents=True)
+    supervisor_root.mkdir(parents=True)
+    now = int(time.time())
+    pid = os.getpid()
+
+    (host_root / "lens-host.pid").write_text(str(pid), encoding="utf-8")
+    (host_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "mode": "resident",
+                "pid": pid,
+                "process_alive": True,
+                "resident": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (supervisor_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "mode": "supervise_resident",
+                "host_mode": "resident",
+                "observed_pid": pid,
+                "observed_state": "resident_running",
+                "resident_supervised_runtime": True,
+                "process_supervision_authority": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_script("-Mode", "Status", env={**os.environ, "FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["required_before_enable_ready"] is False
+    assert payload["missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert payload["first_missing_required_before_enable"] == "tray_presence"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    resident_host = dependencies["resident_host_process"]
+    assert resident_host["ready"] is True
+    assert resident_host["status"] == "ready"
+    assert resident_host["blocker"] == ""
+    assert resident_host["requirement_state"] == "ready"
+    assert resident_host["blocked_reason"] == ""
+    assert resident_host["proof_script"] == ""
+    assert resident_host["process_alive"] is True
+    assert resident_host["pid"] == pid
+    assert resident_host["runtime_status"] == "resident_running"
+    assert resident_host["next_smallest_truthful_gap"] == ""
+    assert resident_host["resident_supervised_runtime"] is True
+    assert resident_host["supervision_observed_pid"] == pid
+    assert resident_host["resident_runtime_candidate_supervised"] is False
+    assert resident_host["fresh_resident_runtime_candidate_supervised"] is False
+    assert resident_host["supervision_execution_receipt_observed"] is False
+    assert resident_host["supervisor_freshness_status"] == "fresh"
+    assert resident_host["read_only_contract"] is True
+    assert resident_host["diagnostic_only"] is True
+    assert resident_host["would_execute"] is False
+    assert resident_host["would_mutate"] is False
+
+    assert payload["first_missing_requirement_handoff"]["id"] == "tray_presence"
+
+
 def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receipt(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     grant_root = data_root / "lens" / "host_supervision_authority_grants"

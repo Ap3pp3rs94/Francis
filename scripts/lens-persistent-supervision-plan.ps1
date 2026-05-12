@@ -213,6 +213,7 @@ function Get-ResidentCandidateReadback {
   $SupervisorState = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'status' -Default '')
   $SupervisorMode = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'mode' -Default '')
   $SupervisorHostMode = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'host_mode' -Default '')
+  $SupervisorObservedPid = [int](Get-PropertyValue -Payload $SupervisorStatus -Name 'observed_pid' -Default 0)
   $SupervisorUpdatedAt = [string](Get-PropertyValue -Payload $SupervisorStatus -Name 'updated_at' -Default '')
   $UpdatedTs = ConvertTo-EpochSeconds -Value $SupervisorUpdatedAt
   $FreshWindowSeconds = 900
@@ -222,6 +223,15 @@ function Get-ResidentCandidateReadback {
     $SupervisorState -eq 'supervised_session_completed' -and
     $SupervisorMode -eq 'supervise_resident_once' -and
     $SupervisorHostMode -eq 'resident' -and
+    $UpdatedTs -gt 0 -and
+    (($NowTs - $UpdatedTs) -le $FreshWindowSeconds)
+  )
+  $ResidentSupervisedRuntime = (
+    $SupervisorKind -eq 'lens.host.supervisor_state' -and
+    $SupervisorState -eq 'resident_supervising' -and
+    $SupervisorMode -eq 'supervise_resident' -and
+    $SupervisorHostMode -eq 'resident' -and
+    (Test-TruthyProperty -Payload $SupervisorStatus -Name 'resident_supervised_runtime') -and
     $UpdatedTs -gt 0 -and
     (($NowTs - $UpdatedTs) -le $FreshWindowSeconds)
   )
@@ -240,6 +250,8 @@ function Get-ResidentCandidateReadback {
 
   return [ordered]@{
     resident_runtime_candidate_supervised = [bool]($FreshSupervisorCandidate -or $ReceiptCandidate)
+    resident_supervised_runtime = [bool]$ResidentSupervisedRuntime
+    supervision_observed_pid = $SupervisorObservedPid
     fresh_resident_runtime_candidate_supervised = [bool]$FreshSupervisorCandidate
     supervision_execution_receipt_observed = [bool]$ReceiptCandidate
     supervision_execution_receipt_id = [string](Get-PropertyValue -Payload $Receipt -Name 'receipt_id' -Default '')
@@ -249,7 +261,7 @@ function Get-ResidentCandidateReadback {
     } else {
       ''
     }
-    supervisor_freshness_status = if ($FreshSupervisorCandidate) { 'fresh' } elseif ($null -ne $SupervisorStatus) { 'stale_or_not_candidate' } else { 'missing' }
+    supervisor_freshness_status = if ($FreshSupervisorCandidate -or $ResidentSupervisedRuntime) { 'fresh' } elseif ($null -ne $SupervisorStatus) { 'stale_or_not_candidate' } else { 'missing' }
     supervisor_state_age_seconds = if ($UpdatedTs -gt 0) { [int]([Math]::Max(0, $NowTs - $UpdatedTs)) } else { $null }
   }
 }
@@ -290,28 +302,48 @@ function Get-HostProcessReadback {
 
   $CandidateReadback = Get-ResidentCandidateReadback -DataRoot $DataRoot
   $CandidateObserved = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'resident_runtime_candidate_supervised' -Default $false)
-  $BlockedReason = if ($ProcessAlive) {
+  $ResidentSupervisedRuntime = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'resident_supervised_runtime' -Default $false)
+  $SupervisorObservedPid = [int](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_observed_pid' -Default 0)
+  $SupervisedResidentProcess = (
+    $ProcessAlive -and
+    $ResidentSupervisedRuntime -and
+    $HostPid -gt 0 -and
+    ($SupervisorObservedPid -eq 0 -or $SupervisorObservedPid -eq $HostPid)
+  )
+  $BlockedReason = if ($SupervisedResidentProcess) {
+    ''
+  } elseif ($ProcessAlive) {
     'resident_host_not_supervised'
   } elseif ($CandidateObserved) {
     'resident_supervision_not_persistent'
   } else {
     'resident_host_process_missing'
   }
-  $Blocker = if ($ProcessAlive) {
+  $Blocker = if ($SupervisedResidentProcess) {
+    ''
+  } elseif ($ProcessAlive) {
     'resident_host_process_not_supervised'
   } elseif ($CandidateObserved) {
     'resident_supervision_not_persistent'
   } else {
     'resident_host_process_missing'
   }
-  $RequirementState = if ($ProcessAlive) {
+  $RequirementState = if ($SupervisedResidentProcess) {
+    'ready'
+  } elseif ($ProcessAlive) {
     'foreground_observed_not_supervised'
   } elseif ($CandidateObserved) {
     'resident_candidate_observed_not_persistent'
   } else {
     'missing'
   }
-  $NextGap = if ($CandidateObserved) { 'resident_supervision_not_persistent' } else { 'resident_host_process_not_supervised' }
+  $NextGap = if ($SupervisedResidentProcess) {
+    ''
+  } elseif ($CandidateObserved) {
+    'resident_supervision_not_persistent'
+  } else {
+    'resident_host_process_not_supervised'
+  }
 
   return [ordered]@{
     process_alive = $ProcessAlive
@@ -325,6 +357,8 @@ function Get-HostProcessReadback {
     blocker = $Blocker
     requirement_state = $RequirementState
     next_smallest_truthful_gap = $NextGap
+    resident_supervised_runtime = [bool]$SupervisedResidentProcess
+    supervision_observed_pid = $SupervisorObservedPid
     resident_runtime_candidate_supervised = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'resident_runtime_candidate_supervised' -Default $false)
     fresh_resident_runtime_candidate_supervised = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'fresh_resident_runtime_candidate_supervised' -Default $false)
     supervision_execution_receipt_observed = [bool](Get-PropertyValue -Payload $CandidateReadback -Name 'supervision_execution_receipt_observed' -Default $false)
@@ -447,11 +481,14 @@ $Requirements = @(
 )
 
 $HostProcessReadback = Get-HostProcessReadback -DataRoot $DataRoot
-$HostProcessProofScript = if ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
+$HostProcessProofScript = if ([bool]$HostProcessReadback.resident_supervised_runtime) {
+  ''
+} elseif ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
   'scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status'
 } else {
   'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status'
 }
+$ResidentHostProcessReady = [bool]$HostProcessReadback.resident_supervised_runtime
 $TrayReady = (
   (Test-TruthyProperty -Payload $TrayConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_host_enabled') -and
@@ -489,11 +526,13 @@ $RequiredBeforeEnable = @(
   'summon_binding'
 )
 $EnablementDependencyReadback = @(
-  (New-EnablementDependency -Id 'resident_host_process' -Family 'resident_host' -Route '/lens/host' -ReadinessRoute '/lens/host/runtime-loop/readiness' -Ready $false -Blocker ([string]$HostProcessReadback.blocker) -RequirementState ([string]$HostProcessReadback.requirement_state) -BlockedReason ([string]$HostProcessReadback.blocked_reason) -ProofScript $HostProcessProofScript -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'resident_host_process' -Family 'resident_host' -Route '/lens/host' -ReadinessRoute '/lens/host/runtime-loop/readiness' -Ready $ResidentHostProcessReady -Blocker ([string]$HostProcessReadback.blocker) -RequirementState ([string]$HostProcessReadback.requirement_state) -BlockedReason ([string]$HostProcessReadback.blocked_reason) -ProofScript $HostProcessProofScript -Extra ([pscustomobject]@{
         process_alive = [bool]$HostProcessReadback.process_alive
         pid = [int]$HostProcessReadback.pid
         runtime_status = [string]$HostProcessReadback.runtime_status
         next_smallest_truthful_gap = [string]$HostProcessReadback.next_smallest_truthful_gap
+        resident_supervised_runtime = [bool]$HostProcessReadback.resident_supervised_runtime
+        supervision_observed_pid = [int]$HostProcessReadback.supervision_observed_pid
         resident_runtime_candidate_supervised = [bool]$HostProcessReadback.resident_runtime_candidate_supervised
         fresh_resident_runtime_candidate_supervised = [bool]$HostProcessReadback.fresh_resident_runtime_candidate_supervised
         supervision_execution_receipt_observed = [bool]$HostProcessReadback.supervision_execution_receipt_observed
