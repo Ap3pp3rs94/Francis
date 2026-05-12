@@ -293,11 +293,11 @@ try {
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '5',
+    '10',
     '-HostLaunchRunSeconds',
-    '5',
+    '10',
     '-ResidentCandidateRunSeconds',
-    '5'
+    '10'
   ) -TimeoutSeconds $ChildProofTimeoutSeconds
 } finally {
   if ([string]::IsNullOrWhiteSpace($BeforeResidentDataDir)) {

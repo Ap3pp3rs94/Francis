@@ -24631,6 +24631,42 @@ Latest validation for the Stage 6 live resident-supervision lease slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
   Result: `passed; status=blocked; ready_total=2/5; ready_to_close=false; blocker_total=70`
 
+Stage 6 resident-supervision persistence-boundary CI stabilization slice on
+`2026-05-11`:
+
+- GitHub Actions run `25703932800` for commit `974b0d7` failed only on
+  `test (windows-latest, 3.12)` during
+  `tests/test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback`.
+  The failed payload showed the wrapped resident-host runtime child proof
+  returned `proof_failed` while later route readback still observed the fresh
+  supervised resident candidate. The failure was treated as a Windows timing
+  fragility in the child proof observation window, not as permission to broaden
+  Stage 6 authority.
+- `scripts/lens-resident-supervision-persistence-boundary-proof.ps1` now runs
+  the wrapped resident-host runtime boundary proof with 10-second foreground,
+  host-launch, and resident-candidate windows instead of 5-second windows.
+  This keeps the proof diagnostic-only and gives the Windows CI runner more
+  room to observe the same bounded candidate before route readback consumes it.
+- This is validation/readback stabilization only. It does not add persistent
+  supervision, service install/control, process restart authority, tray or
+  hotkey registration, overlay control, summon authority, memory writes, API
+  execution authority, approval-decision authority, or resident claim authority.
+- Stage 6 remains active and blocked. The completion audit still reports
+  `ready_to_close=false` and
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 resident-supervision persistence-boundary CI
+stabilization slice:
+
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,resident_candidate_boundary_proof_observed,persistent_supervision_plan_candidate_readback_observed,persistent_supervision_enablement_candidate_readback_observed,resident_dependency_candidate_readback_observed,route_blocking_preserved,side_effects_bounded,@{Name='child_exit';Expression={$_.child_proof_runs[0].exit_code}},@{Name='child_ms';Expression={$_.child_proof_runs[0].duration_ms}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; resident_candidate_boundary_proof_observed=true; child_exit=0; child_ms=40892`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; resident_supervision_persistence_boundary_proof_observed=true; child proof timeouts empty`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
