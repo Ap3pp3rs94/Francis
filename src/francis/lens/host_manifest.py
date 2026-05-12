@@ -890,7 +890,7 @@ def _lens_host_tray_presence_requirement_readback(*, missing: bool) -> dict[str,
     tray_registration_authority = bool(config.get("tray_registration_authority"))
     tray_icon_authority = bool(config.get("tray_icon_authority"))
     notification_authority = bool(config.get("notification_authority"))
-    blocked_reason = str(config.get("blocked_reason") or "lens_tray_presence_not_implemented")
+    blocked_reason = str(config.get("blocked_reason") or "lens_tray_presence_disabled_pending_authority")
     family_blockers = []
     if not config_exists:
         family_blockers.append("lens_tray_config_missing")

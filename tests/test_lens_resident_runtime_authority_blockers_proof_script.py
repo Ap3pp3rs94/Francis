@@ -107,7 +107,7 @@ def test_lens_resident_runtime_authority_blockers_proof_splits_combined_gap(
     assert groups["tray_presence"]["status"] == "blocked"
     assert groups["tray_presence"]["route"] == "/lens/tray"
     assert "tray_registration_authority_not_granted" in groups["tray_presence"]["blockers"]
-    assert "lens_tray_presence_not_implemented" in groups["tray_presence"]["blockers"]
+    assert "lens_tray_presence_disabled_pending_authority" in groups["tray_presence"]["blockers"]
 
     assert groups["hotkey_summon"]["status"] == "blocked"
     assert groups["hotkey_summon"]["route"] == "/lens/summon"

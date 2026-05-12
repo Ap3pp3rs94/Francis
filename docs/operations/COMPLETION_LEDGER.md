@@ -24779,6 +24779,49 @@ Latest validation for the Stage 6 supervisor runtime readback hardening slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3`
   Result: `passed; status=blocked; stage_state=active; stage_claim=backend_readback_contract_only; ready_to_close=false`
 
+Stage 6 tray blocker truth alignment slice on `2026-05-12`:
+
+- `config/runtime/lens/tray.json`, `scripts/lens-tray-preflight.ps1`,
+  `scripts/lens-persistent-supervision-plan.ps1`, and the Lens readback
+  modules now use `lens_tray_presence_disabled_pending_authority` for tray
+  presence when the tray runner exists but the tray host, icon, startup, and
+  authority gates remain disabled.
+- This corrects the stale `lens_tray_presence_not_implemented` claim in current
+  tray, persistent-supervision, OS-binding, and Stage 6 readbacks. It is
+  readback/truth alignment only. It does not enable tray startup registration,
+  auto-start tray presence, register hotkeys, create an overlay, add
+  summon-anywhere, install/control a service, grant process supervision or
+  restart authority, write memory, make approval decisions, or allow a resident
+  claim.
+- Stage 6 remains active and blocked. `lens_status(limit=1)` still reports
+  `ready_total=2/5` and `ready_to_close=false`; tray readback now reports
+  `tray_runner=scripts/lens-tray-presence.ps1` with
+  `lens_tray_presence_disabled_pending_authority` plus the unchanged disabled
+  tray/authority blockers.
+
+Latest validation for the Stage 6 tray blocker truth alignment slice:
+
+- `python -m pytest tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority tests\test_api_lens.py::test_lens_resident_runtime_execute_consumes_bounded_supervision_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-preflight.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ready,@{Name='blockers';Expression={$_.blockers -join ','}},@{Name='runner';Expression={$_.tray.tray_runner}} | ConvertTo-Json -Depth 5`
+  Result: `passed; status=blocked; ready=false; blockers include lens_tray_presence_disabled_pending_authority; runner=scripts/lens-tray-presence.ps1`
+- `python -c "from francis.lens.status import lens_status; ..."`
+  Result: `passed; stage=Stage 6 / Lens MVP; ready_total=2; ready_to_close=false; tray_blockers include lens_tray_presence_disabled_pending_authority; tray_runner=scripts/lens-tray-presence.ps1`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\host_manifest.py src\francis\lens\os_binding_authority.py src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\host_manifest.py src\francis\lens\os_binding_authority.py src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_persistent_supervision_prerequisite_readback.py tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1 and scripts/lens-tray-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

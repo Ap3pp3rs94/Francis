@@ -65,7 +65,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert payload["summon_tray_presence_blockers"] == ["tray_host_missing"]
 
     runtime_blockers = payload["resident_runtime_tray_presence_blockers"]
-    assert "lens_tray_presence_not_implemented" in runtime_blockers
+    assert "lens_tray_presence_disabled_pending_authority" in runtime_blockers
     assert "tray_host_missing" in runtime_blockers
     assert "tray_host_disabled" in runtime_blockers
     assert "tray_registration_authority_not_granted" in runtime_blockers

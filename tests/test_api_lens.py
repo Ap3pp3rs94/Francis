@@ -270,7 +270,7 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "local_process_launch_authority": false,
   "service_control_authority": false,
   "summon_authority": false,
-  "blocked_reason": "lens_tray_presence_not_implemented",
+  "blocked_reason": "lens_tray_presence_disabled_pending_authority",
   "required_before_enable": [
     "resident_host_process",
     "tray_icon",
@@ -569,7 +569,7 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert "global_hotkey_registration_disabled" in blocker_groups["global_hotkey_binding"]
     assert "lens_summon_binding_not_implemented" in blocker_groups["summon_binding"]
     assert "resident_host_process_missing" in blocker_groups["resident_host"]
-    assert "lens_tray_presence_not_implemented" in blocker_groups["tray_presence"]
+    assert "lens_tray_presence_disabled_pending_authority" in blocker_groups["tray_presence"]
     assert "lens_overlay_window_not_implemented" in blocker_groups["overlay_window"]
     assert "summon_authority_not_granted" in blocker_groups["authority"]
     authority_readback = body["authority_request_readback"]

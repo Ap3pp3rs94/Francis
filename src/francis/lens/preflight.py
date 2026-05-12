@@ -596,7 +596,7 @@ def _tray_preflight() -> dict[str, Any]:
     pid_path = _safe_str(payload.get("pid_path"), "data/runtime/lens-tray/lens-tray.pid")
     summon_preflight = _safe_str(payload.get("summon_preflight"), "scripts/lens-summon-preflight.ps1")
     summon_config = _safe_str(payload.get("summon_config"), "config/runtime/lens/summon.json")
-    blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_tray_presence_not_implemented")
+    blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_tray_presence_disabled_pending_authority")
     enabled = _bool(payload.get("enabled"))
     tray_host_enabled = _bool(payload.get("tray_host_enabled"))
     tray_icon_enabled = _bool(payload.get("tray_icon_enabled"))
@@ -979,6 +979,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "tray_presence": _select_blockers(
             blockers,
             "lens_tray_presence_not_implemented",
+            "lens_tray_presence_disabled_pending_authority",
             "tray_host_missing",
             "tray_host_disabled",
             "tray_icon_disabled",

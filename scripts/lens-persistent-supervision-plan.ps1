@@ -362,7 +362,7 @@ $EnablementDependencyReadback = @(
         runtime_status = [string]$HostProcessReadback.runtime_status
         next_smallest_truthful_gap = 'resident_host_process_not_supervised'
       })),
-  (New-EnablementDependency -Id 'tray_presence' -Family 'tray_presence' -Route '/lens/tray' -ReadinessRoute '/lens/tray/readiness' -Ready $TrayReady -Blocker 'tray_host_missing' -RequirementState 'tray_host_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $TrayConfig -Name 'blocked_reason' -Default 'lens_tray_presence_not_implemented')) -PreflightScript 'scripts/lens-tray-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'tray_presence' -Family 'tray_presence' -Route '/lens/tray' -ReadinessRoute '/lens/tray/readiness' -Ready $TrayReady -Blocker 'tray_host_missing' -RequirementState 'tray_host_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $TrayConfig -Name 'blocked_reason' -Default 'lens_tray_presence_disabled_pending_authority')) -PreflightScript 'scripts/lens-tray-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $TrayConfigRelativePath
         config_exists = $null -ne $TrayConfig
         tray_host_enabled = (Test-TruthyProperty -Payload $TrayConfig -Name 'tray_host_enabled')

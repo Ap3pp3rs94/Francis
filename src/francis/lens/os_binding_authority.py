@@ -1382,7 +1382,7 @@ def lens_os_binding_execution_readiness_audit(
             ready=False,
             route="/lens/tray",
             blockers=_readiness_blocker_group(readiness_payload, "tray_presence")
-            or ["lens_tray_presence_not_implemented"],
+            or ["lens_tray_presence_disabled_pending_authority"],
             authority_required="tray_registration_authority",
             evidence=[LENS_OS_BINDING_READINESS_ROUTE, "/lens/tray"],
             readback_ready=True,

@@ -26,7 +26,7 @@
   "local_process_launch_authority": false,
   "service_control_authority": false,
   "summon_authority": false,
-  "blocked_reason": "lens_tray_presence_not_implemented",
+  "blocked_reason": "lens_tray_presence_disabled_pending_authority",
   "required_before_enable": [
     "resident_host_process",
     "tray_icon",

@@ -1726,6 +1726,7 @@ _BOUNDED_HOST_ACTIVATION_SOFT_BLOCKERS = {
     "lens_summon_config_missing",
     "lens_summon_config_invalid",
     "lens_tray_presence_not_implemented",
+    "lens_tray_presence_disabled_pending_authority",
     "lens_tray_config_missing",
     "lens_tray_config_invalid",
     "lens_overlay_window_not_implemented",

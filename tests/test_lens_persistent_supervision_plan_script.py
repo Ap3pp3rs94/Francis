@@ -115,7 +115,7 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert tray["readiness_route"] == "/lens/tray/readiness"
     assert tray["blocker"] == "tray_host_missing"
     assert tray["requirement_state"] == "tray_host_disabled"
-    assert tray["blocked_reason"] == "lens_tray_presence_not_implemented"
+    assert tray["blocked_reason"] == "lens_tray_presence_disabled_pending_authority"
     assert tray["tray_registration_authority"] is False
     assert tray["tray_icon_authority"] is False
 

@@ -354,7 +354,7 @@ def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate
         assert dependency["status"] == "blocked"
         assert dependency["blocker"] == "tray_host_missing"
         assert dependency["requirement_state"] == "tray_host_disabled"
-        assert dependency["blocked_reason"] == "lens_tray_presence_not_implemented"
+        assert dependency["blocked_reason"] == "lens_tray_presence_disabled_pending_authority"
         assert dependency["config_path"] == "config/runtime/lens/tray.json"
         assert dependency["config_exists"] is True
         assert dependency["presence_name"] == "Francis Lens Tray Presence"
@@ -366,7 +366,7 @@ def test_persistent_supervision_prerequisite_readback_reports_tray_presence_gate
         assert dependency["tray_icon_authority"] is False
         assert dependency["notification_authority"] is False
         assert dependency["family_blockers"] == [
-            "lens_tray_presence_not_implemented",
+            "lens_tray_presence_disabled_pending_authority",
             "tray_host_disabled",
             "tray_icon_disabled",
             "tray_startup_registration_disabled",
