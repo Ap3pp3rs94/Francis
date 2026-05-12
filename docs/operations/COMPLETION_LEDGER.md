@@ -25089,6 +25089,47 @@ readback slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
 
+Stage 6 Lens resident-host plan-consumption proof slice on `2026-05-12`:
+
+- `scripts/lens-resident-host-plan-consumption-proof.ps1` now performs the
+  missing live bridge between the bounded supervised resident-host lease and
+  the persistent-supervision plan. In an isolated temporary data root it starts
+  `lens-host-supervisor.ps1 -Mode StartResident`, runs
+  `lens-persistent-supervision-plan.ps1 -Mode Status` against that same runtime
+  state, then stops the resident lease and removes the temporary data root.
+- The proof shows that when a live supervised resident host is present, the
+  persistent-supervision plan consumes it as a ready `resident_host_process`
+  dependency and moves the first missing required prerequisite to
+  `tray_presence`. This replaces the prior proof-layer uncertainty about
+  whether the plan could consume a real supervised resident readback.
+- This is a bounded proof/diagnostic bridge. It temporarily launches and stops
+  a local test resident host under a temp data root, but it does not enable
+  persistent supervision, install or control a service, register tray or
+  hotkey presence, open or control an overlay, add summon-anywhere, grant
+  execution authority, make approval decisions, write memory, write receipts,
+  or allow a resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next concrete implementation blocker is
+  `tray_presence` before persistent supervision can truthfully enable.
+
+Latest validation for the Stage 6 resident-host plan-consumption proof slice:
+
+- `python -m pytest tests\test_lens_resident_host_plan_consumption_proof_script.py -q`
+  Result: `failed before fixing empty stderr/stdout handling in the proof wrapper, then passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; live_resident_host_observed=true; persistent_supervision_plan_consumed_live_resident_host=true; first_missing_required_before_enable=tray_presence; next_smallest_truthful_gap=tray_presence`
+- `python -m pytest tests\test_lens_resident_host_plan_consumption_proof_script.py tests\test_lens_host_supervisor_script.py tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_plan_consumption_proof_script.py tests\test_lens_host_supervisor_script.py tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_plan_consumption_proof_script.py tests\test_lens_host_supervisor_script.py tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=2/5; blocked criteria remain summon_anywhere, helpful_not_noisy, and system_resident_presence`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
