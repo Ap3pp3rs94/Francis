@@ -43,13 +43,28 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
-    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_dir))
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_dir), "-ChildProofTimeoutSeconds", "240")
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.host.persistent_supervision_enablement_transition_plan.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
+    assert payload["child_proof_timeout_seconds"] == 240
+    assert payload["child_proof_timeouts"] == []
+    child_runs = payload["child_proof_runs"]
+    assert [item["name"] for item in child_runs] == [
+        "persistent_supervision_prerequisites",
+        "service_install_plan",
+        "resident_claim_boundary",
+        "persistent_supervision_plan",
+    ]
+    for run in child_runs:
+        assert run["exit_code"] == 0
+        assert run["timed_out"] is False
+        assert run["timeout_seconds"] == 240
+        assert isinstance(run["duration_ms"], int)
+        assert run["duration_ms"] >= 0
     assert payload["transition_plan_observed"] is True
     assert payload["transition_plan_ready"] is False
     assert payload["persistent_supervision_config_gate_enabled"] is True
@@ -132,6 +147,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert checks["persistent_supervision_authority_chain"]["status"] == "resident_claim_boundary_observed"
     assert checks["required_prerequisite_guard_readback"]["status"] == "blocked_prerequisites"
     assert checks["transition_side_effects_denied"]["status"] == "no_side_effects"
+    assert checks["child_proof_timeouts"]["status"] == "none"
     assert all(item["passed"] for item in payload["checks"])
 
     assert "persistent_supervision_required_prerequisites_missing" in payload["blockers"]

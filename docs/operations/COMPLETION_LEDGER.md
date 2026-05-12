@@ -24667,6 +24667,38 @@ stabilization slice:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 420 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,resident_supervision_persistence_boundary_proof_observed,@{Name='timeouts';Expression={$_.child_proof_timeouts -join ','}},@{Name='basis';Expression={$_.next_smallest_truthful_gap_basis}} | ConvertTo-Json -Depth 8`
   Result: `passed; status=blocked; stage_state=active; ready_to_close=false; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; resident_supervision_persistence_boundary_proof_observed=true; child proof timeouts empty`
 
+Stage 6 persistent-supervision transition-plan proof bounded-child slice on
+`2026-05-11`:
+
+- `scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1`
+  now bounds all nested proof children with `ChildProofTimeoutSeconds`, passes
+  that bound into the nested prerequisites proof, and reports
+  `child_proof_runs` plus `child_proof_timeouts`.
+- The Stage 6 completion posture remains blocked with
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+  This slice only prevents the transition-plan proof from hanging indefinitely
+  inside the proof layer while the real persistent-supervision prerequisites
+  remain unresolved.
+- This is diagnostic/proof-harness work only. It does not add product execution
+  authority, approval-decision authority, memory-write behavior, service
+  install/control, tray registration, hotkey registration, overlay control,
+  summon authority, persistent resident supervision, process restart authority,
+  or resident claim authority.
+
+Latest validation for the Stage 6 persistent-supervision transition-plan proof
+bounded-child slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed with Ruff cache write warning for .ruff_cache`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
