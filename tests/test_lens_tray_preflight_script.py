@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -125,6 +126,44 @@ def test_lens_tray_preflight_rejects_stale_runtime_pid(tmp_path: Path) -> None:
     assert "resident_host_process_missing" in payload["blockers"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["runtime_state"]["status"] == "stale_or_unverified"
+
+
+def test_lens_tray_preflight_reports_live_tray_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-tray"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-tray.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.tray.preflight"
+    assert payload["status"] == "blocked"
+    assert payload["ready"] is False
+    assert payload["tray"]["tray_runner"] == "scripts/lens-tray-presence.ps1"
+    tray_runtime = payload["tray_runtime"]
+    assert tray_runtime["ready"] is True
+    assert tray_runtime["process_alive"] is True
+    assert tray_runtime["tray_icon_visible"] is True
+    assert tray_runtime["requirement_state"] == "running"
+    assert tray_runtime["blocker"] == ""
+    assert "tray_presence_runtime_missing" not in payload["blockers"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["tray_runner"]["status"] == "present"
+    assert checks["tray_runtime"]["status"] == "running"
 
 
 def test_lens_tray_preflight_refuses_register_actions() -> None:

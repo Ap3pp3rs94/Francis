@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir, repo_root
-from francis.lens.host_manifest import lens_host_launch_manifest
+from francis.lens.host_manifest import _process_alive_readback, lens_host_launch_manifest
 
 
 def _safe_str(value: Any, default: str = "") -> str:
@@ -72,6 +72,97 @@ def _read_config(relative_path: str) -> tuple[dict[str, Any], bool, str]:
     except (OSError, json.JSONDecodeError) as exc:
         return {}, True, str(exc)
     return (payload if isinstance(payload, dict) else {}), True, "" if isinstance(payload, dict) else "not_json_object"
+
+
+def _json_dict_from_path(path: Path) -> dict[str, Any]:
+    try:
+        if not path.is_file():
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _pid_from_file(path: Path) -> int:
+    try:
+        raw = path.read_text(encoding="utf-8-sig").strip()
+    except OSError:
+        return 0
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 0
+    return max(parsed, 0)
+
+
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def _tray_runtime_readback() -> dict[str, Any]:
+    runtime_root = data_dir() / "runtime" / "lens-tray"
+    state_file = runtime_root / "status.json"
+    pid_file = runtime_root / "lens-tray.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = _safe_str(state_payload.get("kind"))
+    state_status = _safe_str(state_payload.get("status"))
+    state_pid = _int_value(state_payload.get("pid"))
+    state_claims_running_tray = (
+        state_kind == "lens.tray.runtime_state"
+        and state_status == "tray_running"
+        and state_pid > 0
+        and state_pid == pid
+    )
+    if state_claims_running_tray:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.tray.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "tray_running":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_running"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_mismatch"
+    tray_icon_visible = process_alive and _bool(state_payload.get("tray_icon_visible"))
+    requirement_state = (
+        "running"
+        if tray_icon_visible
+        else "process_running_no_icon_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    blocker = (
+        "" if tray_icon_visible else "tray_icon_not_observed" if process_alive else "tray_presence_runtime_missing"
+    )
+    return {
+        "ready": tray_icon_visible,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "tray_icon_visible": tray_icon_visible,
+        "pid": pid,
+        "pid_present": pid_present,
+        "status_path": "data/runtime/lens-tray/status.json",
+        "pid_path": "data/runtime/lens-tray/lens-tray.pid",
+        "runtime_state_exists": state_exists,
+        "runtime_status": state_status,
+        "runtime_status_kind": state_kind,
+        "runtime_status_pid": state_pid,
+        "runtime_status_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "runtime_state_updated_at": _safe_str(state_payload.get("updated_at")),
+        "requirement_state": requirement_state,
+        "blocker": blocker,
+    }
 
 
 def _config_status(*, exists: bool, error: str) -> str:
@@ -500,6 +591,9 @@ def _tray_preflight() -> dict[str, Any]:
     lens_status_route = _safe_str(payload.get("lens_status_route"), "/lens/status")
     host_preflight = _safe_str(payload.get("host_preflight"), "scripts/lens-host-preflight.ps1")
     host_status_runner = _safe_str(payload.get("host_status_runner"), "scripts/lens-host.ps1")
+    tray_runner = _safe_str(payload.get("tray_runner"), "scripts/lens-tray-presence.ps1")
+    runtime_state_path = _safe_str(payload.get("runtime_state_path"), "data/runtime/lens-tray/status.json")
+    pid_path = _safe_str(payload.get("pid_path"), "data/runtime/lens-tray/lens-tray.pid")
     summon_preflight = _safe_str(payload.get("summon_preflight"), "scripts/lens-summon-preflight.ps1")
     summon_config = _safe_str(payload.get("summon_config"), "config/runtime/lens/summon.json")
     blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_tray_presence_not_implemented")
@@ -518,8 +612,11 @@ def _tray_preflight() -> dict[str, Any]:
     required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
+    tray_runner_exists = _runtime_file_exists(tray_runner)
     summon_preflight_exists = _runtime_file_exists(summon_preflight)
     summon_config_exists = _runtime_file_exists(summon_config)
+    tray_runtime = _tray_runtime_readback()
+    tray_runtime_ready = bool(tray_runtime.get("ready"))
     runtime_state_exists = _runtime_state_exists()
     blockers: list[str] = []
     if blocked_reason:
@@ -538,6 +635,10 @@ def _tray_preflight() -> dict[str, Any]:
         blockers.append("lens_host_lifecycle_preflight_missing")
     if not host_status_runner_exists:
         blockers.append("lens_host_status_runner_missing")
+    if (enabled or tray_host_enabled or tray_icon_enabled) and not tray_runner_exists:
+        blockers.append("lens_tray_runner_missing")
+    if tray_host_enabled and tray_icon_enabled and not tray_runtime_ready:
+        blockers.append(_safe_str(tray_runtime.get("blocker"), "tray_presence_runtime_missing"))
     if not summon_preflight_exists:
         blockers.append("lens_summon_preflight_missing")
     if not summon_config_exists:
@@ -600,6 +701,22 @@ def _tray_preflight() -> dict[str, Any]:
                 host_preflight,
             ),
             _check(
+                "tray_runner",
+                "present" if tray_runner_exists else "missing",
+                "tray presence runner is present" if tray_runner_exists else "tray presence runner is missing",
+                tray_runner,
+            ),
+            _check(
+                "tray_runtime",
+                "running"
+                if tray_runtime_ready
+                else "stale_or_unverified"
+                if tray_runtime.get("runtime_state_exists") or tray_runtime.get("pid_present")
+                else "missing",
+                "tray runtime state reports a live tray icon" if tray_runtime_ready else "tray runtime is not live",
+                runtime_state_path,
+            ),
+            _check(
                 "summon_preflight",
                 "present" if summon_preflight_exists else "missing",
                 "summon preflight is present" if summon_preflight_exists else "summon preflight is missing",
@@ -621,9 +738,13 @@ def _tray_preflight() -> dict[str, Any]:
             "notification_supported": notification_supported,
             "host_preflight": host_preflight,
             "host_status_runner": host_status_runner,
+            "tray_runner": tray_runner,
+            "runtime_state_path": runtime_state_path,
+            "pid_path": pid_path,
             "summon_preflight": summon_preflight,
             "summon_config": summon_config,
         },
+        "tray_runtime": tray_runtime,
         "governance": _base_governance(
             service_control_authority=False,
             tray_registration_authority=False,

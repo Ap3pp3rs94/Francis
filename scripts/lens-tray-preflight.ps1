@@ -202,6 +202,77 @@ function Get-HostProcessReadback {
   }
 }
 
+function Get-TrayRuntimeReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-tray'
+  $PidPath = Join-Path $RuntimeRoot 'lens-tray.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsRunningTray = (
+    $StatusKind -eq 'lens.tray.runtime_state' -and
+    $StatusValue -eq 'tray_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningTray -and $RuntimePid -gt 0) {
+    try {
+      $ProcessAlive = $null -ne (Get-Process -Id $RuntimePid -ErrorAction Stop)
+    } catch {
+      $ProcessAlive = $false
+    }
+  }
+  $TrayIconVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'tray_icon_visible' -Default $false)
+  $RequirementState = if ($TrayIconVisible) {
+    'running'
+  } elseif ($ProcessAlive) {
+    'process_running_no_icon_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($TrayIconVisible) {
+    ''
+  } elseif ($ProcessAlive) {
+    'tray_icon_not_observed'
+  } else {
+    'tray_presence_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $TrayIconVisible
+    process_alive = $ProcessAlive
+    tray_icon_visible = $TrayIconVisible
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\tray.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -221,6 +292,9 @@ $StatusRoute = Get-StringProperty -Payload $Config -Name 'status_route' -Default
 $LensStatusRoute = Get-StringProperty -Payload $Config -Name 'lens_status_route' -Default '/lens/status'
 $HostPreflight = Get-StringProperty -Payload $Config -Name 'host_preflight' -Default 'scripts/lens-host-preflight.ps1'
 $HostStatusRunner = Get-StringProperty -Payload $Config -Name 'host_status_runner' -Default 'scripts/lens-host.ps1'
+$TrayRunner = Get-StringProperty -Payload $Config -Name 'tray_runner' -Default 'scripts/lens-tray-presence.ps1'
+$RuntimeStatePath = Get-StringProperty -Payload $Config -Name 'runtime_state_path' -Default 'data/runtime/lens-tray/status.json'
+$PidPath = Get-StringProperty -Payload $Config -Name 'pid_path' -Default 'data/runtime/lens-tray/lens-tray.pid'
 $SummonPreflight = Get-StringProperty -Payload $Config -Name 'summon_preflight' -Default 'scripts/lens-summon-preflight.ps1'
 $SummonConfig = Get-StringProperty -Payload $Config -Name 'summon_config' -Default 'config/runtime/lens/summon.json'
 $BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_tray_presence_not_implemented'
@@ -241,9 +315,12 @@ $RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_
 $DataRoot = Get-DataRoot -Override $DataDir
 $HostPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostPreflight) -PathType Leaf
 $HostStatusRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostStatusRunner) -PathType Leaf
+$TrayRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $TrayRunner) -PathType Leaf
 $SummonPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $SummonPreflight) -PathType Leaf
 $SummonConfigExists = Test-Path -LiteralPath (Join-Path $RepoRoot $SummonConfig) -PathType Leaf
 $HostProcessReadback = Get-HostProcessReadback -Root $DataRoot
+$TrayRuntimeReadback = Get-TrayRuntimeReadback -Root $DataRoot
+$TrayRuntimeReady = [bool]$TrayRuntimeReadback.ready
 $RuntimeStateExists = [bool]$HostProcessReadback.runtime_state_exists
 $PidPresent = [bool]$HostProcessReadback.pid_present
 $ResidentHostProcessAlive = [bool]$HostProcessReadback.process_alive
@@ -257,6 +334,8 @@ Add-Check -Target $Checks -Id 'startup_registration' -Status $(if ($StartupRegis
 Add-Check -Target $Checks -Id 'notifications' -Status $(if ($NotificationSupported) { 'declared' } else { 'disabled' }) -Reason 'tray notifications are not implemented' -Evidence 'notification_supported'
 Add-Check -Target $Checks -Id 'host_preflight' -Status $(if ($HostPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($HostPreflightExists) { 'host lifecycle preflight is present' } else { 'host lifecycle preflight is missing' }) -Evidence $HostPreflight
 Add-Check -Target $Checks -Id 'host_status_runner' -Status $(if ($HostStatusRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($HostStatusRunnerExists) { 'host status runner is present' } else { 'host status runner is missing' }) -Evidence $HostStatusRunner
+Add-Check -Target $Checks -Id 'tray_runner' -Status $(if ($TrayRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($TrayRunnerExists) { 'tray presence runner is present' } else { 'tray presence runner is missing' }) -Evidence $TrayRunner
+Add-Check -Target $Checks -Id 'tray_runtime' -Status $(if ($TrayRuntimeReady) { 'running' } elseif ([bool]$TrayRuntimeReadback.runtime_state_exists -or [bool]$TrayRuntimeReadback.pid_present) { 'stale_or_unverified' } else { 'missing' }) -Reason $(if ($TrayRuntimeReady) { 'tray runtime state reports a live tray icon' } else { 'tray runtime is not live' }) -Evidence $RuntimeStatePath
 Add-Check -Target $Checks -Id 'summon_preflight' -Status $(if ($SummonPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonPreflightExists) { 'summon preflight is present' } else { 'summon preflight is missing' }) -Evidence $SummonPreflight
 Add-Check -Target $Checks -Id 'summon_config' -Status $(if ($SummonConfigExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonConfigExists) { 'summon config is present' } else { 'summon config is missing' }) -Evidence $SummonConfig
 Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($ResidentHostProcessAlive) { 'process_observed' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }) -Reason $(if ($ResidentHostProcessAlive) { 'resident host process is live and matches runtime state' } else { 'resident host runtime state is not live' }) -Evidence 'data/runtime/lens-host'
@@ -272,6 +351,8 @@ if (-not $TrayIconEnabled) { [void]$Blockers.Add('tray_icon_disabled') }
 if (-not $StartupRegister) { [void]$Blockers.Add('tray_startup_registration_disabled') }
 if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_preflight_missing') }
 if (-not $HostStatusRunnerExists) { [void]$Blockers.Add('lens_host_status_runner_missing') }
+if (($Enabled -or $TrayHostEnabled -or $TrayIconEnabled) -and -not $TrayRunnerExists) { [void]$Blockers.Add('lens_tray_runner_missing') }
+if ($TrayHostEnabled -and $TrayIconEnabled -and -not $TrayRuntimeReady) { [void]$Blockers.Add([string]$TrayRuntimeReadback.blocker) }
 if (-not $SummonPreflightExists) { [void]$Blockers.Add('lens_summon_preflight_missing') }
 if (-not $SummonConfigExists) { [void]$Blockers.Add('lens_summon_config_missing') }
 if (-not $ResidentHostProcessAlive) { [void]$Blockers.Add('resident_host_process_missing') }
@@ -308,10 +389,14 @@ $Payload = [ordered]@{
     notification_supported = $NotificationSupported
     host_preflight = $HostPreflight
     host_status_runner = $HostStatusRunner
+    tray_runner = $TrayRunner
+    runtime_state_path = $RuntimeStatePath
+    pid_path = $PidPath
     summon_preflight = $SummonPreflight
     summon_config = $SummonConfig
   }
   resident_host_process = $HostProcessReadback
+  tray_runtime = $TrayRuntimeReadback
   governance = [ordered]@{
     read_only_contract = $true
     execution_authority = $false

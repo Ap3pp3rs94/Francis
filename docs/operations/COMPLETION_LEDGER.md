@@ -24699,6 +24699,53 @@ bounded-child slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1`
 
+Stage 6 tray runtime presence readback slice on `2026-05-11`:
+
+- `scripts/lens-tray-presence.ps1` adds a bounded Windows user-session tray
+  presence runner with `Status`, `Start`, and `Stop` modes plus runtime state
+  readback under `data/runtime/lens-tray`. `Status` is read-only; `Start` and
+  `Stop` are script-level local process/tray actions and are not exposed as API
+  authority.
+- `config/runtime/lens/tray.json`, `scripts/lens-tray-preflight.ps1`, and
+  `src/francis/lens/preflight.py` now expose the tray runner and live tray
+  runtime state readback. The preflight can distinguish an observed live tray
+  runtime from a missing or stale runtime, but tray remains blocked while tray
+  config and authorities stay disabled.
+- This slice moves Stage 6 from "tray proof only" toward a real tray presence
+  prerequisite, without claiming the tray criterion is complete. It does not
+  enable startup registration, auto-start the tray, register hotkeys, create an
+  overlay, add summon-anywhere, install/control a service, grant process
+  restart authority, write memory, add API execution authority, make approval
+  decisions, or allow a resident claim.
+- Stage 6 remains active and blocked. The checkpoint still reports
+  `ready_total=2/5`, `ready_to_close=false`; the blocked criteria remain
+  `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`.
+
+Latest validation for the Stage 6 tray runtime presence readback slice:
+
+- `python -m pytest tests\test_lens_tray_presence_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch -q`
+  Result: `failed before fix, then passed after disabled tray configs stopped treating a missing runner as a blocker`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-presence.ps1 -Mode Start -DataDir <temp> -StartupTimeoutSeconds 5 -RunSeconds 2`, followed by `Status` and `Stop`
+  Result: `failed before fix because Stop used the read-only PowerShell PID automatic variable name, then passed after renaming the local stop pid variable; start_status=started; status_ready=true; stop_status=stopped`
+- `python -m ruff check src\francis\lens\preflight.py tests\test_lens_tray_presence_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py tests\test_lens_tray_presence_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py`
+  Result: `passed after formatting src\francis\lens\preflight.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3`
+  Result: `passed; status=blocked; stage_state=active; stage_claim=backend_readback_contract_only; ready_total=2/5; ready_to_close=false; enablement_gate_ready_total=0/4; blocker_total=71`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-tray-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
