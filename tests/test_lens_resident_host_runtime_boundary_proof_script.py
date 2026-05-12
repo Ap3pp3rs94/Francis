@@ -134,7 +134,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert all(item["passed"] for item in payload["checks"])
 
     assert "resident_host_runtime_blocker_boundary_consumed" in payload["blockers"]
-    assert "lens_host_runtime_not_implemented" in payload["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in payload["blockers"]
     assert "resident_host_process_not_supervised" in payload["blockers"]
     assert "resident_runtime_candidate_not_persistent" in payload["blockers"]
     assert "resident_supervision_not_persistent" in payload["blockers"]

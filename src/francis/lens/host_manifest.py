@@ -1444,7 +1444,9 @@ def _lens_host_service_plan(
     service_control_authority = bool(service_config_payload.get("service_control_authority"))
     start_after_install = bool(service_config_payload.get("start_after_install"))
     use_wrapper = bool(service_config_payload.get("use_wrapper"))
-    blocked_reason = str(service_config_payload.get("blocked_reason") or "lens_host_runtime_not_implemented")
+    blocked_reason = str(
+        service_config_payload.get("blocked_reason") or "lens_host_persistent_supervision_prerequisites_pending"
+    )
     blocked_by = []
     if not service_config_exists:
         blocked_by.append("service_config_missing")
@@ -2349,8 +2351,13 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         process_readback=process_readback,
     )
     foreground_supported = bool(service_config_payload.get("foreground_session_enabled"))
+    runtime_blocker = str(
+        service_config_payload.get("blocked_reason") or "lens_host_persistent_supervision_prerequisites_pending"
+    )
+    if not entrypoint_exists:
+        runtime_blocker = "lens_host_runtime_not_implemented"
     blockers = [
-        "lens_host_runtime_not_implemented",
+        runtime_blocker,
         "tray_host_missing",
         "global_hotkey_binding_missing",
         "overlay_window_missing",
@@ -2373,6 +2380,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "runtime": _select_blockers(
             blockers,
             "lens_host_runtime_not_implemented",
+            "lens_host_persistent_supervision_prerequisites_pending",
             "lens_host_entrypoint_missing",
             "lens_host_service_config_missing",
         ),
@@ -2479,7 +2487,9 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             "config_status": "present_disabled" if service_config_exists else "missing",
             "service_name": str(service_config_payload.get("service_name") or ""),
             "installable": False,
-            "blocked_reason": str(service_config_payload.get("blocked_reason") or "lens_host_runtime_not_implemented"),
+            "blocked_reason": str(
+                service_config_payload.get("blocked_reason") or "lens_host_persistent_supervision_prerequisites_pending"
+            ),
             "install_authority": False,
             "start_after_install": False,
             "auto_start": False,
@@ -2706,7 +2716,7 @@ def lens_host_runtime_boundary(*, manifest: dict[str, Any] | None = None) -> dic
                 "resident": False,
                 "service_managed": False,
                 "process_supervision": False,
-                "blockers": runtime_blockers or ["lens_host_runtime_not_implemented"],
+                "blockers": runtime_blockers or ["lens_host_persistent_supervision_prerequisites_pending"],
             },
         },
         "evidence": [

@@ -24822,6 +24822,44 @@ Latest validation for the Stage 6 tray blocker truth alignment slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1 and scripts/lens-tray-preflight.ps1`
 
+Stage 6 host runtime blocker truth alignment slice on `2026-05-12`:
+
+- Lens host status, manifest, preflight, runtime-plan, and Stage 6 proof
+  readbacks now distinguish the implemented bounded host runner and resident
+  runtime candidate from the still-blocked persistent resident supervision
+  prerequisites. When the host entrypoint and service config exist, the runtime
+  blocker is now `lens_host_persistent_supervision_prerequisites_pending`
+  instead of the stale `lens_host_runtime_not_implemented`.
+- This is readback/truth alignment only. It does not enable persistent
+  supervision, install or control a service, register tray or hotkey presence,
+  open or control an overlay, add summon-anywhere, grant process supervision or
+  restart authority, write memory, make approval decisions, or allow a resident
+  claim.
+- Stage 6 remains active and blocked. `lens_status(limit=1)` reports
+  `ready_total=2/5` and `ready_to_close=false`; with existing resident candidate
+  evidence, the next handoff can now point at
+  `resident_supervision_not_persistent` rather than treating the host runtime as
+  unimplemented.
+
+Latest validation for the Stage 6 host runtime blocker truth alignment slice:
+
+- `python -m pytest tests\test_lens_host_preflight_script.py tests\test_lens_host_runtime_boundary_readback.py tests\test_lens_host_runtime_plan_readback.py tests\test_lens_host_foreground_script.py tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_launch_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\preflight.py src\francis\lens\host_runtime_plan.py src\francis\lens\activation.py tests\test_lens_host_foreground_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_launch_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\preflight.py src\francis\lens\host_runtime_plan.py src\francis\lens\activation.py tests\test_lens_host_foreground_script.py tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_launch_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed after formatting src\francis\lens\host_manifest.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,@{Name='blockers';Expression={$_.blockers -join ','}},@{Name='service_blocked_reason';Expression={$_.service_readback.blocked_reason}} | ConvertTo-Json -Depth 4`
+  Result: `passed; blockers include lens_host_persistent_supervision_prerequisites_pending`
+- `python -c "from francis.lens.status import lens_status; ..."`
+  Result: `passed; ready_total=2; ready_to_close=false; resident_host_blockers include lens_host_persistent_supervision_prerequisites_pending; next_gap=resident_supervision_not_persistent`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

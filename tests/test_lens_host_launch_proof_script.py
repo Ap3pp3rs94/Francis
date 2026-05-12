@@ -64,7 +64,7 @@ def test_lens_host_launch_proof_observes_bounded_launch_without_product_authorit
     assert payload["overlay_window"] is False
     assert payload["summon_anywhere"] is False
     assert "resident_host_process_not_supervised" in payload["blockers"]
-    assert "lens_host_runtime_not_implemented" in payload["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in payload["blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["powershell_runtime"]["passed"] is True

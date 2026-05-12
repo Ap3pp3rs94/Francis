@@ -170,7 +170,7 @@ def test_lens_host_status_observes_live_foreground_session(tmp_path: Path) -> No
         assert status_payload["resident"] is False
         assert status_payload["process_supervision"] is False
         assert "resident_host_process_missing" not in status_payload["blockers"]
-        assert "lens_host_runtime_not_implemented" in status_payload["blockers"]
+        assert "lens_host_persistent_supervision_prerequisites_pending" in status_payload["blockers"]
 
         stdout, stderr = proc.communicate(timeout=10)
         assert proc.returncode == 0, stderr
@@ -285,7 +285,7 @@ def test_lens_host_launch_starts_bounded_background_session(tmp_path: Path) -> N
     assert payload["overlay_window"] is False
     assert payload["summon_anywhere"] is False
     assert "resident_host_process_not_supervised" in payload["blockers"]
-    assert "lens_host_runtime_not_implemented" in payload["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in payload["blockers"]
 
     governance = payload["governance"]
     assert governance["diagnostic_only"] is True

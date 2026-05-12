@@ -404,8 +404,13 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
+    service_blocked_reason = (
+        _safe_str(service_plan.get("blocked_reason")).strip()
+        or _safe_str(service_install.get("blocked_reason")).strip()
+        or "lens_host_persistent_supervision_prerequisites_pending"
+    )
     blockers = [
-        "lens_host_runtime_not_implemented",
+        service_blocked_reason,
         "tray_host_missing",
         "global_hotkey_binding_missing",
         "always_on_top_window_missing",

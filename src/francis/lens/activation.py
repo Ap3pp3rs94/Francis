@@ -1686,6 +1686,7 @@ _BOUNDED_HOST_ACTIVATION_MAX_RUN_SECONDS = 10
 _BOUNDED_HOST_ACTIVATION_SOFT_BLOCKERS = {
     "lens_preflight_blocked",
     "lens_host_runtime_not_implemented",
+    "lens_host_persistent_supervision_prerequisites_pending",
     "resident_host_process_missing",
     "resident_host_not_supervised",
     "resident_host_process_not_supervised",

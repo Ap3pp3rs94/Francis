@@ -350,7 +350,9 @@ def lens_host_runtime_implementation_plan(
     diagnostic_runner_ready = bool(runtime_boundary.get("diagnostic_status_runner_ready"))
     bounded_foreground_ready = bool(runtime_boundary.get("bounded_foreground_session_available"))
     bounded_launch_proof_available = bool(runtime_boundary.get("bounded_launch_proof_available"))
-    runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or ["lens_host_runtime_not_implemented"]
+    runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or [
+        "lens_host_persistent_supervision_prerequisites_pending"
+    ]
     process_blockers = _as_str_list(blocker_groups.get("process_readback")) or [
         str(runtime_boundary.get("resident_host_process_blocker") or "resident_host_process_missing")
     ]
@@ -852,7 +854,9 @@ def lens_host_runtime_loop_contract(
     blocker_groups = _as_dict(implementation_plan.get("blocker_groups"))
     authority_readback = _as_dict(implementation_plan.get("authority_readback"))
 
-    runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or ["lens_host_runtime_not_implemented"]
+    runtime_blockers = _as_str_list(blocker_groups.get("runtime")) or [
+        "lens_host_persistent_supervision_prerequisites_pending"
+    ]
     process_blockers = _as_str_list(blocker_groups.get("process_readback")) or [
         str(runtime_boundary.get("resident_host_process_blocker") or "resident_host_process_missing")
     ]

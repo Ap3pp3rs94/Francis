@@ -17,12 +17,17 @@ $modeName = $Mode.ToLowerInvariant()
 $ServiceConfigPath = Join-Path (Join-Path (Join-Path (Join-Path $RepoRoot 'config') 'runtime') 'services') 'lens-host.json'
 $ServiceConfigExists = Test-Path -LiteralPath $ServiceConfigPath -PathType Leaf
 $ServiceName = 'Francis-LensHost'
+$RuntimeBlockedReason = 'lens_host_persistent_supervision_prerequisites_pending'
 if ($ServiceConfigExists) {
   try {
     $ServiceConfigPayload = Get-Content -LiteralPath $ServiceConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     $ServiceNameProperty = $ServiceConfigPayload.PSObject.Properties['service_name']
     if ($null -ne $ServiceNameProperty -and -not [string]::IsNullOrWhiteSpace([string]$ServiceNameProperty.Value)) {
       $ServiceName = [string]$ServiceNameProperty.Value
+    }
+    $BlockedReasonProperty = $ServiceConfigPayload.PSObject.Properties['blocked_reason']
+    if ($null -ne $BlockedReasonProperty -and -not [string]::IsNullOrWhiteSpace([string]$BlockedReasonProperty.Value)) {
+      $RuntimeBlockedReason = [string]$BlockedReasonProperty.Value
     }
   } catch {
     $ServiceName = 'Francis-LensHost'
@@ -230,7 +235,7 @@ if (-not $ProcessAlive) {
 } elseif ($ResidentSessionActive) {
   $Blockers = @('resident_host_process_not_supervised', 'resident_supervision_disabled') + $Blockers
 }
-$Blockers = @('lens_host_runtime_not_implemented') + $Blockers
+$Blockers = @($RuntimeBlockedReason) + $Blockers
 if (-not $ServiceConfigExists) {
   $Blockers = @('lens_host_service_config_missing') + $Blockers
 }
@@ -268,7 +273,7 @@ if ($WindowsServiceSupported) {
     $ServiceReadbackError = [string]$_.Exception.Message
   }
 }
-$ServiceBlockedReason = if ($ServiceInstalled) { 'lens_host_runtime_not_implemented' } elseif ($WindowsServiceSupported) { 'lens_host_service_not_installed' } else { 'windows_service_readback_unavailable' }
+$ServiceBlockedReason = if ($ServiceInstalled) { $RuntimeBlockedReason } elseif ($WindowsServiceSupported) { 'lens_host_service_not_installed' } else { 'windows_service_readback_unavailable' }
 
 $payload = [ordered]@{
   ok = $true
@@ -478,7 +483,7 @@ if ($Mode -eq 'Resident') {
   $payload.resident = $false
   $payload.resident_claim_allowed = $false
   $payload.foreground_run_seconds = $RunSeconds
-  $payload.message = 'Lens host resident runtime candidate completed; service supervision, tray, summon, overlay, and resident claim remain unimplemented.'
+  $payload.message = 'Lens host resident runtime candidate completed; persistent service supervision, tray, summon, overlay, and resident claim remain blocked.'
   $payload | ConvertTo-Json -Depth 8
   exit 0
 }
@@ -578,7 +583,7 @@ if ($Mode -eq 'Foreground') {
   $payload.foreground_supported = $true
   $payload.foreground_session = $false
   $payload.foreground_run_seconds = $RunSeconds
-  $payload.message = 'Lens host foreground status session completed; resident service, tray, summon, and overlay remain unimplemented.'
+  $payload.message = 'Lens host foreground status session completed; resident service, tray, summon, and overlay remain blocked.'
   $payload | ConvertTo-Json -Depth 8
   exit 0
 }
@@ -658,7 +663,7 @@ if ($Mode -eq 'Launch') {
   $payload.process_readback.blocked_reason = if ($LaunchObserved) { 'resident_host_not_supervised' } else { 'resident_host_process_missing' }
   $payload.blockers = if ($LaunchObserved) {
     @(
-      'lens_host_runtime_not_implemented',
+      $RuntimeBlockedReason,
       'resident_host_process_not_supervised',
       'tray_host_missing',
       'global_hotkey_binding_missing',
@@ -703,6 +708,6 @@ if ($Mode -eq 'Launch') {
 $payload.ok = $false
 $payload.status = 'refused'
 $payload.error = 'lens_host_runtime_not_implemented'
-$payload.message = 'Lens host foreground/runtime launch is not implemented; this runner only reports status.'
+$payload.message = 'Lens host runtime mutation is not authorized by this runner; status, bounded foreground, and bounded resident candidate modes are separate governed paths.'
 $payload | ConvertTo-Json -Depth 8
 exit 2

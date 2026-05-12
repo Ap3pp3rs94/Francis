@@ -108,7 +108,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert enablement_gates["summon_enablement_gate"]["global_hotkey"] == "Ctrl+Alt+Space"
     assert "summon_binding_missing" in enablement_gates["summon_enablement_gate"]["blockers"]
     summon_gate_groups = enablement_gates["summon_enablement_gate"]["blocker_groups"]
-    assert "lens_host_runtime_not_implemented" in summon_gate_groups["resident_host"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in summon_gate_groups["resident_host"]
     assert "local_process_launch_authority_not_granted" in summon_gate_groups["resident_host"]
     assert "global_hotkey_binding_missing" in summon_gate_groups["global_hotkey_binding"]
     assert "summon_binding_missing" in summon_gate_groups["summon_binding"]
@@ -137,7 +137,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "would_mutate": False,
     }
     expected_first_summon_handoff_required_blockers = {
-        "lens_host_runtime_not_implemented",
+        "lens_host_persistent_supervision_prerequisites_pending",
         "local_process_launch_authority_not_granted",
     }
     expected_first_summon_handoff_allowed_blockers = expected_first_summon_handoff_required_blockers | {

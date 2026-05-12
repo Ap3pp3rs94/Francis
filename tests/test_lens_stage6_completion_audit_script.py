@@ -231,7 +231,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "would_mutate": False,
     }
     expected_checkpoint_runtime_blockers = {
-        "lens_host_runtime_not_implemented",
+        "lens_host_persistent_supervision_prerequisites_pending",
         "lens_host_persistent_supervision_prerequisites_pending",
     }
     expected_checkpoint_required_blockers = {"local_process_launch_authority_not_granted"}

@@ -88,7 +88,7 @@ def test_lens_resident_runtime_resident_claim_boundary_is_readback_only() -> Non
     assert "/lens/resident-runtime/plan" in resident_claim["evidence"]
     assert "/lens/resident-runtime/execute" in resident_claim["evidence"]
     assert resident_claim["required_before"] == []
-    assert "lens_host_runtime_not_implemented" in resident_claim["blockers"]
+    assert "resident_surface_runtime_missing" in resident_claim["blockers"]
     assert "resident_claim_authority_not_granted" in resident_claim["blockers"]
     assert "resident_surface_runtime_missing" in resident_claim["blockers"]
     assert payload["blockers"] == resident_claim["blockers"]

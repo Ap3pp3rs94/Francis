@@ -357,7 +357,7 @@ $FinalPid = [int](Get-PropertyValue -Payload $FinalState -Name 'pid' -Default 0)
 $Blockers = @(
   'resident_host_process_not_supervised',
   'resident_supervision_disabled',
-  'lens_host_runtime_not_implemented',
+  'lens_host_persistent_supervision_prerequisites_pending',
   'service_control_authority_false',
   'tray_host_missing',
   'global_hotkey_binding_missing',

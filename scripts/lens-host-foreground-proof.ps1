@@ -272,7 +272,7 @@ $ForegroundCompleted = (
 $ProofPassed = $ForegroundObserved -and $StatusMatched -and $ForegroundCompleted
 $Blockers = @(
   'resident_supervision_disabled',
-  'lens_host_runtime_not_implemented',
+  'lens_host_persistent_supervision_prerequisites_pending',
   'service_control_authority_false',
   'tray_host_missing',
   'global_hotkey_binding_missing',

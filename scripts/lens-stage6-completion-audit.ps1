@@ -286,7 +286,7 @@ $ResidentHostRuntimeBoundaryProofObserved = (
   [bool]$ResidentHostRuntimeBoundaryProof.process_supervision_handoff_observed -and
   [bool]$ResidentHostRuntimeBoundaryProof.side_effects_bounded -and
   $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_runtime_blocker_boundary_consumed' -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'lens_host_runtime_not_implemented' -and
+  $ResidentHostRuntimeBoundaryProofBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
   $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_process_not_supervised' -and
   $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_supervision_authority_not_granted' -and
   $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_restart_authority_not_granted'
@@ -942,7 +942,7 @@ $CheckpointSummonEnablementGateHandoffObserved = (
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_step -eq 'run_resident_host_blocker_proof' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_required -eq 'resident_runtime_execution_authority' -and
-  $CheckpointSummonEnablementGateFirstFamilyHandoffBlockers -contains 'lens_host_runtime_not_implemented' -and
+  $CheckpointSummonEnablementGateFirstFamilyHandoffBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
   $CheckpointSummonEnablementGateFirstFamilyHandoffBlockers -contains 'local_process_launch_authority_not_granted' -and
   -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_granted -and
   [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.read_only_contract -and

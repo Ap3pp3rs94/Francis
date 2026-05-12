@@ -58,7 +58,7 @@ def test_lens_host_foreground_proof_observes_bounded_process_without_authority(t
     assert payload["overlay_window"] is False
     assert payload["summon_anywhere"] is False
     assert "resident_supervision_disabled" in payload["blockers"]
-    assert "lens_host_runtime_not_implemented" in payload["blockers"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in payload["blockers"]
     assert "global_hotkey_binding_missing" in payload["blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}

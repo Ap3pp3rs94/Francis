@@ -970,6 +970,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             blockers,
             "resident_host_process_missing",
             "lens_host_runtime_not_implemented",
+            "lens_host_persistent_supervision_prerequisites_pending",
             "lens_host_service_config_missing",
             "lens_host_entrypoint_missing",
             "lens_host_lifecycle_preflight_missing",

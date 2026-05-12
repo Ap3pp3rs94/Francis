@@ -334,6 +334,7 @@ $OsBindingReadinessEvidence = ConvertTo-StringArray -Value (
 $Stage6BlockerGroups = [ordered]@{
   resident_host = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
       'lens_host_runtime_not_implemented',
+      'lens_host_persistent_supervision_prerequisites_pending',
       'resident_host_process_missing',
       'resident_host_process_not_supervised',
       'local_process_launch_authority_not_granted'
