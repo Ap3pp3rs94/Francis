@@ -3,16 +3,16 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(5, 60)]
-  [int]$StartupTimeoutSeconds = 5,
+  [int]$StartupTimeoutSeconds = 20,
 
   [ValidateRange(2, 30)]
   [int]$ForegroundRunSeconds = 2,
 
   [ValidateRange(2, 30)]
-  [int]$HostLaunchRunSeconds = 2,
+  [int]$HostLaunchRunSeconds = 3,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 3,
+  [int]$SupervisorRunSeconds = 20,
 
   [switch]$ConsumeProcessSupervisionHandoff
 )

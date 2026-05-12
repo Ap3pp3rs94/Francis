@@ -43,16 +43,16 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
         "Status",
         "-ConsumeProcessSupervisionHandoff",
         "-StartupTimeoutSeconds",
-        "5",
+        "20",
         "-ForegroundRunSeconds",
         "2",
         "-HostLaunchRunSeconds",
-        "2",
-        "-SupervisorRunSeconds",
         "3",
+        "-SupervisorRunSeconds",
+        "20",
     )
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.summon_resident_host_blocker.proof"
     assert payload["status"] == "proof_passed"

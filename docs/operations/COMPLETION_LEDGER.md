@@ -25174,6 +25174,44 @@ Latest validation for the Stage 6 tray-runtime plan-consumption readback slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
 
+Stage 6 Lens process-supervision handoff proof-window stabilization on
+`2026-05-12`:
+
+- The CI run for `6d0f1612 feat(lens): consume live tray runtime in
+  supervision plan` failed only on `test (windows-latest, 3.13)` in
+  `tests/test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff`.
+- The failure was in the proof layer, not product authority: the
+  summon-resident-host bridge proof passed `5/2/2/3` second observation
+  windows into the nested process-supervision handoff proof, while the nested
+  proof's stable contract uses `20/2/3/20`. The bridge proof now uses the
+  stable handoff defaults and the focused test uses the same windows.
+- The focused test assertion now includes stdout when the proof fails so
+  future CI failures expose the JSON check payload instead of hiding the
+  failed check behind empty stderr.
+- This is proof/diagnostic-only. It does not enable persistent supervision,
+  install or control a service, register tray or hotkey presence, open or
+  control an overlay, add summon-anywhere, grant execution authority, make
+  approval decisions, write memory, write receipts, or allow a resident claim.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. No readiness percentage or acceptance criterion
+  moved from this recovery slice.
+
+Latest validation for the Stage 6 proof-window stabilization slice:
+
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-summon-resident-host-blocker-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
