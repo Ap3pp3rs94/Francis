@@ -63,8 +63,16 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     assert payload["consumed_resident_candidate_next_smallest_truthful_gap"] == ("resident_supervision_not_persistent")
     assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
-    assert payload["recommended_next_slice"] == ("consume_resident_supervision_persistence_boundary_in_stage6_audit")
-    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_next_slice"] == (
+        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
+    )
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/authority"
+    assert payload["recommended_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/readiness"
+    )
     assert payload["resident_candidate_boundary_proof_observed"] is True
     assert payload["persistent_supervision_plan_candidate_readback_observed"] is True
     assert payload["persistent_supervision_enablement_candidate_readback_observed"] is True
@@ -123,8 +131,10 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
         "consumed_resident_candidate_next_smallest_truthful_gap": "resident_supervision_not_persistent",
         "route_next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
         "next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
-        "recommended_next_slice": "consume_resident_supervision_persistence_boundary_in_stage6_audit",
-        "recommended_proof_script": "scripts/lens-stage6-completion-audit.ps1 -Mode Status",
+        "recommended_next_slice": "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+        "recommended_proof_script": ("scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"),
+        "recommended_route": "/lens/host/persistent-supervision/enablement/authority",
+        "recommended_readiness_route": "/lens/host/persistent-supervision/enablement/authority/readiness",
         "authority_required": "persistent_process_supervision_authority",
     }
     assert payload["governance"] == {

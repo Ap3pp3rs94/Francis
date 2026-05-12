@@ -360,8 +360,10 @@ $ResidentSupervisionPersistenceBoundaryProofObserved = (
   [string]$ResidentSupervisionPersistenceBoundaryProof.consumed_resident_candidate_next_smallest_truthful_gap -eq 'resident_supervision_not_persistent' -and
   [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
   [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
-  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_next_slice -eq 'consume_resident_supervision_persistence_boundary_in_stage6_audit' -and
-  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_next_slice -eq 'prove_persistent_supervision_enablement_authority_after_candidate_handoff' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_proof_script -eq 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_route -eq '/lens/host/persistent-supervision/enablement/authority' -and
+  [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_readiness_route -eq '/lens/host/persistent-supervision/enablement/authority/readiness' -and
   [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_candidate_boundary_proof_observed -and
   [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_plan_candidate_readback_observed -and
   [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_enablement_candidate_readback_observed -and
@@ -3264,6 +3266,8 @@ $Payload = [ordered]@{
     next_smallest_truthful_gap = [string]$ResidentSupervisionPersistenceBoundaryProof.next_smallest_truthful_gap
     recommended_next_slice = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_next_slice
     recommended_proof_script = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_proof_script
+    recommended_route = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_route
+    recommended_readiness_route = [string]$ResidentSupervisionPersistenceBoundaryProof.recommended_readiness_route
     resident_candidate_boundary_proof_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.resident_candidate_boundary_proof_observed
     persistent_supervision_plan_candidate_readback_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_plan_candidate_readback_observed
     persistent_supervision_enablement_candidate_readback_observed = [bool]$ResidentSupervisionPersistenceBoundaryProof.persistent_supervision_enablement_candidate_readback_observed

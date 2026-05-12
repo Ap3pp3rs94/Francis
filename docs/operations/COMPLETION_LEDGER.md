@@ -24904,6 +24904,44 @@ slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-persistent-supervision-plan.ps1`
 
+Stage 6 resident-supervision persistence-boundary authority handoff slice on
+`2026-05-12`:
+
+- `scripts/lens-resident-supervision-persistence-boundary-proof.ps1` now hands
+  `persistent_supervision_authority_not_granted` to the existing persistent
+  supervision enablement-authority proof and route instead of looping back to
+  the Stage 6 completion audit. The handoff now names
+  `scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode
+  Status`, `/lens/host/persistent-supervision/enablement/authority`, and the
+  matching readiness route as the next authority-review surface.
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the updated
+  persistence-boundary handoff and preserves those authority-route fields in
+  its nested proof readback.
+- This is proof/readback handoff alignment only. It does not enable persistent
+  supervision, install or control a service, register tray or hotkey presence,
+  open or control an overlay, add summon-anywhere, grant process supervision or
+  restart authority, write memory, make approval decisions, or allow a resident
+  claim.
+- Stage 6 remains active and blocked. The Stage 6 completion audit still
+  reports `ready_to_close=false` with remaining blockers `summon_anywhere`,
+  `helpful_not_noisy`, and `system_resident_presence`.
+
+Latest validation for the Stage 6 resident-supervision persistence-boundary
+authority handoff slice:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_proof_script,recommended_route,recommended_readiness_route | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; recommended_next_slice=prove_persistent_supervision_enablement_authority_after_candidate_handoff`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed before audit consumption/readback fixes, then passed`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `failed before formatting tests\test_lens_resident_supervision_persistence_boundary_proof_script.py, then passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-resident-supervision-persistence-boundary-proof.ps1 and scripts/lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -389,7 +389,16 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "persistent_supervision_authority_not_granted"
     )
     assert resident_persistence_boundary["recommended_next_slice"] == (
-        "consume_resident_supervision_persistence_boundary_in_stage6_audit"
+        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
+    )
+    assert resident_persistence_boundary["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert resident_persistence_boundary["recommended_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority"
+    )
+    assert resident_persistence_boundary["recommended_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/readiness"
     )
     assert resident_persistence_boundary["resident_candidate_boundary_proof_observed"] is True
     assert resident_persistence_boundary["persistent_supervision_plan_candidate_readback_observed"] is True
