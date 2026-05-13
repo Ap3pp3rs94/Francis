@@ -26055,6 +26055,37 @@ stabilization:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens checkpoint Windows 3.12 timeout guard stabilization on
+`2026-05-13`:
+
+- GitHub Actions run `25830270858` for commit `1ae6408a` passed Ubuntu 3.12,
+  Ubuntu 3.13, and Windows 3.13, but failed Windows 3.12 in
+  `test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`.
+- The failure was a test harness timeout: the Stage 6 checkpoint proof command
+  timed out after `420` seconds on Windows 3.12 while the full matrix showed
+  this proof family can legitimately exceed seven minutes on that runner.
+- The checkpoint test timeout is now `540` seconds so the already-bounded
+  checkpoint proof can finish on slower Windows 3.12 runners while still failing
+  boundedly if it stalls.
+- This is test-harness timeout stabilization only. It does not start a resident
+  host, enable persistent supervision, install or control a service, register
+  tray or hotkeys, open overlay windows, grant summon authority, decide
+  approvals, write memory, claim resident presence, or close Stage 6.
+- Stage 6 remains active. The completion audit still reports
+  `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the checkpoint timeout guard stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
