@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 
@@ -17,6 +19,63 @@ def _client(monkeypatch, tmp_path: Path):
     from francis.api.app import create_app
 
     return TestClient(create_app()), data_root
+
+
+def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-hotkey"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-hotkey.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+                "updated_at": "2026-05-13T00:30:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_summon_config(repo_root: Path) -> None:
+    config_root = repo_root / "config" / "runtime" / "lens"
+    config_root.mkdir(parents=True, exist_ok=True)
+    (config_root / "summon.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "version": 1,
+                "enabled": False,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "binding_enabled": False,
+                "register_hotkey": False,
+                "startup_register": False,
+                "palette_route": "/lens/status",
+                "summon_runner": "scripts/lens-summon.ps1",
+                "local_palette_launcher": "scripts/lens-command-palette.ps1 -Mode LocalOpen",
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "local_process_launch_authority": False,
+                "blocked_reason": "lens_summon_binding_disabled_pending_authority",
+                "required_before_enable": [
+                    "resident_host_process",
+                    "tray_presence",
+                    "overlay_window",
+                    "global_hotkey_binding",
+                    "summon_binding",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_lens_os_binding_authority_grant_requires_approved_request(monkeypatch, tmp_path: Path) -> None:
@@ -263,6 +322,42 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
 
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_os_binding_execution_readiness_carries_live_hotkey_runtime_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, data_root = _client(monkeypatch, tmp_path)
+    _write_lens_summon_config(data_root.parent)
+    _write_lens_hotkey_runtime_state(data_root, pid=os.getpid())
+
+    response = client.get("/lens/os-binding/execution/readiness?actor=test.system.write")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.command_palette_binding.execution_readiness"
+    assert body["status"] == "blocked"
+    assert body["ready"] is False
+    assert body["execution_ready"] is False
+    requirements = {item["id"]: item for item in body["requirements"]}
+    hotkey_requirement = requirements["global_hotkey_binding"]
+    assert hotkey_requirement["ready"] is False
+    assert hotkey_requirement["runtime_ready"] is True
+    assert hotkey_requirement["runtime_requirement_state"] == "bound"
+    assert hotkey_requirement["runtime_blocker"] == ""
+    assert hotkey_requirement["hotkey_runtime_readback"]["process_alive"] is True
+    assert hotkey_requirement["hotkey_runtime_readback"]["hotkey_bound"] is True
+    assert "global_hotkey_binding_disabled" in hotkey_requirement["blockers"]
+    assert "global_hotkey_registration_disabled" in hotkey_requirement["blockers"]
+    assert "hotkey_registration_authority_not_granted" in hotkey_requirement["blockers"]
+    assert "global_hotkey_binding" in body["blocked_execution_prerequisites"]
+    assert body["execution_prerequisites_ready"] is False
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["summon_authority"] is False
 
 
 def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(

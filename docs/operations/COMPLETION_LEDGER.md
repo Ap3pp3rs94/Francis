@@ -25387,6 +25387,53 @@ consumption slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-summon-preflight.ps1`
 
+Stage 6 Lens OS-binding execution-readiness hotkey-runtime carry-forward on
+`2026-05-13`:
+
+- `src/francis/lens/os_binding_authority.py` now carries the
+  `global_hotkey_binding` runtime readback from `/lens/os-binding/readiness`
+  into `/lens/os-binding/execution/readiness`. When a live bounded hotkey
+  runtime is present, the execution-readiness requirement now reports
+  `runtime_ready=true`, `runtime_requirement_state=bound`, and includes the
+  hotkey runtime readback.
+- The global-hotkey execution prerequisite remains blocked unless the real
+  config and authority requirements are satisfied. A live runtime does not
+  grant hotkey-registration authority, summon authority, local process-launch
+  authority, execution authority, approval authority, memory-write authority,
+  overlay control, tray registration, resident claim, or summon-anywhere.
+- This is backend/readback/test-only. It does not change UI files, open the
+  command palette, register a startup hotkey, execute an OS binding, install or
+  control a service, write memory, decide approvals, or claim Stage 6 closure.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next truthful implementation gap remains a
+  governed summon/OS-binding path that resolves the config and authority
+  blockers rather than promoting runtime evidence into capability.
+
+Latest validation for the Stage 6 OS-binding execution-readiness hotkey-runtime
+carry-forward slice:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_execution_readiness_carries_live_hotkey_runtime_without_authority -q`
+  Result: `failed before adding the disabled summon config fixture needed for trusted expected-hotkey comparison; passed after`
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_consumes_live_hotkey_runtime_without_authority tests\test_api_lens.py::test_lens_os_binding_readiness_groups_blockers_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; side_effects_denied=true; os_binding_execution_readiness_observed=true`
+- `python -m ruff check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=2/5; blocked criteria remain summon_anywhere, helpful_not_noisy, and system_resident_presence`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

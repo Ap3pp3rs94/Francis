@@ -1205,6 +1205,14 @@ def _readiness_blocker_group(readiness: dict[str, Any], group: str) -> list[str]
     return _str_list(_as_dict(readiness.get("blocker_groups")).get(group))
 
 
+def _readiness_requirement(readiness: dict[str, Any], requirement_id: str) -> dict[str, Any]:
+    for item in _as_list(readiness.get("requirements")):
+        requirement = _as_dict(item)
+        if _safe_str(requirement.get("id")).strip() == requirement_id:
+            return requirement
+    return {}
+
+
 def lens_os_binding_execution_readiness_audit(
     *,
     actor: Any = "",
@@ -1284,6 +1292,9 @@ def lens_os_binding_execution_readiness_audit(
     else:
         denial_receipt_total = len(_as_list(denial_readback.get("items")))
     denial_receipt_total = max(0, denial_receipt_total)
+    global_hotkey_readiness = _readiness_requirement(readiness_payload, "global_hotkey_binding")
+    hotkey_runtime = _as_dict(global_hotkey_readiness.get("hotkey_runtime_readback"))
+    hotkey_runtime_ready = bool(global_hotkey_readiness.get("runtime_ready")) or bool(hotkey_runtime.get("ready"))
     requirements = [
         _execution_readiness_requirement(
             "system_write_permission",
@@ -1399,6 +1410,22 @@ def lens_os_binding_execution_readiness_audit(
             readback_ready=True,
         ),
     ]
+    for requirement in requirements:
+        if _safe_str(requirement.get("id")).strip() == "global_hotkey_binding":
+            requirement.update(
+                {
+                    "runtime_ready": hotkey_runtime_ready,
+                    "runtime_requirement_state": _safe_str(
+                        global_hotkey_readiness.get("runtime_requirement_state")
+                        or hotkey_runtime.get("requirement_state")
+                        or "missing"
+                    ),
+                    "runtime_blocker": _safe_str(
+                        global_hotkey_readiness.get("runtime_blocker") or hotkey_runtime.get("blocker")
+                    ),
+                    "hotkey_runtime_readback": hotkey_runtime,
+                }
+            )
     blocked_requirements = [_safe_str(item.get("id")).strip() for item in requirements if not bool(item.get("ready"))]
     blocked_execution_prerequisites = [
         item for item in _OS_BINDING_EXECUTION_BOUNDARY_PREREQUISITES if item in blocked_requirements
