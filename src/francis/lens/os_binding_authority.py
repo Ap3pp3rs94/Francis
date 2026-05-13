@@ -1295,6 +1295,9 @@ def lens_os_binding_execution_readiness_audit(
     global_hotkey_readiness = _readiness_requirement(readiness_payload, "global_hotkey_binding")
     hotkey_runtime = _as_dict(global_hotkey_readiness.get("hotkey_runtime_readback"))
     hotkey_runtime_ready = bool(global_hotkey_readiness.get("runtime_ready")) or bool(hotkey_runtime.get("ready"))
+    overlay_window_readiness = _readiness_requirement(readiness_payload, "overlay_window")
+    overlay_runtime = _as_dict(overlay_window_readiness.get("overlay_runtime_readback"))
+    overlay_runtime_ready = bool(overlay_window_readiness.get("runtime_ready")) or bool(overlay_runtime.get("ready"))
     requirements = [
         _execution_readiness_requirement(
             "system_write_permission",
@@ -1424,6 +1427,21 @@ def lens_os_binding_execution_readiness_audit(
                         global_hotkey_readiness.get("runtime_blocker") or hotkey_runtime.get("blocker")
                     ),
                     "hotkey_runtime_readback": hotkey_runtime,
+                }
+            )
+        if _safe_str(requirement.get("id")).strip() == "overlay_window":
+            requirement.update(
+                {
+                    "runtime_ready": overlay_runtime_ready,
+                    "runtime_requirement_state": _safe_str(
+                        overlay_window_readiness.get("runtime_requirement_state")
+                        or overlay_runtime.get("requirement_state")
+                        or "missing"
+                    ),
+                    "runtime_blocker": _safe_str(
+                        overlay_window_readiness.get("runtime_blocker") or overlay_runtime.get("blocker")
+                    ),
+                    "overlay_runtime_readback": overlay_runtime,
                 }
             )
     blocked_requirements = [_safe_str(item.get("id")).strip() for item in requirements if not bool(item.get("ready"))]

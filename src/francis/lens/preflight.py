@@ -1170,8 +1170,16 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
     blockers = sorted(blocker_set)
     hotkey_runtime = _dict_value(summon, "hotkey_runtime_readback")
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
+    overlay_runtime = _dict_value(overlay, "overlay_runtime")
+    overlay_runtime_ready = bool(overlay_runtime.get("ready"))
     if hotkey_runtime_ready:
         blockers = [blocker for blocker in blockers if blocker != "global_hotkey_binding_missing"]
+    if overlay_runtime_ready:
+        blockers = [
+            blocker
+            for blocker in blockers
+            if blocker not in {"lens_overlay_window_not_implemented", "overlay_window_missing"}
+        ]
     summon_ready = bool(summon.get("ready"))
     resident_host_ready = bool(host.get("ready"))
     tray_ready = bool(tray.get("ready"))
@@ -1202,6 +1210,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             blockers,
             "lens_overlay_window_not_implemented",
             "overlay_window_missing",
+            "overlay_window_runtime_missing",
             "overlay_window_disabled",
             "overlay_control_authority_not_granted",
         ),
@@ -1261,6 +1270,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "required_before_enable": _string_list(summon.get("required_before_enable")),
         "global_hotkey_runtime_ready": hotkey_runtime_ready,
         "hotkey_runtime_readback": hotkey_runtime,
+        "overlay_runtime_ready": overlay_runtime_ready,
+        "overlay_runtime_readback": overlay_runtime,
         "blockers": blockers,
         "blocker_groups": blocker_groups,
         "blocker_family_readback": blocker_family_readback,
@@ -1663,8 +1674,11 @@ def lens_os_binding_readiness(
     active_grant_receipt_id = _safe_str(authority_request_summary.get("active_grant_receipt_id")).strip()
     blocker_groups = _dict_value(summon_gate, "blocker_groups")
     summon_preflight = _dict_value(_dict_value(lens_preflight_payload, "surfaces"), "summon")
+    overlay_preflight = _dict_value(_dict_value(lens_preflight_payload, "surfaces"), "overlay")
     hotkey_runtime = _dict_value(summon_preflight, "hotkey_runtime_readback")
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
+    overlay_runtime = _dict_value(overlay_preflight, "overlay_runtime")
+    overlay_runtime_ready = bool(overlay_runtime.get("ready"))
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
     palette_blockers = ["os_level_command_palette_missing"]
     if not bool(summon_gate.get("summon_anywhere")):
@@ -1758,6 +1772,15 @@ def lens_os_binding_readiness(
                     "hotkey_runtime_readback": hotkey_runtime,
                 }
             )
+        if _safe_str(requirement.get("id")).strip() == "overlay_window":
+            requirement.update(
+                {
+                    "runtime_ready": overlay_runtime_ready,
+                    "runtime_requirement_state": _safe_str(overlay_runtime.get("requirement_state"), "missing"),
+                    "runtime_blocker": _safe_str(overlay_runtime.get("blocker")),
+                    "overlay_runtime_readback": overlay_runtime,
+                }
+            )
         if _safe_str(requirement.get("id")).strip() == "os_level_command_palette":
             requirement.update(
                 {
@@ -1846,6 +1869,10 @@ def lens_os_binding_readiness(
             ),
             "first_blocker_family": _safe_str(summon_gate.get("first_blocker_family")).strip(),
             "blocked_families": _string_list(summon_gate.get("blocked_families")),
+            "global_hotkey_runtime_ready": bool(summon_gate.get("global_hotkey_runtime_ready")),
+            "hotkey_runtime_readback": _dict_value(summon_gate, "hotkey_runtime_readback"),
+            "overlay_runtime_ready": bool(summon_gate.get("overlay_runtime_ready")),
+            "overlay_runtime_readback": _dict_value(summon_gate, "overlay_runtime_readback"),
         },
         "governance": _base_governance(
             service_control_authority=False,

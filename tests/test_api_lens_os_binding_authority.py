@@ -44,6 +44,27 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
     )
 
 
+def _write_lens_overlay_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-overlay"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-overlay.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "updated_at": "2026-05-13T02:30:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_summon_config(repo_root: Path) -> None:
     config_root = repo_root / "config" / "runtime" / "lens"
     config_root.mkdir(parents=True, exist_ok=True)
@@ -69,6 +90,48 @@ def _write_lens_summon_config(repo_root: Path) -> None:
                     "resident_host_process",
                     "tray_presence",
                     "overlay_window",
+                    "global_hotkey_binding",
+                    "summon_binding",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_overlay_config(repo_root: Path) -> None:
+    config_root = repo_root / "config" / "runtime" / "lens"
+    config_root.mkdir(parents=True, exist_ok=True)
+    (config_root / "overlay.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.config",
+                "version": 1,
+                "enabled": False,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "window_enabled": False,
+                "always_on_top": False,
+                "dock_supported": False,
+                "focus_supported": False,
+                "click_through_supported": False,
+                "capture_supported": False,
+                "status_route": "/lens/status",
+                "host_route": "/lens/host",
+                "overlay_runner": "scripts/lens-overlay-window.ps1",
+                "requires_explicit_enable": True,
+                "overlay_control_authority": False,
+                "window_management_authority": False,
+                "local_process_launch_authority": False,
+                "capture_authority": False,
+                "summon_authority": False,
+                "tray_registration_authority": False,
+                "blocked_reason": "lens_overlay_window_not_implemented",
+                "required_before_enable": [
+                    "resident_host_process",
+                    "tray_presence",
+                    "overlay_window",
+                    "always_on_top_policy",
                     "global_hotkey_binding",
                     "summon_binding",
                 ],
@@ -358,6 +421,45 @@ def test_lens_os_binding_execution_readiness_carries_live_hotkey_runtime_without
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["hotkey_registration_authority"] is False
     assert body["governance"]["summon_authority"] is False
+
+
+def test_lens_os_binding_execution_readiness_carries_live_overlay_runtime_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, data_root = _client(monkeypatch, tmp_path)
+    _write_lens_summon_config(data_root.parent)
+    _write_lens_overlay_config(data_root.parent)
+    _write_lens_overlay_runtime_state(data_root, pid=os.getpid())
+
+    response = client.get("/lens/os-binding/execution/readiness?actor=test.system.write")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.command_palette_binding.execution_readiness"
+    assert body["status"] == "blocked"
+    assert body["ready"] is False
+    assert body["execution_ready"] is False
+    requirements = {item["id"]: item for item in body["requirements"]}
+    overlay_requirement = requirements["overlay_window"]
+    assert overlay_requirement["ready"] is False
+    assert overlay_requirement["runtime_ready"] is True
+    assert overlay_requirement["runtime_requirement_state"] == "visible"
+    assert overlay_requirement["runtime_blocker"] == ""
+    assert overlay_requirement["overlay_runtime_readback"]["process_alive"] is True
+    assert overlay_requirement["overlay_runtime_readback"]["overlay_window_visible"] is True
+    assert overlay_requirement["overlay_runtime_readback"]["always_on_top"] is True
+    assert "lens_overlay_window_not_implemented" not in overlay_requirement["blockers"]
+    assert "overlay_window_missing" not in overlay_requirement["blockers"]
+    assert "overlay_window_disabled" in overlay_requirement["blockers"]
+    assert "overlay_control_authority_not_granted" in overlay_requirement["blockers"]
+    assert "overlay_window" in body["blocked_execution_prerequisites"]
+    assert body["execution_prerequisites_ready"] is False
+    assert body["os_level_command_palette"] is False
+    assert body["summon_anywhere"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["window_management_authority"] is False
 
 
 def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(

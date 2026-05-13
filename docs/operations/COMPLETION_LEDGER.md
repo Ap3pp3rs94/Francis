@@ -25490,6 +25490,52 @@ slice:
 - `git diff --check`
   Result: `passed with PowerShell line-ending normalization warning for scripts/lens-overlay-preflight.ps1`
 
+Stage 6 Lens overlay-runtime OS-binding readiness carry-forward on
+`2026-05-13`:
+
+- `src/francis/lens/preflight.py` now carries live overlay runtime evidence
+  from `/lens/overlay` into the summon enablement gate and
+  `/lens/os-binding/readiness`. When a bounded overlay runtime is live, the
+  readiness chain removes only stale missing-implementation evidence:
+  `lens_overlay_window_not_implemented` and `overlay_window_missing`.
+- The overlay requirement remains blocked by real config/authority blockers,
+  including disabled overlay-window config and missing overlay-control
+  authority. A live runtime does not make the overlay requirement ready by
+  itself.
+- `src/francis/lens/os_binding_authority.py` now carries the same overlay
+  runtime evidence into `/lens/os-binding/execution/readiness`, matching the
+  existing hotkey-runtime carry-forward pattern.
+- This is backend/readback/test-only. It does not enable the overlay config,
+  grant overlay-control authority, grant window-management authority, grant
+  local process-launch authority, execute an OS binding, open the command
+  palette, register a hotkey, decide approvals, write memory, or claim
+  summon-anywhere.
+- Stage 6 remains active and blocked at `ready_total=2/5`; blocked criteria
+  remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next truthful gap is an audit of the Stage 6
+  readiness chain or the next governed config/authority blocker, not a fake
+  promotion of runtime evidence into capability.
+
+Latest validation for the Stage 6 overlay-runtime OS-binding readiness
+carry-forward slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_readiness_consumes_live_overlay_runtime_without_authority tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_execution_readiness_carries_live_overlay_runtime_without_authority -q`
+  Result: `failed before the summarized summon-gate readback carried overlay
+  runtime fields; passed after`
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_overlay_runtime_readback.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `failed before updating an exact legacy assertion for the new
+  readback fields; passed after`
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\os_binding_authority.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\os_binding_authority.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; side_effects_denied=true; os_binding_execution_readiness_observed=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false; ready_total=2/5; blocked_total=3; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

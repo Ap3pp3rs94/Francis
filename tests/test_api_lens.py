@@ -481,6 +481,28 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
     )
 
 
+def _write_lens_overlay_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-overlay"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-overlay.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "updated_at": "2026-05-13T02:00:00Z",
+                "message": "Francis Lens overlay window is running.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_host_supervisor_state(
     data_root: Path,
     *,
@@ -658,22 +680,25 @@ def test_lens_os_binding_readiness_groups_blockers_without_authority(
     assert command_palette_contract["would_register_hotkey"] is False
     assert command_palette_contract["governance"]["read_only_contract"] is True
     assert command_palette_contract["governance"]["execution_authority"] is False
-    assert body["summon_enablement_gate"] == {
-        "route": "/lens/summon",
-        "status": "blocked",
-        "ready": False,
-        "summon_anywhere": False,
-        "next_smallest_truthful_gap": "summon_anywhere_blockers",
-        "first_blocker_family": "resident_host",
-        "blocked_families": [
-            "resident_host",
-            "tray_presence",
-            "overlay_window",
-            "global_hotkey_binding",
-            "summon_binding",
-            "authority",
-        ],
-    }
+    summon_enablement_gate = body["summon_enablement_gate"]
+    assert summon_enablement_gate["route"] == "/lens/summon"
+    assert summon_enablement_gate["status"] == "blocked"
+    assert summon_enablement_gate["ready"] is False
+    assert summon_enablement_gate["summon_anywhere"] is False
+    assert summon_enablement_gate["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_enablement_gate["first_blocker_family"] == "resident_host"
+    assert summon_enablement_gate["blocked_families"] == [
+        "resident_host",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    assert summon_enablement_gate["global_hotkey_runtime_ready"] is False
+    assert summon_enablement_gate["hotkey_runtime_readback"]["requirement_state"] == "missing"
+    assert summon_enablement_gate["overlay_runtime_ready"] is False
+    assert summon_enablement_gate["overlay_runtime_readback"]["requirement_state"] == "missing"
     implementation_plan = body["implementation_plan"]
     assert implementation_plan["kind"] == "lens.os_binding.implementation_plan"
     assert implementation_plan["route"] == "/lens/os-binding/plan"
@@ -759,6 +784,61 @@ def test_lens_os_binding_readiness_consumes_live_hotkey_runtime_without_authorit
     gate = body["summon_enablement_gate"]
     assert gate["summon_anywhere"] is False
     assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+
+
+def test_lens_os_binding_readiness_consumes_live_overlay_runtime_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    _write_lens_overlay_runtime_state(data_root, pid=os.getpid())
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/lens/os-binding/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.readiness"
+    assert body["status"] == "blocked"
+    assert body["ready"] is False
+    requirements = {item["id"]: item for item in body["requirements"]}
+    overlay_requirement = requirements["overlay_window"]
+    assert overlay_requirement["ready"] is False
+    assert overlay_requirement["runtime_ready"] is True
+    assert overlay_requirement["runtime_requirement_state"] == "visible"
+    assert overlay_requirement["runtime_blocker"] == ""
+    assert overlay_requirement["overlay_runtime_readback"]["process_alive"] is True
+    assert overlay_requirement["overlay_runtime_readback"]["overlay_window_visible"] is True
+    assert overlay_requirement["overlay_runtime_readback"]["always_on_top"] is True
+    assert "lens_overlay_window_not_implemented" not in overlay_requirement["blockers"]
+    assert "overlay_window_missing" not in overlay_requirement["blockers"]
+    assert "overlay_window_disabled" in overlay_requirement["blockers"]
+    assert "overlay_control_authority_not_granted" in overlay_requirement["blockers"]
+    assert body["blocker_groups"]["overlay_window"] == [
+        "overlay_window_disabled",
+        "overlay_control_authority_not_granted",
+    ]
+    gate = body["summon_enablement_gate"]
+    assert gate["overlay_runtime_ready"] is True
+    assert gate["overlay_runtime_readback"]["ready"] is True
+    assert body["summon_anywhere"] is False
+    assert body["governance"]["overlay_control_authority"] is False
     assert body["governance"]["execution_authority"] is False
 
 
