@@ -25780,6 +25780,50 @@ stabilization:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens coordinated surface-runtime plan-consumption proof on
+`2026-05-13`:
+
+- `scripts/lens-surface-plan-consumption-proof.ps1` now provides a bounded
+  Windows proof that starts a temporary supervised resident-host lease, writes
+  synthetic tray, global-hotkey, and overlay runtime readbacks bound to the live
+  proof process, confirms the surface runtime coordinator reads all three as
+  ready, then verifies the persistent-supervision plan consumes the full chain.
+- The proof shows the plan treats `resident_host_process`, `tray_presence`,
+  `global_hotkey_binding`, and `overlay_window` as satisfied together and hands
+  off only to `summon_binding`. This makes the next truthful Stage 6 gap more
+  explicit: resolve summon binding before persistent supervision can move
+  toward enablement.
+- The proof cleans up its temp data root and stops the temporary resident-host
+  lease. It does not enable persistent supervision, install or control a
+  service, register a tray icon or global hotkey, open an OS overlay, grant
+  summon authority, decide approvals, write memory, write receipts, claim
+  resident presence, or close Stage 6.
+- Stage 6 remains active at the stable checkpoint posture of `ready_total=2/5`,
+  with `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+  blocked. This slice is a proof/readback bridge, not a readiness-criterion
+  closure.
+
+Latest validation for the coordinated surface-runtime plan-consumption proof:
+
+- `python -m pytest tests\test_lens_surface_plan_consumption_proof_script.py -q`
+  Result: `failed before the proof handled single dependency readbacks as
+  arrays; passed after`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-surface-plan-consumption-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,first_missing_required_before_enable,next_smallest_truthful_gap,coordinated_surface_runtime_readback_observed,persistent_supervision_plan_consumed_surface_runtime,side_effects_bounded | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed;
+  first_missing_required_before_enable=summon_binding;
+  next_smallest_truthful_gap=summon_binding;
+  coordinated_surface_runtime_readback_observed=true;
+  persistent_supervision_plan_consumed_surface_runtime=true;
+  side_effects_bounded=true`
+- `python -m pytest tests\test_lens_tray_plan_consumption_proof_script.py tests\test_lens_stage6_surface_runtime_script.py tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
