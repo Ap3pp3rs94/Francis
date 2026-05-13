@@ -25700,6 +25700,41 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens live-operator proof Windows CI startup recovery on `2026-05-13`:
+
+- CI run `25787749499` for commit `7734c2f4` failed on Windows Python 3.12 in
+  `tests/test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority`
+  and
+  `tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`.
+  The failing payloads showed the resident-surface foreground runtime proof had
+  completed, but the nested live local HTTP operator proof returned
+  `proof_failed`; the checkpoint then reported `needs_live_operator_proof`
+  instead of the expected bounded
+  `resident_surface_foreground_runtime_observed` status.
+- `scripts/lens-live-operator-proof.ps1` now makes a bounded second local API
+  launch/readback attempt when the first `/lens/status?limit=5` probe fails.
+  Each attempt uses a fresh local TCP port and the same temporary data root,
+  then preserves the same proof contract and read-only authority boundary.
+- This is CI/proof-harness stabilization only. It does not enable resident
+  presence, persistent supervision, service control, tray or hotkey
+  registration, overlay control, summon-anywhere behavior, approval authority,
+  execution authority, memory writes, receipt writes, or Stage 6 closure.
+  Stage 6 remains active at `ready_total=2/5`.
+
+Latest validation for the live-operator proof Windows CI startup recovery:
+
+- `python -m pytest tests\test_lens_live_operator_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 | ConvertFrom-Json | Select-Object status,live_http_status_readback,operator_experience_proof,helpful_not_noisy_readback,next_smallest_truthful_gap | ConvertTo-Json -Depth 5`
+  Result: `passed; status=proof_passed; live_http_status_readback=true;
+  operator_experience_proof=true; helpful_not_noisy_readback=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

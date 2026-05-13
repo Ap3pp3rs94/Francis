@@ -195,9 +195,10 @@ $ProofRuntimeRoot = Join-Path $ProofDataRoot 'runtime\lens-live-operator-proof'
 New-Item -ItemType Directory -Force -Path $ProofRuntimeRoot | Out-Null
 
 $PythonPath = Get-PythonPath
-$Port = Get-FreeTcpPort
-$BaseUrl = "http://127.0.0.1:$Port"
-$StatusUri = "$BaseUrl/lens/status?limit=5"
+$ApiLaunchAttempts = 2
+$Port = 0
+$BaseUrl = ''
+$StatusUri = ''
 $StdoutPath = Join-Path $ProofRuntimeRoot 'api-stdout.log'
 $StderrPath = Join-Path $ProofRuntimeRoot 'api-stderr.log'
 
@@ -212,56 +213,89 @@ $ApiExitCode = $null
 $ApiStdout = ''
 $ApiStderr = ''
 
-try {
-  if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
-    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $StartInfo.FileName = $PythonPath
-    $StartInfo.Arguments = "-m francis api --host 127.0.0.1 --port $Port"
-    $StartInfo.WorkingDirectory = $RepoRoot
-    $StartInfo.UseShellExecute = $false
-    $StartInfo.CreateNoWindow = $true
-    $StartInfo.RedirectStandardOutput = $true
-    $StartInfo.RedirectStandardError = $true
-    $SrcPath = Join-Path $RepoRoot 'src'
-    $PreviousPythonPath = [string]$env:PYTHONPATH
-    if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
-      $StartInfo.EnvironmentVariables['PYTHONPATH'] = $SrcPath
-    } else {
-      $StartInfo.EnvironmentVariables['PYTHONPATH'] = "$SrcPath$([System.IO.Path]::PathSeparator)$PreviousPythonPath"
-    }
-    $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $ProofDataRoot
-
-    $ApiProcess = [System.Diagnostics.Process]::new()
-    $ApiProcess.StartInfo = $StartInfo
-    $Started = $ApiProcess.Start()
-    $StatusResult = Wait-ForLensStatus -Process $ApiProcess -Uri $StatusUri -TimeoutSeconds $StartupTimeoutSeconds
+for ($ApiAttempt = 1; $ApiAttempt -le $ApiLaunchAttempts; $ApiAttempt++) {
+  $Port = Get-FreeTcpPort
+  $BaseUrl = "http://127.0.0.1:$Port"
+  $StatusUri = "$BaseUrl/lens/status?limit=5"
+  $ApiProcess = $null
+  $AttemptStarted = $false
+  $AttemptStatusResult = [ordered]@{
+    ok = $false
+    payload = $null
+    error = 'api_not_started'
   }
-} finally {
-  if ($null -ne $ApiProcess) {
-    if (-not $ApiProcess.HasExited) {
-      try {
-        $ApiProcess.Kill()
-      } catch {
+  $AttemptExitCode = $null
+  $AttemptStdout = ''
+  $AttemptStderr = ''
+
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
+      $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+      $StartInfo.FileName = $PythonPath
+      $StartInfo.Arguments = "-m francis api --host 127.0.0.1 --port $Port"
+      $StartInfo.WorkingDirectory = $RepoRoot
+      $StartInfo.UseShellExecute = $false
+      $StartInfo.CreateNoWindow = $true
+      $StartInfo.RedirectStandardOutput = $true
+      $StartInfo.RedirectStandardError = $true
+      $SrcPath = Join-Path $RepoRoot 'src'
+      $PreviousPythonPath = [string]$env:PYTHONPATH
+      if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
+        $StartInfo.EnvironmentVariables['PYTHONPATH'] = $SrcPath
+      } else {
+        $StartInfo.EnvironmentVariables['PYTHONPATH'] = "$SrcPath$([System.IO.Path]::PathSeparator)$PreviousPythonPath"
       }
-      $ApiProcess.WaitForExit(5000) | Out-Null
+      $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $ProofDataRoot
+
+      $ApiProcess = [System.Diagnostics.Process]::new()
+      $ApiProcess.StartInfo = $StartInfo
+      $AttemptStarted = $ApiProcess.Start()
+      $AttemptStatusResult = Wait-ForLensStatus -Process $ApiProcess -Uri $StatusUri -TimeoutSeconds $StartupTimeoutSeconds
     }
-    try {
-      $ApiExitCode = $ApiProcess.ExitCode
-    } catch {
-      $ApiExitCode = $null
+  } finally {
+    if ($null -ne $ApiProcess) {
+      if (-not $ApiProcess.HasExited) {
+        try {
+          $ApiProcess.Kill()
+        } catch {
+        }
+        $ApiProcess.WaitForExit(5000) | Out-Null
+      }
+      try {
+        $AttemptExitCode = $ApiProcess.ExitCode
+      } catch {
+        $AttemptExitCode = $null
+      }
+      try {
+        $AttemptStdout = $ApiProcess.StandardOutput.ReadToEnd()
+      } catch {
+        $AttemptStdout = ''
+      }
+      try {
+        $AttemptStderr = $ApiProcess.StandardError.ReadToEnd()
+      } catch {
+        $AttemptStderr = ''
+      }
+      Set-Content -LiteralPath $StdoutPath -Value $AttemptStdout -Encoding UTF8
+      Set-Content -LiteralPath $StderrPath -Value $AttemptStderr -Encoding UTF8
     }
-    try {
-      $ApiStdout = $ApiProcess.StandardOutput.ReadToEnd()
-    } catch {
-      $ApiStdout = ''
-    }
-    try {
-      $ApiStderr = $ApiProcess.StandardError.ReadToEnd()
-    } catch {
-      $ApiStderr = ''
-    }
-    Set-Content -LiteralPath $StdoutPath -Value $ApiStdout -Encoding UTF8
-    Set-Content -LiteralPath $StderrPath -Value $ApiStderr -Encoding UTF8
+  }
+
+  $Started = $AttemptStarted
+  $StatusResult = $AttemptStatusResult
+  $ApiExitCode = $AttemptExitCode
+  $ApiStdout = $AttemptStdout
+  $ApiStderr = $AttemptStderr
+
+  $AttemptPayload = Get-PropertyValue -Payload $StatusResult -Name 'payload'
+  if (
+    [bool](Get-PropertyValue -Payload $StatusResult -Name 'ok' -Default $false) -and
+    [string](Get-PropertyValue -Payload $AttemptPayload -Name 'kind' -Default '') -eq 'lens.status'
+  ) {
+    break
+  }
+  if ($ApiAttempt -lt $ApiLaunchAttempts) {
+    Start-Sleep -Milliseconds 500
   }
 }
 
