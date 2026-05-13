@@ -99,9 +99,15 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["foreground_runtime_final_state"] == "foreground_stopped"
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
+    assert proof["live_operator_exit_code"] == 0
+    assert proof["live_operator_startup_timeout_seconds"] == 45
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_operator_helpful_not_noisy_readback"] is True
     assert proof["live_operator_status_route"] == "/lens/status?limit=5"
+    assert proof["live_operator_status_error"] == ""
+    assert proof["live_operator_api_pid"] > 0
+    assert proof["live_operator_api_stdout_path"].endswith("api-stdout.log")
+    assert proof["live_operator_api_stderr_path"].endswith("api-stderr.log")
     assert "resident_surface_runtime_missing" in proof["live_operator_blockers"]
     assert "resident_surface_missing" not in proof["live_operator_blockers"]
     assert proof["tray_status"] == "blocked"

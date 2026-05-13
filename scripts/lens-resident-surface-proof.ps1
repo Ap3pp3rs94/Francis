@@ -4,7 +4,10 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(2, 60)]
-  [int]$ForegroundRunSeconds = 15
+  [int]$ForegroundRunSeconds = 15,
+
+  [ValidateRange(5, 120)]
+  [int]$LiveOperatorStartupTimeoutSeconds = 45
 )
 
 Set-StrictMode -Version 2
@@ -498,13 +501,18 @@ New-Item -ItemType Directory -Force -Path $ReadbackDataRoot | Out-Null
 $ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
 $ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
-$LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
+$LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @(
+  '-Mode', 'Status',
+  '-DataDir', $ReadbackDataRoot,
+  '-StartupTimeoutSeconds', [string]$LiveOperatorStartupTimeoutSeconds
+)
 $TrayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $TrayPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
 $OverlayPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $OverlayPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
 $SummonPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonPreflightPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ReadbackDataRoot)
 
 $HostPayload = Get-PropertyValue -Payload $HostPreflight -Name 'payload'
 $LiveOperatorPayload = Get-PropertyValue -Payload $LiveOperatorProof -Name 'payload'
+$LiveOperatorProofDetails = Get-PropertyValue -Payload $LiveOperatorPayload -Name 'proof'
 $TrayPayload = Get-PropertyValue -Payload $TrayPreflight -Name 'payload'
 $OverlayPayload = Get-PropertyValue -Payload $OverlayPreflight -Name 'payload'
 $SummonPayload = Get-PropertyValue -Payload $SummonPreflight -Name 'payload'
@@ -709,9 +717,16 @@ $Payload = [ordered]@{
     foreground_runtime_final_state = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'final_state_status' -Default '')
     host_lifecycle_status = [string](Get-PropertyValue -Payload $HostPayload -Name 'status' -Default '')
     supervision_proof_available = $SupervisionProofAvailable
+    live_operator_exit_code = [int](Get-PropertyValue -Payload $LiveOperatorProof -Name 'exit_code' -Default -1)
+    live_operator_startup_timeout_seconds = $LiveOperatorStartupTimeoutSeconds
     live_operator_status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '')
     live_operator_helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
     live_operator_status_route = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status_route' -Default '')
+    live_operator_status_error = [string](Get-PropertyValue -Payload $LiveOperatorProofDetails -Name 'status_error' -Default '')
+    live_operator_api_pid = [int](Get-PropertyValue -Payload $LiveOperatorProofDetails -Name 'api_pid' -Default 0)
+    live_operator_api_exit_code = Get-PropertyValue -Payload $LiveOperatorProofDetails -Name 'api_exit_code'
+    live_operator_api_stdout_path = [string](Get-PropertyValue -Payload $LiveOperatorProofDetails -Name 'api_stdout_path' -Default '')
+    live_operator_api_stderr_path = [string](Get-PropertyValue -Payload $LiveOperatorProofDetails -Name 'api_stderr_path' -Default '')
     live_operator_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $LiveOperatorPayload -Name 'blockers' -Default @())
     tray_status = [string](Get-PropertyValue -Payload $TrayPayload -Name 'status' -Default '')
     overlay_status = [string](Get-PropertyValue -Payload $OverlayPayload -Name 'status' -Default '')

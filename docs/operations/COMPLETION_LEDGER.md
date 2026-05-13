@@ -25735,6 +25735,51 @@ Latest validation for the live-operator proof Windows CI startup recovery:
   Result: `passed; status=proof_passed; live_http_status_readback=true;
   operator_experience_proof=true; helpful_not_noisy_readback=true`
 
+Stage 6 Lens resident-surface nested live-operator proof stabilization on
+`2026-05-13`:
+
+- CI run `25791305909` for commit `66b4413a` still failed on Windows Python
+  3.12 in
+  `tests/test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority`.
+  The failure repeated the same nested live-operator proof symptom:
+  resident-surface content and foreground runtime proof were both observed, but
+  the nested live HTTP operator proof was not observed.
+- `scripts/lens-resident-surface-proof.ps1` now passes an explicit
+  `45`-second startup window to the nested `scripts/lens-live-operator-proof.ps1`
+  call and exposes nested live-operator diagnostics in the resident-surface
+  proof payload: exit code, startup window, status error, API PID, API exit
+  code, and stdout/stderr log paths.
+- This is proof/readback stabilization and diagnostic visibility only. It does
+  not enable resident presence, persistent supervision, service control, tray
+  or hotkey registration, overlay control, summon-anywhere behavior, approval
+  authority, execution authority, memory writes, receipt writes, or Stage 6
+  closure. Stage 6 remains active at `ready_total=2/5`.
+
+Latest validation for the resident-surface nested live-operator proof
+stabilization:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,live_http_status_readback,operator_experience_proof,@{Name='proof_status';Expression={$_.proof.live_operator_status}},@{Name='live_operator_exit_code';Expression={$_.proof.live_operator_exit_code}},@{Name='live_operator_startup_timeout_seconds';Expression={$_.proof.live_operator_startup_timeout_seconds}},@{Name='status_error';Expression={$_.proof.live_operator_status_error}} | ConvertTo-Json -Depth 5`
+  Result: `passed; status=proof_passed; live_http_status_readback=true;
+  operator_experience_proof=true; proof_status=proof_passed;
+  live_operator_exit_code=0; live_operator_startup_timeout_seconds=45`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed with cache-write warning only`
+- `python -m ruff format --check tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,@{Name='ready_total';Expression={$_.summary.ready_total}},@{Name='blocked_total';Expression={$_.summary.blocked_total}},next_smallest_truthful_gap | ConvertTo-Json -Depth 5`
+  Result: `passed; status=blocked; stage_state=active; ready_to_close=false;
+  ready_total=2; blocked_total=3`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
