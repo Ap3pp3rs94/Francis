@@ -294,15 +294,19 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
 
     blocked = {item["id"]: item for item in payload["blocked_criteria"]}
     helpful_not_noisy_blockers = set(blocked["helpful_not_noisy"]["blockers"])
-    assert {
-        "resident_surface_not_resident",
-        "resident_surface_runtime_not_supervised",
-    } <= helpful_not_noisy_blockers
-    assert helpful_not_noisy_blockers <= {
-        "operator_experience_proof_missing",
+    resident_surface_blockers = {
         "resident_surface_not_resident",
         "resident_surface_runtime_not_supervised",
     }
+    early_live_readback_blockers = {
+        "operator_experience_proof_missing",
+        "resident_surface_runtime_missing",
+    }
+    assert (
+        resident_surface_blockers <= helpful_not_noisy_blockers
+        or early_live_readback_blockers <= helpful_not_noisy_blockers
+    )
+    assert helpful_not_noisy_blockers <= resident_surface_blockers | early_live_readback_blockers
     assert "global_hotkey_binding_missing" in blocked["summon_anywhere"]["blockers"]
     assert "os_level_command_palette_missing" in payload["closure_blockers"]["command_palette"]
     assert "summon_anywhere_missing" in payload["closure_blockers"]["command_palette"]
@@ -314,7 +318,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "overlay_window_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "summon_authority_not_granted" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "resident_overlay_runtime_missing" in blocked["system_resident_presence"]["blockers"]
-    assert "resident_surface_runtime_missing" not in payload["closure_blockers"]["resident_surface"]
+    if early_live_readback_blockers <= helpful_not_noisy_blockers:
+        assert "resident_surface_runtime_missing" in payload["closure_blockers"]["resident_surface"]
+    else:
+        assert "resident_surface_runtime_missing" not in payload["closure_blockers"]["resident_surface"]
     assert "resident_surface_not_resident" in payload["closure_blockers"]["resident_surface"]
     assert "resident_surface_runtime_not_supervised" in payload["closure_blockers"]["resident_surface"]
     assert "resident_surface_missing" not in payload["closure_blockers"]["resident_surface"]

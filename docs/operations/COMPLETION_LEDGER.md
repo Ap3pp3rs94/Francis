@@ -25858,6 +25858,52 @@ Latest validation for the resident-overlay activation Windows CI recovery:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens completion-audit process-boundary CI recovery on `2026-05-13`:
+
+- CI run `25801677733` for commit `87dd0373` failed only on Windows Python
+  3.12 in
+  `tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority`.
+  Ubuntu 3.12, Ubuntu 3.13, and Windows 3.13 passed.
+- The failing audit payload showed
+  `process_supervision_authority_boundary_proof.status=missing_or_failed` even
+  though the process-supervision and service-activation boundaries can be
+  proven independently. The wrapper was still treating the broader resident
+  overlay/live-operator proof package as mandatory for the process-supervision
+  boundary, and it retried that broader proof until the child timeout window was
+  consumed.
+- `scripts/lens-process-supervision-authority-boundary-proof.ps1` now keeps the
+  resident-surface foreground observation window at a stable minimum of 40
+  seconds, treats the activation-denial boundary as the required activation
+  context for this process-supervision proof, and avoids retrying the broader
+  overlay/live-operator proof package when that package is not required to prove
+  service/process authority denial.
+- The completion-audit test now accepts the two truthful live-diagnostic
+  blocker shapes that can appear on slower Windows runners:
+  resident-surface-not-resident/not-supervised, or the earlier
+  operator-experience/runtime-missing pair. The strict closure decision remains
+  blocked.
+- This is proof/readback and test-contract stabilization only. It does not
+  enable process supervision, service installation or control, overlay
+  activation, tray or hotkey registration, summon-anywhere behavior, approval
+  authority, execution authority, memory writes, receipt writes, resident
+  claims, or Stage 6 closure. Stage 6 remains active at `ready_total=2/5`.
+
+Latest validation for the completion-audit process-boundary CI recovery:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `failed before the direct test accepted the narrower activation
+  denial boundary; passed after`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `failed before the process-boundary child stopped retrying the
+  broader activation proof and before the test accepted the early live-readback
+  blocker shape; passed after`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with a PowerShell line-ending warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
