@@ -25939,6 +25939,42 @@ Latest validation for the resident-supervisor gate readback correction:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident-surface live-operator proof-window stabilization on
+`2026-05-13`:
+
+- GitHub Actions run `25820031866` for commit `462decfc` passed Ubuntu 3.12,
+  Ubuntu 3.13, and Windows 3.13, but failed Windows 3.12 in the full pytest
+  matrix.
+- The failing Windows 3.12 path was timing-specific: the direct
+  `lens-resident-surface-proof.ps1` test timed out its live HTTP operator
+  readback at `45` seconds, which also caused the Stage 6 checkpoint test to
+  fall back to `resident_surface_content_readback_ready` instead of the expected
+  foreground-runtime proof status.
+- The resident-surface proof now gives the wrapped live-operator HTTP readback a
+  `60` second startup/readback window. This preserves the same read-only proof
+  contract and only stabilizes the observation window used by the resident
+  surface proof and checkpoint.
+- This is proof-harness timing stabilization only. It does not start a resident
+  host, enable persistent supervision, install or control a service, register
+  tray or hotkeys, open overlay windows, grant summon authority, decide
+  approvals, write memory, claim resident presence, or close Stage 6.
+- Stage 6 remains active. The completion audit still reports
+  `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the resident-surface proof-window stabilization:
+
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with a PowerShell line-ending warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -100,7 +100,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_exit_code"] == 0
-    assert proof["live_operator_startup_timeout_seconds"] == 45
+    assert proof["live_operator_startup_timeout_seconds"] == 60
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_operator_helpful_not_noisy_readback"] is True
     assert proof["live_operator_status_route"] == "/lens/status?limit=5"

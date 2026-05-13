@@ -7,7 +7,7 @@ param(
   [int]$ForegroundRunSeconds = 15,
 
   [ValidateRange(5, 120)]
-  [int]$LiveOperatorStartupTimeoutSeconds = 45
+  [int]$LiveOperatorStartupTimeoutSeconds = 60
 )
 
 Set-StrictMode -Version 2
