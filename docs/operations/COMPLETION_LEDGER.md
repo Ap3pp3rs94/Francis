@@ -25536,6 +25536,54 @@ carry-forward slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens coordinated surface runtime operator entrypoint on `2026-05-13`:
+
+- `scripts/lens-stage6-surface-runtime.ps1` now provides a single bounded
+  operator entrypoint for the already-built Stage 6 tray, global-hotkey, and
+  overlay-window runtime primitives. It supports `Status`, `Start`, `Stop`, and
+  `Run` modes, accepts an explicit data root, and reports a compact
+  `lens.stage6.surface_runtime` readback with component readiness, blockers,
+  and governance.
+- The coordinator starts only the local tray/hotkey/overlay runtime scripts
+  that already existed. It does not install a service, supervise or restart a
+  process, register startup behavior, grant tray/hotkey/overlay/summon
+  authority through the API, decide approvals, write memory, claim resident
+  presence, or close Stage 6.
+- A bounded local proof in a temp data root started the tray, hotkey, and
+  overlay runtimes together, read back `ready=true` / `ready_total=3`, then
+  stopped them and confirmed `ready=false`. This advances the Stage 6 runtime
+  surface from separate primitives to a coordinated local operator command,
+  while preserving the current governance blockers.
+- Stage 6 remains active. The checkpoint was not counted as updated by this
+  slice; the checkpoint command stalled locally during this pass and was
+  stopped. The last stable Stage 6 posture remains `ready_total=2/5`, with
+  `summon_anywhere`, `helpful_not_noisy`, and `system_resident_presence`
+  blocked until resident host supervision, configured surface enablement,
+  explicit authority, and closure audit proof are resolved.
+
+Latest validation for the Stage 6 coordinated surface runtime slice:
+
+- `python -m pytest tests\test_lens_stage6_surface_runtime_script.py -q`
+  Result: `failed before the coordinator treated ordered child results as
+  dictionaries; passed after`
+- `python -m pytest tests\test_lens_stage6_surface_runtime_script.py tests\test_lens_tray_presence_script.py tests\test_lens_hotkey_binding_script.py tests\test_lens_overlay_window_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_surface_runtime_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_surface_runtime_script.py`
+  Result: `failed before formatting; passed after`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-surface-runtime.ps1 -Mode Status`
+  Result: `passed; status=missing; ready=false; ready_total=0/3`
+- Bounded Windows live proof:
+  `scripts\lens-stage6-surface-runtime.ps1 -Mode Start -DataDir <temp> -StartupTimeoutSeconds 10 -RunSeconds 8 -NoLaunch`,
+  followed by `Status` and `Stop`
+  Result: `passed; start_status=started; start_ready=true; start_ready_total=3; status_ready=true; stop_status=stopped; stop_ready=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `stalled locally during this pass and was stopped; no checkpoint
+  posture change claimed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
