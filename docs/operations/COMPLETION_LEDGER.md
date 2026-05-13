@@ -25904,6 +25904,41 @@ Latest validation for the completion-audit process-boundary CI recovery:
 - `git diff --check`
   Result: `passed with a PowerShell line-ending warning only`
 
+Stage 6 Lens resident-supervisor gate readback correction on `2026-05-13`:
+
+- The host supervision gate now consumes a fresh live resident-supervisor
+  readback instead of hard-coding `resident_supervised_runtime=false`.
+- When the resident host process is alive and the supervisor readback reports a
+  fresh `resident_supervised_runtime=true` state, `/lens/status` now reports the
+  host process as `resident_supervised`, clears the stale
+  `resident_host_process_not_supervised` blocker on the supervision gate, and
+  preserves the next blocker family as tray / hotkey / overlay / summon
+  prerequisites.
+- This is backend readback only. It does not start a resident host, install or
+  control a service, register tray or hotkeys, open overlay windows, grant
+  summon authority, decide approvals, write memory, claim resident presence, or
+  close Stage 6.
+- Stage 6 remains active. The stable checkpoint posture remains
+  `ready_total=2/5` until a live runtime proof and checkpoint show an acceptance
+  criterion moving to ready.
+
+Latest validation for the resident-supervisor gate readback correction:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_host_supervisor_readback_without_authority tests\test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

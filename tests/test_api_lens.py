@@ -7930,6 +7930,15 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     assert resident_process_dependency["resident_supervised_runtime"] is True
     assert resident_process_dependency["process_alive"] is True
 
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["resident_host_process"] is True
+    assert supervision_gate["resident_supervised_runtime"] is True
+    assert supervision_gate["resident_host_supervised"] is True
+    assert supervision_gate["resident_host_process_state"] == "resident_supervised"
+    assert supervision_gate["resident_host_process_blocker"] == ""
+    assert "resident_host_process_not_supervised" not in supervision_gate["blockers"]
+    assert "resident_host_process_missing" not in supervision_gate["blockers"]
+
     tray_dependency = plan_dependencies["tray_presence"]
     assert tray_dependency["ready"] is False
     assert tray_dependency["blocker"] == "tray_host_missing"

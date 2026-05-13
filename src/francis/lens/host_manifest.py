@@ -2054,8 +2054,16 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         blocked_by = sorted({*blocked_by, "host_supervisor_readback_freshness_unknown"})
     supervision_ready = bool(supervision_readiness.get("ready"))
     process_alive = bool(process_readback.get("process_alive"))
-    host_process_blocker = "resident_host_process_not_supervised" if process_alive else "resident_host_process_missing"
-    blocked_by = sorted({*blocked_by, host_process_blocker})
+    resident_supervised_runtime = bool(supervisor_readback.get("resident_supervised_runtime")) and process_alive
+    host_process_blocker = (
+        ""
+        if resident_supervised_runtime
+        else "resident_host_process_not_supervised"
+        if process_alive
+        else "resident_host_process_missing"
+    )
+    if host_process_blocker:
+        blocked_by = sorted({*blocked_by, host_process_blocker})
     service_managed = bool(service_readback.get("installed")) and bool(
         supervision_readiness.get("service_control_authority")
     )
@@ -2078,7 +2086,13 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "resident_claim_allowed": resident_claim_allowed,
         "resident_host_process": process_alive,
         "foreground_process_observed": process_alive,
-        "resident_host_process_state": "foreground_observed_not_supervised" if process_alive else "missing",
+        "resident_host_process_state": (
+            "resident_supervised"
+            if resident_supervised_runtime
+            else "foreground_observed_not_supervised"
+            if process_alive
+            else "missing"
+        ),
         "resident_host_process_blocker": host_process_blocker,
         "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
         "supervisor_freshness_status": supervisor_freshness_status,
@@ -2093,8 +2107,8 @@ def lens_host_supervision_gate(*, manifest: dict[str, Any] | None = None) -> dic
         "fresh_resident_runtime_candidate_supervised": bool(
             supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
         ),
-        "resident_supervised_runtime": False,
-        "resident_host_supervised": False,
+        "resident_supervised_runtime": resident_supervised_runtime,
+        "resident_host_supervised": resident_supervised_runtime,
         "service_installed": bool(service_readback.get("installed")),
         "service_managed": service_managed,
         "process_supervision_enabled": bool(supervision_readiness.get("process_supervision_enabled")),
