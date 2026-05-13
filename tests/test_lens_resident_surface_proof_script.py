@@ -34,6 +34,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
+        timeout=180,
     )
 
 

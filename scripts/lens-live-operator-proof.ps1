@@ -227,6 +227,8 @@ for ($ApiAttempt = 1; $ApiAttempt -le $ApiLaunchAttempts; $ApiAttempt++) {
   $AttemptExitCode = $null
   $AttemptStdout = ''
   $AttemptStderr = ''
+  $AttemptStdoutTask = $null
+  $AttemptStderrTask = $null
 
   try {
     if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
@@ -250,6 +252,10 @@ for ($ApiAttempt = 1; $ApiAttempt -le $ApiLaunchAttempts; $ApiAttempt++) {
       $ApiProcess = [System.Diagnostics.Process]::new()
       $ApiProcess.StartInfo = $StartInfo
       $AttemptStarted = $ApiProcess.Start()
+      if ($AttemptStarted) {
+        $AttemptStdoutTask = $ApiProcess.StandardOutput.ReadToEndAsync()
+        $AttemptStderrTask = $ApiProcess.StandardError.ReadToEndAsync()
+      }
       $AttemptStatusResult = Wait-ForLensStatus -Process $ApiProcess -Uri $StatusUri -TimeoutSeconds $StartupTimeoutSeconds
     }
   } finally {
@@ -267,12 +273,16 @@ for ($ApiAttempt = 1; $ApiAttempt -le $ApiLaunchAttempts; $ApiAttempt++) {
         $AttemptExitCode = $null
       }
       try {
-        $AttemptStdout = $ApiProcess.StandardOutput.ReadToEnd()
+        if ($null -ne $AttemptStdoutTask -and $AttemptStdoutTask.Wait(5000)) {
+          $AttemptStdout = $AttemptStdoutTask.Result
+        }
       } catch {
         $AttemptStdout = ''
       }
       try {
-        $AttemptStderr = $ApiProcess.StandardError.ReadToEnd()
+        if ($null -ne $AttemptStderrTask -and $AttemptStderrTask.Wait(5000)) {
+          $AttemptStderr = $AttemptStderrTask.Result
+        }
       } catch {
         $AttemptStderr = ''
       }

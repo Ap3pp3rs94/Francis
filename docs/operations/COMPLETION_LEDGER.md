@@ -25975,6 +25975,47 @@ Latest validation for the resident-surface proof-window stabilization:
 - `git diff --check`
   Result: `passed with a PowerShell line-ending warning only`
 
+Stage 6 Lens live-operator proof pipe-drain stabilization on `2026-05-13`:
+
+- GitHub Actions run `25823875640` for commit `afe91c67` proved the widened
+  resident-surface live-operator window on Ubuntu 3.12, Ubuntu 3.13, and
+  Windows 3.13, but Windows 3.12 remained in pytest past one hour on the same
+  live-operator/resident-surface proof surface.
+- The hang shape was consistent with a Windows child-process pipe drain issue:
+  `scripts/lens-live-operator-proof.ps1` launched the temporary API process
+  with redirected stdout/stderr and only read those pipes after killing the API
+  process. On slower/noisier Windows 3.12 runners, unread redirected output can
+  block process shutdown and stall the proof wrapper.
+- The live-operator proof now begins asynchronous stdout/stderr reads as soon as
+  the temporary API process starts, then harvests those read tasks during
+  cleanup before writing the existing `api-stdout.log` and `api-stderr.log`
+  files. The resident-surface proof test and Stage 6 checkpoint proof test now
+  also have explicit subprocess timeouts so this proof family fails boundedly
+  instead of hanging indefinitely.
+- This is proof-harness cleanup and test-boundary stabilization only. It does
+  not start a resident host, enable persistent supervision, install or control a
+  service, register tray or hotkeys, open overlay windows, grant summon
+  authority, decide approvals, write memory, claim resident presence, or close
+  Stage 6.
+- Stage 6 remains active. The completion audit still reports
+  `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the live-operator pipe-drain stabilization:
+
+- `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with a PowerShell line-ending warning only`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

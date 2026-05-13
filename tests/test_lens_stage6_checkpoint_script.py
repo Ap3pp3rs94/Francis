@@ -40,6 +40,7 @@ def _run_checkpoint(*args: str) -> subprocess.CompletedProcess[str]:
             check=False,
             text=True,
             capture_output=True,
+            timeout=420,
         )
 
 
