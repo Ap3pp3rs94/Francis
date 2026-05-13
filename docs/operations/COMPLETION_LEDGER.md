@@ -25631,6 +25631,33 @@ readback slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident-host Windows CI timing recovery on `2026-05-13`:
+
+- CI run `25780749501` for commit `1322bb49` failed on Windows Python 3.12 in
+  `tests/test_lens_host_foreground_script.py::test_lens_host_resident_mode_writes_runtime_candidate_readback`.
+  The test used a 3-second bounded resident host process, then performed
+  heartbeat readback followed by a separate `Status` readback. On Windows CI the
+  bounded process could finish before the `Status` call, producing
+  `state_present_process_not_running` instead of the expected
+  `process_observed`.
+- The resident-mode proof window now runs for 8 seconds and waits up to 15
+  seconds for bounded cleanup. This is test-harness stabilization only. It does
+  not change Lens host runtime behavior, execution authority, service control,
+  resident claims, memory writes, or Stage 6 readiness.
+
+Latest validation for the resident-host Windows CI timing recovery:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py::test_lens_host_resident_mode_writes_runtime_candidate_readback -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_foreground_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_host_foreground_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_foreground_script.py`
+  Result: `failed before formatting; passed after`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

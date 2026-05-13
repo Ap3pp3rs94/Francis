@@ -199,7 +199,7 @@ def test_lens_host_resident_mode_writes_runtime_candidate_readback(tmp_path: Pat
             "-Mode",
             "Resident",
             "-RunSeconds",
-            "3",
+            "8",
         ],
         cwd=_repo_root(),
         env=env,
@@ -239,7 +239,7 @@ def test_lens_host_resident_mode_writes_runtime_candidate_readback(tmp_path: Pat
         assert status_payload["governance"]["memory_write"] is False
         assert status_payload["governance"]["resident_claim_authority"] is False
 
-        stdout, stderr = proc.communicate(timeout=10)
+        stdout, stderr = proc.communicate(timeout=15)
         assert proc.returncode == 0, stderr
         final_payload = json.loads(stdout)
         assert final_payload["status"] == "resident_completed"
