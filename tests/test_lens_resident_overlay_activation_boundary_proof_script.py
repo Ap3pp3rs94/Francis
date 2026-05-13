@@ -46,11 +46,11 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
         "-Mode",
         "Status",
         "-StartupTimeoutSeconds",
-        "20",
+        "45",
         "-SupervisorRunSeconds",
-        "25",
+        "30",
         "-ResidentSurfaceForegroundRunSeconds",
-        "25",
+        "40",
         "-DataDir",
         str(data_dir),
     )
@@ -60,9 +60,9 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
     assert payload["kind"] == "lens.resident_overlay_activation_boundary.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["startup_timeout_seconds"] == 20
-    assert payload["supervisor_run_seconds"] == 25
-    assert payload["resident_surface_foreground_run_seconds"] == 25
+    assert payload["startup_timeout_seconds"] == 45
+    assert payload["supervisor_run_seconds"] == 30
+    assert payload["resident_surface_foreground_run_seconds"] == 40
     assert payload["live_operator_experience_proof"] is True
     assert payload["resident_overlay_boundary_observed"] is True
     assert payload["activation_boundary_observed"] is True

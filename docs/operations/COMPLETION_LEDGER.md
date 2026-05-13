@@ -25824,6 +25824,40 @@ Latest validation for the coordinated surface-runtime plan-consumption proof:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident-overlay activation Windows CI timing recovery on
+`2026-05-13`:
+
+- CI run `25798258046` for commit `eadf08e6` failed only on Windows Python
+  3.13 in
+  `tests/test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority`.
+  Ubuntu 3.12, Ubuntu 3.13, and Windows 3.12 passed.
+- The failing payload showed the activation-boundary proof itself remained
+  blocked, but its nested live-operator and resident-overlay-runtime proofs
+  were not observed inside the shorter test override windows
+  (`StartupTimeoutSeconds=20`, `SupervisorRunSeconds=25`,
+  `ResidentSurfaceForegroundRunSeconds=25`).
+- The focused test now uses the safer observation windows already supported by
+  the proof script: `StartupTimeoutSeconds=45`, `SupervisorRunSeconds=30`, and
+  `ResidentSurfaceForegroundRunSeconds=40`.
+- This is test-harness stabilization only. It does not enable overlay
+  activation, persistent supervision, service control, tray or hotkey
+  registration, summon-anywhere behavior, approval authority, execution
+  authority, memory writes, receipt writes, resident claims, or Stage 6
+  closure.
+
+Latest validation for the resident-overlay activation Windows CI recovery:
+
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q`
+  Result: `passed with longer observation windows`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_live_operator_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
