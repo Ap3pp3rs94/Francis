@@ -26016,6 +26016,45 @@ Latest validation for the live-operator pipe-drain stabilization:
 - `git diff --check`
   Result: `passed with a PowerShell line-ending warning only`
 
+Stage 6 Lens resident-overlay activation proof-window stabilization on
+`2026-05-13`:
+
+- GitHub Actions run `25827290028` for commit `e3d91453` passed Ubuntu 3.12,
+  Ubuntu 3.13, and Windows 3.13, but failed Windows 3.12 in
+  `test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority`.
+- The failing Windows 3.12 payload showed the resident-overlay runtime boundary
+  and activation-denial boundary were observed, but the nested live-operator
+  readback proof failed inside
+  `scripts/lens-resident-overlay-activation-boundary-proof.ps1` while using a
+  `45` second startup/readback window.
+- The resident-overlay activation boundary test now gives that nested
+  live-operator readback the same `60` second ceiling already used by the
+  resident-surface proof. The activation boundary remains blocked and the proof
+  still asserts no process launch, service install/control, overlay opening,
+  hotkey registration, tray presence, summon-anywhere behavior, approval
+  decision, receipt write, or memory write.
+- This is proof-harness timing stabilization only. It does not start a resident
+  host, enable persistent supervision, install or control a service, register
+  tray or hotkeys, open overlay windows, grant summon authority, decide
+  approvals, write memory, claim resident presence, or close Stage 6.
+- Stage 6 remains active. The completion audit still reports
+  `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the resident-overlay activation proof-window
+stabilization:
+
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_composes_blocked_surface_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
