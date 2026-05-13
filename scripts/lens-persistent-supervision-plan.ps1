@@ -450,6 +450,169 @@ function Get-TrayRuntimeReadback {
   }
 }
 
+function Get-HotkeyRuntimeReadback {
+  param(
+    [string]$DataRoot,
+    [AllowNull()]
+    [object]$SummonConfig
+  )
+
+  $RuntimeRoot = Join-Path $DataRoot 'runtime/lens-hotkey'
+  $PidPath = Join-Path $RuntimeRoot 'lens-hotkey.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = [string](Get-PropertyValue -Payload $Status -Name 'kind' -Default '')
+  $StatusValue = [string](Get-PropertyValue -Payload $Status -Name 'status' -Default '')
+  $StatusPid = [int](Get-PropertyValue -Payload $Status -Name 'pid' -Default 0)
+  $ExpectedGlobalHotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default 'Ctrl+Alt+Space')
+  $ExpectedBindingScope = [string](Get-PropertyValue -Payload $SummonConfig -Name 'binding_scope' -Default 'global')
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsBoundHotkey = (
+    $StatusKind -eq 'lens.hotkey.runtime_state' -and
+    $StatusValue -eq 'hotkey_bound' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid -and
+    (Test-TruthyProperty -Payload $Status -Name 'hotkey_bound') -and
+    [string](Get-PropertyValue -Payload $Status -Name 'global_hotkey' -Default '') -eq $ExpectedGlobalHotkey -and
+    [string](Get-PropertyValue -Payload $Status -Name 'binding_scope' -Default '') -eq $ExpectedBindingScope
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsBoundHotkey) {
+    $ProcessAlive = Get-ProcessAlive -ProcessId $RuntimePid
+  }
+  $HotkeyBound = $ProcessAlive -and $StatusClaimsBoundHotkey
+  $RequirementState = if ($HotkeyBound) {
+    'ready'
+  } elseif ($ProcessAlive) {
+    'process_running_no_bound_hotkey_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($HotkeyBound) {
+    ''
+  } elseif ($ProcessAlive) {
+    'global_hotkey_binding_not_observed'
+  } else {
+    'global_hotkey_binding_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $HotkeyBound
+    process_alive = $ProcessAlive
+    hotkey_bound = $HotkeyBound
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = 'data/runtime/lens-hotkey/status.json'
+    pid_path = 'data/runtime/lens-hotkey/lens-hotkey.pid'
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    global_hotkey = [string](Get-PropertyValue -Payload $Status -Name 'global_hotkey' -Default '')
+    expected_global_hotkey = $ExpectedGlobalHotkey
+    binding_scope = [string](Get-PropertyValue -Payload $Status -Name 'binding_scope' -Default '')
+    expected_binding_scope = $ExpectedBindingScope
+    launch_on_hotkey = (Test-TruthyProperty -Payload $Status -Name 'launch_on_hotkey')
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
+function Get-OverlayRuntimeReadback {
+  param(
+    [string]$DataRoot,
+    [AllowNull()]
+    [object]$OverlayConfig
+  )
+
+  $RuntimeRoot = Join-Path $DataRoot 'runtime/lens-overlay'
+  $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = [string](Get-PropertyValue -Payload $Status -Name 'kind' -Default '')
+  $StatusValue = [string](Get-PropertyValue -Payload $Status -Name 'status' -Default '')
+  $StatusPid = [int](Get-PropertyValue -Payload $Status -Name 'pid' -Default 0)
+  $ExpectedOverlayName = [string](Get-PropertyValue -Payload $OverlayConfig -Name 'overlay_name' -Default 'Francis Lens Overlay')
+  $ExpectedOverlayScope = [string](Get-PropertyValue -Payload $OverlayConfig -Name 'overlay_scope' -Default 'user_session')
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsRunningOverlay = (
+    $StatusKind -eq 'lens.overlay.runtime_state' -and
+    $StatusValue -eq 'overlay_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid -and
+    [string](Get-PropertyValue -Payload $Status -Name 'overlay_name' -Default '') -eq $ExpectedOverlayName -and
+    [string](Get-PropertyValue -Payload $Status -Name 'overlay_scope' -Default '') -eq $ExpectedOverlayScope
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningOverlay) {
+    $ProcessAlive = Get-ProcessAlive -ProcessId $RuntimePid
+  }
+  $OverlayWindowVisible = $ProcessAlive -and (Test-TruthyProperty -Payload $Status -Name 'overlay_window_visible')
+  $AlwaysOnTop = $OverlayWindowVisible -and (Test-TruthyProperty -Payload $Status -Name 'always_on_top')
+  $OverlayReady = $OverlayWindowVisible -and $AlwaysOnTop
+  $RequirementState = if ($OverlayReady) {
+    'ready'
+  } elseif ($ProcessAlive) {
+    'process_running_no_visible_overlay_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($OverlayReady) {
+    ''
+  } elseif ($ProcessAlive) {
+    'overlay_window_not_observed'
+  } else {
+    'overlay_window_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $OverlayReady
+    process_alive = $ProcessAlive
+    overlay_window_visible = $OverlayWindowVisible
+    always_on_top = $AlwaysOnTop
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = 'data/runtime/lens-overlay/status.json'
+    pid_path = 'data/runtime/lens-overlay/lens-overlay.pid'
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    overlay_name = [string](Get-PropertyValue -Payload $Status -Name 'overlay_name' -Default '')
+    expected_overlay_name = $ExpectedOverlayName
+    overlay_scope = [string](Get-PropertyValue -Payload $Status -Name 'overlay_scope' -Default '')
+    expected_overlay_scope = $ExpectedOverlayScope
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
 function New-EnablementDependency {
   param(
     [string]$Id,
@@ -562,6 +725,8 @@ $Requirements = @(
 
 $HostProcessReadback = Get-HostProcessReadback -DataRoot $DataRoot
 $TrayRuntimeReadback = Get-TrayRuntimeReadback -DataRoot $DataRoot
+$HotkeyRuntimeReadback = Get-HotkeyRuntimeReadback -DataRoot $DataRoot -SummonConfig $SummonConfig
+$OverlayRuntimeReadback = Get-OverlayRuntimeReadback -DataRoot $DataRoot -OverlayConfig $OverlayConfig
 $HostProcessProofScript = if ([bool]$HostProcessReadback.resident_supervised_runtime) {
   ''
 } elseif ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
@@ -594,19 +759,51 @@ $TrayBlocker = if ($TrayRuntimeReady) {
 } else {
   'tray_host_missing'
 }
-$GlobalHotkeyReady = (
+$GlobalHotkeyConfigReady = (
   (Test-TruthyProperty -Payload $SummonConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'register_hotkey') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'startup_register') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'hotkey_registration_authority')
 )
-$OverlayReady = (
+$HotkeyRuntimeReady = [bool]$HotkeyRuntimeReadback.ready
+$GlobalHotkeyReady = $GlobalHotkeyConfigReady -or $HotkeyRuntimeReady
+$GlobalHotkeyRequirementState = if ($HotkeyRuntimeReady) {
+  'ready'
+} elseif ([string]$HotkeyRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$HotkeyRuntimeReadback.requirement_state
+} else {
+  'binding_disabled'
+}
+$GlobalHotkeyBlocker = if ($HotkeyRuntimeReady) {
+  ''
+} elseif ([string]$HotkeyRuntimeReadback.blocker -and [string]$HotkeyRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$HotkeyRuntimeReadback.blocker
+} else {
+  'global_hotkey_binding_missing'
+}
+$OverlayConfigReady = (
   (Test-TruthyProperty -Payload $OverlayConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_enabled') -and
   (Test-TruthyProperty -Payload $OverlayConfig -Name 'overlay_control_authority') -and
   (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_management_authority')
 )
+$OverlayRuntimeReady = [bool]$OverlayRuntimeReadback.ready
+$OverlayReady = $OverlayConfigReady -or $OverlayRuntimeReady
+$OverlayRequirementState = if ($OverlayRuntimeReady) {
+  'ready'
+} elseif ([string]$OverlayRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$OverlayRuntimeReadback.requirement_state
+} else {
+  'window_disabled'
+}
+$OverlayBlocker = if ($OverlayRuntimeReady) {
+  ''
+} elseif ([string]$OverlayRuntimeReadback.blocker -and [string]$OverlayRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$OverlayRuntimeReadback.blocker
+} else {
+  'overlay_window_missing'
+}
 $SummonReady = (
   (Test-TruthyProperty -Payload $SummonConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled') -and
@@ -659,13 +856,25 @@ $EnablementDependencyReadback = @(
         tray_runtime_state_exists = [bool]$TrayRuntimeReadback.runtime_state_exists
         tray_runtime_status_pid_matches_pid_file = [bool]$TrayRuntimeReadback.runtime_status_pid_matches_pid_file
       })),
-  (New-EnablementDependency -Id 'global_hotkey_binding' -Family 'global_hotkey_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $GlobalHotkeyReady -Blocker 'global_hotkey_binding_missing' -RequirementState 'binding_disabled' -BlockedReason 'global_hotkey_binding_disabled' -ProofScript 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'global_hotkey_binding' -Family 'global_hotkey_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $GlobalHotkeyReady -Blocker $GlobalHotkeyBlocker -RequirementState $GlobalHotkeyRequirementState -BlockedReason 'global_hotkey_binding_disabled' -ProofScript 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath
         config_exists = $null -ne $SummonConfig
         global_hotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default '')
         binding_enabled = (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled')
         register_hotkey = (Test-TruthyProperty -Payload $SummonConfig -Name 'register_hotkey')
         hotkey_registration_authority = (Test-TruthyProperty -Payload $SummonConfig -Name 'hotkey_registration_authority')
+        hotkey_config_ready = $GlobalHotkeyConfigReady
+        hotkey_runtime_ready = $HotkeyRuntimeReady
+        global_hotkey_source = if ($HotkeyRuntimeReady) { 'live_runtime_readback' } elseif ($GlobalHotkeyConfigReady) { 'enabled_config' } else { 'blocked_config' }
+        hotkey_runtime_requirement_state = [string]$HotkeyRuntimeReadback.requirement_state
+        hotkey_runtime_blocker = [string]$HotkeyRuntimeReadback.blocker
+        hotkey_runtime_process_alive = [bool]$HotkeyRuntimeReadback.process_alive
+        hotkey_runtime_bound = [bool]$HotkeyRuntimeReadback.hotkey_bound
+        hotkey_runtime_pid = [int]$HotkeyRuntimeReadback.pid
+        hotkey_runtime_status = [string]$HotkeyRuntimeReadback.runtime_status
+        hotkey_runtime_status_kind = [string]$HotkeyRuntimeReadback.runtime_status_kind
+        hotkey_runtime_state_exists = [bool]$HotkeyRuntimeReadback.runtime_state_exists
+        hotkey_runtime_status_pid_matches_pid_file = [bool]$HotkeyRuntimeReadback.runtime_status_pid_matches_pid_file
         os_binding_readiness_route = '/lens/os-binding/readiness'
         os_binding_plan_route = '/lens/os-binding/plan'
         os_binding_authority_route = '/lens/os-binding/authority'
@@ -677,12 +886,25 @@ $EnablementDependencyReadback = @(
         approval_action = 'lens.os_binding.command_palette_binding_authority'
         authority_scope = 'system.write'
       })),
-  (New-EnablementDependency -Id 'overlay_window' -Family 'overlay_window' -Route '/lens/overlay' -ReadinessRoute '/lens/overlay/readiness' -Ready $OverlayReady -Blocker 'overlay_window_missing' -RequirementState 'window_disabled' -BlockedReason ([string](Get-PropertyValue -Payload $OverlayConfig -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented')) -PreflightScript 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'overlay_window' -Family 'overlay_window' -Route '/lens/overlay' -ReadinessRoute '/lens/overlay/readiness' -Ready $OverlayReady -Blocker $OverlayBlocker -RequirementState $OverlayRequirementState -BlockedReason ([string](Get-PropertyValue -Payload $OverlayConfig -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented')) -PreflightScript 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $OverlayConfigRelativePath
         config_exists = $null -ne $OverlayConfig
         window_enabled = (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_enabled')
         overlay_control_authority = (Test-TruthyProperty -Payload $OverlayConfig -Name 'overlay_control_authority')
         window_management_authority = (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_management_authority')
+        overlay_config_ready = $OverlayConfigReady
+        overlay_runtime_ready = $OverlayRuntimeReady
+        overlay_window_source = if ($OverlayRuntimeReady) { 'live_runtime_readback' } elseif ($OverlayConfigReady) { 'enabled_config' } else { 'blocked_config' }
+        overlay_runtime_requirement_state = [string]$OverlayRuntimeReadback.requirement_state
+        overlay_runtime_blocker = [string]$OverlayRuntimeReadback.blocker
+        overlay_runtime_process_alive = [bool]$OverlayRuntimeReadback.process_alive
+        overlay_runtime_window_visible = [bool]$OverlayRuntimeReadback.overlay_window_visible
+        overlay_runtime_always_on_top = [bool]$OverlayRuntimeReadback.always_on_top
+        overlay_runtime_pid = [int]$OverlayRuntimeReadback.pid
+        overlay_runtime_status = [string]$OverlayRuntimeReadback.runtime_status
+        overlay_runtime_status_kind = [string]$OverlayRuntimeReadback.runtime_status_kind
+        overlay_runtime_state_exists = [bool]$OverlayRuntimeReadback.runtime_state_exists
+        overlay_runtime_status_pid_matches_pid_file = [bool]$OverlayRuntimeReadback.runtime_status_pid_matches_pid_file
       })),
   (New-EnablementDependency -Id 'summon_binding' -Family 'summon_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $SummonReady -Blocker 'summon_binding_missing' -RequirementState 'disabled_pending_authority' -BlockedReason ([string](Get-PropertyValue -Payload $SummonConfig -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority')) -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath

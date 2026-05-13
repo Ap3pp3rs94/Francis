@@ -369,6 +369,144 @@ def test_lens_persistent_supervision_plan_accepts_live_tray_runtime_readback(
     assert payload["first_missing_requirement_handoff"]["id"] == "global_hotkey_binding"
 
 
+def test_lens_persistent_supervision_plan_accepts_live_surface_runtime_readbacks(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    host_root = data_root / "runtime" / "lens-host"
+    supervisor_root = data_root / "runtime" / "lens-host-supervisor"
+    tray_root = data_root / "runtime" / "lens-tray"
+    hotkey_root = data_root / "runtime" / "lens-hotkey"
+    overlay_root = data_root / "runtime" / "lens-overlay"
+    host_root.mkdir(parents=True)
+    supervisor_root.mkdir(parents=True)
+    tray_root.mkdir(parents=True)
+    hotkey_root.mkdir(parents=True)
+    overlay_root.mkdir(parents=True)
+    now = int(time.time())
+    pid = os.getpid()
+
+    (host_root / "lens-host.pid").write_text(str(pid), encoding="utf-8")
+    (host_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "mode": "resident",
+                "pid": pid,
+                "process_alive": True,
+                "resident": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (supervisor_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "mode": "supervise_resident",
+                "host_mode": "resident",
+                "observed_pid": pid,
+                "observed_state": "resident_running",
+                "resident_supervised_runtime": True,
+                "process_supervision_authority": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tray_root / "lens-tray.pid").write_text(str(pid), encoding="utf-8")
+    (tray_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (hotkey_root / "lens-hotkey.pid").write_text(str(pid), encoding="utf-8")
+    (hotkey_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (overlay_root / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (overlay_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_script("-Mode", "Status", env={**os.environ, "FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["required_before_enable_ready"] is False
+    assert payload["missing_required_before_enable"] == ["summon_binding"]
+    assert payload["first_missing_required_before_enable"] == "summon_binding"
+
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    hotkey = dependencies["global_hotkey_binding"]
+    assert hotkey["ready"] is True
+    assert hotkey["status"] == "ready"
+    assert hotkey["blocker"] == ""
+    assert hotkey["requirement_state"] == "ready"
+    assert hotkey["global_hotkey_source"] == "live_runtime_readback"
+    assert hotkey["hotkey_config_ready"] is False
+    assert hotkey["hotkey_runtime_ready"] is True
+    assert hotkey["hotkey_runtime_process_alive"] is True
+    assert hotkey["hotkey_runtime_bound"] is True
+    assert hotkey["hotkey_runtime_pid"] == pid
+    assert hotkey["hotkey_runtime_status"] == "hotkey_bound"
+    assert hotkey["hotkey_runtime_state_exists"] is True
+    assert hotkey["hotkey_runtime_status_pid_matches_pid_file"] is True
+
+    overlay = dependencies["overlay_window"]
+    assert overlay["ready"] is True
+    assert overlay["status"] == "ready"
+    assert overlay["blocker"] == ""
+    assert overlay["requirement_state"] == "ready"
+    assert overlay["overlay_window_source"] == "live_runtime_readback"
+    assert overlay["overlay_config_ready"] is False
+    assert overlay["overlay_runtime_ready"] is True
+    assert overlay["overlay_runtime_process_alive"] is True
+    assert overlay["overlay_runtime_window_visible"] is True
+    assert overlay["overlay_runtime_always_on_top"] is True
+    assert overlay["overlay_runtime_pid"] == pid
+    assert overlay["overlay_runtime_status"] == "overlay_running"
+    assert overlay["overlay_runtime_state_exists"] is True
+    assert overlay["overlay_runtime_status_pid_matches_pid_file"] is True
+
+    assert payload["first_missing_requirement_handoff"]["id"] == "summon_binding"
+
+
 def test_lens_persistent_supervision_plan_consumes_active_authority_grant_receipt(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     grant_root = data_root / "lens" / "host_supervision_authority_grants"

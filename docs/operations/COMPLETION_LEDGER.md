@@ -25658,6 +25658,48 @@ Latest validation for the resident-host Windows CI timing recovery:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens persistent-supervision surface-runtime prerequisite readback on
+`2026-05-13`:
+
+- `scripts/lens-persistent-supervision-plan.ps1` now consumes live global-hotkey
+  and overlay-window runtime state alongside the existing live tray runtime
+  readback when evaluating the persistent-supervision
+  `required_before_enable` chain.
+- With a supervised resident host plus live tray, hotkey, and overlay runtime
+  evidence in a temp data root, the plan now treats
+  `resident_host_process`, `tray_presence`, `global_hotkey_binding`, and
+  `overlay_window` as satisfied and hands off only to `summon_binding`.
+- The normal repo data root remains blocked: the plan still reports
+  `persistent_supervision_required_prerequisites_missing` with
+  `resident_host_process`, `tray_presence`, `global_hotkey_binding`,
+  `overlay_window`, and `summon_binding` missing when no live runtimes are
+  active.
+- This is readback/proof-chain alignment only. It does not enable persistent
+  supervision, install or control a service, register a hotkey or tray item,
+  open/control an overlay, grant summon authority, decide approvals, write
+  memory, write receipts, claim resident presence, or close Stage 6.
+
+Latest validation for the persistent-supervision surface-runtime prerequisite
+readback slice:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_accepts_live_surface_runtime_readbacks -q`
+  Result: `failed before the plan consumed live hotkey/overlay runtime
+  readbacks; passed after`
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,required_before_enable_ready,missing_required_before_enable,first_missing_required_before_enable | ConvertTo-Json -Depth 5`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; required_before_enable_ready=false; first_missing_required_before_enable=resident_host_process`
+- `python -m ruff check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
