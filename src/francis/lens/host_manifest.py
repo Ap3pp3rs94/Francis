@@ -366,6 +366,158 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
     }
 
 
+def _lens_hotkey_runtime_readback() -> dict[str, Any]:
+    config = _runtime_json_dict("config/runtime/lens/summon.json")
+    expected_global_hotkey = str(config.get("global_hotkey") or "")
+    expected_binding_scope = str(config.get("binding_scope") or "global")
+    state_file = data_dir() / "runtime" / "lens-hotkey" / "status.json"
+    pid_file = data_dir() / "runtime" / "lens-hotkey" / "lens-hotkey.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = str(state_payload.get("kind") or "")
+    state_status = str(state_payload.get("status") or "")
+    state_pid = _safe_pid(state_payload.get("pid"))
+    state_global_hotkey = str(state_payload.get("global_hotkey") or "")
+    state_binding_scope = str(state_payload.get("binding_scope") or "")
+    state_claims_bound_hotkey = (
+        state_kind == "lens.hotkey.runtime_state"
+        and state_status == "hotkey_bound"
+        and state_pid > 0
+        and state_pid == pid
+        and bool(state_payload.get("hotkey_bound"))
+        and state_global_hotkey == expected_global_hotkey
+        and state_binding_scope == expected_binding_scope
+    )
+    if state_claims_bound_hotkey:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.hotkey.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "hotkey_bound":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_bound"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_or_binding_mismatch"
+
+    hotkey_bound = process_alive and state_claims_bound_hotkey
+    requirement_state = (
+        "bound"
+        if hotkey_bound
+        else "process_running_no_bound_hotkey_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    return {
+        "ready": hotkey_bound,
+        "status": "running" if hotkey_bound else "missing",
+        "runtime_state_path": "data/runtime/lens-hotkey/status.json",
+        "state_exists": state_exists,
+        "state_kind": state_kind,
+        "state_status": state_status,
+        "state_pid": state_pid,
+        "state_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "state_updated_at": str(state_payload.get("updated_at") or ""),
+        "pid_path": "data/runtime/lens-hotkey/lens-hotkey.pid",
+        "pid_present": pid_present,
+        "pid": pid,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "hotkey_bound": hotkey_bound,
+        "global_hotkey": state_global_hotkey,
+        "expected_global_hotkey": expected_global_hotkey,
+        "binding_scope": state_binding_scope,
+        "expected_binding_scope": expected_binding_scope,
+        "launch_on_hotkey": bool(state_payload.get("launch_on_hotkey")),
+        "summon_runner": str(state_payload.get("summon_runner") or ""),
+        "press_count": _safe_pid(state_payload.get("press_count")),
+        "requirement_state": requirement_state,
+        "blocker": "" if hotkey_bound else "global_hotkey_binding_runtime_missing",
+    }
+
+
+def _lens_overlay_runtime_readback() -> dict[str, Any]:
+    config = _runtime_json_dict("config/runtime/lens/overlay.json")
+    expected_overlay_name = str(config.get("overlay_name") or "Francis Lens Overlay")
+    expected_overlay_scope = str(config.get("overlay_scope") or "user_session")
+    state_file = data_dir() / "runtime" / "lens-overlay" / "status.json"
+    pid_file = data_dir() / "runtime" / "lens-overlay" / "lens-overlay.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = str(state_payload.get("kind") or "")
+    state_status = str(state_payload.get("status") or "")
+    state_pid = _safe_pid(state_payload.get("pid"))
+    state_overlay_name = str(state_payload.get("overlay_name") or "")
+    state_overlay_scope = str(state_payload.get("overlay_scope") or "")
+    state_claims_running_overlay = (
+        state_kind == "lens.overlay.runtime_state"
+        and state_status == "overlay_running"
+        and state_pid > 0
+        and state_pid == pid
+        and state_overlay_name == expected_overlay_name
+        and state_overlay_scope == expected_overlay_scope
+    )
+    if state_claims_running_overlay:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.overlay.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "overlay_running":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_running"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_or_identity_mismatch"
+
+    overlay_window_visible = process_alive and bool(state_payload.get("overlay_window_visible"))
+    always_on_top = overlay_window_visible and bool(state_payload.get("always_on_top"))
+    overlay_ready = overlay_window_visible and always_on_top
+    requirement_state = (
+        "visible"
+        if overlay_ready
+        else "process_running_no_visible_overlay_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    blocker = (
+        "" if overlay_ready else "overlay_window_not_observed" if process_alive else "overlay_window_runtime_missing"
+    )
+    return {
+        "ready": overlay_ready,
+        "status": "running" if overlay_ready else "missing",
+        "runtime_state_path": "data/runtime/lens-overlay/status.json",
+        "state_exists": state_exists,
+        "state_kind": state_kind,
+        "state_status": state_status,
+        "state_pid": state_pid,
+        "state_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "state_updated_at": str(state_payload.get("updated_at") or ""),
+        "pid_path": "data/runtime/lens-overlay/lens-overlay.pid",
+        "pid_present": pid_present,
+        "pid": pid,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "overlay_window_visible": overlay_window_visible,
+        "always_on_top": always_on_top,
+        "overlay_name": state_overlay_name,
+        "expected_overlay_name": expected_overlay_name,
+        "overlay_scope": state_overlay_scope,
+        "expected_overlay_scope": expected_overlay_scope,
+        "requirement_state": requirement_state,
+        "blocker": blocker,
+    }
+
+
 def _lens_host_activation_execution_receipt_root() -> Path:
     return data_dir() / "lens" / "host_activation_executions"
 
@@ -635,6 +787,8 @@ def _lens_host_missing_required_before_enable(
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
+    hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
+    overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     resident_supervised_runtime = (
         bool(process_readback.get("process_alive"))
         and bool(supervisor_readback.get("fresh_readback"))
@@ -647,11 +801,17 @@ def _lens_host_missing_required_before_enable(
         resident_supervised_runtime or not resident_host_process_blocked
     )
     tray_presence_ready = bool(tray_runtime_readback.get("ready")) or "tray_host_missing" not in surface_blockers
+    hotkey_binding_ready = (
+        bool(hotkey_runtime_readback.get("ready")) or "global_hotkey_binding_missing" not in surface_blockers
+    )
+    overlay_window_ready = (
+        bool(overlay_runtime_readback.get("ready")) or "overlay_window_missing" not in surface_blockers
+    )
     missing_by_requirement = {
         "resident_host_process": not resident_host_process_ready,
         "tray_presence": not tray_presence_ready,
-        "global_hotkey_binding": "global_hotkey_binding_missing" in surface_blockers,
-        "overlay_window": "overlay_window_missing" in surface_blockers,
+        "global_hotkey_binding": not hotkey_binding_ready,
+        "overlay_window": not overlay_window_ready,
         "summon_binding": "summon_binding_missing" in surface_blockers,
     }
     return [item for item in required_before_enable if missing_by_requirement.get(item, False)]
@@ -1042,9 +1202,14 @@ def _lens_host_tray_presence_requirement_readback(
     }
 
 
-def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str, Any]:
+def _lens_host_global_hotkey_requirement_readback(
+    *,
+    launch_manifest: dict[str, Any],
+    missing: bool,
+) -> dict[str, Any]:
     config_path = "config/runtime/lens/summon.json"
     config = _runtime_json_dict(config_path)
+    hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
     config_exists = bool(config)
     global_hotkey = str(config.get("global_hotkey") or "")
     binding_scope = str(config.get("binding_scope") or "global")
@@ -1054,6 +1219,7 @@ def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str,
     startup_register = bool(config.get("startup_register"))
     hotkey_registration_authority = bool(config.get("hotkey_registration_authority"))
     summon_authority = bool(config.get("summon_authority"))
+    hotkey_runtime_ready = bool(hotkey_runtime_readback.get("ready"))
     family_blockers = []
     if not config_exists:
         family_blockers.append("lens_summon_config_missing")
@@ -1065,11 +1231,15 @@ def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str,
         family_blockers.append("global_hotkey_registration_disabled")
     if not hotkey_registration_authority:
         family_blockers.append("hotkey_registration_authority_not_granted")
+    if missing and hotkey_runtime_readback and not hotkey_runtime_ready:
+        family_blockers.append(str(hotkey_runtime_readback.get("blocker") or "global_hotkey_binding_runtime_missing"))
 
     requirement_state = "ready"
     if missing:
         if not config_exists:
             requirement_state = "config_missing"
+        elif hotkey_runtime_readback and str(hotkey_runtime_readback.get("requirement_state") or "") != "missing":
+            requirement_state = str(hotkey_runtime_readback.get("requirement_state") or "stale_or_unverified")
         elif not global_hotkey:
             requirement_state = "hotkey_not_declared"
         elif not binding_enabled:
@@ -1096,6 +1266,22 @@ def _lens_host_global_hotkey_requirement_readback(*, missing: bool) -> dict[str,
         "startup_register": startup_register,
         "hotkey_registration_authority": hotkey_registration_authority,
         "summon_authority": summon_authority,
+        "hotkey_runtime_ready": hotkey_runtime_ready,
+        "hotkey_presence_source": "live_runtime_readback"
+        if hotkey_runtime_ready
+        else "enabled_config"
+        if config_exists and binding_enabled and register_hotkey and hotkey_registration_authority
+        else "blocked_config",
+        "hotkey_runtime_requirement_state": str(hotkey_runtime_readback.get("requirement_state") or "missing"),
+        "hotkey_runtime_blocker": str(hotkey_runtime_readback.get("blocker") or ""),
+        "hotkey_runtime_process_alive": bool(hotkey_runtime_readback.get("process_alive")),
+        "hotkey_runtime_bound": bool(hotkey_runtime_readback.get("hotkey_bound")),
+        "hotkey_runtime_pid": int(hotkey_runtime_readback.get("pid") or 0),
+        "hotkey_runtime_status": str(hotkey_runtime_readback.get("state_status") or ""),
+        "hotkey_runtime_status_kind": str(hotkey_runtime_readback.get("state_kind") or ""),
+        "hotkey_runtime_state_exists": bool(hotkey_runtime_readback.get("state_exists")),
+        "hotkey_runtime_status_pid_matches_pid_file": bool(hotkey_runtime_readback.get("state_pid_matches_pid_file")),
+        "hotkey_runtime_readback": hotkey_runtime_readback,
         "family_blockers": _ordered_unique(family_blockers) if missing else [],
     }
 
@@ -1216,9 +1402,14 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
     }
 
 
-def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str, Any]:
+def _lens_host_overlay_window_requirement_readback(
+    *,
+    launch_manifest: dict[str, Any],
+    missing: bool,
+) -> dict[str, Any]:
     config_path = "config/runtime/lens/overlay.json"
     config = _runtime_json_dict(config_path)
+    overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     config_exists = bool(config)
     overlay_name = str(config.get("overlay_name") or "Francis Lens Overlay")
     overlay_scope = str(config.get("overlay_scope") or "user_session")
@@ -1238,6 +1429,7 @@ def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str
     capture_authority = bool(config.get("capture_authority"))
     summon_authority = bool(config.get("summon_authority"))
     tray_registration_authority = bool(config.get("tray_registration_authority"))
+    overlay_runtime_ready = bool(overlay_runtime_readback.get("ready"))
     family_blockers = []
     if not config_exists:
         family_blockers.append("lens_overlay_config_missing")
@@ -1265,11 +1457,15 @@ def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str
         family_blockers.append("summon_authority_not_granted")
     if not tray_registration_authority:
         family_blockers.append("tray_registration_authority_not_granted")
+    if missing and overlay_runtime_readback and not overlay_runtime_ready:
+        family_blockers.append(str(overlay_runtime_readback.get("blocker") or "overlay_window_runtime_missing"))
 
     requirement_state = "ready"
     if missing:
         if not config_exists:
             requirement_state = "config_missing"
+        elif overlay_runtime_readback and str(overlay_runtime_readback.get("requirement_state") or "") != "missing":
+            requirement_state = str(overlay_runtime_readback.get("requirement_state") or "stale_or_unverified")
         elif not window_enabled:
             requirement_state = "window_disabled"
         elif not overlay_control_authority:
@@ -1304,6 +1500,28 @@ def _lens_host_overlay_window_requirement_readback(*, missing: bool) -> dict[str
         "capture_authority": capture_authority,
         "summon_authority": summon_authority,
         "tray_registration_authority": tray_registration_authority,
+        "overlay_runtime_ready": overlay_runtime_ready,
+        "overlay_presence_source": "live_runtime_readback"
+        if overlay_runtime_ready
+        else "enabled_config"
+        if config_exists
+        and overlay_enabled
+        and window_enabled
+        and always_on_top
+        and overlay_control_authority
+        and window_management_authority
+        else "blocked_config",
+        "overlay_runtime_requirement_state": str(overlay_runtime_readback.get("requirement_state") or "missing"),
+        "overlay_runtime_blocker": str(overlay_runtime_readback.get("blocker") or ""),
+        "overlay_runtime_process_alive": bool(overlay_runtime_readback.get("process_alive")),
+        "overlay_runtime_window_visible": bool(overlay_runtime_readback.get("overlay_window_visible")),
+        "overlay_runtime_always_on_top": bool(overlay_runtime_readback.get("always_on_top")),
+        "overlay_runtime_pid": int(overlay_runtime_readback.get("pid") or 0),
+        "overlay_runtime_status": str(overlay_runtime_readback.get("state_status") or ""),
+        "overlay_runtime_status_kind": str(overlay_runtime_readback.get("state_kind") or ""),
+        "overlay_runtime_state_exists": bool(overlay_runtime_readback.get("state_exists")),
+        "overlay_runtime_status_pid_matches_pid_file": bool(overlay_runtime_readback.get("state_pid_matches_pid_file")),
+        "overlay_runtime_readback": overlay_runtime_readback,
         "family_blockers": _ordered_unique(family_blockers) if missing else [],
     }
 
@@ -1345,9 +1563,15 @@ def _lens_host_enablement_dependency_readback(
                 missing=item_missing,
             )
         elif item == "global_hotkey_binding":
-            extra_readback = _lens_host_global_hotkey_requirement_readback(missing=item_missing)
+            extra_readback = _lens_host_global_hotkey_requirement_readback(
+                launch_manifest=launch_manifest,
+                missing=item_missing,
+            )
         elif item == "overlay_window":
-            extra_readback = _lens_host_overlay_window_requirement_readback(missing=item_missing)
+            extra_readback = _lens_host_overlay_window_requirement_readback(
+                launch_manifest=launch_manifest,
+                missing=item_missing,
+            )
         elif item == "summon_binding":
             extra_readback = _lens_host_summon_binding_requirement_readback(missing=item_missing)
         dependencies.append(
@@ -2461,6 +2685,8 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     )
     process_readback = _lens_host_process_readback()
     tray_runtime_readback = _lens_tray_runtime_readback()
+    hotkey_runtime_readback = _lens_hotkey_runtime_readback()
+    overlay_runtime_readback = _lens_overlay_runtime_readback()
     supervisor_readback = _lens_host_supervisor_readback()
     supervision_execution_readback = _lens_host_supervision_execution_readback()
     supervision_readiness = _lens_host_supervision_readiness(
@@ -2477,13 +2703,15 @@ def lens_host_launch_manifest() -> dict[str, Any]:
     )
     if not entrypoint_exists:
         runtime_blocker = "lens_host_runtime_not_implemented"
-    blockers = [
-        runtime_blocker,
-        "tray_host_missing",
-        "global_hotkey_binding_missing",
-        "overlay_window_missing",
-        "summon_binding_missing",
-    ]
+    surface_dependency_blockers = []
+    if not bool(tray_runtime_readback.get("ready")):
+        surface_dependency_blockers.append("tray_host_missing")
+    if not bool(hotkey_runtime_readback.get("ready")):
+        surface_dependency_blockers.append("global_hotkey_binding_missing")
+    if not bool(overlay_runtime_readback.get("ready")):
+        surface_dependency_blockers.append("overlay_window_missing")
+    surface_dependency_blockers.append("summon_binding_missing")
+    blockers = [runtime_blocker, *surface_dependency_blockers]
     if not entrypoint_exists:
         blockers.insert(0, "lens_host_entrypoint_missing")
     if not service_config_exists:
@@ -2509,7 +2737,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "service_plan": service_plan_blockers,
         "supervision": supervision_blockers,
         "surface_dependencies": _select_blockers(
-            blockers,
+            surface_dependency_blockers,
             "tray_host_missing",
             "global_hotkey_binding_missing",
             "overlay_window_missing",
@@ -2632,6 +2860,8 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "service_readback": service_readback,
         "process_readback": process_readback,
         "tray_runtime_readback": tray_runtime_readback,
+        "hotkey_runtime_readback": hotkey_runtime_readback,
+        "overlay_runtime_readback": overlay_runtime_readback,
         "activation_execution_readback": activation_execution_readback,
         "supervision_execution_readback": supervision_execution_readback,
         "supervisor_readback": supervisor_readback,

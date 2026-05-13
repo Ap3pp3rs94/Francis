@@ -8031,6 +8031,115 @@ def test_lens_status_promotes_live_tray_runtime_before_hotkey(monkeypatch, tmp_p
     assert persistent_plan["governance"]["resident_claim_authority"] is False
 
 
+def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    _write_lens_host_runtime_state(
+        data_root,
+        pid=6789,
+        status="resident_running",
+        mode="resident",
+    )
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=6789,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        updated_at="2026-05-01T00:00:00Z",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    surface_pid = os.getpid()
+    _write_lens_tray_runtime_state(data_root, pid=surface_pid)
+    _write_lens_hotkey_runtime_state(data_root, pid=surface_pid)
+    _write_lens_overlay_runtime_state(data_root, pid=surface_pid)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(
+        host_manifest_module,
+        "_process_alive_readback",
+        lambda pid: (pid in {surface_pid, 6789}, "test"),
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    assert resident_host["tray_runtime_readback"]["ready"] is True
+    assert resident_host["hotkey_runtime_readback"]["ready"] is True
+    assert resident_host["hotkey_runtime_readback"]["hotkey_bound"] is True
+    assert resident_host["overlay_runtime_readback"]["ready"] is True
+    assert resident_host["overlay_runtime_readback"]["overlay_window_visible"] is True
+
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == ["summon_binding"]
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    for dependency_id in [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+    ]:
+        assert plan_dependencies[dependency_id]["ready"] is True
+        assert plan_dependencies[dependency_id]["blocker"] == ""
+        assert plan_dependencies[dependency_id]["requirement_state"] == "ready"
+
+    hotkey_dependency = plan_dependencies["global_hotkey_binding"]
+    assert hotkey_dependency["hotkey_presence_source"] == "live_runtime_readback"
+    assert hotkey_dependency["hotkey_runtime_ready"] is True
+    assert hotkey_dependency["hotkey_runtime_process_alive"] is True
+    assert hotkey_dependency["hotkey_runtime_bound"] is True
+    assert hotkey_dependency["hotkey_runtime_pid"] == surface_pid
+
+    overlay_dependency = plan_dependencies["overlay_window"]
+    assert overlay_dependency["overlay_presence_source"] == "live_runtime_readback"
+    assert overlay_dependency["overlay_runtime_ready"] is True
+    assert overlay_dependency["overlay_runtime_process_alive"] is True
+    assert overlay_dependency["overlay_runtime_window_visible"] is True
+    assert overlay_dependency["overlay_runtime_always_on_top"] is True
+    assert overlay_dependency["overlay_runtime_pid"] == surface_pid
+
+    handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert handoff["id"] == "summon_binding"
+    assert handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert handoff["route"] == "/lens/summon"
+    assert handoff["read_only_contract"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert persistent_plan["governance"]["execution_authority"] is False
+    assert persistent_plan["governance"]["resident_claim_authority"] is False
+
+
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

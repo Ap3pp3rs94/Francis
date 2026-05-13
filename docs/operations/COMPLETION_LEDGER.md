@@ -25584,6 +25584,53 @@ Latest validation for the Stage 6 coordinated surface runtime slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens coordinated surface runtime prerequisite readback on `2026-05-13`:
+
+- The Lens host manifest now reads live global-hotkey and overlay-window
+  runtime state alongside the existing tray runtime state, using the same
+  PID/state-file validation style before treating a runtime primitive as
+  present.
+- Persistent-supervision required-before-enable readback now consumes live
+  tray, global-hotkey, and overlay runtime evidence. When all three surface
+  runtimes are proven live and a supervised resident host is present, the
+  persistent-supervision prerequisite chain advances to the remaining
+  `summon_binding` blocker instead of repeatedly reporting surface prerequisites
+  as missing.
+- `/lens/status` now exposes the host manifest hotkey and overlay runtime
+  readbacks on the resident-host surface and marks those specific runtime
+  booleans from evidence only. This is readback-only: it does not grant
+  execution authority, hotkey/tray/overlay registration authority, service
+  control, approval authority, memory writes, resident claims, or Stage 6
+  closure.
+- Stage 6 remains active. The current live checkout still reports
+  `ready_total=2/5`, with `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence` blocked. Because no live resident host process and
+  coordinated runtime state are active in the normal data root, the next
+  live-system handoff remains `resident_host_process_not_supervised`.
+
+Latest validation for the Stage 6 coordinated surface runtime prerequisite
+readback slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding -q`
+  Result: `failed before /lens/status exposed hotkey/overlay runtime readbacks;
+  passed after`
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist tests\test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray tests\test_api_lens.py::test_lens_status_promotes_live_tray_runtime_before_hotkey tests\test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_surface_runtime_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `failed before formatting; passed after`
+- `$env:PYTHONPATH='src'; python -c "... lens_status(limit=3) ..."`
+  Result: `passed; status=blocked; ready_total=2/5; blocked_total=3;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  next_handoff.next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

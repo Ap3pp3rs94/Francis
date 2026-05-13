@@ -402,23 +402,27 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     service_plan = _as_dict(launch_manifest.get("service_plan"))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
+    hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
+    overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
     tray_runtime_ready = bool(tray_runtime_readback.get("ready"))
+    hotkey_runtime_ready = bool(hotkey_runtime_readback.get("ready"))
+    overlay_runtime_ready = bool(overlay_runtime_readback.get("ready"))
     service_blocked_reason = (
         _safe_str(service_plan.get("blocked_reason")).strip()
         or _safe_str(service_install.get("blocked_reason")).strip()
         or "lens_host_persistent_supervision_prerequisites_pending"
     )
-    blockers = [
-        service_blocked_reason,
-        "tray_host_missing",
-        "global_hotkey_binding_missing",
-        "always_on_top_window_missing",
-        "overlay_window_missing",
-        "summon_binding_missing",
-    ]
+    blockers = [service_blocked_reason]
+    if not tray_runtime_ready:
+        blockers.append("tray_host_missing")
+    if not hotkey_runtime_ready:
+        blockers.append("global_hotkey_binding_missing")
+    if not overlay_runtime_ready:
+        blockers.extend(["always_on_top_window_missing", "overlay_window_missing"])
+    blockers.append("summon_binding_missing")
     if not process_alive:
         blockers.insert(1, "resident_host_process_missing")
     if not status_runner_present:
@@ -482,13 +486,13 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         {
             "id": "global_hotkey",
             "label": "Global summon hotkey",
-            "status": "missing",
+            "status": "running" if hotkey_runtime_ready else "missing",
             "required_for": ["summon_anywhere"],
         },
         {
             "id": "overlay_window",
             "label": "Always-on-top Lens window",
-            "status": "missing",
+            "status": "running" if overlay_runtime_ready else "missing",
             "required_for": ["hud_layer_runtime", "in_place_assistance"],
         },
         {
@@ -664,6 +668,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "process_readback_ready": bool(process_readback.get("readback_ready")),
         "tray_runtime_readback": tray_runtime_readback,
         "tray_runtime_readback_ready": tray_runtime_ready,
+        "hotkey_runtime_readback": hotkey_runtime_readback,
+        "hotkey_runtime_readback_ready": hotkey_runtime_ready,
+        "overlay_runtime_readback": overlay_runtime_readback,
+        "overlay_runtime_readback_ready": overlay_runtime_ready,
         "supervisor_readback": supervisor_readback,
         "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
         "supervisor_freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
@@ -685,9 +693,9 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "process_supervision": False,
         "startup_integration": False,
         "tray_presence": tray_runtime_ready,
-        "global_hotkey": False,
-        "always_on_top_overlay": False,
-        "overlay_window": False,
+        "global_hotkey": hotkey_runtime_ready,
+        "always_on_top_overlay": overlay_runtime_ready,
+        "overlay_window": overlay_runtime_ready,
         "command_palette_binding": False,
         "summon_anywhere": False,
         "components": components,
