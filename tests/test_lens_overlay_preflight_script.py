@@ -61,6 +61,10 @@ def test_lens_overlay_preflight_reports_disabled_window_without_authority(tmp_pa
     assert payload["resident_host_process"]["process_alive"] is False
     assert payload["resident_host_process"]["requirement_state"] == "missing"
     assert payload["resident_host_process"]["blocker"] == "resident_host_process_missing"
+    assert payload["overlay"]["overlay_runner"] == "scripts/lens-overlay-window.ps1"
+    assert payload["overlay_runtime"]["ready"] is False
+    assert payload["overlay_runtime"]["requirement_state"] == "missing"
+    assert payload["overlay_runtime"]["blocker"] == "overlay_window_runtime_missing"
     assert "overlay_window_disabled" in payload["blockers"]
     assert "resident_host_process_missing" in payload["blockers"]
     assert "overlay_control_authority_not_granted" in payload["blockers"]
@@ -70,7 +74,9 @@ def test_lens_overlay_preflight_reports_disabled_window_without_authority(tmp_pa
     assert checks["always_on_top"]["status"] == "disabled"
     assert checks["host_preflight"]["status"] == "present"
     assert checks["tray_preflight"]["status"] == "present"
+    assert checks["overlay_runner"]["status"] == "present"
     assert checks["runtime_state"]["status"] == "missing"
+    assert checks["overlay_runtime"]["status"] == "missing"
     assert checks["overlay_control_authority"]["status"] == "blocked"
     assert payload["governance"] == {
         "read_only_contract": True,

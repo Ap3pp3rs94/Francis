@@ -14,6 +14,7 @@
   "host_route": "/lens/host",
   "host_preflight": "scripts/lens-host-preflight.ps1",
   "host_status_runner": "scripts/lens-host.ps1",
+  "overlay_runner": "scripts/lens-overlay-window.ps1",
   "summon_preflight": "scripts/lens-summon-preflight.ps1",
   "tray_preflight": "scripts/lens-tray-preflight.ps1",
   "requires_explicit_enable": true,

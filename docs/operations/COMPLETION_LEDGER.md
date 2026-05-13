@@ -25434,6 +25434,62 @@ carry-forward slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens bounded overlay-window runtime and readback on `2026-05-13`:
+
+- `scripts/lens-overlay-window.ps1` now provides a bounded Windows overlay
+  runtime primitive with `Status`, `Start`, `Stop`, and `Run` modes. Its
+  status path is `data/runtime/lens-overlay/status.json`, its PID path is
+  `data/runtime/lens-overlay/lens-overlay.pid`, and it only reports ready when
+  a live process owns a matching `lens.overlay.runtime_state` payload with the
+  configured overlay name/scope, a visible overlay-window claim, and
+  always-on-top truth.
+- `config/runtime/lens/overlay.json` now names the overlay runner as
+  `scripts/lens-overlay-window.ps1`.
+- `scripts/lens-overlay-preflight.ps1` and
+  `src/francis/lens/preflight.py` now consume that overlay runtime readback.
+  A live bounded overlay removes only the implementation blocker
+  `lens_overlay_window_not_implemented`; disabled overlay config, disabled
+  always-on-top policy, missing resident host, and missing overlay/window/
+  local-process/capture/summon/tray authorities remain blockers.
+- A bounded Windows live proof in a temp data root started the overlay runtime,
+  confirmed status `visible`, then stopped it cleanly.
+- This is a local runtime/readback/test slice. It does not enable the overlay
+  config by default, grant overlay-control authority, grant window-management
+  authority, grant local process-launch authority through the API, grant
+  execution authority, make approval decisions, write memory, register a tray
+  icon or hotkey, install or control a service, or claim summon-anywhere.
+- Stage 6 remains active and blocked at the existing `ready_total=2/5`;
+  blocked criteria remain `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`. The next truthful gap is consuming this overlay
+  runtime in the OS-binding/summon readiness chain and then resolving the
+  explicit config/authority blockers without fake promotion.
+
+Latest validation for the Stage 6 bounded overlay-window runtime/readback
+slice:
+
+- `python -m pytest tests\test_lens_overlay_window_script.py tests\test_lens_overlay_runtime_readback.py tests\test_lens_overlay_preflight_script.py -q`
+  Result: `failed before adding expected overlay identity readback to the
+  overlay runtime script; passed after`
+- `python -m pytest tests\test_api_lens.py -q`
+  Result: `failed before updating the API fixture config to include the new
+  overlay runner contract; passed after`
+- `python -m ruff check src\francis\lens\preflight.py tests\test_lens_overlay_window_script.py tests\test_lens_overlay_runtime_readback.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py tests\test_lens_overlay_window_script.py tests\test_lens_overlay_runtime_readback.py tests\test_lens_overlay_preflight_script.py tests\test_api_lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-window.ps1 -Mode Status -DataDir <temp>`
+  Result: `passed; status=missing; ready=false`
+- Bounded Windows live proof:
+  `scripts\lens-overlay-window.ps1 -Mode Start -DataDir <temp> -RunSeconds 3 -StartupTimeoutSeconds 10`,
+  followed by `Status` and `Stop`
+  Result: `passed; start=started; status=visible; stop=stopped`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-preflight.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for scripts/lens-overlay-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

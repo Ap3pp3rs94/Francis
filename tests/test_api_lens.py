@@ -202,6 +202,7 @@ def _write_lens_preflight_scripts(repo_root: Path) -> None:
         "lens-command-palette.ps1",
         "lens-tray-preflight.ps1",
         "lens-overlay-preflight.ps1",
+        "lens-overlay-window.ps1",
     ):
         (script_dir / name).write_text("# Lens preflight fixture\n", encoding="utf-8")
 
@@ -305,6 +306,7 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "host_route": "/lens/host",
   "host_preflight": "scripts/lens-host-preflight.ps1",
   "host_status_runner": "scripts/lens-host.ps1",
+  "overlay_runner": "scripts/lens-overlay-window.ps1",
   "summon_preflight": "scripts/lens-summon-preflight.ps1",
   "tray_preflight": "scripts/lens-tray-preflight.ps1",
   "requires_explicit_enable": true,

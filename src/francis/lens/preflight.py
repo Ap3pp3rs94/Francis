@@ -234,6 +234,75 @@ def _hotkey_runtime_readback(*, global_hotkey: str, binding_scope: str) -> dict[
     }
 
 
+def _overlay_runtime_readback(*, overlay_name: str, overlay_scope: str) -> dict[str, Any]:
+    runtime_root = data_dir() / "runtime" / "lens-overlay"
+    state_file = runtime_root / "status.json"
+    pid_file = runtime_root / "lens-overlay.pid"
+    state_exists = _path_exists(state_file)
+    pid_present = _path_exists(pid_file)
+    pid = _pid_from_file(pid_file) if pid_present else 0
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = _safe_str(state_payload.get("kind"))
+    state_status = _safe_str(state_payload.get("status"))
+    state_pid = _int_value(state_payload.get("pid"))
+    state_claims_running_overlay = (
+        state_kind == "lens.overlay.runtime_state"
+        and state_status == "overlay_running"
+        and state_pid > 0
+        and state_pid == pid
+        and _safe_str(state_payload.get("overlay_name")) == overlay_name
+        and _safe_str(state_payload.get("overlay_scope")) == overlay_scope
+    )
+    if state_claims_running_overlay:
+        process_alive, process_alive_check = _process_alive_readback(pid)
+    elif not pid_present:
+        process_alive, process_alive_check = False, "not_attempted_no_pid_file"
+    elif not state_exists:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
+    elif state_kind != "lens.overlay.runtime_state":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status != "overlay_running":
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_not_running"
+    else:
+        process_alive, process_alive_check = False, "not_attempted_runtime_state_pid_or_identity_mismatch"
+    overlay_window_visible = process_alive and _bool(state_payload.get("overlay_window_visible"))
+    always_on_top = overlay_window_visible and _bool(state_payload.get("always_on_top"))
+    ready = overlay_window_visible and always_on_top
+    requirement_state = (
+        "visible"
+        if ready
+        else "process_running_no_visible_overlay_claim"
+        if process_alive
+        else "stale_or_unverified"
+        if state_exists or pid_present
+        else "missing"
+    )
+    blocker = "" if ready else "overlay_window_not_observed" if process_alive else "overlay_window_runtime_missing"
+    return {
+        "ready": ready,
+        "process_alive": process_alive,
+        "process_alive_check": process_alive_check,
+        "overlay_window_visible": overlay_window_visible,
+        "always_on_top": always_on_top,
+        "pid": pid,
+        "pid_present": pid_present,
+        "status_path": "data/runtime/lens-overlay/status.json",
+        "pid_path": "data/runtime/lens-overlay/lens-overlay.pid",
+        "runtime_state_exists": state_exists,
+        "runtime_status": state_status,
+        "runtime_status_kind": state_kind,
+        "runtime_status_pid": state_pid,
+        "runtime_status_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "runtime_state_updated_at": _safe_str(state_payload.get("updated_at")),
+        "overlay_name": _safe_str(state_payload.get("overlay_name")),
+        "expected_overlay_name": overlay_name,
+        "overlay_scope": _safe_str(state_payload.get("overlay_scope")),
+        "expected_overlay_scope": overlay_scope,
+        "requirement_state": requirement_state,
+        "blocker": blocker,
+    }
+
+
 def _config_status(*, exists: bool, error: str) -> str:
     if exists and not error:
         return "present_disabled"
@@ -877,6 +946,7 @@ def _overlay_preflight() -> dict[str, Any]:
     host_route = _safe_str(payload.get("host_route"), "/lens/host")
     host_preflight = _safe_str(payload.get("host_preflight"), "scripts/lens-host-preflight.ps1")
     host_status_runner = _safe_str(payload.get("host_status_runner"), "scripts/lens-host.ps1")
+    overlay_runner = _safe_str(payload.get("overlay_runner"), "scripts/lens-overlay-window.ps1")
     summon_preflight = _safe_str(payload.get("summon_preflight"), "scripts/lens-summon-preflight.ps1")
     tray_preflight = _safe_str(payload.get("tray_preflight"), "scripts/lens-tray-preflight.ps1")
     blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_overlay_window_not_implemented")
@@ -896,11 +966,14 @@ def _overlay_preflight() -> dict[str, Any]:
     required_before_enable = _string_list(payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
+    overlay_runner_exists = _runtime_file_exists(overlay_runner)
     summon_preflight_exists = _runtime_file_exists(summon_preflight)
     tray_preflight_exists = _runtime_file_exists(tray_preflight)
     runtime_state_exists = _runtime_state_exists()
+    overlay_runtime = _overlay_runtime_readback(overlay_name=overlay_name, overlay_scope=overlay_scope)
+    overlay_runtime_ready = bool(overlay_runtime.get("ready"))
     blockers: list[str] = []
-    if blocked_reason:
+    if blocked_reason and not overlay_runtime_ready:
         blockers.append(blocked_reason)
     if not exists:
         blockers.append("lens_overlay_config_missing")
@@ -920,10 +993,14 @@ def _overlay_preflight() -> dict[str, Any]:
         blockers.append("lens_host_lifecycle_preflight_missing")
     if not host_status_runner_exists:
         blockers.append("lens_host_status_runner_missing")
+    if not overlay_runner_exists:
+        blockers.append("lens_overlay_runner_missing")
     if not summon_preflight_exists:
         blockers.append("lens_summon_preflight_missing")
     if not tray_preflight_exists:
         blockers.append("lens_tray_preflight_missing")
+    if window_enabled and not overlay_runtime_ready:
+        blockers.append("overlay_window_runtime_missing")
     if not runtime_state_exists:
         blockers.append("resident_host_process_missing")
     if not overlay_control_authority:
@@ -986,6 +1063,22 @@ def _overlay_preflight() -> dict[str, Any]:
                 tray_preflight,
             ),
             _check(
+                "overlay_runner",
+                "present" if overlay_runner_exists else "missing",
+                "overlay window runtime runner is present"
+                if overlay_runner_exists
+                else "overlay window runtime runner is missing",
+                overlay_runner,
+            ),
+            _check(
+                "overlay_runtime",
+                _safe_str(overlay_runtime.get("requirement_state"), "missing"),
+                "overlay window runtime is live and topmost"
+                if overlay_runtime_ready
+                else "overlay window runtime is not live",
+                "data/runtime/lens-overlay",
+            ),
+            _check(
                 "overlay_control_authority",
                 "allowed" if overlay_control_authority else "blocked",
                 "overlay control authority is not granted",
@@ -1003,9 +1096,11 @@ def _overlay_preflight() -> dict[str, Any]:
             "capture_supported": capture_supported,
             "host_preflight": host_preflight,
             "host_status_runner": host_status_runner,
+            "overlay_runner": overlay_runner,
             "summon_preflight": summon_preflight,
             "tray_preflight": tray_preflight,
         },
+        "overlay_runtime": overlay_runtime,
         "governance": _base_governance(
             window_management_authority=False,
             tray_registration_authority=False,

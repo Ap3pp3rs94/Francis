@@ -202,6 +202,75 @@ function Get-HostProcessReadback {
   }
 }
 
+function Get-OverlayRuntimeReadback {
+  param(
+    [string]$Root,
+    [string]$ExpectedOverlayName,
+    [string]$ExpectedOverlayScope
+  )
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $OverlayPid = 0
+  if ($PidPresent) {
+    try {
+      $OverlayPid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $OverlayPid = 0
+    }
+  }
+
+  $StatusClaimsRunningOverlay = (
+    $StatusKind -eq 'lens.overlay.runtime_state' -and
+    $StatusValue -eq 'overlay_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $OverlayPid -and
+    (Get-StringProperty -Payload $Status -Name 'overlay_name' -Default '') -eq $ExpectedOverlayName -and
+    (Get-StringProperty -Payload $Status -Name 'overlay_scope' -Default '') -eq $ExpectedOverlayScope
+  )
+  $ProcessAlive = $false
+  if ($StatusClaimsRunningOverlay -and $OverlayPid -gt 0) {
+    try {
+      $ProcessAlive = $null -ne (Get-Process -Id $OverlayPid -ErrorAction Stop)
+    } catch {
+      $ProcessAlive = $false
+    }
+  }
+
+  $OverlayWindowVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'overlay_window_visible' -Default $false)
+  $AlwaysOnTop = $OverlayWindowVisible -and (Get-BoolProperty -Payload $Status -Name 'always_on_top' -Default $false)
+  $Ready = $OverlayWindowVisible -and $AlwaysOnTop
+
+  return [ordered]@{
+    ready = $Ready
+    process_alive = $ProcessAlive
+    overlay_window_visible = $OverlayWindowVisible
+    always_on_top = $AlwaysOnTop
+    pid = $OverlayPid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $OverlayPid)
+    overlay_name = Get-StringProperty -Payload $Status -Name 'overlay_name' -Default ''
+    expected_overlay_name = $ExpectedOverlayName
+    overlay_scope = Get-StringProperty -Payload $Status -Name 'overlay_scope' -Default ''
+    expected_overlay_scope = $ExpectedOverlayScope
+    requirement_state = if ($Ready) { 'visible' } elseif ($ProcessAlive) { 'process_running_no_visible_overlay_claim' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }
+    blocker = if ($Ready) { '' } elseif ($ProcessAlive) { 'overlay_window_not_observed' } else { 'overlay_window_runtime_missing' }
+  }
+}
+
 $ModeName = $Mode.ToLowerInvariant()
 $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -221,6 +290,7 @@ $StatusRoute = Get-StringProperty -Payload $Config -Name 'status_route' -Default
 $HostRoute = Get-StringProperty -Payload $Config -Name 'host_route' -Default '/lens/host'
 $HostPreflight = Get-StringProperty -Payload $Config -Name 'host_preflight' -Default 'scripts/lens-host-preflight.ps1'
 $HostStatusRunner = Get-StringProperty -Payload $Config -Name 'host_status_runner' -Default 'scripts/lens-host.ps1'
+$OverlayRunner = Get-StringProperty -Payload $Config -Name 'overlay_runner' -Default 'scripts/lens-overlay-window.ps1'
 $SummonPreflight = Get-StringProperty -Payload $Config -Name 'summon_preflight' -Default 'scripts/lens-summon-preflight.ps1'
 $TrayPreflight = Get-StringProperty -Payload $Config -Name 'tray_preflight' -Default 'scripts/lens-tray-preflight.ps1'
 $BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented'
@@ -241,10 +311,13 @@ $RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_
 
 $HostPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostPreflight) -PathType Leaf
 $HostStatusRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $HostStatusRunner) -PathType Leaf
+$OverlayRunnerExists = Test-Path -LiteralPath (Join-Path $RepoRoot $OverlayRunner) -PathType Leaf
 $SummonPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $SummonPreflight) -PathType Leaf
 $TrayPreflightExists = Test-Path -LiteralPath (Join-Path $RepoRoot $TrayPreflight) -PathType Leaf
 $DataRoot = Get-DataRoot -Override $DataDir
 $HostProcessReadback = Get-HostProcessReadback -Root $DataRoot
+$OverlayRuntimeReadback = Get-OverlayRuntimeReadback -Root $DataRoot -ExpectedOverlayName $OverlayName -ExpectedOverlayScope $OverlayScope
+$OverlayRuntimeReady = [bool]$OverlayRuntimeReadback.ready
 $RuntimeStateExists = [bool]$HostProcessReadback.runtime_state_exists
 $PidPresent = [bool]$HostProcessReadback.pid_present
 $ResidentHostProcessAlive = [bool]$HostProcessReadback.process_alive
@@ -258,14 +331,16 @@ Add-Check -Target $Checks -Id 'focus_support' -Status $(if ($FocusSupported) { '
 Add-Check -Target $Checks -Id 'capture_support' -Status $(if ($CaptureSupported) { 'declared' } else { 'disabled' }) -Reason 'overlay capture support is not implemented' -Evidence 'capture_supported'
 Add-Check -Target $Checks -Id 'host_preflight' -Status $(if ($HostPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($HostPreflightExists) { 'host lifecycle preflight is present' } else { 'host lifecycle preflight is missing' }) -Evidence $HostPreflight
 Add-Check -Target $Checks -Id 'host_status_runner' -Status $(if ($HostStatusRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($HostStatusRunnerExists) { 'host status runner is present' } else { 'host status runner is missing' }) -Evidence $HostStatusRunner
+Add-Check -Target $Checks -Id 'overlay_runner' -Status $(if ($OverlayRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($OverlayRunnerExists) { 'overlay window runtime runner is present' } else { 'overlay window runtime runner is missing' }) -Evidence $OverlayRunner
 Add-Check -Target $Checks -Id 'summon_preflight' -Status $(if ($SummonPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonPreflightExists) { 'summon preflight is present' } else { 'summon preflight is missing' }) -Evidence $SummonPreflight
 Add-Check -Target $Checks -Id 'tray_preflight' -Status $(if ($TrayPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($TrayPreflightExists) { 'tray preflight is present' } else { 'tray preflight is missing' }) -Evidence $TrayPreflight
 Add-Check -Target $Checks -Id 'runtime_state' -Status $(if ($ResidentHostProcessAlive) { 'process_observed' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }) -Reason $(if ($ResidentHostProcessAlive) { 'resident host process is live and matches runtime state' } else { 'resident host runtime state is not live' }) -Evidence 'data/runtime/lens-host'
+Add-Check -Target $Checks -Id 'overlay_runtime' -Status $OverlayRuntimeReadback.requirement_state -Reason $(if ($OverlayRuntimeReady) { 'overlay window runtime is live and topmost' } else { 'overlay window runtime is not live' }) -Evidence 'data/runtime/lens-overlay'
 Add-Check -Target $Checks -Id 'overlay_control_authority' -Status $(if ($OverlayControlAuthority) { 'allowed' } else { 'blocked' }) -Reason 'overlay control authority is not granted' -Evidence 'overlay_control_authority'
 Add-Check -Target $Checks -Id 'window_management_authority' -Status $(if ($WindowManagementAuthority) { 'allowed' } else { 'blocked' }) -Reason 'window management authority is not granted' -Evidence 'window_management_authority'
 
 $Blockers = [System.Collections.ArrayList]::new()
-if ($BlockedReason) { [void]$Blockers.Add($BlockedReason) }
+if ($BlockedReason -and -not $OverlayRuntimeReady) { [void]$Blockers.Add($BlockedReason) }
 if (-not $ConfigExists) { [void]$Blockers.Add('lens_overlay_config_missing') }
 if ($ConfigError) { [void]$Blockers.Add('lens_overlay_config_invalid') }
 if (-not $WindowEnabled) { [void]$Blockers.Add('overlay_window_disabled') }
@@ -275,8 +350,10 @@ if (-not $FocusSupported) { [void]$Blockers.Add('overlay_focus_not_supported') }
 if (-not $ClickThroughSupported) { [void]$Blockers.Add('overlay_click_through_not_supported') }
 if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_preflight_missing') }
 if (-not $HostStatusRunnerExists) { [void]$Blockers.Add('lens_host_status_runner_missing') }
+if (-not $OverlayRunnerExists) { [void]$Blockers.Add('lens_overlay_runner_missing') }
 if (-not $SummonPreflightExists) { [void]$Blockers.Add('lens_summon_preflight_missing') }
 if (-not $TrayPreflightExists) { [void]$Blockers.Add('lens_tray_preflight_missing') }
+if ($WindowEnabled -and -not $OverlayRuntimeReady) { [void]$Blockers.Add('overlay_window_runtime_missing') }
 if (-not $ResidentHostProcessAlive) { [void]$Blockers.Add('resident_host_process_missing') }
 if (-not $OverlayControlAuthority) { [void]$Blockers.Add('overlay_control_authority_not_granted') }
 if (-not $WindowManagementAuthority) { [void]$Blockers.Add('window_management_authority_not_granted') }
@@ -312,9 +389,11 @@ $Payload = [ordered]@{
     capture_supported = $CaptureSupported
     host_preflight = $HostPreflight
     host_status_runner = $HostStatusRunner
+    overlay_runner = $OverlayRunner
     summon_preflight = $SummonPreflight
     tray_preflight = $TrayPreflight
   }
+  overlay_runtime = $OverlayRuntimeReadback
   resident_host_process = $HostProcessReadback
   governance = [ordered]@{
     read_only_contract = $true
