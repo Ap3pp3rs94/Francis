@@ -26275,6 +26275,52 @@ Latest validation for the summon action handoff wrapper slice:
   Result: `passed with PowerShell line-ending normalization warning for
   scripts/lens-summon-preflight.ps1`
 
+Stage 6 Lens summon ready-handoff proof slice on `2026-05-14`:
+
+- `scripts/lens-summon-preflight.ps1` now accepts an explicit
+  `-ConfigOverridePath` for readiness proof runs. The default repository
+  config path remains `config/runtime/lens/summon.json`, and the default
+  checked-in summon config remains blocked.
+- `scripts/lens-summon-action.ps1` now carries the same explicit config
+  override through preflight and bounded handoff execution. It also accepts a
+  `-StatusPath` for local command-palette readback proof runs and normalizes
+  bounded handoff status in the action receipt.
+- `scripts/lens-summon.ps1` and `scripts/lens-hotkey-binding.ps1` can consume
+  the same explicit summon config override when they are called by the guarded
+  action wrapper, keeping the preflight/readback/runtime chain on one declared
+  authority source.
+- `tests/test_lens_summon_action_script.py` now proves a ready `Launch`
+  action path with temporary explicit authority config, temporary resident-host
+  and hotkey runtime readbacks, and a temporary Lens status readback. The action
+  reaches `scripts/lens-summon.ps1 -Mode LocalOpen -NoLaunch`, returns a
+  parsed `local_open_ready` handoff receipt, does not open Lens, and keeps
+  mutation/local-process-launch authority false without `-AllowLaunch`.
+- This is a guarded ready-handoff proof, not Stage 6 closure. It does not
+  change the default summon config, register a global hotkey by default, start
+  persistent supervision, register tray presence, open an overlay, grant
+  operator approval, write memory, claim always-resident Lens, or prove live
+  summon-anywhere behavior.
+- Stage 6 remains active. The next roadmap movement is a tightly bounded live
+  hotkey/summon runtime proof under explicit authority, or a Stage 6 checkpoint
+  audit if the checkpoint criteria are expected to move.
+
+Latest validation for the summon ready-handoff proof slice:
+
+- `python -m pytest tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_script.py tests\test_lens_hotkey_binding_script.py -q`
+  Result: `failed before fix, then passed`
+- `python -m ruff check tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_script.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py tests\test_lens_summon_script.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warnings for
+  scripts/lens-hotkey-binding.ps1, scripts/lens-summon-action.ps1,
+  scripts/lens-summon-preflight.ps1, and scripts/lens-summon.ps1`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `attempted, then stopped after the focused checkpoint process
+  exceeded the expected slice validation window without output; not counted as
+  passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

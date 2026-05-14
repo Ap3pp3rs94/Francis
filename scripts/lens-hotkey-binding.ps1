@@ -11,6 +11,8 @@ param(
   [ValidateRange(0, 3600)]
   [int]$RunSeconds = 0,
 
+  [string]$ConfigOverridePath = '',
+
   [switch]$NoLaunch
 )
 
@@ -123,7 +125,11 @@ function Get-ProcessAlive {
 }
 
 function Get-HotkeyConfig {
-  $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+  $ConfigPath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+    [System.IO.Path]::GetFullPath($ConfigOverridePath)
+  } else {
+    Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+  }
   $Config = Read-JsonFile -Path $ConfigPath
   return [ordered]@{
     path = $ConfigPath
@@ -353,7 +359,7 @@ if ($Mode -eq 'Run') {
         Write-HotkeyState -Root $script:DataRoot -Status 'hotkey_bound' -HotkeyBound $true -Message 'Francis Lens global hotkey was pressed.' -LaunchOnHotkey $script:LaunchOnHotkey -PressCount $script:PressCount
         if ($script:LaunchOnHotkey) {
           $SummonScript = Join-Path $script:PSScriptRoot 'lens-summon.ps1'
-          Start-Process -FilePath 'powershell' -ArgumentList @(
+          $SummonArguments = @(
             '-NoProfile',
             '-ExecutionPolicy',
             'Bypass',
@@ -361,7 +367,11 @@ if ($Mode -eq 'Run') {
             $SummonScript,
             '-Mode',
             'LocalOpen'
-          ) -WindowStyle Hidden
+          )
+          if (-not [string]::IsNullOrWhiteSpace($script:ConfigOverridePath)) {
+            $SummonArguments += @('-ConfigOverridePath', $script:ConfigOverridePath)
+          }
+          Start-Process -FilePath 'powershell' -ArgumentList $SummonArguments -WindowStyle Hidden
         }
       })
     $Registered = [FrancisLensHotkeyNative]::RegisterHotKey($Window.Handle, 1, 0x0003, 0x20)
@@ -455,6 +465,9 @@ $ArgumentList = @(
 )
 if ($NoLaunch) {
   $ArgumentList += '-NoLaunch'
+}
+if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  $ArgumentList += @('-ConfigOverridePath', $ConfigOverridePath)
 }
 Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentList -WindowStyle Hidden | Out-Null
 

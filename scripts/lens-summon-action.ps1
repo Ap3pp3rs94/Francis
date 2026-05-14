@@ -11,6 +11,10 @@ param(
   [ValidateRange(1, 60)]
   [int]$RunSeconds = 5,
 
+  [string]$ConfigOverridePath = '',
+
+  [string]$StatusPath = '',
+
   [switch]$AllowLaunch
 )
 
@@ -60,6 +64,7 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
+    status = if ($null -ne $Payload -and $null -ne $Payload.PSObject.Properties['status']) { [string]$Payload.status } else { '' }
     exit_code = $ExitCode
     payload = $Payload
     output = $Text
@@ -74,6 +79,9 @@ $HotkeyScript = Join-Path $PSScriptRoot 'lens-hotkey-binding.ps1'
 $SummonScript = Join-Path $PSScriptRoot 'lens-summon.ps1'
 $PreflightMode = if ($Mode -eq 'Status') { 'Status' } else { $Mode }
 $PreflightArgs = @('-Mode', $PreflightMode, '-DataDir', $DataRoot)
+if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  $PreflightArgs += @('-ConfigOverridePath', $ConfigOverridePath)
+}
 $PreflightResult = Invoke-JsonScript -ScriptPath $PreflightScript -ScriptArgs $PreflightArgs
 $PreflightPayload = $PreflightResult.payload
 $PreflightReady = (
@@ -126,10 +134,19 @@ if (-not [bool]$PreflightResult.json_parsed) {
       ([string]$RunSeconds),
       '-NoLaunch'
     )
+    if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+      $Args += @('-ConfigOverridePath', $ConfigOverridePath)
+    }
     $HandoffResult = Invoke-JsonScript -ScriptPath $HotkeyScript -ScriptArgs $Args
   } else {
     $LaunchAttempted = $true
     $Args = @('-Mode', 'LocalOpen')
+    if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+      $Args += @('-ConfigOverridePath', $ConfigOverridePath)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($StatusPath)) {
+      $Args += @('-StatusPath', $StatusPath)
+    }
     if (-not [bool]$AllowLaunch) {
       $Args += '-NoLaunch'
     }
@@ -150,6 +167,8 @@ $Payload = [ordered]@{
   action = $ModeName
   repo_root = $RepoRoot
   data_root = $DataRoot
+  config_override_path = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) { [System.IO.Path]::GetFullPath($ConfigOverridePath) } else { '' }
+  status_path = if (-not [string]::IsNullOrWhiteSpace($StatusPath)) { [System.IO.Path]::GetFullPath($StatusPath) } else { '' }
   preflight_exit_code = $PreflightResult.exit_code
   preflight_ready = $PreflightReady
   preflight = $PreflightPayload
@@ -190,7 +209,7 @@ $Payload = [ordered]@{
     tray_registration_authority = $false
     capture_authority = $false
     new_sensing_authority = $false
-    mutation_authority_granted = $ExecutionAttempted -and $Ok
+    mutation_authority_granted = $ExecutionAttempted -and $Ok -and ($Mode -eq 'Bind' -or ([bool]$AllowLaunch -and $Mode -eq 'Launch'))
   }
 }
 

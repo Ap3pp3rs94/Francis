@@ -7,6 +7,8 @@ param(
 
   [string]$ChatUiBaseUrl = 'http://127.0.0.1:5173',
 
+  [string]$ConfigOverridePath = '',
+
   [string]$StatusPath = '',
 
   [ValidateRange(1, 30)]
@@ -60,6 +62,30 @@ function Get-StringProperty {
     return $Default
   }
   return $Text
+}
+
+function Get-StringPropertyPreserveEmpty {
+  param(
+    [AllowNull()]
+    [object]$Payload,
+    [string]$Name,
+    [string]$Default = ''
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  if ($Payload -is [System.Collections.IDictionary]) {
+    if ($Payload.Contains($Name) -and $null -ne $Payload[$Name]) {
+      return [string]$Payload[$Name]
+    }
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  return [string]$Property.Value
 }
 
 function Get-BoolProperty {
@@ -161,7 +187,17 @@ function Invoke-CommandPaletteLocalOpen {
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
-$ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+$DefaultConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+$ConfigPath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  [System.IO.Path]::GetFullPath($ConfigOverridePath)
+} else {
+  $DefaultConfigPath
+}
+$ConfigEvidencePath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  $ConfigPath
+} else {
+  'config/runtime/lens/summon.json'
+}
 $Config = $null
 $ConfigError = ''
 try {
@@ -189,7 +225,7 @@ $PaletteTargetUrl = Get-StringProperty -Payload $PalettePayload -Name 'local_ope
 $PaletteOpened = [bool](Get-PropertyValue -Payload $PalettePayload -Name 'opened' -Default $false)
 $LocalBindingReady = $CommandPaletteScriptExists -and $PaletteExitCode -eq 0 -and $PaletteLocalOpenAvailable -and $PaletteReadbackReady
 
-$BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
+$BlockedReason = Get-StringPropertyPreserveEmpty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
 $GlobalHotkey = Get-StringProperty -Payload $Config -Name 'global_hotkey' -Default ''
 $BindingScope = Get-StringProperty -Payload $Config -Name 'binding_scope' -Default 'global'
 $SummonRunner = Get-StringProperty -Payload $Config -Name 'summon_runner' -Default 'scripts/lens-summon.ps1'
@@ -224,7 +260,7 @@ $Payload = [ordered]@{
   status = if ($Mode -eq 'LocalOpen' -and $PaletteOpened) { 'opened' } elseif ($Mode -eq 'LocalOpen' -and $LocalBindingReady) { 'local_open_ready' } elseif ($LocalBindingReady) { 'local_binding_ready' } else { 'blocked' }
   mode = $ModeName
   repo_root = $RepoRoot
-  config_path = 'config/runtime/lens/summon.json'
+  config_path = $ConfigEvidencePath
   summon_runner = $SummonRunner
   local_binding_ready = $LocalBindingReady
   summon_binding_target_ready = $LocalBindingReady

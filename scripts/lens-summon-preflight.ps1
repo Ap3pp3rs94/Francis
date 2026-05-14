@@ -3,7 +3,9 @@ param(
   [ValidateSet('Status', 'Bind', 'Launch')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$ConfigOverridePath = ''
 )
 
 Set-StrictMode -Version 2
@@ -72,6 +74,23 @@ function Get-StringProperty {
     return $Default
   }
   return $Value
+}
+
+function Get-StringPropertyPreserveEmpty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [string]$Default = ''
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  return [string]$Property.Value
 }
 
 function Get-StringListProperty {
@@ -379,7 +398,17 @@ function Select-AuthorityBlockers {
 }
 
 $ModeName = $Mode.ToLowerInvariant()
-$ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+$DefaultConfigPath = Join-Path $RepoRoot 'config\runtime\lens\summon.json'
+$ConfigPath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  [System.IO.Path]::GetFullPath($ConfigOverridePath)
+} else {
+  $DefaultConfigPath
+}
+$ConfigEvidencePath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
+  $ConfigPath
+} else {
+  'config/runtime/lens/summon.json'
+}
 $ConfigExists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
 $Config = $null
 $ConfigError = ''
@@ -399,7 +428,7 @@ $HostPreflight = Get-StringProperty -Payload $Config -Name 'host_preflight' -Def
 $HostStatusRunner = Get-StringProperty -Payload $Config -Name 'host_status_runner' -Default 'scripts/lens-host.ps1'
 $SummonRunner = Get-StringProperty -Payload $Config -Name 'summon_runner' -Default 'scripts/lens-summon.ps1'
 $LocalPaletteLauncher = Get-StringProperty -Payload $Config -Name 'local_palette_launcher' -Default 'scripts/lens-command-palette.ps1 -Mode LocalOpen'
-$BlockedReason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
+$BlockedReason = Get-StringPropertyPreserveEmpty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
 $Enabled = Get-BoolProperty -Payload $Config -Name 'enabled' -Default $false
 $BindingEnabled = Get-BoolProperty -Payload $Config -Name 'binding_enabled' -Default $false
 $RegisterHotkey = Get-BoolProperty -Payload $Config -Name 'register_hotkey' -Default $false
@@ -411,6 +440,22 @@ $HotkeyRegistrationAuthority = Get-BoolProperty -Payload $Config -Name 'hotkey_r
 $OverlayControlAuthority = Get-BoolProperty -Payload $Config -Name 'overlay_control_authority' -Default $false
 $LocalProcessLaunchAuthority = Get-BoolProperty -Payload $Config -Name 'local_process_launch_authority' -Default $false
 $RequiredBeforeEnable = Get-StringListProperty -Payload $Config -Name 'required_before_enable'
+$ConfigStatus = if ($ConfigExists -and -not $ConfigError) {
+  if ($Enabled -or $BindingEnabled -or $RegisterHotkey -or $SummonAuthority) { 'present_enabled' } else { 'present_disabled' }
+} elseif ($ConfigExists) {
+  'invalid'
+} else {
+  'missing'
+}
+$ConfigReason = if ($ConfigError) {
+  $ConfigError
+} elseif ($ConfigExists -and $ConfigStatus -eq 'present_enabled') {
+  'explicit summon config is present'
+} elseif ($ConfigExists) {
+  'disabled summon config is present'
+} else {
+  'summon config is missing'
+}
 $DataRoot = Get-DataRoot -Override $DataDir
 $ResidentHostProcessReadback = Get-HostProcessReadback -Root $DataRoot
 $HotkeyRuntimeReadback = Get-HotkeyRuntimeReadback -Root $DataRoot -ExpectedHotkey $GlobalHotkey -ExpectedBindingScope $BindingScope
@@ -424,7 +469,7 @@ $SummonRunnerExists = Test-Path -LiteralPath $SummonRunnerPath -PathType Leaf
 
 $Checks = [System.Collections.ArrayList]::new()
 Add-Check -Target $Checks -Id 'runtime_root' -Status 'ready' -Reason 'runtime root accepted' -Evidence $RepoRoot
-Add-Check -Target $Checks -Id 'summon_config' -Status $(if ($ConfigExists -and -not $ConfigError) { 'present_disabled' } elseif ($ConfigExists) { 'invalid' } else { 'missing' }) -Reason $(if ($ConfigError) { $ConfigError } elseif ($ConfigExists) { 'disabled summon config is present' } else { 'summon config is missing' }) -Evidence 'config/runtime/lens/summon.json'
+Add-Check -Target $Checks -Id 'summon_config' -Status $ConfigStatus -Reason $ConfigReason -Evidence $ConfigEvidencePath
 Add-Check -Target $Checks -Id 'summon_runner' -Status $(if ($SummonRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($SummonRunnerExists) { 'local summon launcher is present' } else { 'local summon launcher is missing' }) -Evidence $SummonRunner
 Add-Check -Target $Checks -Id 'hotkey_declared' -Status $(if ($GlobalHotkey) { 'declared' } else { 'missing' }) -Reason $(if ($GlobalHotkey) { 'global hotkey intent is declared but not bound' } else { 'global hotkey intent is missing' }) -Evidence $GlobalHotkey
 Add-Check -Target $Checks -Id 'binding_enabled' -Status $(if ($BindingEnabled) { 'enabled' } else { 'disabled' }) -Reason 'global binding remains disabled until resident Lens host exists' -Evidence $BindingScope
@@ -597,7 +642,7 @@ $Payload = [ordered]@{
   repo_root = $RepoRoot
   data_root = $DataRoot
   summon_name = $SummonName
-  config_path = 'config/runtime/lens/summon.json'
+  config_path = $ConfigEvidencePath
   acceptance_criterion = 'summon_anywhere'
   next_smallest_truthful_gap = 'summon_anywhere_blockers'
   required_before_enable = @($RequiredBeforeEnable)
