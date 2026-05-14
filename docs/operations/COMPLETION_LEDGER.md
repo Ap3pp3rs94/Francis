@@ -26888,6 +26888,29 @@ child proof retry stabilization:
   Result: `passed with the expected PowerShell line-ending warning for
   scripts\lens-resident-overlay-activation-boundary-proof.ps1`
 
+Stage 6 Lens resident-host process-supervision blocker outer-timeout
+stabilization on `2026-05-14`:
+
+- Updated the focused
+  `tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  subprocess timeout from 240 seconds to 420 seconds.
+- This aligns the test's outer timeout with the composed proof contract: the
+  parent proof can run both resident-host runtime-boundary and
+  process-supervision authority-boundary child proofs, each still bounded by
+  `-ChildProofTimeoutSeconds 180`.
+- This addresses a Windows 3.13 CI failure where the parent test timed out at
+  240 seconds while the wrapped process-supervision proof was still completing.
+  It does not weaken child-timeout assertions, change the proof result, grant
+  process supervision, process restart, service control, execution, approval,
+  receipt, memory, resident-claim, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 resident-host process-supervision blocker
+outer-timeout stabilization:
+
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
