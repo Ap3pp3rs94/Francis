@@ -230,7 +230,8 @@ def test_lens_summon_preflight_refuses_bind_actions() -> None:
     assert action_gate["action"] == "bind"
     assert action_gate["status"] == "blocked"
     assert action_gate["policy_gate"] == "lens_summon_preflight"
-    assert action_gate["execution_handoff"] == "scripts/lens-hotkey-binding.ps1 -Mode Start"
+    assert action_gate["execution_handoff"] == "scripts/lens-summon-action.ps1 -Mode Bind"
+    assert action_gate["bounded_runtime_handoff"] == "scripts/lens-hotkey-binding.ps1 -Mode Start"
     assert action_gate["required_before_enable_ready"] is False
     assert action_gate["missing_required_before_enable"] == [
         "resident_host_process",

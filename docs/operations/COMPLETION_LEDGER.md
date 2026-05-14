@@ -26237,6 +26237,44 @@ Latest validation for the CI pytest timeout containment slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens summon action handoff wrapper slice on `2026-05-14`:
+
+- `scripts/lens-summon-action.ps1` now provides a bounded action wrapper for
+  `Status`, `Bind`, and `Launch`. It consumes
+  `scripts/lens-summon-preflight.ps1` first and refuses to call the hotkey
+  runtime or local-open launcher unless the preflight action gate reports
+  `ready_for_execution`.
+- `scripts/lens-summon-preflight.ps1` now points action callers to
+  `scripts/lens-summon-action.ps1 -Mode <Bind|Launch>` as the guarded
+  execution handoff while still naming the bounded runtime handoff underneath
+  (`scripts/lens-hotkey-binding.ps1 -Mode Start` for `Bind`, and
+  `scripts/lens-summon.ps1 -Mode LocalOpen` for `Launch`).
+- The default repo state remains blocked because `config/runtime/lens/summon.json`
+  still keeps the summon, hotkey-registration, overlay-control, and local
+  process-launch authorities false. The new action wrapper therefore attempts
+  no hotkey binding, no local launch, no overlay open, no approval decision, and
+  no memory write in the default state.
+- This is a guarded action-handoff capability, not Stage 6 closure. It does not
+  grant summon authority, register a global hotkey, open Lens by default, start
+  a resident host, enable persistent supervision, control a service, register
+  tray presence, write receipts or memory, decide approvals, claim resident
+  presence, or close Stage 6.
+- Stage 6 remains active. The next roadmap movement is still to make the
+  summon/hotkey path ready under explicit authority and then prove live
+  summon-anywhere behavior without weakening resident-claim boundaries.
+
+Latest validation for the summon action handoff wrapper slice:
+
+- `python -m pytest tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for
+  scripts/lens-summon-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
