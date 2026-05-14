@@ -26839,6 +26839,26 @@ contract tightening:
 - `git diff --check`
   Result: `passed before ledger update`
 
+CI superseded-run truthfulness correction on `2026-05-14`:
+
+- Added workflow-level concurrency to `.github/workflows/ci.yml`:
+  `group: ${{ github.workflow }}-${{ github.ref }}` with
+  `cancel-in-progress: true`.
+- This keeps pushes to the same branch or pull request from leaving multiple
+  obsolete CI runs in progress at once. The change is aimed at branch-posture
+  truthfulness: the latest commit's CI becomes the primary signal instead of a
+  stack of superseded Stage 6 proof-harness runs.
+- This does not change the matrix, install, Ruff, format, mypy, pytest command,
+  or pytest timeout. It is a CI orchestration/readback correction only and does
+  not change Francis runtime behavior, Stage 6 authority, execution, memory,
+  resident-host, HUD, shell, or governance behavior. Stage 6 remains active at
+  2/5 checkpoint criteria.
+
+Latest validation for the CI superseded-run truthfulness correction:
+
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
