@@ -155,6 +155,46 @@ function Invoke-JsonScript {
   }
 }
 
+function Invoke-JsonScriptWithProofRetry {
+  param(
+    [string]$PowerShellPath,
+    [string]$ScriptPath,
+    [string[]]$ScriptArgs = @(),
+    [string]$ExpectedKind,
+    [int]$Attempts = 2
+  )
+
+  $LastProof = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $Result = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ScriptArgs $ScriptArgs)
+    $Proof = if ($Result.Count -gt 0) { $Result[-1] } else { $null }
+    $LastProof = $Proof
+
+    $ExitCode = -1
+    $Payload = $null
+    if ($Proof -is [System.Collections.IDictionary]) {
+      if ($Proof.Contains('exit_code') -and $null -ne $Proof['exit_code']) {
+        $ExitCode = [int]$Proof['exit_code']
+      }
+      if ($Proof.Contains('payload') -and $null -ne $Proof['payload']) {
+        $Payload = $Proof['payload']
+      }
+    }
+
+    if (
+      $ExitCode -eq 0 -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+    ) {
+      return $Proof
+    }
+    if ($Attempt -lt $Attempts) {
+      Start-Sleep -Milliseconds 500
+    }
+  }
+  return $LastProof
+}
+
 function Read-CachedJsonScriptResult {
   param([string]$Path)
 
@@ -309,7 +349,11 @@ $CachedLiveResult = Read-CachedJsonScriptResult -Path $CachedLiveOperatorProofPa
 if ($null -ne $CachedLiveResult) {
   $LiveResult = $CachedLiveResult
 } else {
-  $LiveResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs $LiveArgs
+  $LiveResult = Invoke-JsonScriptWithProofRetry `
+    -PowerShellPath $PowerShellPath `
+    -ScriptPath $LiveOperatorProofPath `
+    -ScriptArgs $LiveArgs `
+    -ExpectedKind 'lens.live_operator_experience.proof'
 }
 $OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $OverlayArgs
 $ActivationResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ProofDataRoot -SelectedApprovalId $ApprovalId -SelectedActor $Actor

@@ -26859,6 +26859,35 @@ Latest validation for the CI superseded-run truthfulness correction:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident overlay activation live-operator child proof retry
+stabilization on `2026-05-14`:
+
+- Updated `scripts/lens-resident-overlay-activation-boundary-proof.ps1` so the
+  uncached live-operator child proof uses the existing two-attempt proof retry
+  pattern before the parent proof declares activation-boundary readback failed.
+- This addresses a Windows 3.12 CI failure where the activation boundary itself
+  stayed denial-safe, but the nested live-operator proof returned
+  `proof_failed` once during the long matrix run.
+- The proof still requires `lens.live_operator_experience.proof` with
+  `status=proof_passed` before it reports the activation boundary observed.
+  This is proof-harness stabilization only; it does not grant activation,
+  process launch, process supervision, service, tray, hotkey, overlay, summon,
+  approval, receipt, memory, resident-claim, or mutation authority. Stage 6
+  remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 resident overlay activation live-operator
+child proof retry stabilization:
+
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with the expected PowerShell line-ending warning for
+  scripts\lens-resident-overlay-activation-boundary-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
