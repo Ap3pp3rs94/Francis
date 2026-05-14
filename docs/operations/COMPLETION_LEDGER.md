@@ -26667,6 +26667,43 @@ Latest validation for the Stage 6 proof-subprocess timing stabilization:
 - `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_stage6_checkpoint_script.py -q`
   Result: `passed`
 
+Stage 6 Lens persistent-supervision current-gap proof on `2026-05-14`:
+
+- Added `scripts/lens-persistent-supervision-current-gap-proof.ps1` as a
+  focused readback proof for the persistent-supervision seam. The proof reads
+  `scripts/lens-persistent-supervision-plan.ps1 -Mode Status`, consumes the
+  bounded enablement, execution, and resident-claim authority proof chain, and
+  reports the current truthful next gap without running the long Stage 6
+  completion audit.
+- The new proof currently reports
+  `persistent_supervision_required_prerequisites_missing` after the authority
+  chain is consumed. Its handoff stays read-only and points at
+  `scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`,
+  with first missing requirement `resident_host_process` and the plan-provided
+  resident-host proof handoff.
+- The proof distinguishes product behavior from fixture behavior: it grants no
+  product execution, service-control, service-config, memory, receipt, or
+  resident-claim authority, while explicitly noting that child authority proofs
+  use temporary fixture approval decisions and receipt writes.
+- This is a proof/readback improvement, not Stage 6 closure. Stage 6 remains
+  active at 2/5 checkpoint criteria, and the completion audit remains required.
+
+Latest validation for the Stage 6 persistent-supervision current-gap proof:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status`
+  Result: `passed`; emitted `proof_passed`,
+  `persistent_supervision_authority_chain_consumed=true`,
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  and `stage6_completion_audit_not_run=true`.
+- `python -m pytest tests\test_lens_persistent_supervision_current_gap_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed after formatting`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
