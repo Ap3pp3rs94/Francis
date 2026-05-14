@@ -9,7 +9,11 @@ param(
   [ValidateRange(2, 45)]
   [int]$ResidentSurfaceForegroundRunSeconds = 40,
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$CachedResidentSurfaceProofPath = '',
+
+  [string]$CachedSupervisorProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -208,6 +212,48 @@ function Invoke-JsonScript {
   }
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    cached = $true
+  }
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -232,12 +278,22 @@ $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-
 $ResidentSurfaceTimeoutSeconds = [Math]::Max(150, ($ResidentSurfaceForegroundRunSeconds * 2) + 120)
 $ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
 
-$ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceArgs -TimeoutSeconds $ResidentSurfaceTimeoutSeconds
+$CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
+if ($null -ne $CachedResidentSurfaceResult) {
+  $ResidentSurfaceResult = $CachedResidentSurfaceResult
+} else {
+  $ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceArgs -TimeoutSeconds $ResidentSurfaceTimeoutSeconds
+}
 $SupervisorArgs = @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $SupervisorArgs += @('-DataDir', $DataDir)
 }
-$SupervisorResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SupervisorObservationProofPath -ScriptArgs $SupervisorArgs -TimeoutSeconds ([Math]::Max(190, ($SupervisorRunSeconds * 2) + 150))
+$CachedSupervisorResult = Read-CachedJsonScriptResult -Path $CachedSupervisorProofPath
+if ($null -ne $CachedSupervisorResult) {
+  $SupervisorResult = $CachedSupervisorResult
+} else {
+  $SupervisorResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SupervisorObservationProofPath -ScriptArgs $SupervisorArgs -TimeoutSeconds ([Math]::Max(190, ($SupervisorRunSeconds * 2) + 150))
+}
 
 $ResidentSurfacePayload = Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'payload'
 $SupervisorPayload = Get-PropertyValue -Payload $SupervisorResult -Name 'payload'
@@ -360,6 +416,8 @@ $Payload = [ordered]@{
   checks = @($Checks)
   blockers = @($AllBlockers)
   proof = [ordered]@{
+    resident_surface_source = if ([bool](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'cached' -Default $false)) { 'checkpoint_cached_payload' } else { 'script_execution' }
+    supervisor_observation_source = if ([bool](Get-PropertyValue -Payload $SupervisorResult -Name 'cached' -Default $false)) { 'checkpoint_cached_payload' } else { 'script_execution' }
     resident_surface_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '')
     supervisor_observation_status = [string](Get-PropertyValue -Payload $SupervisorPayload -Name 'status' -Default '')
     host_running_state_status = [string](Get-PropertyValue -Payload $SupervisorProof -Name 'running_state_status' -Default '')

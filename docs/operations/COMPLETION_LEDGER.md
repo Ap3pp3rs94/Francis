@@ -26385,6 +26385,52 @@ Latest validation for the hotkey runtime config-gate slice:
   (`ci(lens): surface pytest progress in actions`) passed all matrix jobs before
   this slice was committed.
 
+Stage 6 Lens checkpoint proof-window reuse slice on `2026-05-14`:
+
+- GitHub Actions run `25850895198` for commit `9800fe99` failed only on
+  `test (windows-latest, 3.13)` because
+  `tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`
+  timed out after the checkpoint subprocess exceeded its 540 second guard.
+  Other matrix jobs passed, and the failing log showed the checkpoint script was
+  still composing nested proof windows rather than surfacing a semantic
+  assertion failure.
+- `scripts/lens-stage6-checkpoint.ps1` now writes checkpoint-local JSON caches
+  for proof payloads it already collected and passes those cache paths into the
+  resident overlay runtime and activation-boundary proof scripts.
+- `scripts/lens-resident-overlay-runtime-proof.ps1` can consume cached resident
+  surface and host-supervisor proof payloads when a caller explicitly provides
+  cache paths. Without cache paths, it still runs the standalone proof scripts.
+- `scripts/lens-resident-overlay-activation-boundary-proof.ps1` can consume
+  cached live-operator and resident-surface proof payloads when a caller
+  explicitly provides cache paths. It still runs the overlay runtime proof for
+  its own supervisor observation window, preserving the activation boundary's
+  stronger timing contract.
+- This is proof-harness stabilization only. It does not enable persistent
+  supervision, register tray presence, register a global hotkey, enable summon,
+  open an overlay, grant approval, write memory, decide approvals, claim
+  resident presence, or close Stage 6.
+- Stage 6 remains active at 2/5 checkpoint criteria. The next roadmap movement
+  remains a real readiness criterion change, not more proof-layer churn: the
+  smallest likely gap is explicit authority/request flow for one blocked Lens
+  prerequisite such as resident host supervision or summon/hotkey binding.
+
+Latest validation for the checkpoint proof-window reuse slice:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed` locally in about 2 minutes 26 seconds after the final
+  window-safe cache correction.
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warnings for
+  scripts/lens-stage6-checkpoint.ps1,
+  scripts/lens-resident-overlay-runtime-proof.ps1, and
+  scripts/lens-resident-overlay-activation-boundary-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

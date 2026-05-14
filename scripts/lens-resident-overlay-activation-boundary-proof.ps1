@@ -16,7 +16,11 @@ param(
 
   [string]$ApprovalId = '',
 
-  [string]$Actor = ''
+  [string]$Actor = '',
+
+  [string]$CachedLiveOperatorProofPath = '',
+
+  [string]$CachedResidentSurfaceProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -151,6 +155,48 @@ function Invoke-JsonScript {
   }
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    cached = $true
+  }
+}
+
 function Invoke-ActivationBoundary {
   param(
     [string]$PythonPath,
@@ -255,8 +301,16 @@ $OverlayArgs = @(
 if (-not [string]::IsNullOrWhiteSpace($ProofDataRoot)) {
   $OverlayArgs += @('-DataDir', $ProofDataRoot)
 }
+if (-not [string]::IsNullOrWhiteSpace($CachedResidentSurfaceProofPath)) {
+  $OverlayArgs += @('-CachedResidentSurfaceProofPath', $CachedResidentSurfaceProofPath)
+}
 
-$LiveResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs $LiveArgs
+$CachedLiveResult = Read-CachedJsonScriptResult -Path $CachedLiveOperatorProofPath
+if ($null -ne $CachedLiveResult) {
+  $LiveResult = $CachedLiveResult
+} else {
+  $LiveResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs $LiveArgs
+}
 $OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $OverlayArgs
 $ActivationResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ProofDataRoot -SelectedApprovalId $ApprovalId -SelectedActor $Actor
 
@@ -391,6 +445,8 @@ $Payload = [ordered]@{
   checks = @($Checks)
   blockers = @($AllBlockers)
   proof = [ordered]@{
+    live_operator_source = if ([bool](Get-PropertyValue -Payload $LiveResult -Name 'cached' -Default $false)) { 'checkpoint_cached_payload' } else { 'script_execution' }
+    overlay_runtime_source = 'script_execution'
     live_operator_status = [string](Get-PropertyValue -Payload $LivePayload -Name 'status' -Default '')
     live_http_status_readback = [bool](Get-PropertyValue -Payload $LivePayload -Name 'live_http_status_readback' -Default $false)
     helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LivePayload -Name 'helpful_not_noisy_readback' -Default $false)

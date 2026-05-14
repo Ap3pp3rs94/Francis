@@ -763,6 +763,24 @@ $ResidentOverlayActivationResidentSurfaceForegroundSeconds = [Math]::Max(
   $ResidentSurfaceForegroundObservationSeconds,
   $ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds
 )
+
+function Write-ProofPayloadCache {
+  param(
+    [object]$Payload,
+    [string]$FileName
+  )
+
+  if ($null -eq $Payload -or [string]::IsNullOrWhiteSpace($FileName)) {
+    return ''
+  }
+
+  $CacheRoot = Join-Path $CheckpointProofDataRoot 'checkpoint-proof-cache'
+  New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
+  $CachePath = Join-Path $CacheRoot $FileName
+  $Payload | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $CachePath -Encoding UTF8
+  return $CachePath
+}
+
 $CommandPaletteStatusPath = [System.IO.Path]::GetTempFileName()
 try {
   $LensStatus | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $CommandPaletteStatusPath -Encoding UTF8
@@ -1018,6 +1036,7 @@ if ($ResidentSurfaceForegroundRuntimeProofPassed) {
     @($ResidentSurfaceRuntimeProofBlockers)
   ) | Sort-Object -Unique
 }
+$ResidentSurfaceProofCachePath = Write-ProofPayloadCache -Payload $ResidentSurfaceProofPayload -FileName 'resident-surface-proof.json'
 
 $HostLaunchProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds, '-DataDir', $CheckpointProofDataRoot))
 $HostLaunchProof = if ($HostLaunchProofResult.Count -gt 0) { $HostLaunchProofResult[-1] } else { $null }
@@ -1062,6 +1081,7 @@ $HostSupervisorProofPassed = (
   -not [bool](Get-PropertyValue -Payload $HostSupervisorPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $HostSupervisorProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorPayload -Name 'blockers' -Default @())
+$HostSupervisorProofCachePath = Write-ProofPayloadCache -Payload $HostSupervisorPayload -FileName 'host-supervisor-observation-proof.json'
 
 $HostSupervisorOwnedSessionRunSeconds = [Math]::Max(3, [Math]::Min($HostLaunchRunSeconds, $SupervisorRunSeconds))
 $HostSupervisorOwnedSessionResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorOwnedSessionPath -ScriptArgs @('-Mode', 'SuperviseOnce', '-RunSeconds', [string]$HostSupervisorOwnedSessionRunSeconds, '-DataDir', $CheckpointProofDataRoot))
@@ -1093,7 +1113,14 @@ $HostSupervisorOwnedSessionPassed = (
 )
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisorOwnedSessionPayload -Name 'blockers' -Default @())
 
-$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_runtime.proof'
+$ResidentOverlayRuntimeArgs = @('-Mode', 'Status', '-SupervisorRunSeconds', [string]$SupervisorObservationSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds, '-DataDir', $CheckpointProofDataRoot)
+if (-not [string]::IsNullOrWhiteSpace($ResidentSurfaceProofCachePath)) {
+  $ResidentOverlayRuntimeArgs += @('-CachedResidentSurfaceProofPath', $ResidentSurfaceProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($HostSupervisorProofCachePath)) {
+  $ResidentOverlayRuntimeArgs += @('-CachedSupervisorProofPath', $HostSupervisorProofCachePath)
+}
+$ResidentOverlayRuntimeProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $ResidentOverlayRuntimeArgs -ExpectedKind 'lens.resident_overlay_runtime.proof'
 $ResidentOverlayRuntimeExitCode = -1
 $ResidentOverlayRuntimePayload = $null
 if ($ResidentOverlayRuntimeProof -is [System.Collections.IDictionary]) {
@@ -1118,8 +1145,16 @@ $ResidentOverlayRuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValu
 if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
+$LiveOperatorProofCachePath = Write-ProofPayloadCache -Payload $LiveOperatorPayload -FileName 'live-operator-proof.json'
 
-$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$ResidentOverlayActivationStartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$ResidentOverlayActivationSupervisorSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentOverlayActivationResidentSurfaceForegroundSeconds, '-DataDir', $CheckpointProofDataRoot) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
+$ResidentOverlayActivationBoundaryArgs = @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$ResidentOverlayActivationStartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$ResidentOverlayActivationSupervisorSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentOverlayActivationResidentSurfaceForegroundSeconds, '-DataDir', $CheckpointProofDataRoot)
+if (-not [string]::IsNullOrWhiteSpace($LiveOperatorProofCachePath)) {
+  $ResidentOverlayActivationBoundaryArgs += @('-CachedLiveOperatorProofPath', $LiveOperatorProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($ResidentSurfaceProofCachePath)) {
+  $ResidentOverlayActivationBoundaryArgs += @('-CachedResidentSurfaceProofPath', $ResidentSurfaceProofCachePath)
+}
+$ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs $ResidentOverlayActivationBoundaryArgs -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $ResidentOverlayActivationBoundaryExitCode = -1
 $ResidentOverlayActivationBoundaryPayload = $null
 if ($ResidentOverlayActivationBoundaryProof -is [System.Collections.IDictionary]) {
