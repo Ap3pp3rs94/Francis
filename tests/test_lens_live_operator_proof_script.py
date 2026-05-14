@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from powershell_script_runner import run_powershell_script
+
 
 def _powershell() -> str:
     exe = shutil.which("powershell") or shutil.which("pwsh")
@@ -20,21 +22,12 @@ def _repo_root() -> Path:
 
 
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            _powershell(),
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(_repo_root() / "scripts" / "lens-live-operator-proof.ps1"),
-            *args,
-        ],
+    return run_powershell_script(
+        _powershell(),
+        _repo_root() / "scripts" / "lens-live-operator-proof.ps1",
+        args,
         cwd=_repo_root(),
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=45,
+        timeout_seconds=90,
     )
 
 

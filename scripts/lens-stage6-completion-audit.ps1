@@ -52,6 +52,13 @@ function Stop-ProcessTree {
   if ($null -eq $Process -or $Process.HasExited) {
     return
   }
+  if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+    try {
+      & taskkill.exe /F /T /PID $Process.Id | Out-Null
+      return
+    } catch {
+    }
+  }
   try {
     $Process.Kill($true)
   } catch {
@@ -104,8 +111,25 @@ function Invoke-JsonScript {
   $StartInfo.WorkingDirectory = $RepoRoot
   $StartInfo.UseShellExecute = $false
   $StartInfo.CreateNoWindow = $true
-  $StartInfo.RedirectStandardOutput = $true
-  $StartInfo.RedirectStandardError = $true
+  $ScriptName = [IO.Path]::GetFileNameWithoutExtension($ScriptPath)
+  $ProofCaptureRoot = Join-Path $RepoRoot 'data/test_runs/lens-stage6-completion-audit'
+  New-Item -ItemType Directory -Path $ProofCaptureRoot -Force | Out-Null
+  $CaptureId = [Guid]::NewGuid().ToString('N')
+  $StdoutPath = Join-Path $ProofCaptureRoot "$ScriptName-$CaptureId.stdout.json"
+  $StderrPath = Join-Path $ProofCaptureRoot "$ScriptName-$CaptureId.stderr.txt"
+  $StartInfo.RedirectStandardOutput = $false
+  $StartInfo.RedirectStandardError = $false
+  $StartInfo.RedirectStandardInput = $false
+  $StartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+  $StartInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+  $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (
+    Quote-ProcessArgument -Value (
+      '& ' + (Quote-ProcessArgument -Value $PowerShellPath) + ' ' + ($ArgumentParts -join ' ') +
+      ' > ' + (Quote-ProcessArgument -Value $StdoutPath) +
+      ' 2> ' + (Quote-ProcessArgument -Value $StderrPath)
+    )
+  )
+  $StartInfo.FileName = $PowerShellPath
 
   $Process = [System.Diagnostics.Process]::new()
   $Process.StartInfo = $StartInfo
@@ -138,8 +162,6 @@ function Invoke-JsonScript {
     }
   }
 
-  $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
-  $StderrTask = $Process.StandardError.ReadToEndAsync()
   $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
   if (-not $Exited) {
     Stop-ProcessTree -Process $Process
@@ -156,8 +178,14 @@ function Invoke-JsonScript {
     }
   }
 
-  $Text = $StdoutTask.GetAwaiter().GetResult()
-  $ErrorText = $StderrTask.GetAwaiter().GetResult()
+  $Text = ''
+  if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+    $Text = [IO.File]::ReadAllText($StdoutPath)
+  }
+  $ErrorText = ''
+  if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+    $ErrorText = [IO.File]::ReadAllText($StderrPath)
+  }
   $Timer.Stop()
   $Payload = $null
   try {
@@ -2066,6 +2094,46 @@ $RecommendedProofScript = ''
 $RecommendedAuthorityRequired = ''
 $RecommendedHandoff = [ordered]@{}
 if (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_authority_not_granted' -and
+  $PersistentSupervisionEnablementDenialObserved -and
+  $PersistentSupervisionEnablementExecutionDenialObserved
+) {
+  $RecommendedHandoffSource = 'persistent_supervision_enablement_authority_denial_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'persistent_supervision_authority_not_granted'
+    consumed_audit_next_smallest_truthful_gap = 'persistent_supervision_enablement_denial_boundary'
+    next_smallest_truthful_gap = 'persistent_supervision_enablement_authority_not_granted'
+    next_step = 'prove_persistent_supervision_enablement_authority_after_candidate_handoff'
+    proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision/enablement'
+    request_route = '/lens/host/persistent-supervision/enablement/authority/request'
+    grant_route = '/lens/host/persistent-supervision/enablement/authority/grant'
+    readiness_route = '/lens/host/persistent-supervision/enablement/authority/readiness'
+    execution_readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    authority_required = 'persistent_supervision_enablement_authority'
+    authority_granted = $false
+    enablement_denial_observed = $PersistentSupervisionEnablementDenialObserved
+    execution_denial_observed = $PersistentSupervisionEnablementExecutionDenialObserved
+    persistent_supervision_enablement_authority = [bool]$PersistentSupervisionEnablementDenial.persistent_supervision_enablement_authority
+    service_config_write_authority = [bool]$PersistentSupervisionEnablementDenial.service_config_write_authority
+    persistent_supervision_execution_authority = [bool]$PersistentSupervisionEnablementExecutionDenial.persistent_supervision_execution_authority
+    receipt_write_authority = [bool]$PersistentSupervisionEnablementExecutionDenial.receipt_write_authority
+    resident_claim_authority = [bool]$PersistentSupervisionEnablementExecutionDenial.resident_claim_authority
+    resident_claim_allowed = [bool]$PersistentSupervisionEnablementExecutionDenial.resident_claim_allowed
+    service_config_updated = [bool]$PersistentSupervisionEnablementDenial.service_config_updated
+    applied = [bool]$PersistentSupervisionEnablementDenial.applied
+    executed = [bool]$PersistentSupervisionEnablementExecutionDenial.executed
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    blockers = [string[]]@($PersistentSupervisionEnablementDenialBlockers + $PersistentSupervisionEnablementExecutionDenialBlockers | Select-Object -Unique)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary' -and
   $PersistentSupervisionExecutionAuthorityProofObserved
 ) {

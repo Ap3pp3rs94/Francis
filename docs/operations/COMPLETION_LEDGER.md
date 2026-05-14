@@ -26620,6 +26620,53 @@ Latest validation for the CI pytest hang diagnostic guard:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens proof-subprocess timing stabilization on `2026-05-14`:
+
+- GitHub Actions run `25872243516` proved the diagnostic guard was useful but
+  too blunt: Windows 3.12 timed out in
+  `test_lens_live_operator_proof_script.py` while waiting on captured
+  PowerShell output, and Ubuntu 3.12/3.13 timed out in the Stage 6 completion
+  audit path. Local reproduction showed the completion audit could previously
+  be killed only by an outer process timeout, not by its own child proof
+  contracts.
+- Added `tests/powershell_script_runner.py`, a test-only PowerShell runner that
+  launches proof scripts in an isolated process group and kills the process tree
+  on timeout before returning a normal `CompletedProcess` with captured output.
+  The live-operator, host-supervisor observation, resident-overlay runtime, and
+  completion-audit proof tests now use that bounded runner.
+- Changed the Stage 6 completion-audit child proof runner to redirect child
+  stdout/stderr to repo-local capture files instead of waiting on inherited pipe
+  handles. This prevents descendant processes from keeping redirected output
+  pipes open after the proof script has logically completed. Timeout cleanup now
+  uses Windows `taskkill /F /T` when available before falling back to
+  `Process.Kill`.
+- Recalibrated the global pytest faulthandler timeout from 180 seconds to 600
+  seconds because the current Stage 6 checkpoint/audit tests legitimately take
+  longer than 180 seconds while retaining their own narrower process timeouts.
+  This keeps CI diagnostic stacks for true hangs without killing known-long
+  proof contracts prematurely.
+- The completion audit now exposes an explicit recommended handoff for the
+  current top-level gap
+  `persistent_supervision_enablement_authority_not_granted`:
+  `scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`.
+  This is a receipt/readback correction, not Stage 6 closure. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 proof-subprocess timing stabilization:
+
+- `python -m ruff check tests\powershell_script_runner.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\powershell_script_runner.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed after formatting tests\test_lens_stage6_completion_audit_script.py`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command '$null = [scriptblock]::Create((Get-Content -Raw scripts\lens-stage6-completion-audit.ps1)); "syntax-ok"'`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
