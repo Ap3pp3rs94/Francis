@@ -26467,6 +26467,48 @@ Latest validation for the completion-audit child receipt consumption slice:
   Result: `passed with PowerShell line-ending normalization warning for
   scripts/lens-stage6-completion-audit.ps1`
 
+Stage 6 Lens governed resident-supervision lease execution slice on
+`2026-05-14`:
+
+- `/lens/host/supervision/execute` now accepts an explicit supervision mode for
+  the existing host supervision execution route. The default remains the
+  bounded candidate proof path. `resident_start` and `resident_stop` consume the
+  already-tested `scripts/lens-host-supervisor.ps1` `StartResident` and
+  `StopResident` modes under the existing host-supervision authority flow.
+- Resident-start execution writes a receipt that records the execution mode,
+  live resident host process evidence, supervised-runtime evidence, and the
+  stop command. The Lens host manifest and `/lens/status` readback can now
+  recognize a governed live resident supervision lease and move the persistent
+  supervision prerequisite chain past `resident_host_process` to the next
+  missing prerequisite, `tray_presence`, while the supervised lease is live.
+- Resident-stop execution writes a corresponding stop receipt and readback does
+  not keep resident host or supervised-runtime claims after the lease is
+  stopped.
+- This is a bounded execution-path change through an existing governed Lens
+  route. It grants no service install/control authority, no tray registration,
+  no global hotkey binding, no overlay opening, no summon binding, no approval
+  decision authority, no memory write, and no resident-presence stage claim.
+- Stage 6 remains active at 2/5 checkpoint criteria. This removes the
+  proof-layer stall around resident host supervision by making the existing
+  live supervisor lease reachable through a governed API/readback path, but it
+  does not close the `system_resident_presence`, `summon_anywhere`, or
+  `helpful_not_noisy` criteria.
+
+Latest validation for the governed resident-supervision lease execution slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease tests\test_lens_host_supervisor_script.py::test_lens_host_supervisor_starts_and_stops_live_resident_lease tests\test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_accepts_supervised_resident_host_readback -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\lens.py src\francis\lens\activation.py src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

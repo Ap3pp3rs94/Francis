@@ -610,12 +610,21 @@ def _lens_host_supervision_execution_readback() -> dict[str, Any]:
     latest_resident_claim = _as_dict(latest.get("resident_claim"))
     candidate_supervised = bool(latest_execution.get("resident_runtime_candidate_supervised"))
     resident_supervised_runtime = bool(latest_execution.get("resident_supervised_runtime"))
+    resident_host_process = bool(latest_execution.get("resident_host_process"))
     next_gap = str(latest_execution.get("next_smallest_truthful_gap") or "").strip()
+    supervision_mode = str(latest_execution.get("supervision_mode") or "bounded_candidate").strip()
     candidate_receipt_observed = (
         bool(latest)
         and candidate_supervised
         and not resident_supervised_runtime
         and next_gap == "resident_supervision_not_persistent"
+        and not bool(latest_resident_claim.get("resident_host_process_claimed"))
+    )
+    supervised_runtime_receipt_observed = (
+        bool(latest)
+        and supervision_mode == "resident_start"
+        and resident_host_process
+        and resident_supervised_runtime
         and not bool(latest_resident_claim.get("resident_host_process_claimed"))
     )
     return {
@@ -630,14 +639,18 @@ def _lens_host_supervision_execution_readback() -> dict[str, Any]:
         "latest_created_ts": _record_ts(latest.get("created_ts")),
         "latest_bounded_supervised_session": bool(latest_execution.get("bounded_supervised_session")),
         "latest_temporary_host_process_observed": bool(latest_execution.get("temporary_host_process_observed")),
+        "latest_supervision_mode": supervision_mode,
+        "latest_resident_host_process": resident_host_process,
         "latest_resident_runtime_candidate_supervised": candidate_supervised,
         "latest_resident_supervised_runtime": resident_supervised_runtime,
+        "latest_stop_command": str(latest_execution.get("stop_command") or ""),
         "latest_next_smallest_truthful_gap": next_gap,
         "resident_runtime_candidate_receipt_observed": candidate_receipt_observed,
+        "resident_supervised_runtime_receipt_observed": supervised_runtime_receipt_observed,
         "resident_claim_allowed": False,
         "resident_claim_authority": False,
         "evidence_only": True,
-        "does_not_satisfy_resident_host_process": True,
+        "does_not_satisfy_resident_host_process": not supervised_runtime_receipt_observed,
     }
 
 
@@ -671,6 +684,8 @@ def _lens_host_supervision_execution_requirement_readback(launch_manifest: dict[
         "supervision_execution_receipt_count": _safe_pid(readback.get("receipt_count")),
         "supervision_execution_receipt_id": str(readback.get("latest_receipt_id") or ""),
         "supervision_execution_status": str(readback.get("latest_status") or ""),
+        "supervision_execution_mode": str(readback.get("latest_supervision_mode") or ""),
+        "supervision_execution_resident_host_process": bool(readback.get("latest_resident_host_process")),
         "supervision_execution_bounded_session": bool(readback.get("latest_bounded_supervised_session")),
         "supervision_execution_temporary_host_process_observed": bool(
             readback.get("latest_temporary_host_process_observed")
@@ -683,8 +698,14 @@ def _lens_host_supervision_execution_requirement_readback(launch_manifest: dict[
             readback.get("latest_next_smallest_truthful_gap") or ""
         ),
         "supervision_execution_receipt_observed": bool(readback.get("resident_runtime_candidate_receipt_observed")),
+        "supervision_execution_supervised_runtime_receipt_observed": bool(
+            readback.get("resident_supervised_runtime_receipt_observed")
+        ),
+        "supervision_execution_stop_command": str(readback.get("latest_stop_command") or ""),
         "supervision_execution_evidence_only": True,
-        "supervision_execution_does_not_satisfy_resident_host_process": True,
+        "supervision_execution_does_not_satisfy_resident_host_process": bool(
+            readback.get("does_not_satisfy_resident_host_process")
+        ),
     }
 
 
@@ -950,6 +971,14 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
             "authority_executions_route": "/lens/host/activation/executions",
             "authority_grants_route": "/lens/host/activation/authority/grants",
             "execution_denials_route": "/lens/host/activation/denials",
+            "supervision_authority_route": "/lens/host/supervision/authority",
+            "supervision_authority_request_route": "/lens/host/supervision/authority/request",
+            "supervision_authority_requests_route": "/lens/host/supervision/authority/requests",
+            "supervision_authority_grants_route": "/lens/host/supervision/authority/grants",
+            "supervision_execute_route": "/lens/host/supervision/execute",
+            "supervision_executions_route": "/lens/host/supervision/executions",
+            "supervision_start_mode": "resident_start",
+            "supervision_stop_mode": "resident_stop",
             "approval_action": "lens.host.foreground_activation",
             "authority_scope": "system.write",
         }
@@ -1009,6 +1038,8 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
             "supervision_execution_receipt_id",
             "supervision_execution_readback_status",
             "supervision_execution_next_smallest_truthful_gap",
+            "supervision_execution_supervised_runtime_receipt_observed",
+            "supervision_execution_stop_command",
         ):
             if key in dependency:
                 handoff[key] = dependency[key]
@@ -1046,8 +1077,14 @@ def _lens_host_resident_process_requirement_readback(
     supervision_execution_candidate_observed = bool(
         supervision_execution_readback.get("supervision_execution_receipt_observed")
     )
+    supervision_execution_supervised_runtime_observed = bool(
+        supervision_execution_readback.get("supervision_execution_supervised_runtime_receipt_observed")
+    )
     durable_resident_candidate_supervised = resident_candidate_supervised or bool(
         supervision_execution_readback.get("supervision_execution_resident_runtime_candidate_supervised")
+    )
+    durable_resident_supervised_runtime = resident_supervised_runtime or (
+        process_alive and supervision_execution_supervised_runtime_observed
     )
     if not missing:
         return {
@@ -1058,7 +1095,7 @@ def _lens_host_resident_process_requirement_readback(
             "blocked_reason": "",
             "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
-            "resident_supervised_runtime": resident_supervised_runtime,
+            "resident_supervised_runtime": durable_resident_supervised_runtime,
             "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
             "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
         }

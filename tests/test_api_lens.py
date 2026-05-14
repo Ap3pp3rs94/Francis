@@ -8733,6 +8733,242 @@ def test_lens_host_supervision_execute_writes_bounded_resident_candidate_receipt
     assert dependencies["resident_host_process"]["blocker"] == "resident_supervision_not_persistent"
 
 
+def test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.activation as activation_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+
+    def fake_resident_supervision_action(*, mode: str) -> dict[str, Any]:
+        if mode == "resident_stop":
+            host_root = data_root / "runtime" / "lens-host"
+            host_root.mkdir(parents=True, exist_ok=True)
+            (host_root / "lens-host.pid").unlink(missing_ok=True)
+            (host_root / "status.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "lens.host.runtime_state",
+                        "status": "resident_stopped",
+                        "mode": "resident",
+                        "pid": pid,
+                        "process_alive": False,
+                        "resident": False,
+                        "resident_claim_allowed": False,
+                        "service_managed": False,
+                        "tray_presence": False,
+                        "global_hotkey": False,
+                        "overlay_window": False,
+                        "summon_anywhere": False,
+                        "updated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _write_lens_host_supervisor_state(
+                data_root,
+                observed_pid=pid,
+                status="resident_supervision_stopped",
+                mode="stop_resident",
+                host_mode="resident",
+                observed_state="resident_stopped",
+                resident_supervised_runtime=False,
+                process_supervision_authority=True,
+                process_restart_authority=False,
+                service_control_authority=False,
+            )
+            return {
+                "ok": True,
+                "status": "resident_supervision_stopped",
+                "returncode": 0,
+                "script_mode": "StopResident",
+                "script": "scripts/lens-host-supervisor.ps1",
+                "runner": {
+                    "ok": True,
+                    "status": "resident_supervision_stopped",
+                    "resident_host_process": False,
+                    "resident_supervised_runtime": False,
+                    "resident_runtime_candidate_supervised": False,
+                    "resident_claim_allowed": False,
+                    "next_smallest_truthful_gap": "resident_host_process_missing",
+                },
+                "blockers": ["resident_host_process_missing", "tray_host_missing"],
+            }
+
+        _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+        _write_lens_host_supervisor_state(
+            data_root,
+            observed_pid=pid,
+            status="resident_supervising",
+            mode="supervise_resident",
+            host_mode="resident",
+            observed_state="resident_running",
+            resident_supervised_runtime=True,
+            process_supervision_authority=True,
+            process_restart_authority=False,
+            service_control_authority=False,
+        )
+        return {
+            "ok": True,
+            "status": "resident_supervision_started",
+            "returncode": 0,
+            "script_mode": "StartResident",
+            "script": "scripts/lens-host-supervisor.ps1",
+            "runner": {
+                "ok": True,
+                "status": "resident_supervision_started",
+                "bounded_supervised_session": False,
+                "temporary_host_process_observed": True,
+                "resident_host_process": True,
+                "resident_supervised_runtime": True,
+                "resident_runtime_candidate_supervised": True,
+                "resident_claim_allowed": False,
+                "service_managed": False,
+                "tray_presence": False,
+                "global_hotkey": False,
+                "overlay_window": False,
+                "summon_anywhere": False,
+                "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+            },
+            "blockers": [
+                "tray_host_missing",
+                "global_hotkey_binding_missing",
+                "overlay_window_missing",
+                "summon_binding_missing",
+            ],
+        }
+
+    monkeypatch.setattr(
+        activation_module,
+        "_run_lens_host_resident_supervision_action",
+        fake_resident_supervision_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/host/supervision/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants resident host supervision authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved host supervision lease boundary review",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    grant = client.post(
+        "/lens/host/supervision/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants host supervision authority for resident lease",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["status"] == "authority_granted"
+
+    started = client.post(
+        "/lens/host/supervision/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "start governed live resident host supervision",
+            "mode": "resident_start",
+        },
+    )
+    assert started.status_code == 200
+    started_body = started.json()
+    assert started_body["kind"] == "lens.host.supervision.execution"
+    assert started_body["status"] == "resident_supervision_started"
+    assert started_body["supervision_mode"] == "resident_start"
+    assert started_body["executed"] is True
+    assert started_body["resident_host_process"] is True
+    assert started_body["resident_supervised_runtime"] is True
+    assert started_body["resident_runtime_candidate_supervised"] is True
+    assert started_body["resident_claim_allowed"] is False
+    assert started_body["stop_command"] == "scripts/lens-host-supervisor.ps1 -Mode StopResident"
+    assert started_body["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert started_body["governance"]["resident_supervision_lease_execution"] is True
+    assert started_body["governance"]["local_process_launch_authority"] is True
+    assert started_body["governance"]["service_control_authority"] is False
+    assert started_body["governance"]["resident_claim_authority"] is False
+    assert started_body["receipt_written"] is True
+    start_receipt = started_body["receipt"]
+    assert start_receipt["execution"]["supervision_mode"] == "resident_start"
+    assert start_receipt["execution"]["resident_host_process"] is True
+    assert start_receipt["execution"]["resident_supervised_runtime"] is True
+    assert start_receipt["resident_claim"]["resident_host_process_claimed"] is False
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    status_body = status.json()
+    persistent_plan = status_body["resident_host"]["persistent_supervision_plan"]
+    dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    assert dependencies["resident_host_process"]["ready"] is True
+    assert dependencies["resident_host_process"]["resident_supervised_runtime"] is True
+    assert dependencies["resident_host_process"]["supervision_execution_supervised_runtime_receipt_observed"] is True
+    assert persistent_plan["first_missing_required_before_enable"] == "tray_presence"
+    next_handoff = status_body["stage6_readiness"]["next_handoff"]
+    assert next_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+
+    stopped = client.post(
+        "/lens/host/supervision/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "stop governed live resident host supervision",
+            "mode": "resident_stop",
+        },
+    )
+    assert stopped.status_code == 200
+    stopped_body = stopped.json()
+    assert stopped_body["status"] == "resident_supervision_stopped"
+    assert stopped_body["supervision_mode"] == "resident_stop"
+    assert stopped_body["resident_host_process"] is False
+    assert stopped_body["resident_supervised_runtime"] is False
+    assert stopped_body["resident_claim_allowed"] is False
+    assert stopped_body["governance"]["resident_supervision_lease_execution"] is True
+    assert stopped_body["governance"]["service_control_authority"] is False
+    assert stopped_body["governance"]["resident_claim_authority"] is False
+
+
 def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
     monkeypatch,
     tmp_path: Path,

@@ -144,6 +144,7 @@ class LensHostSupervisionExecuteIn(BaseModel):
     approval_id: str = ""
     reason: str = "attempt bounded Lens resident host supervision"
     run_seconds: int = Field(default=2, ge=1, le=10)
+    mode: str = Field(default="bounded_candidate")
 
 
 class LensHostPersistentSupervisionEnablementIn(BaseModel):
@@ -396,6 +397,7 @@ def host_supervision_execute(request: Request, payload: LensHostSupervisionExecu
         method=request.method,
         record_receipt=True,
         run_seconds=payload.run_seconds,
+        mode=payload.mode,
     )
 
 

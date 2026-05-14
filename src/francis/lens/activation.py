@@ -1937,6 +1937,93 @@ def _run_bounded_lens_host_supervision_once(*, run_seconds: Any) -> dict[str, An
     }
 
 
+def _host_supervision_execution_mode(value: Any) -> str:
+    requested = _safe_str(value).strip().lower().replace("-", "_")
+    if requested in {"resident_start", "start_resident"}:
+        return "resident_start"
+    if requested in {"resident_stop", "stop_resident"}:
+        return "resident_stop"
+    return "bounded_candidate"
+
+
+def _run_lens_host_resident_supervision_action(*, mode: str) -> dict[str, Any]:
+    script_mode = "StopResident" if mode == "resident_stop" else "StartResident"
+    root = repo_root()
+    script = root / "scripts" / "lens-host-supervisor.ps1"
+    if not script.is_file():
+        return {
+            "ok": False,
+            "status": "lens_host_supervisor_entrypoint_missing",
+            "script_mode": script_mode,
+            "blockers": ["lens_host_supervisor_entrypoint_missing"],
+        }
+
+    powershell = _powershell_path()
+    if not powershell:
+        return {
+            "ok": False,
+            "status": "powershell_runtime_missing",
+            "script_mode": script_mode,
+            "blockers": ["powershell_runtime_missing"],
+        }
+
+    command = [powershell, "-NoProfile"]
+    if os.name == "nt":
+        command.extend(["-ExecutionPolicy", "Bypass"])
+    command.extend(
+        [
+            "-File",
+            str(script),
+            "-Mode",
+            script_mode,
+        ]
+    )
+    env = dict(os.environ)
+    env.setdefault("FRANCIS_ROOT", str(root))
+    env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "status": "resident_supervision_action_timeout",
+            "script_mode": script_mode,
+            "blockers": ["lens_host_resident_supervision_action_timeout"],
+            "script": "scripts/lens-host-supervisor.ps1",
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "status": "resident_supervision_action_failed",
+            "script_mode": script_mode,
+            "blockers": ["lens_host_resident_supervision_action_failed"],
+            "error": _redact_free_text(str(exc)),
+            "script": "scripts/lens-host-supervisor.ps1",
+        }
+
+    payload = _parse_json_process_stdout(completed.stdout)
+    runner_ok = completed.returncode == 0 and bool(payload.get("ok"))
+    stderr = (completed.stderr or "").strip()
+    return {
+        "ok": runner_ok,
+        "status": _safe_str(payload.get("status")).strip() or "resident_supervision_action_failed",
+        "returncode": completed.returncode,
+        "script_mode": script_mode,
+        "script": "scripts/lens-host-supervisor.ps1",
+        "runner": _display(payload),
+        "blockers": _str_list(payload.get("blockers")),
+        "stderr": _redact_free_text(stderr[:500]) if stderr else "",
+    }
+
+
 def lens_host_activation_execution_preflight(*, approval_id: Any = "", actor: Any = "") -> dict[str, Any]:
     requested_id = _safe_str(approval_id).strip()
     approval, approval_lookup_status = _activation_approval_by_id(requested_id)
@@ -5854,6 +5941,7 @@ def _host_supervision_execution_receipt(execution: dict[str, Any]) -> dict[str, 
     authorities = _as_dict(execution.get("authorities"))
     runner = _as_dict(execution.get("runner"))
     runner_payload = _as_dict(runner.get("runner"))
+    governance_payload = _as_dict(execution.get("governance"))
     post_supervision_gate = _as_dict(execution.get("post_supervision_gate"))
     post_plan = _as_dict(execution.get("post_persistent_supervision_plan"))
     return _filtered_record(
@@ -5893,12 +5981,15 @@ def _host_supervision_execution_receipt(execution: dict[str, Any]) -> dict[str, 
             },
             "execution": {
                 "run_seconds": _bounded_host_activation_run_seconds(execution.get("run_seconds")),
+                "supervision_mode": _safe_str(execution.get("supervision_mode")).strip() or "bounded_candidate",
                 "executed": bool(execution.get("executed")),
                 "bounded_supervised_session": bool(execution.get("bounded_supervised_session")),
                 "temporary_host_process_observed": bool(execution.get("temporary_host_process_observed")),
                 "resident_runtime_candidate_supervised": bool(execution.get("resident_runtime_candidate_supervised")),
-                "resident_supervised_runtime": False,
+                "resident_host_process": bool(execution.get("resident_host_process")),
+                "resident_supervised_runtime": bool(execution.get("resident_supervised_runtime")),
                 "resident_claim_allowed": False,
+                "stop_command": _safe_str(execution.get("stop_command")).strip(),
                 "next_smallest_truthful_gap": _safe_str(execution.get("next_smallest_truthful_gap")).strip(),
                 "runner_status": _safe_str(runner.get("status") or runner_payload.get("status")).strip(),
                 "runner_returncode": int(runner.get("returncode") or 0),
@@ -5911,7 +6002,7 @@ def _host_supervision_execution_receipt(execution: dict[str, Any]) -> dict[str, 
                 "fresh_resident_runtime_candidate_supervised": bool(
                     post_supervision_gate.get("fresh_resident_runtime_candidate_supervised")
                 ),
-                "resident_supervised_runtime": False,
+                "resident_supervised_runtime": bool(post_supervision_gate.get("resident_supervised_runtime")),
                 "resident_claim_allowed": False,
                 "blockers": _str_list(post_supervision_gate.get("blockers")),
             },
@@ -5931,13 +6022,19 @@ def _host_supervision_execution_receipt(execution: dict[str, Any]) -> dict[str, 
             "governance": {
                 "gate": "lens_host_supervision_execution_receipt",
                 "execution_boundary": True,
-                "bounded_supervision_execution": True,
+                "bounded_supervision_execution": bool(governance_payload.get("bounded_supervision_execution")),
+                "resident_supervision_lease_execution": bool(
+                    governance_payload.get("resident_supervision_lease_execution")
+                ),
                 "execution_authority": bool(execution.get("executed")),
                 "approval_decision_authority": False,
-                "local_process_launch_authority": bool(execution.get("local_process_launch_authority")),
-                "bounded_supervision_process_launch_authority": bool(execution.get("executed")),
+                "local_process_launch_authority": bool(governance_payload.get("local_process_launch_authority")),
+                "bounded_supervision_process_launch_authority": bool(
+                    governance_payload.get("bounded_supervision_process_launch_authority")
+                ),
                 "process_supervision_authority": bool(authorities.get("process_supervision_authority")),
-                "process_restart_authority": False,
+                "process_restart_authority": bool(authorities.get("process_restart_authority"))
+                and _safe_str(execution.get("supervision_mode")).strip() == "bounded_candidate",
                 "service_install_authority": False,
                 "service_control_authority": False,
                 "tray_registration_authority": False,
@@ -7633,9 +7730,11 @@ def execute_lens_host_supervision_once(
     method: str = "POST",
     record_receipt: bool = False,
     run_seconds: Any = 2,
+    mode: Any = "bounded_candidate",
 ) -> dict[str, Any]:
     safe_route = _safe_str(route).strip() or LENS_HOST_SUPERVISION_EXECUTE_ROUTE
     safe_approval_id = _safe_str(approval_id).strip()
+    safe_mode = _host_supervision_execution_mode(mode)
     permission = _permission_readiness(actor, route=safe_route, method=method)
     grants = lens_host_supervision_authority_grant_receipts(
         limit=1,
@@ -7646,6 +7745,7 @@ def execute_lens_host_supervision_once(
     authorities = _as_dict(active_grant.get("authorities"))
     manifest = lens_host_launch_manifest()
     process_readback = _as_dict(manifest.get("process_readback"))
+    supervisor_readback = _as_dict(manifest.get("supervisor_readback"))
     blockers: list[str] = []
     if not safe_approval_id:
         blockers.append("approval_id_required")
@@ -7653,14 +7753,18 @@ def execute_lens_host_supervision_once(
         blockers.append("host_supervision_authority_grant_not_active")
     if not bool(authorities.get("process_supervision_authority")):
         blockers.append("process_supervision_authority_not_granted")
-    if not bool(authorities.get("process_restart_authority")):
+    if safe_mode == "bounded_candidate" and not bool(authorities.get("process_restart_authority")):
         blockers.append("process_restart_authority_not_granted")
     if record_receipt and not bool(authorities.get("receipt_write_authority")):
         blockers.append("receipt_write_authority_not_granted")
     if not bool(permission.get("ready")):
         blockers.append("system_write_scope_not_ready")
-    if bool(process_readback.get("process_alive")):
+    process_alive = bool(process_readback.get("process_alive"))
+    resident_supervised_runtime = bool(supervisor_readback.get("resident_supervised_runtime"))
+    if safe_mode == "bounded_candidate" and process_alive:
         blockers.append("resident_host_process_already_observed")
+    elif safe_mode == "resident_start" and process_alive and not resident_supervised_runtime:
+        blockers.append("resident_host_process_already_observed_not_supervised")
 
     deduped_blockers = _dedupe_strs(blockers)
     safe_run_seconds = _bounded_host_activation_run_seconds(run_seconds)
@@ -7673,6 +7777,7 @@ def execute_lens_host_supervision_once(
             "status": "blocked",
             "route": safe_route,
             "method": method,
+            "supervision_mode": safe_mode,
             "approval_id": safe_approval_id,
             "actor": _redact_free_text(actor),
             "reason": _redact_free_text(reason),
@@ -7695,6 +7800,7 @@ def execute_lens_host_supervision_once(
                 ),
                 "gate": "lens_host_supervision_execution_denial",
                 "execution_boundary": True,
+                "resident_supervision_lease_execution": safe_mode in {"resident_start", "resident_stop"},
                 "execution_authority": False,
                 "approval_decision_authority": False,
                 "local_process_launch_authority": False,
@@ -7715,23 +7821,53 @@ def execute_lens_host_supervision_once(
             },
         }
 
-    runner = _run_bounded_lens_host_supervision_once(run_seconds=safe_run_seconds)
+    runner = (
+        _run_bounded_lens_host_supervision_once(run_seconds=safe_run_seconds)
+        if safe_mode == "bounded_candidate"
+        else _run_lens_host_resident_supervision_action(mode=safe_mode)
+    )
     runner_ok = bool(runner.get("ok"))
     runner_payload = _as_dict(runner.get("runner"))
     post_manifest = lens_host_launch_manifest()
     post_supervision_gate = lens_host_supervision_gate(manifest=post_manifest)
     post_plan = lens_host_persistent_supervision_plan(manifest=post_manifest)
     runner_blockers = _str_list(runner.get("blockers"))
+    resident_runtime_supervised = (
+        runner_ok
+        and safe_mode == "resident_start"
+        and bool(runner_payload.get("resident_supervised_runtime"))
+        and bool(runner_payload.get("resident_host_process"))
+    )
+    resident_stop_observed = (
+        runner_ok
+        and safe_mode == "resident_stop"
+        and not bool(runner_payload.get("resident_supervised_runtime"))
+        and not bool(runner_payload.get("resident_host_process"))
+    )
+    if safe_mode == "resident_start":
+        status = "resident_supervision_started" if resident_runtime_supervised else "resident_supervision_start_failed"
+        next_gap = (
+            _safe_str(runner_payload.get("next_smallest_truthful_gap")).strip()
+            if resident_runtime_supervised
+            else "resident_host_process_not_supervised"
+        )
+    elif safe_mode == "resident_stop":
+        status = "resident_supervision_stopped" if resident_stop_observed else "resident_supervision_stop_incomplete"
+        next_gap = "resident_host_process_missing" if resident_stop_observed else "resident_host_process_not_supervised"
+    else:
+        status = (
+            "resident_candidate_supervised_not_persistent" if runner_ok else "resident_candidate_supervision_failed"
+        )
+        next_gap = "resident_supervision_not_persistent" if runner_ok else "resident_host_process_not_supervised"
     response: dict[str, Any] = {
         "ok": True,
         "applied": runner_ok,
         "executed": runner_ok,
         "kind": "lens.host.supervision.execution",
-        "status": "resident_candidate_supervised_not_persistent"
-        if runner_ok
-        else "resident_candidate_supervision_failed",
+        "status": status,
         "route": safe_route,
         "method": method,
+        "supervision_mode": safe_mode,
         "approval_id": safe_approval_id,
         "actor": _redact_free_text(actor),
         "reason": _redact_free_text(reason),
@@ -7747,13 +7883,13 @@ def execute_lens_host_supervision_once(
         "temporary_host_process_observed": runner_ok and bool(runner_payload.get("temporary_host_process_observed")),
         "resident_runtime_candidate_supervised": runner_ok
         and bool(runner_payload.get("resident_runtime_candidate_supervised")),
-        "resident_supervised_runtime": False,
+        "resident_host_process": runner_ok and bool(runner_payload.get("resident_host_process")),
+        "resident_supervised_runtime": resident_runtime_supervised,
         "resident_claim_allowed": False,
+        "stop_command": "scripts/lens-host-supervisor.ps1 -Mode StopResident" if resident_runtime_supervised else "",
         "post_supervision_gate": post_supervision_gate,
         "post_persistent_supervision_plan": post_plan,
-        "next_smallest_truthful_gap": "resident_supervision_not_persistent"
-        if runner_ok
-        else "resident_host_process_not_supervised",
+        "next_smallest_truthful_gap": next_gap,
         "blockers": _dedupe_strs(runner_blockers),
         "receipt_written": False,
         "receipt": {},
@@ -7765,13 +7901,14 @@ def execute_lens_host_supervision_once(
             ),
             "gate": "lens_host_supervision_execution",
             "execution_boundary": True,
-            "bounded_supervision_execution": True,
+            "bounded_supervision_execution": safe_mode == "bounded_candidate",
+            "resident_supervision_lease_execution": safe_mode in {"resident_start", "resident_stop"},
             "execution_authority": runner_ok,
             "approval_decision_authority": False,
-            "local_process_launch_authority": False,
-            "bounded_supervision_process_launch_authority": True,
+            "local_process_launch_authority": runner_ok and safe_mode == "resident_start",
+            "bounded_supervision_process_launch_authority": runner_ok and safe_mode == "bounded_candidate",
             "process_supervision_authority": True,
-            "process_restart_authority": True,
+            "process_restart_authority": safe_mode == "bounded_candidate",
             "service_install_authority": False,
             "service_control_authority": False,
             "tray_registration_authority": False,
@@ -7786,7 +7923,11 @@ def execute_lens_host_supervision_once(
             "persistent_resident_claim": False,
             "next_step": (
                 "review_resident_supervision_persistence_boundary"
-                if runner_ok
+                if runner_ok and safe_mode == "bounded_candidate"
+                else "continue_with_tray_hotkey_overlay_summon_prerequisites"
+                if resident_runtime_supervised
+                else "resident_supervision_stopped_verify_readback"
+                if resident_stop_observed
                 else "resolve_bounded_resident_supervision_execution_failure"
             ),
         },
