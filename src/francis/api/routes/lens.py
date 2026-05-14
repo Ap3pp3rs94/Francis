@@ -14,6 +14,7 @@ from francis.lens import (
     execute_lens_host_persistent_supervision_enablement,
     execute_lens_host_supervision_once,
     execute_lens_resident_runtime_activation,
+    execute_lens_os_binding,
     execute_lens_tray_presence,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
@@ -55,6 +56,7 @@ from francis.lens import (
     lens_os_binding_authority_request_contract,
     lens_os_binding_authority_request_readback,
     lens_os_binding_execution_denial_receipts,
+    lens_os_binding_execution_receipts,
     lens_os_binding_execution_readiness_audit,
     lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
@@ -203,7 +205,10 @@ class LensOsBindingAuthorityGrantIn(BaseModel):
 
 class LensOsBindingExecuteIn(BaseModel):
     actor: str | None = None
+    approval_id: str = ""
     reason: str = "attempt Lens OS-binding command palette execution"
+    mode: str = Field(default="bind")
+    run_seconds: int = Field(default=300, ge=0, le=3600)
 
 
 class LensTrayAuthorityRequestIn(BaseModel):
@@ -285,6 +290,15 @@ def os_binding_denials(
     return lens_os_binding_execution_denial_receipts(limit=limit, approval_id=approval_id, status=status)
 
 
+@router.get("/os-binding/executions")
+def os_binding_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_os_binding_execution_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
 @router.get("/os-binding/execution/readiness")
 def os_binding_execution_readiness(
     limit: int = Query(5, ge=1, le=50),
@@ -311,12 +325,23 @@ def os_binding_execute(
     request: Request,
     payload: LensOsBindingExecuteIn,
 ) -> dict[str, Any]:
-    return deny_lens_os_binding_execution(
+    if not payload.approval_id:
+        return deny_lens_os_binding_execution(
+            actor=payload.actor,
+            reason=payload.reason,
+            route=request.url.path,
+            method=request.method,
+            record_receipt=True,
+        )
+    return execute_lens_os_binding(
+        approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
         method=request.method,
         record_receipt=True,
+        mode=payload.mode,
+        run_seconds=payload.run_seconds,
     )
 
 

@@ -1171,6 +1171,249 @@ def test_lens_os_binding_authority_request_creates_approval_only_readback(
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 
+def test_lens_os_binding_execute_binds_governed_hotkey_lease(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.os_binding_authority as os_binding_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+
+    def fake_hotkey_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+        if mode == "stop":
+            runtime_root = data_root / "runtime" / "lens-hotkey"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            (runtime_root / "lens-hotkey.pid").unlink(missing_ok=True)
+            (runtime_root / "status.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "lens.hotkey.runtime_state",
+                        "status": "hotkey_stopped",
+                        "pid": pid,
+                        "global_hotkey": "Ctrl+Alt+Space",
+                        "binding_scope": "global",
+                        "hotkey_bound": False,
+                        "launch_on_hotkey": False,
+                        "updated_at": "2026-05-14T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return {
+                "ok": True,
+                "status": "stopped",
+                "returncode": 0,
+                "script_mode": "Stop",
+                "script": "scripts/lens-hotkey-binding.ps1",
+                "runner": {"ok": True, "status": "stopped", "ready": False},
+                "blockers": ["global_hotkey_binding_runtime_missing"],
+            }
+
+        _write_lens_hotkey_runtime_state(data_root, pid=pid)
+        return {
+            "ok": True,
+            "status": "started",
+            "returncode": 0,
+            "script_mode": "Start",
+            "script": "scripts/lens-hotkey-binding.ps1",
+            "runner": {
+                "ok": True,
+                "status": "started",
+                "ready": True,
+                "global_hotkey_binding": True,
+                "run_seconds": run_seconds,
+                "hotkey_runtime": {
+                    "ready": True,
+                    "hotkey_bound": True,
+                    "pid": pid,
+                    "launch_on_hotkey": False,
+                },
+                "governance": {
+                    "execution_authority": False,
+                    "hotkey_registration_authority": True,
+                    "local_process_launch_authority": True,
+                    "summon_authority": False,
+                    "overlay_control_authority": False,
+                    "memory_write": False,
+                },
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        os_binding_module,
+        "_run_lens_os_binding_hotkey_action",
+        fake_hotkey_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/os-binding/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants OS binding command palette authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved OS binding command palette authority",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    grant = client.post(
+        "/lens/os-binding/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants bounded OS binding authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["status"] == "authority_granted"
+    assert grant_body["os_level_command_palette_binding_authority"] is True
+    assert grant_body["hotkey_registration_authority"] is True
+    assert grant_body["local_process_launch_authority"] is True
+    assert grant_body["receipt_written"] is True
+    assert grant_body["governance"]["hotkey_registration_authority"] is True
+    assert grant_body["governance"]["local_process_launch_authority"] is True
+    assert grant_body["governance"]["summon_authority"] is False
+    assert grant_body["governance"]["overlay_control_authority"] is False
+    assert grant_body["governance"]["memory_write"] is False
+
+    started = client.post(
+        "/lens/os-binding/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "bind governed Lens global hotkey",
+            "mode": "bind",
+            "run_seconds": 60,
+        },
+    )
+    assert started.status_code == 200
+    started_body = started.json()
+    assert started_body["kind"] == "lens.os_binding.command_palette_binding.execution"
+    assert started_body["status"] == "global_hotkey_bound"
+    assert started_body["executed"] is True
+    assert started_body["mode"] == "bind"
+    assert started_body["global_hotkey_binding"] is True
+    assert started_body["hotkey_runtime_ready"] is True
+    assert started_body["hotkey_bound"] is True
+    assert started_body["hotkey_runtime_pid"] == pid
+    assert started_body["launch_on_hotkey"] is False
+    assert started_body["stop_command"] == "scripts/lens-hotkey-binding.ps1 -Mode Stop"
+    assert started_body["next_smallest_truthful_gap"] == "summon_binding"
+    assert started_body["governance"]["execution_authority"] is True
+    assert started_body["governance"]["hotkey_registration_authority"] is True
+    assert started_body["governance"]["local_process_launch_authority"] is True
+    assert started_body["governance"]["summon_authority"] is False
+    assert started_body["governance"]["overlay_control_authority"] is False
+    assert started_body["governance"]["memory_write"] is False
+    assert started_body["governance"]["resident_claim_authority"] is False
+    assert started_body["receipt_written"] is True
+    receipt = started_body["receipt"]
+    assert receipt["kind"] == "lens.os_binding.command_palette_binding.execution_receipt"
+    assert receipt["execution"]["mode"] == "bind"
+    assert receipt["execution"]["global_hotkey_binding"] is True
+    assert receipt["execution"]["hotkey_runtime_ready"] is True
+    assert receipt["execution"]["launch_on_hotkey"] is False
+
+    executions = client.get("/lens/os-binding/executions?limit=10")
+    assert executions.status_code == 200
+    executions_body = executions.json()
+    assert executions_body["kind"] == "lens.os_binding.command_palette_binding.execution_receipts"
+    assert executions_body["status"] == "readback_ready"
+    assert executions_body["total"] == 1
+    assert executions_body["latest_global_hotkey_binding"] is True
+    assert executions_body["latest_next_smallest_truthful_gap"] == "summon_binding"
+
+    readiness = client.get("/lens/os-binding/execution/readiness", params={"actor": "test.system.write"})
+    assert readiness.status_code == 200
+    readiness_body = readiness.json()
+    assert readiness_body["kind"] == "lens.os_binding.command_palette_binding.execution_readiness"
+    assert readiness_body["authority_granted"] is True
+    assert readiness_body["os_level_command_palette"] is True
+    assert "global_hotkey_binding" not in readiness_body["blocked_requirements"]
+    assert readiness_body["governance"]["hotkey_registration_authority"] is True
+    assert readiness_body["governance"]["local_process_launch_authority"] is True
+    assert readiness_body["governance"]["memory_write"] is False
+
+
+def test_lens_os_binding_execute_requires_active_grant(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/lens/os-binding/execute",
+        json={
+            "approval_id": "missing-grant",
+            "actor": "test.system.write",
+            "reason": "try to bind without an active grant",
+            "mode": "bind",
+            "run_seconds": 60,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.os_binding.command_palette_binding.execution_denial"
+    assert body["status"] == "blocked"
+    assert body["executed"] is False
+    assert body["receipt_written"] is False
+    assert "os_binding_authority_grant_not_active" in body["blockers"]
+    assert "hotkey_registration_authority_not_granted" in body["blockers"]
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["local_process_launch_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert not (data_root / "runtime" / "lens-hotkey" / "status.json").exists()
+
+
 def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

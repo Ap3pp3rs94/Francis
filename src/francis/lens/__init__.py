@@ -71,11 +71,13 @@ from francis.lens.host_runtime_plan import (
 )
 from francis.lens.os_binding_authority import (
     deny_lens_os_binding_execution,
+    execute_lens_os_binding,
     grant_lens_os_binding_authority,
     lens_os_binding_authority_grant_receipts,
     lens_os_binding_authority_request_contract,
     lens_os_binding_authority_request_readback,
     lens_os_binding_execution_denial_receipts,
+    lens_os_binding_execution_receipts,
     lens_os_binding_execution_readiness_audit,
     request_lens_os_binding_authority,
 )
@@ -151,11 +153,13 @@ __all__ = [
     "lens_host_supervision_gate",
     "lens_host_status",
     "deny_lens_os_binding_execution",
+    "execute_lens_os_binding",
     "grant_lens_os_binding_authority",
     "lens_os_binding_authority_grant_receipts",
     "lens_os_binding_authority_request_contract",
     "lens_os_binding_authority_request_readback",
     "lens_os_binding_execution_denial_receipts",
+    "lens_os_binding_execution_receipts",
     "lens_os_binding_execution_readiness_audit",
     "lens_os_binding_implementation_plan",
     "lens_os_binding_readiness",

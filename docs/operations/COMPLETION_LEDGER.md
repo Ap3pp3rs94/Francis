@@ -26552,6 +26552,48 @@ Latest validation for the governed tray-presence lease execution slice:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens governed OS-binding hotkey lease execution slice on `2026-05-14`:
+
+- Added a bounded OS-binding command-palette execution boundary. The existing
+  OS-binding authority grant now carries only the extra lease authorities needed
+  to register a global hotkey process and write its execution receipt:
+  `hotkey_registration_authority`, `local_process_launch_authority`, and
+  `receipt_write_authority`. It still grants no summon, overlay, tray,
+  approval-decision, memory-write, service-control, capture, or resident-claim
+  authority.
+- `/lens/os-binding/execute` can now consume an active approved OS-binding
+  authority grant and start or stop the existing
+  `scripts/lens-hotkey-binding.ps1` runtime through a bounded no-launch lease.
+  The execution writes a receipt/readback with the active grant, execution mode,
+  hotkey runtime state, stop command, and next truthful gap.
+- Added `/lens/os-binding/executions` readback for the hotkey execution
+  receipts. The execution-readiness audit now consumes live hotkey runtime
+  readback, so once a governed hotkey lease is live it no longer reports
+  `global_hotkey_binding` as the blocker.
+- This is a backend/API execution-path and authority change. It does not flip
+  the persistent summon config, does not open the UI, does not launch on hotkey,
+  does not enable summon-anywhere by itself, and does not close Stage 6.
+- Stage 6 remains active at 2/5 checkpoint criteria. This removes the
+  proof-layer stall around `global_hotkey_binding` by making that prerequisite
+  reachable through governed API/readback. The next smallest truthful gap is
+  the remaining summon/overlay binding chain needed before `summon_anywhere`
+  can be claimed.
+
+Latest validation for the governed OS-binding hotkey lease execution slice:
+
+- `python -m pytest tests\test_api_lens.py -k "os_binding" -q`
+  Result: `failed before fix` because the denial-receipts readback referenced
+  an execution-scope variable, then `passed` after correcting that readback.
+- `python -m pytest tests\test_api_lens.py tests\test_lens_hotkey_binding_script.py tests\test_lens_command_palette_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `failed before formatting src\francis\lens\os_binding_authority.py`,
+  then `passed` after formatting.
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
