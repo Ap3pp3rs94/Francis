@@ -258,10 +258,10 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     assert governance["execution_authority"] is False
     assert governance["approval_decision_authority"] is False
     assert governance["memory_write"] is False
-    assert governance["hotkey_registration_authority"] is False
+    assert governance["hotkey_registration_authority"] is True
     assert governance["summon_authority"] is False
     assert governance["overlay_control_authority"] is False
-    assert governance["local_process_launch_authority"] is False
+    assert governance["local_process_launch_authority"] is True
     assert governance["resident_claim_authority"] is False
     assert governance["mutation_authority_granted"] is False
 
@@ -405,18 +405,16 @@ def test_lens_os_binding_execution_readiness_carries_live_hotkey_runtime_without
     assert body["execution_ready"] is False
     requirements = {item["id"]: item for item in body["requirements"]}
     hotkey_requirement = requirements["global_hotkey_binding"]
-    assert hotkey_requirement["ready"] is False
+    assert hotkey_requirement["ready"] is True
     assert hotkey_requirement["runtime_ready"] is True
     assert hotkey_requirement["runtime_requirement_state"] == "bound"
     assert hotkey_requirement["runtime_blocker"] == ""
     assert hotkey_requirement["hotkey_runtime_readback"]["process_alive"] is True
     assert hotkey_requirement["hotkey_runtime_readback"]["hotkey_bound"] is True
-    assert "global_hotkey_binding_disabled" in hotkey_requirement["blockers"]
-    assert "global_hotkey_registration_disabled" in hotkey_requirement["blockers"]
-    assert "hotkey_registration_authority_not_granted" in hotkey_requirement["blockers"]
-    assert "global_hotkey_binding" in body["blocked_execution_prerequisites"]
+    assert hotkey_requirement["blockers"] == []
+    assert "global_hotkey_binding" not in body["blocked_execution_prerequisites"]
     assert body["execution_prerequisites_ready"] is False
-    assert body["os_level_command_palette"] is False
+    assert body["os_level_command_palette"] is True
     assert body["summon_anywhere"] is False
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["hotkey_registration_authority"] is False
@@ -545,15 +543,15 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert body["denial"]["would_decide_approval"] is False
     assert body["denial"]["would_claim_resident"] is False
     assert "os_binding_execution_boundary_not_implemented" in body["blockers"]
-    assert "hotkey_registration_authority_not_granted" in body["blockers"]
     assert "summon_authority_not_granted" in body["blockers"]
     assert body["governance"]["gate"] == "lens_os_binding_command_palette_execution_denial"
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["approval_decision_authority"] is False
     assert body["governance"]["memory_write"] is False
-    assert body["governance"]["hotkey_registration_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is True
     assert body["governance"]["summon_authority"] is False
     assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["local_process_launch_authority"] is True
     assert body["governance"]["resident_claim_authority"] is False
     assert body["governance"]["denial_receipt_write_authority"] is True
 
@@ -674,7 +672,8 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert readiness["governance"]["execution_authority"] is False
     assert readiness["governance"]["approval_decision_authority"] is False
     assert readiness["governance"]["memory_write"] is False
-    assert readiness["governance"]["hotkey_registration_authority"] is False
+    assert readiness["governance"]["hotkey_registration_authority"] is True
+    assert readiness["governance"]["local_process_launch_authority"] is True
     assert readiness["governance"]["summon_authority"] is False
     assert readiness["governance"]["denial_receipt_write_authority"] is False
     assert readiness["governance"]["mutation_authority_granted"] is False
