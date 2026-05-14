@@ -26213,6 +26213,30 @@ Latest validation for the summon action-gate preflight slice:
   Result: `passed with PowerShell line-ending normalization warning for
   scripts/lens-summon-preflight.ps1`
 
+Stage 6 CI pytest timeout containment slice on `2026-05-14`:
+
+- GitHub Actions run `25839579748` for commit `e39e06d7` remained pending after
+  Ubuntu 3.12, Ubuntu 3.13, and Windows 3.12 completed successfully. The only
+  remaining job was Windows 3.13 still inside the `Pytest` step.
+- `.github/workflows/ci.yml` now applies `timeout-minutes: 90` to the `Pytest`
+  step. This does not change Francis runtime behavior; it makes full-suite CI
+  fail cleanly if a future matrix job stalls instead of leaving the main branch
+  in an indefinite pending state.
+- This is CI validation containment only. It does not start a resident host,
+  enable persistent supervision, register tray or hotkeys, open overlay
+  windows, grant summon authority, decide approvals, write receipts or memory,
+  claim resident presence, or close Stage 6.
+- Stage 6 remains active. The next roadmap movement remains real
+  summon/hotkey execution-readiness under explicit authority, unless CI exposes
+  another focused regression.
+
+Latest validation for the CI pytest timeout containment slice:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

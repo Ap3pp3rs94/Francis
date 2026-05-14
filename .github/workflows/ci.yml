@@ -42,4 +42,5 @@ jobs:
         run: uv run -m mypy src
 
       - name: Pytest
+        timeout-minutes: 90
         run: uv run -m pytest -q
