@@ -653,9 +653,55 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
+$ActionMode = $Mode.ToLowerInvariant()
+$RequiredAuthorities = [string[]]@(
+  'summon_authority',
+  'hotkey_registration_authority',
+  'overlay_control_authority',
+  'local_process_launch_authority'
+)
+$MissingAuthorities = [string[]]@(Select-AuthorityBlockers -Blockers $BlockerArray)
+$ActionGate = [ordered]@{
+  action = $ActionMode
+  status = if ($Ready) { 'ready_for_execution' } else { 'blocked' }
+  policy_gate = 'lens_summon_preflight'
+  execution_handoff = 'scripts/lens-hotkey-binding.ps1 -Mode Start'
+  required_before_enable_ready = [bool]$Payload.required_before_enable_ready
+  missing_required_before_enable = [string[]]@($MissingRequiredBeforeEnable)
+  first_missing_required_before_enable = $FirstMissingRequiredBeforeEnable
+  first_missing_requirement_handoff = $FirstMissingRequirementHandoff
+  required_authorities = $RequiredAuthorities
+  missing_authorities = $MissingAuthorities
+  blocker_groups = $BlockerGroups
+  blockers = $BlockerArray
+  binding_execution_attempted = $false
+  launch_execution_attempted = $false
+  would_register_hotkey = $Ready -and $Mode -eq 'Bind'
+  would_summon = $Ready -and $Mode -eq 'Launch'
+  would_launch_process = $Ready -and $Mode -eq 'Launch'
+  would_open_overlay = $Ready -and $Mode -eq 'Launch'
+  would_write_memory = $false
+  would_decide_approval = $false
+  mutation_authority_granted = $false
+}
+
+$Payload.action_gate = $ActionGate
+$Payload.binding_execution_attempted = $false
+$Payload.launch_execution_attempted = $false
+$Payload.governance.read_only_contract = $false
+$Payload.governance.action_request_gated = $true
+$Payload.governance.summon_action_authorized = $Ready
+if ($Ready) {
+  $Payload.status = 'ready_for_execution'
+  $Payload.error = ''
+  $Payload.message = 'Lens summon action passed preflight and is ready for the bounded hotkey-binding handoff; no binding or launch was executed by this preflight.'
+  $Payload | ConvertTo-Json -Depth 10
+  exit 0
+}
+
 $Payload.ok = $false
-$Payload.status = 'refused'
-$Payload.error = 'lens_summon_action_not_authorized'
-$Payload.message = 'Lens summon actions are not authorized by this preflight; use Status for read-only inspection.'
+$Payload.status = 'blocked'
+$Payload.error = "lens_summon_${ActionMode}_blocked_by_preflight"
+$Payload.message = "Lens summon $ActionMode is blocked by preflight; no binding or launch was attempted."
 $Payload | ConvertTo-Json -Depth 8
 exit 2

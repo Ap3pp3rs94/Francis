@@ -221,8 +221,49 @@ def test_lens_summon_preflight_refuses_bind_actions() -> None:
     assert proc.returncode == 2
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.summon.preflight"
-    assert payload["status"] == "refused"
+    assert payload["status"] == "blocked"
     assert payload["ok"] is False
-    assert payload["error"] == "lens_summon_action_not_authorized"
+    assert payload["error"] == "lens_summon_bind_blocked_by_preflight"
+    assert payload["binding_execution_attempted"] is False
+    assert payload["launch_execution_attempted"] is False
+    action_gate = payload["action_gate"]
+    assert action_gate["action"] == "bind"
+    assert action_gate["status"] == "blocked"
+    assert action_gate["policy_gate"] == "lens_summon_preflight"
+    assert action_gate["execution_handoff"] == "scripts/lens-hotkey-binding.ps1 -Mode Start"
+    assert action_gate["required_before_enable_ready"] is False
+    assert action_gate["missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+    ]
+    assert action_gate["first_missing_required_before_enable"] == "resident_host_process"
+    assert action_gate["first_missing_requirement_handoff"]["id"] == "resident_host_process"
+    assert action_gate["first_missing_requirement_handoff"]["blocker"] == "resident_host_process_missing"
+    assert action_gate["required_authorities"] == [
+        "summon_authority",
+        "hotkey_registration_authority",
+        "overlay_control_authority",
+        "local_process_launch_authority",
+    ]
+    assert action_gate["missing_authorities"] == [
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+        "local_process_launch_authority_not_granted",
+    ]
+    assert action_gate["binding_execution_attempted"] is False
+    assert action_gate["launch_execution_attempted"] is False
+    assert action_gate["would_register_hotkey"] is False
+    assert action_gate["would_summon"] is False
+    assert action_gate["would_launch_process"] is False
+    assert action_gate["would_open_overlay"] is False
+    assert action_gate["would_write_memory"] is False
+    assert action_gate["would_decide_approval"] is False
+    assert action_gate["mutation_authority_granted"] is False
     assert payload["governance"]["hotkey_registration_authority"] is False
     assert payload["governance"]["summon_authority"] is False
+    assert payload["governance"]["action_request_gated"] is True
+    assert payload["governance"]["summon_action_authorized"] is False

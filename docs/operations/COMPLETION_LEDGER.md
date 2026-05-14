@@ -26177,6 +26177,42 @@ Latest validation for the live-operator optional-blocker stabilization:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens summon action-gate preflight slice on `2026-05-14`:
+
+- `scripts/lens-summon-preflight.ps1 -Mode Bind` and `-Mode Launch` now return
+  a structured `action_gate` instead of a generic refusal. The gate reports the
+  required prerequisite families, the first missing prerequisite handoff, the
+  required authorities, and the exact missing authority blockers before any
+  future bounded hotkey-binding or launch handoff can execute.
+- The default repo state remains blocked. `config/runtime/lens/summon.json`
+  still keeps `binding_enabled`, `register_hotkey`, `summon_authority`,
+  `hotkey_registration_authority`, `overlay_control_authority`, and
+  `local_process_launch_authority` false. The action gate therefore reports no
+  binding execution, no launch execution, no hotkey registration, no overlay
+  open, no approval decision, and no memory write.
+- This is a gated action-readiness contract, not a Stage 6 completion claim. It
+  does not grant summon authority, register a global hotkey, open Lens, start a
+  resident host, enable persistent supervision, control a service, register tray
+  presence, write receipts or memory, decide approvals, claim resident presence,
+  or close Stage 6.
+- Stage 6 remains active. The next real movement is still to turn the guarded
+  summon/hotkey path into a verified bounded runtime under explicit authority
+  while preserving the existing prerequisite and resident-claim boundaries.
+
+Latest validation for the summon action-gate preflight slice:
+
+- `python -m pytest tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_preflight_script.py tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for
+  scripts/lens-summon-preflight.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
