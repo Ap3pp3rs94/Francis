@@ -26348,6 +26348,43 @@ Latest validation for the CI pytest progress visibility slice:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens hotkey runtime config-gate slice on `2026-05-14`:
+
+- `scripts/lens-hotkey-binding.ps1 -Mode Start` and direct `-Mode Run` now
+  refuse before registering a global hotkey unless the summon config grants the
+  required binding flags and hotkey-registration authority. Launch-on-hotkey
+  additionally requires summon, overlay-control, and local-process-launch
+  authority.
+- The refusal receipt reports `blocked_by_config`, the active blockers,
+  required authorities, missing authorities, `would_register_hotkey = false`,
+  `would_launch_process = false`, and keeps mutation authority false. The
+  default checked-in `config/runtime/lens/summon.json` remains blocked.
+- This closes a lower-level bypass around the guarded summon action wrapper. It
+  does not enable default hotkey registration, launch Lens, open an overlay,
+  register tray presence, start persistent supervision, decide approvals, write
+  receipts or memory, claim resident presence, or close Stage 6.
+- Stage 6 remains active. The next roadmap movement remains a truthful
+  summon-anywhere prerequisite under explicit authority: prove bounded hotkey
+  runtime readiness only through the guarded action path, or move to tray/overlay
+  prerequisite gates if the hotkey path is blocked by environment support.
+
+Latest validation for the hotkey runtime config-gate slice:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_hotkey_binding_script.py tests\test_lens_summon_action_script.py tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for
+  scripts/lens-hotkey-binding.ps1`
+- GitHub Actions run `25848182197` for commit `1399b672`
+  (`ci(lens): surface pytest progress in actions`) passed all matrix jobs before
+  this slice was committed.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

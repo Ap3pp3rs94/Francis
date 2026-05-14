@@ -133,11 +133,55 @@ function Get-HotkeyConfig {
   $Config = Read-JsonFile -Path $ConfigPath
   return [ordered]@{
     path = $ConfigPath
+    exists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
     payload = $Config
     global_hotkey = Get-StringProperty -Payload $Config -Name 'global_hotkey' -Default 'Ctrl+Alt+Space'
     binding_scope = Get-StringProperty -Payload $Config -Name 'binding_scope' -Default 'global'
     summon_runner = Get-StringProperty -Payload $Config -Name 'summon_runner' -Default 'scripts/lens-summon.ps1'
+    blocked_reason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
+    binding_enabled = Get-BoolProperty -Payload $Config -Name 'binding_enabled' -Default $false
+    register_hotkey = Get-BoolProperty -Payload $Config -Name 'register_hotkey' -Default $false
+    summon_authority = Get-BoolProperty -Payload $Config -Name 'summon_authority' -Default $false
+    hotkey_registration_authority = Get-BoolProperty -Payload $Config -Name 'hotkey_registration_authority' -Default $false
+    overlay_control_authority = Get-BoolProperty -Payload $Config -Name 'overlay_control_authority' -Default $false
+    local_process_launch_authority = Get-BoolProperty -Payload $Config -Name 'local_process_launch_authority' -Default $false
   }
+}
+
+function Get-HotkeyStartBlockers {
+  param(
+    [object]$Config,
+    [bool]$LaunchOnHotkey
+  )
+
+  $Blockers = [System.Collections.ArrayList]::new()
+  if (-not [bool]$Config.exists) {
+    [void]$Blockers.Add('lens_summon_config_missing')
+  }
+  if (-not [string]::IsNullOrWhiteSpace([string]$Config.blocked_reason)) {
+    [void]$Blockers.Add([string]$Config.blocked_reason)
+  }
+  if (-not [bool]$Config.binding_enabled) {
+    [void]$Blockers.Add('global_hotkey_binding_disabled')
+  }
+  if (-not [bool]$Config.register_hotkey) {
+    [void]$Blockers.Add('global_hotkey_registration_disabled')
+  }
+  if (-not [bool]$Config.hotkey_registration_authority) {
+    [void]$Blockers.Add('hotkey_registration_authority_not_granted')
+  }
+  if ($LaunchOnHotkey) {
+    if (-not [bool]$Config.summon_authority) {
+      [void]$Blockers.Add('summon_authority_not_granted')
+    }
+    if (-not [bool]$Config.overlay_control_authority) {
+      [void]$Blockers.Add('overlay_control_authority_not_granted')
+    }
+    if (-not [bool]$Config.local_process_launch_authority) {
+      [void]$Blockers.Add('local_process_launch_authority_not_granted')
+    }
+  }
+  return [string[]]@($Blockers.ToArray())
 }
 
 function Write-HotkeyState {
@@ -334,6 +378,43 @@ public sealed class FrancisLensHotkeyWindow : NativeWindow {
 $DataRoot = Get-DataRoot -Override $DataDir
 $ModeName = $Mode.ToLowerInvariant()
 $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+$LaunchOnHotkey = -not [bool]$NoLaunch
+$ConfigForAction = Get-HotkeyConfig
+$StartBlockers = if ($Mode -eq 'Start' -or $Mode -eq 'Run') {
+  Get-HotkeyStartBlockers -Config $ConfigForAction -LaunchOnHotkey $LaunchOnHotkey
+} else {
+  [string[]]@()
+}
+
+if (@($StartBlockers).Count -gt 0) {
+  $RequiredAuthorities = [string[]]@('hotkey_registration_authority')
+  if ($LaunchOnHotkey) {
+    $RequiredAuthorities = [string[]]@(
+      'hotkey_registration_authority',
+      'summon_authority',
+      'overlay_control_authority',
+      'local_process_launch_authority'
+    )
+  }
+  $MissingAuthorities = [string[]]@(
+    $StartBlockers | Where-Object { [string]$_ -like '*_authority_not_granted' }
+  )
+  $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'blocked_by_config'
+  $Payload.ok = $false
+  $Payload.error = "lens_hotkey_binding_${ModeName}_blocked_by_config"
+  $Payload.config_path = [string]$ConfigForAction.path
+  $Payload.blockers = [string[]]@($StartBlockers)
+  $Payload.required_authorities = $RequiredAuthorities
+  $Payload.missing_authorities = $MissingAuthorities
+  $Payload.would_register_hotkey = $false
+  $Payload.would_launch_process = $false
+  $Payload.governance.hotkey_registration_authority = $false
+  $Payload.governance.local_process_launch_authority = $false
+  $Payload.governance.mutation_authority_granted = $false
+  $Payload.message = 'Lens global hotkey binding start is blocked by summon config; no hotkey registration or launch runtime was attempted.'
+  $Payload | ConvertTo-Json -Depth 8
+  exit 2
+}
 
 if ($Mode -eq 'Run') {
   $RuntimeRoot = Join-Path $DataRoot 'runtime\lens-hotkey'
@@ -342,7 +423,6 @@ if ($Mode -eq 'Run') {
   $Timer = $null
   $Registered = $false
   $PressCount = 0
-  $LaunchOnHotkey = -not [bool]$NoLaunch
   $Failed = $false
   try {
     if (-not $RunningOnWindows) {

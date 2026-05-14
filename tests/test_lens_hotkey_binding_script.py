@@ -101,3 +101,64 @@ def test_lens_hotkey_binding_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["governance"]["read_only_contract"] is True
     assert payload["governance"]["hotkey_registration_authority"] is False
     assert payload["governance"]["local_process_launch_authority"] is False
+
+
+def test_lens_hotkey_binding_start_refuses_default_blocked_config(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    proc = _run_hotkey_binding(
+        "-Mode",
+        "Start",
+        "-DataDir",
+        str(data_dir),
+        "-StartupTimeoutSeconds",
+        "1",
+        "-RunSeconds",
+        "1",
+        "-NoLaunch",
+    )
+
+    assert proc.returncode == 2, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.hotkey.binding.runtime"
+    assert payload["status"] == "blocked_by_config"
+    assert payload["ok"] is False
+    assert payload["ready"] is False
+    assert payload["global_hotkey_binding"] is False
+    assert payload["error"] == "lens_hotkey_binding_start_blocked_by_config"
+    assert "lens_summon_binding_disabled_pending_authority" in payload["blockers"]
+    assert "global_hotkey_binding_disabled" in payload["blockers"]
+    assert "global_hotkey_registration_disabled" in payload["blockers"]
+    assert "hotkey_registration_authority_not_granted" in payload["blockers"]
+    assert payload["required_authorities"] == ["hotkey_registration_authority"]
+    assert payload["missing_authorities"] == ["hotkey_registration_authority_not_granted"]
+    assert payload["would_register_hotkey"] is False
+    assert payload["would_launch_process"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+    assert not (data_dir / "runtime" / "lens-hotkey" / "lens-hotkey.pid").exists()
+
+
+def test_lens_hotkey_binding_run_refuses_default_blocked_config(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    proc = _run_hotkey_binding(
+        "-Mode",
+        "Run",
+        "-DataDir",
+        str(data_dir),
+        "-RunSeconds",
+        "1",
+        "-NoLaunch",
+    )
+
+    assert proc.returncode == 2, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked_by_config"
+    assert payload["error"] == "lens_hotkey_binding_run_blocked_by_config"
+    assert payload["global_hotkey_binding"] is False
+    assert "hotkey_registration_authority_not_granted" in payload["blockers"]
+    assert payload["would_register_hotkey"] is False
+    assert payload["would_launch_process"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+    assert not (data_dir / "runtime" / "lens-hotkey" / "lens-hotkey.pid").exists()
