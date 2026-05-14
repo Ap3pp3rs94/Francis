@@ -26738,6 +26738,40 @@ child-runner correction:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens resident-host runtime-boundary proof child-runner correction on
+`2026-05-14`:
+
+- Updated `scripts/lens-resident-host-runtime-boundary-proof.ps1` to accept
+  `-ChildProofTimeoutSeconds` and run its child proof scripts through a bounded
+  process wrapper with asynchronous stdout/stderr draining.
+- The proof still reports
+  `next_smallest_truthful_gap=resident_host_process_not_supervised` and
+  recommends
+  `scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`.
+  The correction prevents child JSON output or child process stalls from
+  blocking the parent proof indefinitely.
+- The focused pytest now has an outer timeout and passes the child timeout
+  explicitly. This is a validation-harness reliability improvement only; it
+  does not grant product/API launch, process supervision, service control,
+  memory, receipt, resident-claim, or mutation authority. Stage 6 remains active
+  at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 resident-host runtime-boundary child-runner
+correction:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds 2 -ChildProofTimeoutSeconds 180`
+  Result: `passed`; emitted `proof_passed`,
+  `next_smallest_truthful_gap=resident_host_process_not_supervised`, and
+  `side_effects_bounded=true`.
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

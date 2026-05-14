@@ -34,6 +34,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
+        timeout=210,
     )
 
 
@@ -47,6 +48,8 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
         "3",
         "-ResidentCandidateRunSeconds",
         "2",
+        "-ChildProofTimeoutSeconds",
+        "180",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -171,6 +174,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
         "bounded_local_process_launch": True,
         "bounded_process_launch": True,
         "bounded_resident_candidate_launch": True,
+        "child_proof_timeout_seconds": 180,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,

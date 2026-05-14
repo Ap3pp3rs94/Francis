@@ -10,7 +10,10 @@ param(
   [int]$HostLaunchRunSeconds = 3,
 
   [ValidateRange(2, 30)]
-  [int]$ResidentCandidateRunSeconds = 3
+  [int]$ResidentCandidateRunSeconds = 3,
+
+  [ValidateRange(30, 240)]
+  [int]$ChildProofTimeoutSeconds = 180
 )
 
 Set-StrictMode -Version 2
@@ -91,6 +94,32 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-JsonScript {
   param(
     [Parameter(Mandatory = $true)]
@@ -99,7 +128,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -107,16 +138,98 @@ function Invoke-JsonScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = ''
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
+      parse_error = 'missing_powershell_or_script'
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
-  $Payload = $null
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = (@(
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      $ScriptPath
+    ) + @($ScriptArgs) | ForEach-Object { Quote-ProcessArgument -Value $_ }) -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
   try {
-    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+    $Started = $Process.Start()
   } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      parse_error = ''
+    }
+  }
+
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_start_returned_false'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      parse_error = ''
+    }
+  }
+
+  $StdOutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StdErrTask = $Process.StandardError.ReadToEndAsync()
+  $TimedOut = $false
+  if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+    $TimedOut = $true
+    Stop-ProcessTree -Process $Process
+    try {
+      $Process.WaitForExit(5000) | Out-Null
+    } catch {
+    }
+  }
+  $Timer.Stop()
+  try {
+    $StdOut = [string]$StdOutTask.GetAwaiter().GetResult()
+  } catch {
+    $StdOut = ''
+  }
+  try {
+    $StdErr = [string]$StdErrTask.GetAwaiter().GetResult()
+  } catch {
+    $StdErr = ''
+  }
+  $Text = if ([string]::IsNullOrWhiteSpace($StdErr)) {
+    $StdOut
+  } elseif ([string]::IsNullOrWhiteSpace($StdOut)) {
+    $StdErr
+  } else {
+    $StdOut.TrimEnd() + "`n" + $StdErr
+  }
+  $ExitCode = if ($TimedOut) { 124 } else { [int]$Process.ExitCode }
+  $Payload = $null
+  $ParseError = ''
+  try {
+    $Payload = $StdOut | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $ParseError = [string]$_.Exception.Message
     $Payload = $null
   }
 
@@ -124,6 +237,11 @@ function Invoke-JsonScript {
     exit_code = $ExitCode
     payload = $Payload
     output = $Text
+    error = $StdErr
+    timed_out = $TimedOut
+    timeout_seconds = $TimeoutSeconds
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+    parse_error = $ParseError
   }
 }
 
@@ -408,6 +526,7 @@ $Payload = [ordered]@{
     bounded_local_process_launch = $true
     bounded_process_launch = $true
     bounded_resident_candidate_launch = $ResidentCandidateObserved
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     temporary_runtime_state_write = $true
     product_execution_authority = $false
     execution_authority = $false
