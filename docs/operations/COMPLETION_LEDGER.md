@@ -26594,6 +26594,32 @@ Latest validation for the governed OS-binding hotkey lease execution slice:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens CI pytest hang diagnostic guard on `2026-05-14`:
+
+- GitHub Actions run `25870256314` for the governed OS-binding hotkey lease
+  follow-up remained in progress across all four matrix jobs after setup,
+  install, Ruff, format, and mypy had already passed, with every job blocked in
+  the pytest step and no in-progress job logs available from GitHub.
+- Added a pytest faulthandler guard so any single test running longer than 180
+  seconds dumps all thread stacks and exits the test process. This changes
+  validation diagnostics only; it does not change Francis runtime behavior,
+  Stage 6 authority, execution, approval, memory, UI, telemetry, or promotion
+  behavior.
+- Reduced the GitHub Actions pytest step timeout from 90 minutes to 60 minutes.
+  The repo has repeatedly shown normal CI completion well below that window,
+  while 45+ minute pytest runs are treated as hang candidates that should
+  return actionable evidence instead of silently blocking continuation.
+- Focused timing-sensitive Lens proof tests passed locally under the new pytest
+  configuration. The previous in-progress CI run remains a validation follow-up,
+  not a Stage 6 completion signal.
+
+Latest validation for the CI pytest hang diagnostic guard:
+
+- `python -m pytest tests\test_lens_host_supervisor_observation_proof_script.py tests\test_lens_resident_overlay_runtime_proof_script.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
