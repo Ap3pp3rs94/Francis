@@ -119,6 +119,8 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
 
     child_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_runs) == {"resident_host_runtime_boundary", "route_readback"}
+    assert child_runs["resident_host_runtime_boundary"]["timeout_seconds"] == 180
+    assert child_runs["route_readback"]["timeout_seconds"] == 60
     for run in child_runs.values():
         assert run["exit_code"] == 0
         assert run["timed_out"] is False
@@ -143,6 +145,7 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
         "wraps_resident_host_runtime_boundary_proof": True,
         "wraps_persistent_supervision_plan_route": True,
         "wraps_persistent_supervision_enablement_route": True,
+        "child_proof_timeout_seconds": 180,
         "bounded_local_process_launch": True,
         "bounded_process_launch": True,
         "temporary_runtime_state_write": True,

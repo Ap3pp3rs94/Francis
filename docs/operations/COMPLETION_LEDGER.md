@@ -26805,6 +26805,40 @@ contract tightening:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens resident-supervision persistence proof timeout contract tightening
+on `2026-05-14`:
+
+- Updated `scripts/lens-resident-supervision-persistence-boundary-proof.ps1` so
+  its governance payload includes the active `child_proof_timeout_seconds`
+  value used for the resident-host runtime-boundary child proof.
+- Strengthened the focused persistence proof test to assert the expected child
+  timeout values: 180 seconds for the resident-host runtime boundary child proof
+  and 60 seconds for the route-readback child process.
+- The proof still reports
+  `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+  after proving a fresh resident candidate is observed but not persistent, and
+  still recommends the persistent-supervision enablement authority proof. This
+  is a proof-contract reliability correction only; it does not grant product
+  execution, persistent supervision, service control, memory, receipt,
+  resident-claim, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 resident-supervision persistence timeout
+contract tightening:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status -DataDir "$env:TEMP\francis-resident-persistence-proof-manual" -ChildProofTimeoutSeconds 180`
+  Result: `passed`; emitted `proof_passed`,
+  `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`,
+  and `side_effects_bounded=true`.
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

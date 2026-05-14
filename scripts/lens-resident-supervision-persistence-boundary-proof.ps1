@@ -595,6 +595,7 @@ $Payload = [ordered]@{
     wraps_resident_host_runtime_boundary_proof = $true
     wraps_persistent_supervision_plan_route = $true
     wraps_persistent_supervision_enablement_route = $true
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     bounded_local_process_launch = $true
     bounded_process_launch = $true
     temporary_runtime_state_write = $true
