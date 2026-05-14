@@ -26911,6 +26911,30 @@ outer-timeout stabilization:
 - `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q`
   Result: `passed`
 
+Stage 6 Lens resident-session runtime-state readback stabilization on
+`2026-05-14`:
+
+- Updated `scripts\lens-resident-session.ps1` so runtime-state JSON readback
+  retries briefly before reporting the leased resident host as missing.
+- This addresses a Windows 3.13 CI failure where the resident session start
+  returned `resident_session_started`, but an immediate status readback observed
+  `missing` while the resident host was replacing `status.json`.
+- This is readback-race stabilization only. It does not change resident lease
+  length, startup criteria, stop behavior, process launch scope, process
+  supervision, service control, tray, hotkey, overlay, summon, approval,
+  receipt, memory, resident-claim, or mutation authority. Stage 6 remains active
+  at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 resident-session runtime-state readback
+stabilization:
+
+- `python -m pytest tests\test_lens_resident_session_script.py::test_lens_resident_session_starts_and_stops_leased_host -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_session_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_session_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

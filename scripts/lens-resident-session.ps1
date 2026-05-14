@@ -30,16 +30,33 @@ function Get-DataRoot {
 }
 
 function Read-JsonFile {
-  param([string]$Path)
+  param(
+    [string]$Path,
+    [int]$Attempts = 1,
+    [int]$DelayMilliseconds = 50
+  )
 
-  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    return $null
+  $Attempt = 0
+  while ($Attempt -lt $Attempts) {
+    $Attempt += 1
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+      if ($Attempt -lt $Attempts) {
+        Start-Sleep -Milliseconds $DelayMilliseconds
+        continue
+      }
+      return $null
+    }
+    try {
+      return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      if ($Attempt -lt $Attempts) {
+        Start-Sleep -Milliseconds $DelayMilliseconds
+        continue
+      }
+      return $null
+    }
   }
-  try {
-    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-  } catch {
-    return $null
-  }
+  return $null
 }
 
 function Write-JsonFile {
@@ -149,7 +166,7 @@ function Get-ResidentState {
     [string]$PidPath
   )
 
-  $StatePayload = Read-JsonFile -Path $StatePath
+  $StatePayload = Read-JsonFile -Path $StatePath -Attempts 10 -DelayMilliseconds 50
   $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
   $PidValue = Get-PidValue -Path $PidPath
   $StateKind = [string](Get-PropertyValue -Payload $StatePayload -Name 'kind' -Default '')
