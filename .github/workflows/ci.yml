@@ -43,4 +43,4 @@ jobs:
 
       - name: Pytest
         timeout-minutes: 90
-        run: uv run -m pytest -q
+        run: uv run -m pytest -vv --durations=25 --durations-min=1

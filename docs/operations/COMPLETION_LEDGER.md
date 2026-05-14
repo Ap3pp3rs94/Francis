@@ -26321,6 +26321,33 @@ Latest validation for the summon ready-handoff proof slice:
   exceeded the expected slice validation window without output; not counted as
   passed`
 
+Stage 6 CI pytest progress visibility slice on `2026-05-14`:
+
+- GitHub Actions run `25846763777` for commit `f415c711` remained in the
+  `Pytest` step across all four matrix jobs after the normal early CI window.
+  Locally, `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  did pass after several minutes, showing that at least one Stage 6 proof path
+  can look silent without being failed.
+- `.github/workflows/ci.yml` now runs full-suite pytest as
+  `uv run -m pytest -vv --durations=25 --durations-min=1` while keeping the
+  existing `timeout-minutes: 90` containment. This does not select different
+  tests or weaken validation; it makes CI logs show per-test progress and the
+  slowest tests so future stuck runs expose the exact active test instead of a
+  silent `Pytest` step.
+- This is CI observability only. It does not change Francis runtime behavior,
+  grant summon/hotkey/tray/overlay/resident authority, enable persistent
+  supervision, open Lens, write memory, decide approvals, or close Stage 6.
+- Stage 6 remains active. The next action is to inspect the new CI run's
+  verbose pytest output if CI still stalls, or return to the smallest
+  Stage 6 summon/hotkey/resident readiness blocker if CI passes.
+
+Latest validation for the CI pytest progress visibility slice:
+
+- `python -c "import pathlib, yaml; data=yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text()); assert data['jobs']['test']['steps'][-1]['run'] == 'uv run -m pytest -vv --durations=25 --durations-min=1'; print(data['jobs']['test']['steps'][-1]['run'])"`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
