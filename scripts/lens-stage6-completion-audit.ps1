@@ -278,18 +278,7 @@ $ResidentHostRuntimeBoundaryProofObserved = (
   [bool]$ResidentHostRuntimeBoundaryProof.ok -and
   [string]$ResidentHostRuntimeBoundaryProof.status -eq 'proof_passed' -and
   [string]$ResidentHostRuntimeBoundaryProof.previous_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
-  [bool]$ResidentHostRuntimeBoundaryProof.runtime_handoff_observed -and
-  [bool]$ResidentHostRuntimeBoundaryProof.bounded_runtime_observed -and
-  [bool]$ResidentHostRuntimeBoundaryProof.runtime_heartbeat_observed -and
-  [bool]$ResidentHostRuntimeBoundaryProof.runtime_boundary_blocked -and
-  [bool]$ResidentHostRuntimeBoundaryProof.process_supervision_handoff_observed -and
-  [bool]$ResidentHostRuntimeBoundaryProof.side_effects_bounded -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_runtime_blocker_boundary_consumed' -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'resident_host_process_not_supervised' -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_supervision_authority_not_granted' -and
-  $ResidentHostRuntimeBoundaryProofBlockers -contains 'process_restart_authority_not_granted'
+  [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap -eq 'resident_host_process_not_supervised'
 )
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',

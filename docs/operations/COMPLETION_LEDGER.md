@@ -26431,6 +26431,42 @@ Latest validation for the checkpoint proof-window reuse slice:
   scripts/lens-resident-overlay-runtime-proof.ps1, and
   scripts/lens-resident-overlay-activation-boundary-proof.ps1`
 
+Stage 6 Lens completion-audit child receipt consumption slice on `2026-05-14`:
+
+- GitHub Actions run `25854971631` for commit `5d614161` showed that the prior
+  checkpoint timeout was resolved: the Windows 3.13 checkpoint test completed
+  in about 153 seconds. The remaining Windows 3.13 failure moved to
+  `tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority`,
+  where the completion audit expected the resident-host runtime boundary to be
+  observed even though the child resident-host runtime boundary proof owns that
+  detailed contract.
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the child
+  `lens.resident_host.runtime_blocker_boundary.proof` receipt by checking its
+  exit code, kind, `ok`, `proof_passed` status, and handoff transition. It no
+  longer duplicates the child proof's internal blocker and heartbeat assertions
+  inside the audit aggregation boolean.
+- This is audit aggregation stabilization only. It does not enable persistent
+  supervision, tray, global hotkey, summon, overlay, resident claim, approval
+  decisions, receipt/memory writes, or Stage 6 closure.
+- Stage 6 remains active at 2/5 checkpoint criteria. The next real roadmap
+  movement remains resolving one actual blocked prerequisite, with persistent
+  supervision prerequisites currently named by the completion audit as the next
+  smallest truthful gap.
+
+Latest validation for the completion-audit child receipt consumption slice:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_runtime_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with PowerShell line-ending normalization warning for
+  scripts/lens-stage6-completion-audit.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
