@@ -14,12 +14,14 @@ from francis.lens import (
     execute_lens_host_persistent_supervision_enablement,
     execute_lens_host_supervision_once,
     execute_lens_resident_runtime_activation,
+    execute_lens_tray_presence,
     grant_lens_os_binding_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
     grant_lens_host_supervision_authority,
+    grant_lens_tray_authority,
     lens_host_activation_denial_receipts,
     lens_host_activation_execution_receipts,
     lens_host_activation_authority_grant_receipts,
@@ -70,13 +72,18 @@ from francis.lens import (
     lens_resident_surface_readback,
     lens_status,
     lens_summon_enablement_gate,
+    lens_tray_authority_grant_receipts,
+    lens_tray_authority_request_contract,
+    lens_tray_authority_request_readback,
     lens_tray_enablement_gate,
+    lens_tray_presence_execution_receipts,
     request_lens_host_activation,
     request_lens_host_persistent_supervision_enablement_execution_authority,
     request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
     request_lens_os_binding_authority,
     request_lens_resident_runtime_execution_authority,
+    request_lens_tray_authority,
 )
 
 router = APIRouter()
@@ -199,6 +206,26 @@ class LensOsBindingExecuteIn(BaseModel):
     reason: str = "attempt Lens OS-binding command palette execution"
 
 
+class LensTrayAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens tray presence authority review"
+
+
+class LensTrayAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens tray presence authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class LensTrayExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens tray presence execution"
+    mode: str = Field(default="start")
+    run_seconds: int = Field(default=300, ge=0, le=3600)
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -319,6 +346,86 @@ def summon() -> dict[str, Any]:
 @router.get("/tray")
 def tray() -> dict[str, Any]:
     return lens_tray_enablement_gate()
+
+
+@router.get("/tray/authority")
+def tray_authority() -> dict[str, Any]:
+    return lens_tray_authority_request_contract()
+
+
+@router.get("/tray/authority/requests")
+def tray_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_tray_authority_request_readback(limit=limit)
+
+
+@router.get("/tray/authority/grants")
+def tray_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_tray_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.get("/tray/executions")
+def tray_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_tray_presence_execution_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
+@router.post("/tray/authority/request")
+def tray_authority_request(
+    request: Request,
+    payload: LensTrayAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_tray_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.post("/tray/authority")
+def tray_authority_grant(
+    request: Request,
+    payload: LensTrayAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_tray_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
+
+
+@router.post("/tray/execute")
+def tray_execute(
+    request: Request,
+    payload: LensTrayExecuteIn,
+) -> dict[str, Any]:
+    return execute_lens_tray_presence(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        mode=payload.mode,
+        run_seconds=payload.run_seconds,
+    )
 
 
 @router.get("/overlay/readiness")

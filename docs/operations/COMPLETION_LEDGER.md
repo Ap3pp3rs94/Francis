@@ -26509,6 +26509,49 @@ Latest validation for the governed resident-supervision lease execution slice:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens governed tray-presence lease execution slice on `2026-05-14`:
+
+- Added an explicit Lens tray-presence authority and execution boundary. The new
+  `/lens/tray/authority/request`, `/lens/tray/authority`,
+  `/lens/tray/authority/requests`, `/lens/tray/authority/grants`,
+  `/lens/tray/execute`, and `/lens/tray/executions` routes make tray presence a
+  governed approval-backed lease instead of an implicit UI claim.
+- `/lens/tray/execute` can start or stop the existing
+  `scripts/lens-tray-presence.ps1` tray runtime only after an active approved
+  tray-presence authority grant exists. Start additionally requires live
+  supervised resident-host readback, so tray presence cannot be promoted ahead
+  of the resident supervision prerequisite.
+- Tray execution writes receipt/readback evidence for the execution mode, active
+  grant, tray runtime, tray icon visibility, resident-host supervision
+  readiness, stop command, and next missing persistent-supervision prerequisite.
+  With live resident supervision and live tray runtime, `/lens/status` can move
+  the prerequisite chain past `tray_presence` to the existing
+  `global_hotkey_binding` / OS-binding gap.
+- This is a bounded execution-path and authority change. It grants no global
+  hotkey binding, no summon binding, no overlay control, no service control, no
+  approval decision authority, no memory write, and no resident claim. The
+  runtime tray config remains disabled by default; the route only executes under
+  an explicit approved lease.
+- Stage 6 remains active at 2/5 checkpoint criteria. This removes the
+  proof-layer stall around tray presence by making the next prerequisite
+  reachable through governed API/readback, but it does not close
+  `summon_anywhere`, `helpful_not_noisy`, or `system_resident_presence`.
+
+Latest validation for the governed tray-presence lease execution slice:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease -q`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease tests\test_api_lens.py::test_lens_status_promotes_live_tray_runtime_before_hotkey -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_presence_script.py tests\test_lens_tray_preflight_script.py tests\test_lens_tray_runtime_readback.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\api\routes\lens.py src\francis\lens\__init__.py src\francis\lens\tray_authority.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\lens.py src\francis\lens\__init__.py src\francis\lens\tray_authority.py tests\test_api_lens.py`
+  Result: `passed after formatting src\francis\lens\tray_authority.py`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

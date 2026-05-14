@@ -8969,6 +8969,249 @@ def test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lea
     assert stopped_body["governance"]["resident_claim_authority"] is False
 
 
+def test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.tray_authority as tray_authority_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=pid,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+        process_restart_authority=False,
+        service_control_authority=False,
+    )
+
+    def fake_tray_presence_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+        if mode == "stop":
+            runtime_root = data_root / "runtime" / "lens-tray"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            (runtime_root / "lens-tray.pid").unlink(missing_ok=True)
+            (runtime_root / "status.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "lens.tray.runtime_state",
+                        "status": "tray_stopped",
+                        "pid": pid,
+                        "tray_icon_visible": False,
+                        "updated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                        "message": "Francis Lens tray presence stopped by operator command.",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return {
+                "ok": True,
+                "status": "stopped",
+                "returncode": 0,
+                "script_mode": "Stop",
+                "script": "scripts/lens-tray-presence.ps1",
+                "runner": {
+                    "ok": True,
+                    "status": "stopped",
+                    "ready": False,
+                    "tray_presence": False,
+                    "run_seconds": run_seconds,
+                },
+                "blockers": ["tray_presence_runtime_missing"],
+            }
+
+        _write_lens_tray_runtime_state(data_root, pid=pid)
+        return {
+            "ok": True,
+            "status": "started",
+            "returncode": 0,
+            "script_mode": "Start",
+            "script": "scripts/lens-tray-presence.ps1",
+            "runner": {
+                "ok": True,
+                "status": "started",
+                "ready": True,
+                "tray_presence": True,
+                "run_seconds": run_seconds,
+                "tray_runtime": {
+                    "ready": True,
+                    "process_alive": True,
+                    "tray_icon_visible": True,
+                    "pid": pid,
+                },
+                "governance": {
+                    "execution_authority": False,
+                    "tray_registration_authority": True,
+                    "tray_icon_authority": True,
+                    "local_process_launch_authority": True,
+                    "memory_write": False,
+                },
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        tray_authority_module,
+        "_run_lens_tray_presence_action",
+        fake_tray_presence_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/tray/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants tray presence authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved tray presence lease boundary review",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    grant = client.post(
+        "/lens/tray/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants tray presence authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["status"] == "authority_granted"
+    assert grant_body["tray_presence_authority"] is True
+    assert grant_body["receipt_written"] is True
+    assert grant_body["governance"]["tray_registration_authority"] is True
+    assert grant_body["governance"]["hotkey_registration_authority"] is False
+    assert grant_body["governance"]["summon_authority"] is False
+    assert grant_body["governance"]["overlay_control_authority"] is False
+    assert grant_body["governance"]["memory_write"] is False
+    assert grant_body["governance"]["resident_claim_authority"] is False
+
+    started = client.post(
+        "/lens/tray/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "start governed Lens tray presence",
+            "mode": "start",
+            "run_seconds": 60,
+        },
+    )
+    assert started.status_code == 200
+    started_body = started.json()
+    assert started_body["kind"] == "lens.tray.presence.execution"
+    assert started_body["status"] == "tray_presence_started"
+    assert started_body["executed"] is True
+    assert started_body["mode"] == "start"
+    assert started_body["tray_presence"] is True
+    assert started_body["tray_runtime_ready"] is True
+    assert started_body["tray_icon_visible"] is True
+    assert started_body["tray_runtime_pid"] == pid
+    assert started_body["resident_host_readiness"]["ready"] is True
+    assert started_body["resident_host_readiness"]["resident_supervised_runtime"] is True
+    assert started_body["stop_command"] == "scripts/lens-tray-presence.ps1 -Mode Stop"
+    assert started_body["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+    assert started_body["governance"]["execution_authority"] is True
+    assert started_body["governance"]["local_process_launch_authority"] is True
+    assert started_body["governance"]["tray_registration_authority"] is True
+    assert started_body["governance"]["tray_icon_authority"] is True
+    assert started_body["governance"]["hotkey_registration_authority"] is False
+    assert started_body["governance"]["summon_authority"] is False
+    assert started_body["governance"]["overlay_control_authority"] is False
+    assert started_body["governance"]["service_control_authority"] is False
+    assert started_body["governance"]["memory_write"] is False
+    assert started_body["governance"]["resident_claim_authority"] is False
+    assert started_body["receipt_written"] is True
+    start_receipt = started_body["receipt"]
+    assert start_receipt["execution"]["mode"] == "start"
+    assert start_receipt["execution"]["tray_presence"] is True
+    assert start_receipt["execution"]["tray_runtime_ready"] is True
+    assert start_receipt["resident_claim"]["resident_host_process_claimed"] is False
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    status_body = status.json()
+    persistent_plan = status_body["resident_host"]["persistent_supervision_plan"]
+    dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    assert dependencies["resident_host_process"]["ready"] is True
+    assert dependencies["tray_presence"]["ready"] is True
+    assert dependencies["tray_presence"]["tray_presence_source"] == "live_runtime_readback"
+    assert persistent_plan["missing_required_before_enable"] == [
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    next_handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert next_handoff["id"] == "global_hotkey_binding"
+    assert next_handoff["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
+
+    stopped = client.post(
+        "/lens/tray/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "stop governed Lens tray presence",
+            "mode": "stop",
+        },
+    )
+    assert stopped.status_code == 200
+    stopped_body = stopped.json()
+    assert stopped_body["status"] == "tray_presence_stopped"
+    assert stopped_body["mode"] == "stop"
+    assert stopped_body["executed"] is True
+    assert stopped_body["tray_presence"] is False
+    assert stopped_body["tray_runtime_ready"] is False
+    assert stopped_body["governance"]["execution_authority"] is True
+    assert stopped_body["governance"]["local_process_launch_authority"] is False
+    assert stopped_body["governance"]["service_control_authority"] is False
+    assert stopped_body["governance"]["hotkey_registration_authority"] is False
+    assert stopped_body["governance"]["summon_authority"] is False
+    assert stopped_body["governance"]["overlay_control_authority"] is False
+    assert stopped_body["governance"]["memory_write"] is False
+    assert stopped_body["governance"]["resident_claim_authority"] is False
+    assert stopped_body["receipt_written"] is True
+
+
 def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
     monkeypatch,
     tmp_path: Path,
