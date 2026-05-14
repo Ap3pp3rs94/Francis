@@ -506,6 +506,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     wraps_resident_host_runtime_boundary_proof = $true
     wraps_process_supervision_authority_boundary_proof = $true
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     bounded_local_process_launch = $true
     temporary_runtime_state_write = $true
     local_process_launch_authority = $true

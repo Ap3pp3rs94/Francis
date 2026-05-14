@@ -34,6 +34,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
+        timeout=240,
     )
 
 
@@ -49,6 +50,8 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
         "3",
         "-SupervisorRunSeconds",
         "20",
+        "-ChildProofTimeoutSeconds",
+        "180",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -101,7 +104,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["foreground_run_seconds"] == 2
     assert payload["host_launch_run_seconds"] == 3
     assert payload["supervisor_run_seconds"] == 20
-    assert payload["child_proof_timeout_seconds"] == 360
+    assert payload["child_proof_timeout_seconds"] == 180
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
@@ -110,7 +113,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     }
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 360
+        assert run["timeout_seconds"] == 180
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["resident_host_process_state"] == "foreground_observed_not_supervised"
@@ -159,6 +162,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
         "diagnostic_only": True,
         "wraps_resident_host_runtime_boundary_proof": True,
         "wraps_process_supervision_authority_boundary_proof": True,
+        "child_proof_timeout_seconds": 180,
         "bounded_local_process_launch": True,
         "temporary_runtime_state_write": True,
         "local_process_launch_authority": True,

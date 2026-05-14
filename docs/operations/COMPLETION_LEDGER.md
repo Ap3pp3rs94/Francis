@@ -26772,6 +26772,39 @@ correction:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens resident-host process-supervision proof timeout contract tightening
+on `2026-05-14`:
+
+- Updated `scripts/lens-resident-host-process-supervision-blocker-proof.ps1` so
+  its governance payload includes the active `child_proof_timeout_seconds`
+  value already used by the proof runner.
+- Updated the focused process-supervision proof test to pass
+  `-ChildProofTimeoutSeconds 180` explicitly and enforce a 240-second outer
+  subprocess timeout. This keeps the process-supervision handoff validation
+  bounded while preserving the proof's existing behavior and result.
+- The proof still reports `next_smallest_truthful_gap=stage6_lens_completion_audit`
+  after consuming the resident-host process-supervision handoff, with no child
+  proof timeouts observed. This is a harness/contract reliability correction
+  only; it does not grant product execution, process supervision, restart,
+  service, memory, receipt, resident-claim, or mutation authority. Stage 6
+  remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 resident-host process-supervision timeout
+contract tightening:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 -ChildProofTimeoutSeconds 180`
+  Result: `passed`; emitted `proof_passed`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`, and
+  `child_proof_timeouts=[]`.
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
