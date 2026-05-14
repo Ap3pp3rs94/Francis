@@ -26086,6 +26086,59 @@ Latest validation for the checkpoint timeout guard stabilization:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens persistent-supervision proof-chain completion audit on
+`2026-05-14`:
+
+- The persistent-supervision prerequisite and authority proof family was run
+  through the Stage 6 completion audit after the Windows 3.12 timing
+  stabilizations landed and GitHub Actions run `25832702508` passed for commit
+  `d44bfa12`.
+- `scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  passed and still reported
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+  The missing prerequisite families remain resident host process, tray
+  presence, global hotkey binding, overlay window, and summon binding.
+- `scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+  passed and consumed the bounded resident candidate into the persistence
+  boundary, proving the next gap is persistent supervision rather than another
+  transient resident-candidate proof.
+- `scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`,
+  `scripts\lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`,
+  and
+  `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  all passed. Together they prove the enablement and execution authority
+  readbacks reach the resident-claim denial boundary without granting a product
+  resident claim.
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status` passed as an audit
+  command and returned `status=blocked`, `ready_to_close=false`,
+  `can_close_stage6=false`, `transition_allowed=false`, and
+  `closure_decision=do_not_close_stage6`.
+- The completion audit still lists `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence` as remaining Stage 6 acceptance blockers. Stage 6
+  therefore remains active and must not transition to Stage 7.
+- This entry is audit/readback truth only. It does not start a resident host,
+  enable persistent supervision, install or control a service, register tray or
+  hotkeys, open overlay windows, grant summon authority, decide approvals, write
+  memory, claim resident presence, or close Stage 6.
+- The proof layer is now sufficiently audited for this seam. The next roadmap
+  movement must target a real persistent-supervision prerequisite, not another
+  proof-only wrapper, unless a regression appears.
+
+Latest validation for the persistent-supervision proof-chain completion audit:
+
+- `scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  Result: `passed`
+- `scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`
+  Result: `passed`
+- `scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`
+  Result: `passed`
+- `scripts\lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
+  Result: `passed`
+- `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  Result: `passed`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed audit command; audit conclusion remained blocked`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
