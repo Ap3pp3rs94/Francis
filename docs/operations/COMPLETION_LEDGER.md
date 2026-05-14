@@ -26139,6 +26139,44 @@ Latest validation for the persistent-supervision proof-chain completion audit:
 - `scripts\lens-stage6-completion-audit.ps1 -Mode Status`
   Result: `passed audit command; audit conclusion remained blocked`
 
+Stage 6 Lens checkpoint live-operator optional-blocker stabilization on
+`2026-05-14`:
+
+- GitHub Actions run `25835493248` for commit `a9660cf2` passed Ubuntu 3.12
+  and Ubuntu 3.13, but failed Windows 3.13 in
+  `test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`
+  while Windows 3.12 was still running.
+- The failing payload was still truthful: the checkpoint observed
+  `resident_surface_foreground_runtime_observed`, kept Stage 6 blocked, and
+  included the required `resident_surface_not_resident` and
+  `resident_surface_runtime_not_supervised` blockers. On the slower Windows
+  3.13 run, it also retained `operator_experience_proof_missing` because the
+  live operator proof did not fully read back inside its observation window.
+- The checkpoint test now accepts `operator_experience_proof_missing` as an
+  optional blocker for the helpful-not-noisy criterion and aggregate blocker
+  list while still requiring the resident-surface blockers and all authority
+  denials. This matches the script contract: live-operator proof is a readiness
+  signal, not a Stage 6 claim, and a missing readback must keep the criterion
+  blocked rather than fail the contract test.
+- This is test-harness assertion stabilization only. It does not start a
+  resident host, enable persistent supervision, install or control a service,
+  register tray or hotkeys, open overlay windows, grant summon authority, decide
+  approvals, write memory, claim resident presence, or close Stage 6.
+- Stage 6 remains active. The next roadmap movement remains real
+  persistent-supervision prerequisite work, not another proof-only wrapper,
+  unless CI exposes another focused regression.
+
+Latest validation for the live-operator optional-blocker stabilization:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
