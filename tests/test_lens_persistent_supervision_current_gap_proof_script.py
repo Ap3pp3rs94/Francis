@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
@@ -24,21 +23,20 @@ def _repo_root() -> Path:
 def test_persistent_supervision_current_gap_proof_consumes_authority_chain_without_audit(
     tmp_path: Path,
 ) -> None:
-    env = os.environ.copy()
-    env["FRANCIS_DATA_DIR"] = str(tmp_path / "data")
-    old_env = os.environ.copy()
-    try:
-        os.environ.update(env)
-        proc = run_powershell_script(
-            _powershell(),
-            _repo_root() / "scripts" / "lens-persistent-supervision-current-gap-proof.ps1",
-            ["-Mode", "Status"],
-            cwd=_repo_root(),
-            timeout_seconds=180,
-        )
-    finally:
-        os.environ.clear()
-        os.environ.update(old_env)
+    proc = run_powershell_script(
+        _powershell(),
+        _repo_root() / "scripts" / "lens-persistent-supervision-current-gap-proof.ps1",
+        [
+            "-Mode",
+            "Status",
+            "-DataDir",
+            str(tmp_path / "data"),
+            "-ChildProofTimeoutSeconds",
+            "180",
+        ],
+        cwd=_repo_root(),
+        timeout_seconds=210,
+    )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
@@ -116,6 +114,8 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
     assert payload["stage6_completion_audit_script"] == "scripts/lens-stage6-completion-audit.ps1"
 
     assert payload["persistent_supervision_plan_summary"]["kind"] == "lens.host.persistent_supervision_plan"
+    assert payload["persistent_supervision_plan_summary"]["timed_out"] is False
+    assert payload["persistent_supervision_plan_summary"]["timeout_seconds"] == 180
     assert payload["persistent_supervision_plan_summary"]["status"] == "blocked"
     assert (
         payload["persistent_supervision_plan_summary"]["next_smallest_truthful_gap"]
@@ -125,14 +125,17 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
         payload["persistent_supervision_enablement_authority_summary"]["next_smallest_truthful_gap"]
         == "persistent_supervision_execution_authority_or_resident_claim_boundary"
     )
+    assert payload["persistent_supervision_enablement_authority_summary"]["timed_out"] is False
     assert (
         payload["persistent_supervision_execution_authority_summary"]["next_smallest_truthful_gap"]
         == "persistent_supervision_resident_claim_authority_boundary"
     )
+    assert payload["persistent_supervision_execution_authority_summary"]["timed_out"] is False
     assert (
         payload["persistent_supervision_resident_claim_boundary_summary"]["next_smallest_truthful_gap"]
         == "stage6_lens_completion_audit"
     )
+    assert payload["persistent_supervision_resident_claim_boundary_summary"]["timed_out"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["persistent_supervision_plan_readback"]["status"] == "required_prerequisites_missing"
@@ -149,6 +152,7 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
         "diagnostic_only": True,
         "product_read_only_contract": True,
         "runs_child_proofs": True,
+        "child_proof_timeout_seconds": 180,
         "child_proofs_use_test_fixture_approval_decisions": True,
         "child_proofs_write_temp_fixture_receipts": True,
         "stage6_completion_audit_not_run": True,

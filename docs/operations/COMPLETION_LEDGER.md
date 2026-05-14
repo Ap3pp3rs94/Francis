@@ -26704,6 +26704,40 @@ Latest validation for the Stage 6 persistent-supervision current-gap proof:
 - `git diff --check`
   Result: `passed before ledger update`
 
+Stage 6 Lens persistent-supervision current-gap proof child-runner correction on
+`2026-05-14`:
+
+- Updated `scripts/lens-persistent-supervision-current-gap-proof.ps1` to accept
+  explicit `-DataDir` and `-ChildProofTimeoutSeconds` parameters. Tests no
+  longer need to mutate the parent process environment to isolate proof data.
+- The current-gap proof now runs child proof scripts through a bounded process
+  runner with per-child timeout reporting. It drains stdout/stderr
+  asynchronously before waiting, preventing large child JSON payloads from
+  blocking the parent proof while still preserving timeout-based cleanup.
+- The proof payload now includes child timeout evidence in each proof summary
+  and in governance as `child_proof_timeout_seconds`.
+- This is a proof-harness reliability correction only. It does not grant
+  product execution, service, memory, receipt, resident-claim, or mutation
+  authority, and it does not close a Stage 6 checkpoint. Stage 6 remains active
+  at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 persistent-supervision current-gap proof
+child-runner correction:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status -DataDir "$env:TEMP\francis-current-gap-proof-manual" -ChildProofTimeoutSeconds 180`
+  Result: `passed`; emitted `proof_passed`,
+  `persistent_supervision_authority_chain_consumed=true`,
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  and `stage6_completion_audit_not_run=true`.
+- `python -m pytest tests\test_lens_persistent_supervision_current_gap_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed before ledger update`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

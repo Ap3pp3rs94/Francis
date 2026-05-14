@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [string]$DataDir = '',
+
+  [ValidateRange(30, 240)]
+  [int]$ChildProofTimeoutSeconds = 180
 )
 
 Set-StrictMode -Version 2
@@ -94,10 +99,37 @@ function New-Check {
   }
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
 function Invoke-JsonProofScript {
   param(
     [string]$PowerShellPath,
-    [string]$ScriptName
+    [string]$ScriptName,
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
   $ScriptPath = Join-Path $PSScriptRoot $ScriptName
@@ -108,19 +140,99 @@ function Invoke-JsonProofScript {
       duration_ms = 0
       payload = $null
       output = ''
+      error = ''
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
       parse_error = "missing_script: $ScriptPath"
     }
   }
 
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellPath
+  $StartInfo.Arguments = (@(
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      $ScriptPath,
+      '-Mode',
+      $Mode
+    ) | ForEach-Object { Quote-ProcessArgument -Value $_ }) -join ' '
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $true
+  $StartInfo.RedirectStandardError = $true
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
   $Timer = [System.Diagnostics.Stopwatch]::StartNew()
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath -Mode $Mode 2>&1
-  $ExitCode = $LASTEXITCODE
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      script = "scripts/$ScriptName"
+      exit_code = 1
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      parse_error = ''
+    }
+  }
+
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      script = "scripts/$ScriptName"
+      exit_code = 1
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      payload = $null
+      output = ''
+      error = 'process_start_returned_false'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      parse_error = ''
+    }
+  }
+
+  $TimedOut = $false
+  $StdOutTask = $Process.StandardOutput.ReadToEndAsync()
+  $StdErrTask = $Process.StandardError.ReadToEndAsync()
+  if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+    $TimedOut = $true
+    Stop-ProcessTree -Process $Process
+    try {
+      $Process.WaitForExit(5000) | Out-Null
+    } catch {
+    }
+  }
   $Timer.Stop()
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  try {
+    $StdOut = [string]$StdOutTask.GetAwaiter().GetResult()
+  } catch {
+    $StdOut = ''
+  }
+  try {
+    $StdErr = [string]$StdErrTask.GetAwaiter().GetResult()
+  } catch {
+    $StdErr = ''
+  }
+  $Text = if ([string]::IsNullOrWhiteSpace($StdErr)) {
+    $StdOut
+  } elseif ([string]::IsNullOrWhiteSpace($StdOut)) {
+    $StdErr
+  } else {
+    $StdOut.TrimEnd() + "`n" + $StdErr
+  }
+  $ExitCode = if ($TimedOut) { 124 } else { [int]$Process.ExitCode }
   $Payload = $null
   $ParseError = ''
   try {
-    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+    $Payload = $StdOut | ConvertFrom-Json -ErrorAction Stop
   } catch {
     $ParseError = [string]$_.Exception.Message
   }
@@ -131,6 +243,9 @@ function Invoke-JsonProofScript {
     duration_ms = [int]$Timer.ElapsedMilliseconds
     payload = $Payload
     output = $Text
+    error = $StdErr
+    timed_out = $TimedOut
+    timeout_seconds = $TimeoutSeconds
     parse_error = $ParseError
   }
 }
@@ -150,6 +265,8 @@ function New-ProofSummary {
     ok = [bool](Get-PropertyValue -Payload $Payload -Name 'ok' -Default $false)
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Payload -Name 'next_smallest_truthful_gap' -Default '')
     blockers = [string[]](ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Payload -Name 'blockers'))
+    timed_out = [bool](Get-PropertyValue -Payload $Result -Name 'timed_out' -Default $false)
+    timeout_seconds = [int](Get-PropertyValue -Payload $Result -Name 'timeout_seconds' -Default 0)
     parse_error = [string](Get-PropertyValue -Payload $Result -Name 'parse_error' -Default '')
   }
 }
@@ -162,6 +279,14 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 
+$PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
+$ProofDataRoot = $DataDir
+if (-not [string]::IsNullOrWhiteSpace($ProofDataRoot)) {
+  $ProofDataRoot = [System.IO.Path]::GetFullPath($ProofDataRoot)
+  New-Item -ItemType Directory -Force -Path $ProofDataRoot | Out-Null
+  $env:FRANCIS_DATA_DIR = $ProofDataRoot
+}
+
 $ExpectedMissingBeforeEnable = [string[]]@(
   'resident_host_process',
   'tray_presence',
@@ -170,10 +295,20 @@ $ExpectedMissingBeforeEnable = [string[]]@(
   'summon_binding'
 )
 
-$PlanResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-plan.ps1'
-$EnablementResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-enablement-authority-proof.ps1'
-$ExecutionResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-execution-authority-proof.ps1'
-$ResidentClaimResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
+try {
+  $PlanResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-plan.ps1'
+  $EnablementResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-enablement-authority-proof.ps1'
+  $ExecutionResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-execution-authority-proof.ps1'
+  $ResidentClaimResult = Invoke-JsonProofScript -PowerShellPath $PowerShell.Source -ScriptName 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
+} finally {
+  if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+    if ([string]::IsNullOrWhiteSpace($PreviousDataDir)) {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    } else {
+      $env:FRANCIS_DATA_DIR = $PreviousDataDir
+    }
+  }
+}
 
 $Plan = Get-PropertyValue -Payload $PlanResult -Name 'payload'
 $Enablement = Get-PropertyValue -Payload $EnablementResult -Name 'payload'
@@ -292,7 +427,7 @@ $Handoff = [ordered]@{
   mode = $Mode.ToLowerInvariant()
   stage = 'Stage 6 / Lens MVP'
   repo_root = $RepoRoot
-  data_root = [string](Get-PropertyValue -Payload $Plan -Name 'data_root' -Default '')
+  data_root = [string](Get-PropertyValue -Payload $Plan -Name 'data_root' -Default $ProofDataRoot)
   persistent_supervision_plan_observed = $PlanObserved
   persistent_supervision_enablement_authority_proof_observed = $EnablementObserved
   persistent_supervision_execution_authority_proof_observed = $ExecutionObserved
@@ -337,6 +472,7 @@ $Handoff = [ordered]@{
     diagnostic_only = $true
     product_read_only_contract = $true
     runs_child_proofs = $true
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     child_proofs_use_test_fixture_approval_decisions = $true
     child_proofs_write_temp_fixture_receipts = $true
     stage6_completion_audit_not_run = $true
