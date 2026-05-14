@@ -330,12 +330,12 @@ $ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resi
 $HostSupervisionProofPath = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
 $EffectiveResidentSurfaceForegroundRunSeconds = [Math]::Max(40, $ResidentSurfaceForegroundRunSeconds)
 
-$ActivationBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @(
+$ActivationBoundaryResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
   '-ResidentSurfaceForegroundRunSeconds', [string]$EffectiveResidentSurfaceForegroundRunSeconds
-)
+) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,

@@ -26935,6 +26935,41 @@ stabilization:
 - `python -m ruff format --check tests\test_lens_resident_session_script.py`
   Result: `passed`
 
+Stage 6 Lens composed proof retry stabilization on `2026-05-14`:
+
+- Updated `scripts\lens-process-supervision-authority-boundary-proof.ps1` so
+  its resident-overlay activation child proof uses the existing proof retry
+  helper instead of a single child invocation.
+- Updated `scripts\lens-stage6-checkpoint.ps1` so proof child readback retries
+  up to three times before preserving the last failed payload.
+- This addresses the latest Windows 3.13 CI-only proof instability where the
+  process-supervision blocker composition lost the process-boundary child
+  payload and the checkpoint reported the weaker
+  `resident_overlay_boundary_observed` status instead of
+  `resident_overlay_activation_boundary_observed`.
+- The proof contracts remain unchanged: child proofs must still return the
+  expected `kind` and `status=proof_passed`, and no process supervision,
+  restart, service control, tray, hotkey, overlay, summon, approval, receipt,
+  memory, resident-claim, execution, or mutation authority is granted. Stage 6
+  remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 composed proof retry stabilization:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_blocks_supervision_and_service_activation -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with expected PowerShell line-ending warnings for
+  scripts\lens-process-supervision-authority-boundary-proof.ps1 and
+  scripts\lens-stage6-checkpoint.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

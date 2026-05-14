@@ -127,7 +127,7 @@ function Invoke-JsonScriptWithProofRetry {
     [string]$ScriptPath,
     [string[]]$ScriptArgs = @(),
     [string]$ExpectedKind,
-    [int]$Attempts = 2
+    [int]$Attempts = 3
   )
 
   $LastProof = $null
