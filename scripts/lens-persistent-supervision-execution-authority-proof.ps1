@@ -456,6 +456,7 @@ def _run() -> tuple[int, dict[str, Any]]:
         "recommended_next_slice": "review_persistent_supervision_resident_claim_boundary_without_runtime_start",
         "recommended_proof_script": "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status",
         "recommended_handoff_source": "persistent_supervision_execution_authority_handoff",
+        "authority_required": "resident_claim_authority",
         "persistent_supervision_execution_route": "/lens/host/persistent-supervision/enablement/execution",
         "persistent_supervision_execution_request_route": (
             "/lens/host/persistent-supervision/enablement/execution/request"

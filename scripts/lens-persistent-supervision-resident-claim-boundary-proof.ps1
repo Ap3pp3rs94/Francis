@@ -214,6 +214,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   recommended_next_slice = 'run_stage6_lens_completion_audit_after_resident_claim_boundary_readback'
   recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
   recommended_handoff_source = 'persistent_supervision_resident_claim_boundary_handoff'
+  authority_required = 'none_new_stage6_completion_audit'
   stage6_completion_audit_script = 'scripts/lens-stage6-completion-audit.ps1'
   persistent_supervision_execution_route = '/lens/host/persistent-supervision/enablement/execution'
   persistent_supervision_execution_readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
