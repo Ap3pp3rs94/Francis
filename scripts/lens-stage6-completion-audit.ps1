@@ -120,8 +120,6 @@ function Invoke-JsonScript {
   $StartInfo.RedirectStandardOutput = $false
   $StartInfo.RedirectStandardError = $false
   $StartInfo.RedirectStandardInput = $false
-  $StartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-  $StartInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
   $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (
     Quote-ProcessArgument -Value (
       '& ' + (Quote-ProcessArgument -Value $PowerShellPath) + ' ' + ($ArgumentParts -join ' ') +

@@ -34,6 +34,17 @@ def _run_audit(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$StartInfo.RedirectStandardOutput = $false" in script
+    assert "$StartInfo.RedirectStandardError = $false" in script
+    assert "$StdoutPath" in script
+    assert "$StderrPath" in script
+    assert "StandardOutputEncoding" not in script
+    assert "StandardErrorEncoding" not in script
+
+
 def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> None:
     proc = _run_audit(
         "-Mode",
