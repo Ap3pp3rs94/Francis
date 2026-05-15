@@ -27003,6 +27003,24 @@ correction:
   `next_smallest_truthful_gap=persistent_supervision_enablement_authority_not_granted`
   and `persistent_supervision_enablement_authority_handoff_observed=true`
 
+Latest CI and handoff-chain receipt for the Stage 6 next-handoff
+enablement-authority readback correction:
+
+- Commit `eabe1c3c` (`fix(lens): surface audited stage6 handoff`) was pushed to
+  `origin/main`.
+- GitHub Actions run `25893227326` completed successfully across the full matrix:
+  `windows-latest / Python 3.12` in `38m50s`, `ubuntu-latest / Python 3.13`
+  in `28m0s`, `windows-latest / Python 3.13` in `36m21s`, and
+  `ubuntu-latest / Python 3.12` in `27m39s`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,stage6_completion_audit_not_run,@{Name='authority_chain_consumed';Expression={$_.persistent_supervision_authority_chain_consumed}},@{Name='resident_claim_consumed';Expression={$_.persistent_supervision_resident_claim_boundary_proof_observed}} | ConvertTo-Json -Depth 8`
+  Result: `proof_passed`, with
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  `recommended_next_slice=resolve_persistent_supervision_required_prerequisites_before_enablement`,
+  `authority_chain_consumed=true`, `resident_claim_consumed=true`, and
+  `stage6_completion_audit_not_run=true`.
+- This receipt records proof-chain convergence only. It does not grant runtime
+  authority, mark Stage 6 complete, or change the 2/5 checkpoint posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
