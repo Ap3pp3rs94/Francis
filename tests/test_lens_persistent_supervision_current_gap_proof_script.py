@@ -53,7 +53,7 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
     assert payload["persistent_supervision_authority_chain_consumed"] is True
     assert payload["persistent_supervision_current_gap_observed"] is True
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
-    assert payload["recommended_handoff_source"] == "persistent_supervision_plan_first_missing_requirement_handoff"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_required_prerequisites_handoff"
     assert payload["recommended_next_slice"] == (
         "resolve_persistent_supervision_required_prerequisites_before_enablement"
     )
@@ -88,6 +88,32 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
     assert first_missing["diagnostic_only"] is True
     assert first_missing["would_execute"] is False
     assert first_missing["would_mutate"] is False
+    assert (
+        payload["recommended_first_missing_handoff_source"]
+        == "persistent_supervision_plan_first_missing_requirement_handoff"
+    )
+    if first_missing["next_smallest_truthful_gap"] == "resident_supervision_not_persistent":
+        expected_first_missing_next_slice = (
+            "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+        )
+        expected_first_missing_authority_required = "persistent_process_supervision_authority"
+    elif first_missing.get("blocker") == "resident_host_process_not_supervised":
+        expected_first_missing_next_slice = "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+        expected_first_missing_authority_required = "process_supervision_authority"
+    else:
+        expected_first_missing_next_slice = "resolve_resident_host_process_before_persistent_supervision_enablement"
+        expected_first_missing_authority_required = "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["recommended_first_missing_next_slice"] == first_missing.get(
+        "next_step",
+        expected_first_missing_next_slice,
+    )
+    assert payload["recommended_first_missing_proof_script"] == first_missing["proof_script"]
+    assert payload["recommended_first_missing_route"] == first_missing["route"]
+    assert payload["recommended_first_missing_readiness_route"] == first_missing["readiness_route"]
+    assert payload["recommended_first_missing_authority_required"] == first_missing.get(
+        "authority_required",
+        expected_first_missing_authority_required,
+    )
 
     handoff = payload["handoff"]
     assert handoff["status"] == "blocked"

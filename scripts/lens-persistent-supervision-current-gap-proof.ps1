@@ -397,10 +397,33 @@ $Checks = @(
   (New-Check -Id 'resident_claim_boundary_proof' -Status $(if ($ResidentClaimObserved) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $ResidentClaimObserved -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'Resident-claim boundary readback must be consumed without claiming residency.')
   (New-Check -Id 'authority_chain_consumed' -Status $(if ($AuthorityChainConsumed) { 'consumed' } else { 'incomplete' }) -Passed $AuthorityChainConsumed -Evidence 'persistent supervision authority proof chain' -Reason 'The focused proof must consume the bounded authority chain without running the Stage 6 completion audit.')
   (New-Check -Id 'current_gap' -Status $(if ($CurrentGapObserved) { 'persistent_supervision_required_prerequisites_missing' } else { 'unknown_or_unexpected' }) -Passed $CurrentGapObserved -Evidence 'persistent_supervision_plan.next_smallest_truthful_gap' -Reason 'The current next gap must stay anchored to missing resident host, tray, hotkey, overlay, and summon prerequisites.')
-  (New-Check -Id 'first_missing_requirement_handoff' -Status $(if ($FirstMissingHandoffReady) { 'resident_host_process_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstMissingHandoffReady -Evidence 'persistent_supervision_plan.first_missing_requirement_handoff' -Reason 'The first actionable handoff must remain the resident host runtime boundary proof.')
+  (New-Check -Id 'first_missing_requirement_handoff' -Status $(if ($FirstMissingHandoffReady) { 'resident_host_process_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstMissingHandoffReady -Evidence 'persistent_supervision_plan.first_missing_requirement_handoff' -Reason 'The first actionable handoff must remain a read-only resident-host proof before persistent supervision can be enabled.')
   (New-Check -Id 'product_side_effects_denied' -Status $(if ($ProductSideEffectsDenied) { 'product_read_only' } else { 'unexpected_product_mutation_authority' }) -Passed $ProductSideEffectsDenied -Evidence 'persistent_supervision_plan.governance' -Reason 'The focused proof must not claim product execution, service, memory, receipt, or resident-claim authority.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool](Get-PropertyValue -Payload $_ -Name 'passed' -Default $false) })
+
+$FirstMissingBlocker = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'blocker' -Default '')
+$FirstMissingNextGap = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'next_smallest_truthful_gap' -Default '')
+$RecommendedFirstMissingNextSlice = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'next_step' -Default '')
+if ([string]::IsNullOrWhiteSpace($RecommendedFirstMissingNextSlice)) {
+  if ($FirstMissingBlocker -eq 'resident_supervision_not_persistent' -or $FirstMissingNextGap -eq 'resident_supervision_not_persistent') {
+    $RecommendedFirstMissingNextSlice = 'resolve_resident_supervision_persistence_before_persistent_supervision_enablement'
+  } elseif ($FirstMissingBlocker -eq 'resident_host_process_not_supervised') {
+    $RecommendedFirstMissingNextSlice = 'consume_resident_host_process_supervision_handoff_before_stage6_closure'
+  } else {
+    $RecommendedFirstMissingNextSlice = 'resolve_resident_host_process_before_persistent_supervision_enablement'
+  }
+}
+$RecommendedFirstMissingAuthorityRequired = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'authority_required' -Default '')
+if ([string]::IsNullOrWhiteSpace($RecommendedFirstMissingAuthorityRequired)) {
+  if ($FirstMissingBlocker -eq 'resident_supervision_not_persistent' -or $FirstMissingNextGap -eq 'resident_supervision_not_persistent') {
+    $RecommendedFirstMissingAuthorityRequired = 'persistent_process_supervision_authority'
+  } elseif ($FirstMissingBlocker -eq 'resident_host_process_not_supervised') {
+    $RecommendedFirstMissingAuthorityRequired = 'process_supervision_authority'
+  } else {
+    $RecommendedFirstMissingAuthorityRequired = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
+  }
+}
 
 $Handoff = [ordered]@{
   status = 'blocked'
@@ -435,7 +458,7 @@ $Handoff = [ordered]@{
   persistent_supervision_authority_chain_consumed = $AuthorityChainConsumed
   persistent_supervision_current_gap_observed = $CurrentGapObserved
   next_smallest_truthful_gap = if ($CurrentGapObserved) { 'persistent_supervision_required_prerequisites_missing' } else { [string](Get-PropertyValue -Payload $Plan -Name 'next_smallest_truthful_gap' -Default '') }
-  recommended_handoff_source = 'persistent_supervision_plan_first_missing_requirement_handoff'
+  recommended_handoff_source = 'persistent_supervision_required_prerequisites_handoff'
   recommended_next_slice = 'resolve_persistent_supervision_required_prerequisites_before_enablement'
   recommended_proof_script = 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'
   recommended_route = '/lens/host/persistent-supervision'
@@ -445,6 +468,12 @@ $Handoff = [ordered]@{
   missing_required_before_enable = [string[]]$PlanMissingBeforeEnable
   first_missing_required_before_enable = $FirstMissingId
   first_missing_requirement_handoff = $FirstMissingHandoff
+  recommended_first_missing_handoff_source = 'persistent_supervision_plan_first_missing_requirement_handoff'
+  recommended_first_missing_next_slice = $RecommendedFirstMissingNextSlice
+  recommended_first_missing_proof_script = $FirstMissingProofScript
+  recommended_first_missing_route = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'route' -Default '')
+  recommended_first_missing_readiness_route = [string](Get-PropertyValue -Payload $FirstMissingHandoff -Name 'readiness_route' -Default '')
+  recommended_first_missing_authority_required = $RecommendedFirstMissingAuthorityRequired
   handoff = $Handoff
   authority_chain = [ordered]@{
     enablement_authority_consumed = $EnablementObserved

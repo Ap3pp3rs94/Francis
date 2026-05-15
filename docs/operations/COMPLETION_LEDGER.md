@@ -27152,6 +27152,56 @@ Latest validation for the Stage 6 completion-audit CI gate narrowing:
   Result: `passed; default path skipped the explicit full completion-audit
   diagnostic and passed the focused current-gap/prerequisite proof coverage`
 
+Stage 6 Lens persistent-supervision current-gap first-missing handoff readback
+correction on `2026-05-15`:
+
+- Updated `scripts\lens-persistent-supervision-current-gap-proof.ps1` so its
+  broad top-level `recommended_handoff_source` names
+  `persistent_supervision_required_prerequisites_handoff`, matching its
+  top-level `next_smallest_truthful_gap` of
+  `persistent_supervision_required_prerequisites_missing`.
+- Added explicit first-missing recommendation fields:
+  `recommended_first_missing_handoff_source`,
+  `recommended_first_missing_next_slice`,
+  `recommended_first_missing_proof_script`,
+  `recommended_first_missing_route`,
+  `recommended_first_missing_readiness_route`, and
+  `recommended_first_missing_authority_required`.
+- The focused readback now preserves both truths at once: the broad prerequisite
+  map remains the current persistent-supervision gap, and the actionable first
+  missing requirement points to the resident-host proof currently required by
+  the resident-host process state.
+- This is an auditability/readback correction only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 persistent-supervision current-gap
+first-missing handoff readback correction:
+
+- `python -m pytest tests\test_lens_persistent_supervision_current_gap_proof_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_proof_script,recommended_first_missing_handoff_source,recommended_first_missing_next_slice,recommended_first_missing_proof_script,recommended_first_missing_authority_required,stage6_completion_audit_not_run | ConvertTo-Json -Depth 6`
+  Result: `proof_passed`, with
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  `recommended_handoff_source=persistent_supervision_required_prerequisites_handoff`,
+  `recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`,
+  `recommended_first_missing_handoff_source=persistent_supervision_plan_first_missing_requirement_handoff`,
+  `recommended_first_missing_next_slice=resolve_resident_supervision_persistence_before_persistent_supervision_enablement`,
+  `recommended_first_missing_proof_script=scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status`,
+  `recommended_first_missing_authority_required=persistent_process_supervision_authority`,
+  and `stage6_completion_audit_not_run=true`.
+- `python -m ruff check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-current-gap-proof.ps1`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
