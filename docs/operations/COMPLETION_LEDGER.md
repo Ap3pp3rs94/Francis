@@ -27953,6 +27953,35 @@ contract:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+Stage 6 Lens summon parent handoff authority contract on `2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so the parent `summon_anywhere` closure
+  handoff now exposes explicit `authority_granted` beside its existing
+  `authority_required` field.
+- When a first blocker family handoff is present, the parent handoff now derives
+  `authority_granted` from that source handoff; the OS-binding fallback remains
+  explicitly `authority_granted: false`.
+- Updated `tests\test_api_lens.py` so the Stage 6 Lens status contract asserts
+  the current denied parent summon authority boundary.
+- This is closure-readback contract tightening only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon parent handoff authority contract:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed; 1 test`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1185,6 +1185,7 @@ def _stage6_summon_handoff(
             "first_blocker_family_completion_audit_handoff": audit_handoff,
             "summon_anywhere_family_chain_completion_audit_handoff": family_chain_handoff,
             "authority_required": _safe_str(first_handoff.get("authority_required")).strip(),
+            "authority_granted": bool(first_handoff.get("authority_granted")),
             "next_smallest_truthful_gap": next_smallest_truthful_gap,
             "read_only_contract": True,
         }
@@ -1201,6 +1202,7 @@ def _stage6_summon_handoff(
         "execution_readiness_route": "/lens/os-binding/execution/readiness",
         "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status",
         "authority_required": "os_level_command_palette_binding_authority",
+        "authority_granted": False,
         "next_smallest_truthful_gap": next_smallest_truthful_gap,
         "read_only_contract": True,
     }

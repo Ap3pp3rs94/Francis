@@ -1631,6 +1631,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
             "would_mutate": False,
         },
         "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
         "next_smallest_truthful_gap": "summon_anywhere_blockers",
         "read_only_contract": True,
     }
