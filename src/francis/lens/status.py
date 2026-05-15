@@ -1374,6 +1374,7 @@ def _stage6_next_handoff_readback(
     if prerequisites_observed:
         prerequisites_handoff = {
             "id": "persistent_supervision_required_prerequisites",
+            "status": "blocked",
             "next_step": "resolve_persistent_supervision_required_prerequisites_before_enablement",
             "proof_script": "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
             "route": "/lens/host/persistent-supervision",
