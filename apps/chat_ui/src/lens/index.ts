@@ -419,6 +419,17 @@ export type LensStage6NextHandoffPresentation = {
   sourceHandoffBlockers: string[];
   sourceHandoffPreviousGap: string;
   sourceHandoffConsumedAuditGap: string;
+  sourceHandoffEnablementDenialObserved: boolean;
+  sourceHandoffExecutionDenialObserved: boolean;
+  sourceHandoffPersistentSupervisionEnablementAuthority: boolean;
+  sourceHandoffServiceConfigWriteAuthority: boolean;
+  sourceHandoffPersistentSupervisionExecutionAuthority: boolean;
+  sourceHandoffReceiptWriteAuthority: boolean;
+  sourceHandoffResidentClaimAuthority: boolean;
+  sourceHandoffResidentClaimAllowed: boolean;
+  sourceHandoffServiceConfigUpdated: boolean;
+  sourceHandoffApplied: boolean;
+  sourceHandoffExecuted: boolean;
   stageGap: string;
   currentGap: string;
   currentHandoff: string;
@@ -600,6 +611,23 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const sourceHandoffBlockers = safeStringList(sourceHandoff.blockers);
   const sourceHandoffPreviousGap = safeString(sourceHandoff.previous_next_smallest_truthful_gap).trim();
   const sourceHandoffConsumedAuditGap = safeString(sourceHandoff.consumed_audit_next_smallest_truthful_gap).trim();
+  const sourceHandoffEnablementDenialObserved = safeBoolean(sourceHandoff.enablement_denial_observed, false);
+  const sourceHandoffExecutionDenialObserved = safeBoolean(sourceHandoff.execution_denial_observed, false);
+  const sourceHandoffPersistentSupervisionEnablementAuthority = safeBoolean(
+    sourceHandoff.persistent_supervision_enablement_authority,
+    false,
+  );
+  const sourceHandoffServiceConfigWriteAuthority = safeBoolean(sourceHandoff.service_config_write_authority, false);
+  const sourceHandoffPersistentSupervisionExecutionAuthority = safeBoolean(
+    sourceHandoff.persistent_supervision_execution_authority,
+    false,
+  );
+  const sourceHandoffReceiptWriteAuthority = safeBoolean(sourceHandoff.receipt_write_authority, false);
+  const sourceHandoffResidentClaimAuthority = safeBoolean(sourceHandoff.resident_claim_authority, false);
+  const sourceHandoffResidentClaimAllowed = safeBoolean(sourceHandoff.resident_claim_allowed, false);
+  const sourceHandoffServiceConfigUpdated = safeBoolean(sourceHandoff.service_config_updated, false);
+  const sourceHandoffApplied = safeBoolean(sourceHandoff.applied, false);
+  const sourceHandoffExecuted = safeBoolean(sourceHandoff.executed, false);
   const stageGap = safeString(handoff?.stage_next_smallest_truthful_gap).trim();
   const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
   const currentHandoff = safeString(handoff?.recommended_next_slice).trim();
@@ -671,6 +699,17 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     sourceHandoffBlockers,
     sourceHandoffPreviousGap,
     sourceHandoffConsumedAuditGap,
+    sourceHandoffEnablementDenialObserved,
+    sourceHandoffExecutionDenialObserved,
+    sourceHandoffPersistentSupervisionEnablementAuthority,
+    sourceHandoffServiceConfigWriteAuthority,
+    sourceHandoffPersistentSupervisionExecutionAuthority,
+    sourceHandoffReceiptWriteAuthority,
+    sourceHandoffResidentClaimAuthority,
+    sourceHandoffResidentClaimAllowed,
+    sourceHandoffServiceConfigUpdated,
+    sourceHandoffApplied,
+    sourceHandoffExecuted,
     stageGap,
     currentGap,
     currentHandoff,

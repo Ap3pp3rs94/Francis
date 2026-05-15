@@ -576,6 +576,17 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             would_execute: false,
             would_mutate: false,
             authority_granted: false,
+            enablement_denial_observed: true,
+            execution_denial_observed: true,
+            persistent_supervision_enablement_authority: false,
+            service_config_write_authority: false,
+            persistent_supervision_execution_authority: false,
+            receipt_write_authority: false,
+            resident_claim_authority: false,
+            resident_claim_allowed: false,
+            service_config_updated: false,
+            applied: false,
+            executed: false,
             blockers: [
               "persistent_supervision_enablement_authority_not_granted",
               "persistent_supervision_execution_authority_not_granted",
@@ -941,6 +952,17 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.sourceHandoffConsumedAuditGap,
       "persistent_supervision_enablement_denial_boundary",
     );
+    assert.equal(handoffPresentation.sourceHandoffEnablementDenialObserved, true);
+    assert.equal(handoffPresentation.sourceHandoffExecutionDenialObserved, true);
+    assert.equal(handoffPresentation.sourceHandoffPersistentSupervisionEnablementAuthority, false);
+    assert.equal(handoffPresentation.sourceHandoffServiceConfigWriteAuthority, false);
+    assert.equal(handoffPresentation.sourceHandoffPersistentSupervisionExecutionAuthority, false);
+    assert.equal(handoffPresentation.sourceHandoffReceiptWriteAuthority, false);
+    assert.equal(handoffPresentation.sourceHandoffResidentClaimAuthority, false);
+    assert.equal(handoffPresentation.sourceHandoffResidentClaimAllowed, false);
+    assert.equal(handoffPresentation.sourceHandoffServiceConfigUpdated, false);
+    assert.equal(handoffPresentation.sourceHandoffApplied, false);
+    assert.equal(handoffPresentation.sourceHandoffExecuted, false);
     assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
     assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.stageGap, "summon_anywhere_blockers");
@@ -1073,6 +1095,17 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     sourceHandoffBlockers: [],
     sourceHandoffPreviousGap: "",
     sourceHandoffConsumedAuditGap: "",
+    sourceHandoffEnablementDenialObserved: false,
+    sourceHandoffExecutionDenialObserved: false,
+    sourceHandoffPersistentSupervisionEnablementAuthority: false,
+    sourceHandoffServiceConfigWriteAuthority: false,
+    sourceHandoffPersistentSupervisionExecutionAuthority: false,
+    sourceHandoffReceiptWriteAuthority: false,
+    sourceHandoffResidentClaimAuthority: false,
+    sourceHandoffResidentClaimAllowed: false,
+    sourceHandoffServiceConfigUpdated: false,
+    sourceHandoffApplied: false,
+    sourceHandoffExecuted: false,
     stageGap: "",
     currentGap: "",
     currentHandoff: "",

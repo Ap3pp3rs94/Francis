@@ -4478,6 +4478,19 @@ function SystemPanel(props: {
     ["receipt write", lensStage6NextHandoff.receiptWriteAuthority],
     ["mutation", lensStage6NextHandoff.mutationAuthorityGranted],
   ] as const;
+  const lensStage6SourceAuthorityReadback = [
+    ["enablement denial", lensStage6NextHandoff.sourceHandoffEnablementDenialObserved],
+    ["execution denial", lensStage6NextHandoff.sourceHandoffExecutionDenialObserved],
+    ["enablement authority", lensStage6NextHandoff.sourceHandoffPersistentSupervisionEnablementAuthority],
+    ["service config write", lensStage6NextHandoff.sourceHandoffServiceConfigWriteAuthority],
+    ["execution authority", lensStage6NextHandoff.sourceHandoffPersistentSupervisionExecutionAuthority],
+    ["receipt write", lensStage6NextHandoff.sourceHandoffReceiptWriteAuthority],
+    ["resident claim authority", lensStage6NextHandoff.sourceHandoffResidentClaimAuthority],
+    ["resident claim allowed", lensStage6NextHandoff.sourceHandoffResidentClaimAllowed],
+    ["service config updated", lensStage6NextHandoff.sourceHandoffServiceConfigUpdated],
+    ["applied", lensStage6NextHandoff.sourceHandoffApplied],
+    ["executed", lensStage6NextHandoff.sourceHandoffExecuted],
+  ] as const;
   const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
   const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
   const lensHudBadges = lensHud?.badges ?? [];
@@ -5794,6 +5807,16 @@ function SystemPanel(props: {
                     {" / "}consumed audit <code>{lensStage6NextHandoff.sourceHandoffConsumedAuditGap}</code>
                   </>
                 ) : null}
+              </div>
+            ) : null}
+            {lensStage6NextHandoff.sourceHandoffLoaded ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                source authority{" "}
+                <code>
+                  {lensStage6SourceAuthorityReadback
+                    .map(([label, value]) => `${label}=${value ? "true" : "false"}`)
+                    .join(", ")}
+                </code>
               </div>
             ) : null}
             {lensStage6NextHandoff.stageGap ? (
