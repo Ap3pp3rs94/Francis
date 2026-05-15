@@ -27924,6 +27924,35 @@ contract:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+Stage 6 Lens system-resident handoff authority contract on `2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so the blocked
+  `system_resident_presence` closure handoff now exposes an explicit
+  `authority_granted` readback beside
+  `authority_required: resident_runtime_execution_authority`.
+- The new field is sourced from the existing resident runtime authority grant
+  readiness instead of being hard-coded, so the handoff stays truthful if that
+  authority posture changes while other resident-presence blockers remain.
+- Updated `tests\test_api_lens.py` so the Stage 6 Lens status contract asserts
+  the current denied resident-runtime authority boundary.
+- This is closure-readback contract tightening only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens system-resident handoff authority
+contract:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed; 1 test`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

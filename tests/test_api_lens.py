@@ -1733,6 +1733,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "tray_route": "/lens/tray",
         "overlay_route": "/lens/overlay",
         "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
         "supervision_authority_next_smallest_truthful_gap": "host_supervision_authority_exact_approval_request",
         "supervision_authority_first_blocked_requirement": "exact_supervision_authority_approval",
         "supervision_authority_first_blocked_requirement_handoff": {

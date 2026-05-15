@@ -1776,6 +1776,7 @@ def _stage6_closure_readback(
                 "tray_route": "/lens/tray",
                 "overlay_route": "/lens/overlay",
                 "authority_required": "resident_runtime_execution_authority",
+                "authority_granted": bool(resident_runtime_authority_grant_readiness.get("authority_granted")),
                 "supervision_authority_next_smallest_truthful_gap": _safe_str(
                     supervision_authority_readiness.get("next_smallest_truthful_gap")
                 ).strip(),
