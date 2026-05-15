@@ -374,9 +374,19 @@ export type LensStage6NextHandoff = {
 
 export type LensStage6NextHandoffPresentation = {
   loaded: boolean;
+  kind: string;
   status: string;
+  readyToClose: boolean;
   source: string;
   authority: string;
+  readOnlyContract: boolean;
+  diagnosticOnly: boolean;
+  executionAuthority: boolean;
+  processSupervisionAuthority: boolean;
+  residentClaimAuthority: boolean;
+  prerequisitesObserved: boolean;
+  enablementAuthorityHandoffObserved: boolean;
+  residentCandidateHandoffObserved: boolean;
   stageGap: string;
   currentGap: string;
   currentHandoff: string;
@@ -500,7 +510,21 @@ export function shouldOpenLensStatusPanel(search: string, hash = ""): boolean {
 }
 
 export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensStage6NextHandoffPresentation {
+  const governance = safeRecord(handoff?.governance);
+  const kind = safeString(handoff?.kind).trim();
   const status = safeString(handoff?.status).trim() || "readback";
+  const readyToClose = safeBoolean(handoff?.ready_to_close, false);
+  const readOnlyContract = safeBoolean(governance.read_only_contract, false);
+  const diagnosticOnly = safeBoolean(governance.diagnostic_only, false);
+  const executionAuthority = safeBoolean(governance.execution_authority, false);
+  const processSupervisionAuthority = safeBoolean(governance.process_supervision_authority, false);
+  const residentClaimAuthority = safeBoolean(governance.resident_claim_authority, false);
+  const prerequisitesObserved = safeBoolean(handoff?.persistent_supervision_required_prerequisites_observed, false);
+  const enablementAuthorityHandoffObserved = safeBoolean(
+    handoff?.persistent_supervision_enablement_authority_handoff_observed,
+    false,
+  );
+  const residentCandidateHandoffObserved = safeBoolean(handoff?.resident_runtime_candidate_handoff_observed, false);
   const source = safeString(handoff?.recommended_handoff_source).trim();
   const stageGap = safeString(handoff?.stage_next_smallest_truthful_gap).trim();
   const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
@@ -530,9 +554,19 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
 
   return {
     loaded: Boolean(stageGap || currentGap || source || firstBlockedCriterion || missingPrerequisites.length),
+    kind,
     status,
+    readyToClose,
     source,
     authority,
+    readOnlyContract,
+    diagnosticOnly,
+    executionAuthority,
+    processSupervisionAuthority,
+    residentClaimAuthority,
+    prerequisitesObserved,
+    enablementAuthorityHandoffObserved,
+    residentCandidateHandoffObserved,
     stageGap,
     currentGap,
     currentHandoff,

@@ -869,7 +869,17 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.stage6_readiness.next_handoff.governance.execution_authority, false);
     const handoffPresentation = presentStage6NextHandoff(snapshot.stage6_readiness.next_handoff);
     assert.equal(handoffPresentation.loaded, true);
+    assert.equal(handoffPresentation.kind, "lens.stage6.next_handoff.readback");
     assert.equal(handoffPresentation.status, "readback_ready");
+    assert.equal(handoffPresentation.readyToClose, false);
+    assert.equal(handoffPresentation.readOnlyContract, true);
+    assert.equal(handoffPresentation.diagnosticOnly, true);
+    assert.equal(handoffPresentation.executionAuthority, false);
+    assert.equal(handoffPresentation.processSupervisionAuthority, false);
+    assert.equal(handoffPresentation.residentClaimAuthority, false);
+    assert.equal(handoffPresentation.prerequisitesObserved, true);
+    assert.equal(handoffPresentation.enablementAuthorityHandoffObserved, true);
+    assert.equal(handoffPresentation.residentCandidateHandoffObserved, false);
     assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
     assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.stageGap, "summon_anywhere_blockers");
@@ -952,9 +962,19 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
 test("presentStage6NextHandoff returns an unloaded readback when the contract is missing", () => {
   assert.deepEqual(presentStage6NextHandoff(undefined), {
     loaded: false,
+    kind: "",
     status: "readback",
+    readyToClose: false,
     source: "",
     authority: "",
+    readOnlyContract: false,
+    diagnosticOnly: false,
+    executionAuthority: false,
+    processSupervisionAuthority: false,
+    residentClaimAuthority: false,
+    prerequisitesObserved: false,
+    enablementAuthorityHandoffObserved: false,
+    residentCandidateHandoffObserved: false,
     stageGap: "",
     currentGap: "",
     currentHandoff: "",

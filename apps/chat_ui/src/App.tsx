@@ -5701,12 +5701,37 @@ function SystemPanel(props: {
             <div style={{ fontSize: 11, color: THEME.muted }}>Stage 6 next handoff</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
               <span style={badgeStyle(lensStage6NextHandoff.status)}>{lensStage6NextHandoff.status}</span>
+              <span style={badgeStyle(lensStage6NextHandoff.readyToClose ? "settled" : "blocked")}>
+                close {lensStage6NextHandoff.readyToClose ? "ready" : "blocked"}
+              </span>
+              {lensStage6NextHandoff.readOnlyContract ? <span style={badgeStyle("readback")}>read-only</span> : null}
+              {lensStage6NextHandoff.diagnosticOnly ? <span style={badgeStyle("readback")}>diagnostic</span> : null}
+              <span style={badgeStyle(lensStage6NextHandoff.executionAuthority ? "settled" : "blocked")}>
+                execution {lensStage6NextHandoff.executionAuthority ? "true" : "false"}
+              </span>
+              <span style={badgeStyle(lensStage6NextHandoff.processSupervisionAuthority ? "settled" : "blocked")}>
+                supervision {lensStage6NextHandoff.processSupervisionAuthority ? "true" : "false"}
+              </span>
+              <span style={badgeStyle(lensStage6NextHandoff.residentClaimAuthority ? "settled" : "blocked")}>
+                resident claim {lensStage6NextHandoff.residentClaimAuthority ? "true" : "false"}
+              </span>
               {lensStage6NextHandoff.source ? (
                 <span style={badgeStyle("readback")}>{lensStage6NextHandoff.source}</span>
               ) : null}
               {lensStage6NextHandoff.authority ? (
                 <span style={badgeStyle("blocked")}>authority {lensStage6NextHandoff.authority}</span>
               ) : null}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle(lensStage6NextHandoff.prerequisitesObserved ? "readback" : "blocked")}>
+                prerequisites observed {lensStage6NextHandoff.prerequisitesObserved ? "true" : "false"}
+              </span>
+              <span style={badgeStyle(lensStage6NextHandoff.enablementAuthorityHandoffObserved ? "readback" : "blocked")}>
+                authority handoff {lensStage6NextHandoff.enablementAuthorityHandoffObserved ? "true" : "false"}
+              </span>
+              <span style={badgeStyle(lensStage6NextHandoff.residentCandidateHandoffObserved ? "readback" : "blocked")}>
+                resident candidate {lensStage6NextHandoff.residentCandidateHandoffObserved ? "true" : "false"}
+              </span>
             </div>
             {lensStage6NextHandoff.stageGap ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
