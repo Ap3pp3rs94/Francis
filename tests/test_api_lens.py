@@ -1526,6 +1526,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_execute"] is False
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_mutate"] is False
     assert (
+        next_handoff["persistent_supervision_required_prerequisites_handoff"]["id"]
+        == "persistent_supervision_required_prerequisites"
+    )
+    assert (
         next_handoff["persistent_supervision_required_prerequisites_handoff"]["next_smallest_truthful_gap"]
         == "persistent_supervision_required_prerequisites_missing"
     )
@@ -5005,6 +5009,10 @@ def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> N
     )
     assert next_handoff["recommended_prerequisites_proof_script"] == (
         "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert (
+        next_handoff["persistent_supervision_required_prerequisites_handoff"]["id"]
+        == "persistent_supervision_required_prerequisites"
     )
     assert next_handoff["recommended_first_missing_handoff_source"] == (
         "persistent_supervision_first_missing_requirement_handoff"
