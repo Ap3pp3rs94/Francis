@@ -63,6 +63,7 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     assert payload["consumed_resident_candidate_next_smallest_truthful_gap"] == ("resident_supervision_not_persistent")
     assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["recommended_handoff_source"] == "resident_supervision_persistence_boundary_handoff"
     assert payload["recommended_next_slice"] == (
         "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
     )
@@ -133,11 +134,17 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
         "consumed_resident_candidate_next_smallest_truthful_gap": "resident_supervision_not_persistent",
         "route_next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
         "next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
+        "recommended_handoff_source": "resident_supervision_persistence_boundary_handoff",
         "recommended_next_slice": "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
         "recommended_proof_script": ("scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"),
         "recommended_route": "/lens/host/persistent-supervision/enablement/authority",
         "recommended_readiness_route": "/lens/host/persistent-supervision/enablement/authority/readiness",
         "authority_required": "persistent_process_supervision_authority",
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "authority_granted": False,
     }
     assert payload["governance"] == {
         "diagnostic_only": True,

@@ -520,6 +520,7 @@ $Payload = [ordered]@{
   consumed_resident_candidate_next_smallest_truthful_gap = $PlanHandoffNextGap
   route_next_smallest_truthful_gap = $RouteNextGap
   next_smallest_truthful_gap = 'persistent_supervision_authority_not_granted'
+  recommended_handoff_source = 'resident_supervision_persistence_boundary_handoff'
   recommended_next_slice = 'prove_persistent_supervision_enablement_authority_after_candidate_handoff'
   recommended_proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
   recommended_route = '/lens/host/persistent-supervision/enablement/authority'
@@ -577,11 +578,17 @@ $Payload = [ordered]@{
     consumed_resident_candidate_next_smallest_truthful_gap = $PlanHandoffNextGap
     route_next_smallest_truthful_gap = $RouteNextGap
     next_smallest_truthful_gap = 'persistent_supervision_authority_not_granted'
+    recommended_handoff_source = 'resident_supervision_persistence_boundary_handoff'
     recommended_next_slice = 'prove_persistent_supervision_enablement_authority_after_candidate_handoff'
     recommended_proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
     recommended_route = '/lens/host/persistent-supervision/enablement/authority'
     recommended_readiness_route = '/lens/host/persistent-supervision/enablement/authority/readiness'
     authority_required = [string](Get-PropertyValue -Payload $PlanHandoff -Name 'authority_required' -Default '')
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    authority_granted = $false
   }
   evidence = @(
     'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',

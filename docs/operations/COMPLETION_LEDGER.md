@@ -27021,6 +27021,45 @@ enablement-authority readback correction:
 - This receipt records proof-chain convergence only. It does not grant runtime
   authority, mark Stage 6 complete, or change the 2/5 checkpoint posture.
 
+Stage 6 Lens resident-supervision persistence-boundary handoff readback
+correction on `2026-05-15`:
+
+- Updated `scripts\lens-resident-supervision-persistence-boundary-proof.ps1` so
+  its top-level payload and nested `handoff` object explicitly name
+  `recommended_handoff_source=resident_supervision_persistence_boundary_handoff`
+  when the bounded resident-candidate proof has been consumed and the next
+  truthful gap is `persistent_supervision_authority_not_granted`.
+- The nested handoff now also carries explicit read-only governance flags:
+  `read_only_contract=true`, `diagnostic_only=true`, `would_execute=false`,
+  `would_mutate=false`, and `authority_granted=false`.
+- This is a readback correction only. It does not grant persistent process
+  supervision authority, process restart authority, service control authority,
+  persistent-supervision enablement authority, execution authority, receipt write
+  authority, resident-claim authority, runtime residency, tray, hotkey, overlay,
+  summon, memory, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 resident-supervision persistence-boundary
+handoff readback correction:
+
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required,handoff | ConvertTo-Json -Depth 8`
+  Result: `proof_passed`, with
+  `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`,
+  `recommended_handoff_source=resident_supervision_persistence_boundary_handoff`,
+  `recommended_proof_script=scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`,
+  and a nested read-only handoff with `authority_granted=false`.
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts\lens-resident-supervision-persistence-boundary-proof.ps1), ...)`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed with expected PowerShell line-ending warning for
+  scripts\lens-resident-supervision-persistence-boundary-proof.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
