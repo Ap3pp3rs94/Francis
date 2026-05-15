@@ -399,6 +399,8 @@ def _run() -> tuple[int, dict[str, Any]]:
         "recommended_proof_script": "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status",
         "recommended_handoff_source": "persistent_supervision_enablement_authority_handoff",
         "authority_required": "persistent_supervision_execution_authority_and_resident_claim_authority",
+        "recommended_route": "/lens/host/persistent-supervision/enablement",
+        "recommended_readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
         "persistent_supervision_enablement_route": "/lens/host/persistent-supervision/enablement",
         "enablement_authority_request_route": "/lens/host/persistent-supervision/enablement/authority/request",
         "enablement_authority_grants_route": "/lens/host/persistent-supervision/enablement/authority/grants",

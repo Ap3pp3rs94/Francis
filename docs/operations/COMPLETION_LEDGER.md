@@ -27202,19 +27202,20 @@ first-missing handoff readback correction:
   `scripts\lens-persistent-supervision-current-gap-proof.ps1`
   Result: `passed`
 
-Stage 6 Lens persistent-supervision authority-chain top-level authority
-readback correction on `2026-05-15`:
+Stage 6 Lens persistent-supervision authority-chain top-level handoff readback
+correction on `2026-05-15`:
 
 - Updated
   `scripts\lens-persistent-supervision-enablement-authority-proof.ps1`,
   `scripts\lens-persistent-supervision-execution-authority-proof.ps1`, and
   `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1` so
-  each top-level payload exposes `authority_required` with the same value as its
-  nested `handoff.authority_required`.
+  each top-level payload exposes `authority_required`, `recommended_route`, and
+  `recommended_readiness_route` with the same values as the nested `handoff`
+  object.
 - The authority-chain proof summaries now report:
   `persistent_supervision_execution_authority_and_resident_claim_authority`,
   `resident_claim_authority`, and `none_new_stage6_completion_audit` at the
-  top level.
+  top level, plus the corresponding route/readiness-route handoff surfaces.
 - This is an auditability/readback correction only. It does not grant runtime
   launch authority, product execution, process supervision, process restart,
   service install/control, service config write, persistent-supervision
@@ -27223,24 +27224,30 @@ readback correction on `2026-05-15`:
   active at 2/5 checkpoint criteria.
 
 Latest validation for the Stage 6 persistent-supervision authority-chain
-top-level authority readback correction:
+top-level handoff readback correction:
 
 - `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
   Result: `passed`
 - Direct readback for
   `scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`
   Result: `proof_passed`, with
-  `authority_required=persistent_supervision_execution_authority_and_resident_claim_authority`
-  and matching nested `handoff.authority_required`.
+  `authority_required=persistent_supervision_execution_authority_and_resident_claim_authority`,
+  `recommended_route=/lens/host/persistent-supervision/enablement`,
+  `recommended_readiness_route=/lens/host/persistent-supervision/enablement/execution/readiness`,
+  and matching nested handoff fields.
 - Direct readback for
   `scripts\lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status`
-  Result: `proof_passed`, with `authority_required=resident_claim_authority`
-  and matching nested `handoff.authority_required`.
+  Result: `proof_passed`, with `authority_required=resident_claim_authority`,
+  `recommended_route=/lens/host/persistent-supervision/enablement/execution`,
+  `recommended_readiness_route=/lens/host/persistent-supervision/enablement/execution/readiness`,
+  and matching nested handoff fields.
 - Direct readback for
   `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
   Result: `proof_passed`, with
-  `authority_required=none_new_stage6_completion_audit` and matching nested
-  `handoff.authority_required`.
+  `authority_required=none_new_stage6_completion_audit`,
+  `recommended_route=/lens/host/persistent-supervision/enablement/execution`,
+  `recommended_readiness_route=/lens/host/persistent-supervision/enablement/execution/readiness`,
+  and matching nested handoff fields.
 - `python -m ruff check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py`
   Result: `passed`
 - `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py`

@@ -83,6 +83,8 @@ def test_lens_persistent_supervision_enablement_authority_proof_grants_bounded_a
     )
     assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_authority_handoff"
     assert payload["authority_required"] == "persistent_supervision_execution_authority_and_resident_claim_authority"
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/execution/readiness"
     assert payload["persistent_supervision_enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert (
         payload["enablement_authority_request_route"]
