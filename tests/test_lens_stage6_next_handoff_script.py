@@ -402,6 +402,8 @@ def test_lens_stage6_next_handoff_consumes_activation_execution_handoff(tmp_path
     assert handoff["activation_execution_evidence_only"] is True
     assert handoff["does_not_satisfy_resident_host_process"] is True
     assert handoff["next_step"] == "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    assert handoff["authority_required"] == "process_supervision_authority"
+    assert handoff["authority_granted"] is False
     assert handoff["read_only_contract"] is True
     assert handoff["diagnostic_only"] is True
     assert handoff["would_execute"] is False

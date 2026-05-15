@@ -9020,6 +9020,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
         assert execution_handoff["route"] == "/lens/host"
         assert execution_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
         assert execution_handoff["authority_required"] == "process_supervision_authority"
+        assert execution_handoff["authority_granted"] is False
         assert execution_handoff["read_only_contract"] is True
         assert execution_handoff["diagnostic_only"] is True
         assert execution_handoff["would_execute"] is False

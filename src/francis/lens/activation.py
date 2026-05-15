@@ -2722,6 +2722,7 @@ def _activation_execution_handoff(latest: dict[str, Any] | None) -> dict[str, An
         "route": "/lens/host",
         "readiness_route": "/lens/host/runtime-loop/readiness",
         "authority_required": "process_supervision_authority",
+        "authority_granted": False,
         "read_only_contract": True,
         "diagnostic_only": True,
         "would_execute": False,

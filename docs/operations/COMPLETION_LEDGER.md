@@ -27836,6 +27836,36 @@ contract:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
   Result: `passed`
 
+Stage 6 Lens activation execution handoff authority contract on
+`2026-05-15`:
+
+- Updated `src\francis\lens\activation.py` so bounded foreground activation
+  execution handoffs now carry explicit `authority_granted: false` beside their
+  existing `authority_required: process_supervision_authority` boundary.
+- Updated `tests\test_api_lens.py` so the activation execution receipt readback
+  asserts the denied process-supervision authority boundary before treating the
+  handoff as valid evidence.
+- Updated `tests\test_lens_stage6_next_handoff_script.py` so the Stage 6
+  next-handoff proof wrapper asserts the same activation-execution authority
+  boundary when it consumes that handoff.
+- This is source-handoff API/readback contract tightening only. It does not run
+  the Stage 6 completion audit, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens activation execution handoff authority
+contract:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_activation_execution_handoff -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
