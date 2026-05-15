@@ -1472,6 +1472,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["recommended_request_route"] == "/lens/host/activation/request"
     assert next_handoff["recommended_grant_route"] == "/lens/host/activation/authority"
     assert next_handoff["authority_required"] == ("resident_host_process_tray_hotkey_overlay_and_summon_prerequisites")
+    assert next_handoff["authority_granted"] is False
     assert next_handoff["recommended_prerequisites_handoff_source"] == (
         "persistent_supervision_required_prerequisites_handoff"
     )

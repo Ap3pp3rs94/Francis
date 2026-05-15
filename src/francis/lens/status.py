@@ -1517,6 +1517,7 @@ def _stage6_next_handoff_readback(
         "recommended_execution_readiness_route": _safe_str(recommended_handoff.get("execution_readiness_route")).strip()
         or _safe_str(recommended_handoff.get("execution_route")).strip(),
         "authority_required": authority_required,
+        "authority_granted": bool(recommended_handoff.get("authority_granted")),
         "recommended_prerequisites_handoff_source": (
             "persistent_supervision_required_prerequisites_handoff" if prerequisites_observed else ""
         ),
