@@ -75,6 +75,32 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement"
     assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
     assert payload["authority_required"] == "persistent_supervision_enablement_authority"
+    assert payload["recommended_prerequisites_handoff_source"] == (
+        "persistent_supervision_required_prerequisites_handoff"
+    )
+    assert payload["recommended_prerequisites_next_slice"] == (
+        "resolve_persistent_supervision_required_prerequisites_before_enablement"
+    )
+    assert payload["recommended_prerequisites_proof_script"] == (
+        "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_prerequisites_route"] == "/lens/host/persistent-supervision"
+    assert payload["recommended_prerequisites_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["recommended_prerequisites_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert payload["recommended_first_missing_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_first_missing_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert payload["recommended_first_missing_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_first_missing_route"] == "/lens/host"
+    assert payload["recommended_first_missing_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert payload["recommended_first_missing_authority_required"] == "process_supervision_authority"
     assert payload["blocked_criteria"] == [
         "summon_anywhere",
         "helpful_not_noisy",

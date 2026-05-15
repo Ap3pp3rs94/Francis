@@ -27255,6 +27255,50 @@ top-level handoff readback correction:
 - PowerShell parser check for the three touched proof scripts
   Result: `passed`
 
+Stage 6 Lens next-handoff prerequisite summary readback correction on
+`2026-05-15`:
+
+- Updated `scripts\lens-stage6-next-handoff.ps1` so the top-level payload keeps
+  its existing current `recommended_handoff_source` while also exposing
+  `recommended_prerequisites_*` and `recommended_first_missing_*` summary fields
+  for the already-observed persistent-supervision prerequisite and first-missing
+  handoff paths.
+- The readback now preserves both operator truths at once: the current selected
+  Stage 6 next handoff can remain the enablement-authority denial proof after the
+  audit chain consumes earlier resident-host diagnostics, and the still-missing
+  prerequisite path remains visible without requiring operator surfaces to parse
+  nested handoff objects.
+- This is an auditability/readback correction only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 next-handoff prerequisite summary readback
+correction:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_prerequisites_handoff_source,recommended_prerequisites_next_slice,recommended_prerequisites_proof_script,recommended_first_missing_handoff_source,recommended_first_missing_next_slice,recommended_first_missing_proof_script,recommended_first_missing_authority_required | ConvertTo-Json -Depth 6`
+  Result: `proof_passed`, with
+  `next_smallest_truthful_gap=persistent_supervision_enablement_authority_not_granted`,
+  `recommended_handoff_source=persistent_supervision_enablement_authority_denial_handoff`,
+  `recommended_prerequisites_handoff_source=persistent_supervision_required_prerequisites_handoff`,
+  `recommended_prerequisites_next_slice=resolve_persistent_supervision_required_prerequisites_before_enablement`,
+  `recommended_prerequisites_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`,
+  `recommended_first_missing_handoff_source=persistent_supervision_first_missing_requirement_handoff`,
+  `recommended_first_missing_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement`,
+  `recommended_first_missing_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`,
+  and `recommended_first_missing_authority_required=process_supervision_authority`.
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

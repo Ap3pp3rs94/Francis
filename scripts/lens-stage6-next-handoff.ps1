@@ -487,6 +487,19 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
   $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'readiness_route' -Default '')
   $AuthorityRequired = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'authority_required' -Default '')
 }
+$RecommendedFirstMissingAuthorityRequired = [string](
+  Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
+)
+$FirstMissingHandoffNextGap = [string](
+  Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default ''
+)
+if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
+  if ($FirstMissingHandoffNextGap -eq 'resident_host_process_not_supervised') {
+    $RecommendedFirstMissingAuthorityRequired = 'process_supervision_authority'
+  } elseif ($FirstMissingHandoffNextGap -eq 'resident_supervision_not_persistent') {
+    $RecommendedFirstMissingAuthorityRequired = 'persistent_process_supervision_authority'
+  }
+}
 $FamilyChainHandoffObserved = (
   [string](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
   [bool](Get-PropertyValue -Payload $FamilyChainCompletionAuditHandoff -Name 'read_only_contract' -Default $false) -and
@@ -546,6 +559,18 @@ $Payload = [ordered]@{
   recommended_route = $RecommendedRoute
   recommended_readiness_route = $RecommendedReadinessRoute
   authority_required = $AuthorityRequired
+  recommended_prerequisites_handoff_source = $(if ($PersistentSupervisionRequiredPrerequisitesObserved) { 'persistent_supervision_required_prerequisites_handoff' } else { '' })
+  recommended_prerequisites_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'next_step' -Default '')
+  recommended_prerequisites_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'proof_script' -Default '')
+  recommended_prerequisites_route = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'route' -Default '')
+  recommended_prerequisites_readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'readiness_route' -Default '')
+  recommended_prerequisites_authority_required = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'authority_required' -Default '')
+  recommended_first_missing_handoff_source = $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'persistent_supervision_first_missing_requirement_handoff' } else { '' })
+  recommended_first_missing_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_step' -Default '')
+  recommended_first_missing_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'proof_script' -Default '')
+  recommended_first_missing_route = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'route' -Default '')
+  recommended_first_missing_readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'readiness_route' -Default '')
+  recommended_first_missing_authority_required = $RecommendedFirstMissingAuthorityRequired
   blocked_criteria = $BlockedCriteria
   ready_criteria = $ReadyCriteria
   first_blocker_family_handoff = $FirstBlockerFamilyHandoff
