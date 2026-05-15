@@ -33,7 +33,7 @@ import {
 import { ExplanationApiError, ExplanationClient, type ExplanationRecord } from "./explanation_explorer";
 import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
 import type { MemoryTimelineEvent } from "./memory_timeline";
-import { LensApiError, LensClient, shouldOpenLensCommandPalette, type LensStatus } from "./lens";
+import { LensApiError, LensClient, shouldOpenLensCommandPalette, shouldOpenLensStatusPanel, type LensStatus } from "./lens";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
 import {
@@ -2833,6 +2833,11 @@ export default function App() {
     if (!shouldOpenLensCommandPalette(window.location.search, window.location.hash)) return;
     setPaletteQuery("");
     setPaletteOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldOpenLensStatusPanel(window.location.search, window.location.hash)) return;
+    setPanel("system");
   }, []);
 
   useEffect(() => {

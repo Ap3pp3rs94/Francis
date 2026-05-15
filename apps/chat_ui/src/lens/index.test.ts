@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LensApiError, LensClient, parseLensStatus, shouldOpenLensCommandPalette } from "./index.ts";
+import {
+  LensApiError,
+  LensClient,
+  parseLensStatus,
+  shouldOpenLensCommandPalette,
+  shouldOpenLensStatusPanel,
+} from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -12,6 +18,15 @@ test("shouldOpenLensCommandPalette accepts governed URL intents", () => {
   assert.equal(shouldOpenLensCommandPalette("", "#/console?lens_palette=command_palette"), true);
   assert.equal(shouldOpenLensCommandPalette("?francis_lens=status"), false);
   assert.equal(shouldOpenLensCommandPalette("?lens_palette=closed"), false);
+});
+
+test("shouldOpenLensStatusPanel accepts read-only Lens status URL intents", () => {
+  assert.equal(shouldOpenLensStatusPanel("?francis_lens=status"), true);
+  assert.equal(shouldOpenLensStatusPanel("?lens_panel=status"), true);
+  assert.equal(shouldOpenLensStatusPanel("", "#/console?francis_lens=status"), true);
+  assert.equal(shouldOpenLensStatusPanel("", "#/console?lens_panel=status"), true);
+  assert.equal(shouldOpenLensStatusPanel("?francis_lens=command_palette"), false);
+  assert.equal(shouldOpenLensStatusPanel("?lens_panel=approvals"), false);
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

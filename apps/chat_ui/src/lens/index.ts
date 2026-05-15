@@ -460,6 +460,19 @@ export function shouldOpenLensCommandPalette(search: string, hash = ""): boolean
   return francisLens === "command_palette" || lensPalette === "open" || lensPalette === "command_palette";
 }
 
+export function shouldOpenLensStatusPanel(search: string, hash = ""): boolean {
+  const searchParams = paramsFromLocationPart(search);
+  const hashText = safeString(hash).trim().replace(/^#/, "");
+  const hashQuery = hashText.includes("?") ? hashText.slice(hashText.indexOf("?") + 1) : hashText;
+  const hashParams = paramsFromLocationPart(hashQuery);
+
+  const francisLens = (searchParams.get("francis_lens") || hashParams.get("francis_lens") || "")
+    .trim()
+    .toLowerCase();
+  const lensPanel = (searchParams.get("lens_panel") || hashParams.get("lens_panel") || "").trim().toLowerCase();
+  return francisLens === "status" || lensPanel === "status";
+}
+
 function safeNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {

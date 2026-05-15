@@ -27355,6 +27355,35 @@ Latest validation for the Stage 6 chat UI next-handoff summary projection:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens status-panel URL intent on `2026-05-15`:
+
+- Added a read-only Lens status panel URL intent for the chat UI:
+  `?francis_lens=status` or `?lens_panel=status` now opens the ORB/System panel
+  where the Stage 6 Lens next-handoff readback is rendered.
+- The existing `?francis_lens=command_palette` command-palette intent remains
+  unchanged; `?francis_lens=status` does not open the command palette and does
+  not perform any mutation.
+- This is an operator navigation/readback improvement only. It does not run the
+  Stage 6 completion audit, does not close Stage 6, and does not grant runtime
+  launch, product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens status-panel URL intent:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- Browser screenshot attempt:
+  Result: `not completed; Playwright CLI screenshot hung after the Vite dev
+  server started, and the temporary child processes were stopped. No browser
+  proof is claimed for this slice.`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
