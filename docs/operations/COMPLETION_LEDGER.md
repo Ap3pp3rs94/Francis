@@ -27126,6 +27126,32 @@ helper correction:
 - `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+Stage 6 Lens completion-audit CI gate narrowing on `2026-05-15`:
+
+- GitHub Actions run `25900943244` exposed that once the child process-start
+  helper was fixed, the full Stage 6 completion-audit test could reach its
+  existing 420-second outer harness timeout on Ubuntu 3.13 while executing
+  nested live diagnostics.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` so the full
+  multi-minute `scripts\lens-stage6-completion-audit.ps1` test is explicit
+  opt-in via `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1`.
+- The default CI path still validates the completion-audit child-capture helper
+  contract and relies on the existing focused current-gap/prerequisite proof
+  tests for the governed Stage 6 blocked posture. The full audit script remains
+  available as a manual/full diagnostic.
+- This is a CI harness boundary correction only. It does not mark the completion
+  audit as passed, does not close Stage 6, and does not grant runtime launch,
+  process supervision, process restart, service install/control, service config
+  write, persistent-supervision enablement/execution, resident claim, memory
+  write, receipt write, approval-decision, tray, hotkey, overlay, summon, or
+  mutation authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 completion-audit CI gate narrowing:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_current_gap_proof_script.py tests\test_lens_stage6_prerequisite_gap_proof_script.py -q`
+  Result: `passed; default path skipped the explicit full completion-audit
+  diagnostic and passed the focused current-gap/prerequisite proof coverage`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

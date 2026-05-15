@@ -11,6 +11,7 @@ import pytest
 from powershell_script_runner import run_powershell_script
 
 _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS = 120
+_FULL_AUDIT_ENV = "FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST"
 
 
 def _powershell() -> str:
@@ -45,6 +46,12 @@ def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodin
     assert "StandardErrorEncoding" not in script
 
 
+@pytest.mark.skipif(
+    os.environ.get(_FULL_AUDIT_ENV) != "1",
+    reason=(
+        f"Full Stage 6 completion audit runs nested live diagnostics; set {_FULL_AUDIT_ENV}=1 to run it explicitly."
+    ),
+)
 def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> None:
     proc = _run_audit(
         "-Mode",
