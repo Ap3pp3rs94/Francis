@@ -2282,7 +2282,7 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 }
 
-$RecommendedAuthorityGranted = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'authority_granted' -Default $false)
+$RecommendedAuthorityGranted = [bool]$RecommendedHandoff.authority_granted
 
 $Payload = [ordered]@{
   ok = $true

@@ -28145,6 +28145,43 @@ correction:
 - Full opt-in completion audit was not rerun in this slice after the timeout
   budget correction.
 
+Stage 6 Lens completion-audit timeout-path readback on `2026-05-15`:
+
+- Fixed `scripts\lens-stage6-completion-audit.ps1` so the top-level
+  `authority_granted` projection reads the selected `recommended_handoff`
+  directly instead of calling a helper that is not defined in the completion
+  audit script.
+- Updated the opt-in full audit test so it accepts both truthful completion
+  outcomes under the serial child-proof envelope: all child proofs complete and
+  the audit blocks on `persistent_supervision_enablement_authority_not_granted`,
+  or the transition-plan child proof times out and the audit blocks on
+  `persistent_supervision_enablement_transition_plan_proof_readback`.
+- The test also arms a matching pytest faulthandler budget so the repo-level
+  `600s` faulthandler does not kill a still-valid full audit before the expanded
+  parent timeout can return a structured result.
+- This is completion-audit script/test hardening only. It does not close Stage
+  6, and does not grant runtime launch, product execution, process supervision,
+  process restart, service install/control, service config write,
+  persistent-supervision enablement/execution, resident claim, memory write,
+  receipt write, approval-decision, tray, hotkey, overlay, summon, capture,
+  sensing, or mutation authority. Stage 6 remains active at 2/5 checkpoint
+  criteria.
+
+Latest validation for the Stage 6 Lens completion-audit timeout-path readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed; 1 test`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
