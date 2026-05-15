@@ -725,11 +725,15 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$PersistentSupervisionEnablementTransitionPlanProofChildProofCount = 4
+$PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (
+  $ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofChildProofCount
+) + 60
 $PersistentSupervisionEnablementTransitionPlanProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionEnablementTransitionPlanProofScript `
-  -ScriptArgs @('-Mode', 'Status') `
-  -TimeoutSeconds $ChildProofTimeoutSeconds
+  -ScriptArgs @('-Mode', 'Status', '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds) `
+  -TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds
 $PersistentSupervisionEnablementTransitionPlanProof = $PersistentSupervisionEnablementTransitionPlanProofResult.payload
 $PersistentSupervisionEnablementTransitionPlanProofBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementTransitionPlanProof.blockers
 $PersistentSupervisionEnablementTransitionPlanProofRequiredBeforeEnable = ConvertTo-StringArray -Value (

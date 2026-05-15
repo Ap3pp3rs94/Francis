@@ -28182,6 +28182,47 @@ Latest validation for the Stage 6 Lens completion-audit timeout-path readback:
 - `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
   Result: `passed; 1 test`
 
+Stage 6 Lens completion-audit transition-plan child budget correction on
+`2026-05-15`:
+
+- Confirmed the standalone transition-plan proof is healthy with
+  `-ChildProofTimeoutSeconds 120`, but takes longer than `120s` as a wrapper:
+  local timing was `123690ms`, with no nested child proof timeouts.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the
+  `persistent_supervision_enablement_transition_plan` child run gets a wrapper
+  timeout based on its four serial nested proofs (`4 * ChildProofTimeoutSeconds +
+  60`) while still passing the requested child timeout into the nested proof.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` so the opt-in full
+  audit now requires no child proof timeouts, asserts the expanded transition
+  wrapper timeout, and verifies the stronger reviewed posture:
+  `stage6_completion_reviewed=true`,
+  `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  and `recommended_handoff_source=resident_host_process_supervision_handoff_consumed`.
+- This is audit-budget/readback hardening only. It does not close Stage 6, and
+  does not grant runtime launch, product execution, process supervision, process
+  restart, service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens completion-audit transition-plan child
+budget correction:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=proof_passed; child proof timeouts empty; elapsed_ms=123690`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper -q`
+  Result: `passed; 4 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed; 1 test; child proof timeouts empty`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
