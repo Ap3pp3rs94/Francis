@@ -26970,6 +26970,39 @@ Latest validation for the Stage 6 composed proof retry stabilization:
   scripts\lens-process-supervision-authority-boundary-proof.ps1 and
   scripts\lens-stage6-checkpoint.ps1`
 
+Stage 6 Lens next-handoff enablement-authority readback correction on
+`2026-05-14`:
+
+- Updated `/lens/status` Stage 6 `next_handoff` construction and
+  `scripts\lens-stage6-next-handoff.ps1` so they promote to
+  `persistent_supervision_enablement_authority_not_granted` when existing
+  enablement-authority readiness and execution-readiness readbacks already show
+  audited denial boundaries.
+- The promotion is readback-only. It requires blocked enablement authority,
+  grant-boundary readback capability, execution-denial readiness, and no live
+  foreground resident-host process override. If a live foreground host process
+  is observed but not supervised, the handoff remains on
+  `resident_host_process_not_supervised`.
+- This does not grant persistent-supervision enablement authority, service
+  config write authority, execution authority, receipt write authority,
+  resident-claim authority, process supervision, service control, tray, hotkey,
+  overlay, summon, memory, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 next-handoff enablement-authority readback
+correction:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_stage6_next_handoff_promotes_audited_enablement_authority_denial tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_request_creates_approval_only_readback tests\test_api_lens.py::test_lens_persistent_supervision_enablement_authority_grant_requires_approved_request_and_host_grant tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `applied formatting`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,recommended_route,recommended_readiness_route,authority_required,persistent_supervision_enablement_authority_handoff_observed | ConvertTo-Json -Depth 6`
+  Result: `proof_passed`, with
+  `next_smallest_truthful_gap=persistent_supervision_enablement_authority_not_granted`
+  and `persistent_supervision_enablement_authority_handoff_observed=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

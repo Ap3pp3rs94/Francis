@@ -64,15 +64,17 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_authority_not_granted"
     assert payload["recommended_next_slice"] == (
-        "resolve_resident_host_process_before_persistent_supervision_enablement"
+        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
     )
-    assert payload["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
-    assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
-    assert payload["recommended_route"] == "/lens/host"
-    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_authority_denial_handoff"
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
+    assert payload["authority_required"] == "persistent_supervision_enablement_authority"
     assert payload["blocked_criteria"] == [
         "summon_anywhere",
         "helpful_not_noisy",
@@ -170,6 +172,49 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert persistent_prerequisites_handoff["diagnostic_only"] is True
     assert persistent_prerequisites_handoff["would_execute"] is False
     assert persistent_prerequisites_handoff["would_mutate"] is False
+    assert payload["persistent_supervision_enablement_authority_handoff_observed"] is True
+    enablement_handoff = payload["persistent_supervision_enablement_authority_handoff"]
+    assert enablement_handoff["status"] == "blocked"
+    assert enablement_handoff["previous_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert (
+        enablement_handoff["consumed_audit_next_smallest_truthful_gap"]
+        == "persistent_supervision_enablement_denial_boundary"
+    )
+    assert enablement_handoff["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_authority_not_granted"
+    )
+    assert enablement_handoff["next_step"] == (
+        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
+    )
+    assert enablement_handoff["proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert enablement_handoff["request_route"] == "/lens/host/persistent-supervision/enablement/authority/request"
+    assert enablement_handoff["grant_route"] == "/lens/host/persistent-supervision/enablement/authority"
+    assert enablement_handoff["grants_route"] == "/lens/host/persistent-supervision/enablement/authority/grants"
+    assert enablement_handoff["readiness_route"] == ("/lens/host/persistent-supervision/enablement/authority/readiness")
+    assert enablement_handoff["execution_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
+    assert enablement_handoff["authority_required"] == "persistent_supervision_enablement_authority"
+    assert enablement_handoff["authority_granted"] is False
+    assert enablement_handoff["enablement_denial_observed"] is True
+    assert enablement_handoff["execution_denial_observed"] is True
+    assert enablement_handoff["persistent_supervision_enablement_authority"] is False
+    assert enablement_handoff["service_config_write_authority"] is False
+    assert enablement_handoff["persistent_supervision_execution_authority"] is False
+    assert enablement_handoff["receipt_write_authority"] is False
+    assert enablement_handoff["resident_claim_authority"] is False
+    assert enablement_handoff["resident_claim_allowed"] is False
+    assert enablement_handoff["service_config_updated"] is False
+    assert enablement_handoff["applied"] is False
+    assert enablement_handoff["executed"] is False
+    assert enablement_handoff["read_only_contract"] is True
+    assert enablement_handoff["diagnostic_only"] is True
+    assert enablement_handoff["would_execute"] is False
+    assert enablement_handoff["would_mutate"] is False
+    assert "persistent_supervision_enablement_authority_not_granted" in enablement_handoff["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in enablement_handoff["blockers"]
     assert payload["resident_runtime_candidate_handoff_observed"] is False
     assert payload["resident_runtime_candidate_handoff"] == {}
 
@@ -184,6 +229,9 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert (
         checks["persistent_supervision_first_missing_requirement"]["status"]
         == "first_missing_requirement_handoff_ready"
+    )
+    assert checks["persistent_supervision_enablement_authority_handoff"]["status"] == (
+        "enablement_authority_handoff_ready"
     )
     assert checks["resident_runtime_candidate_handoff"]["status"] == "not_observed"
     assert checks["side_effects_denied"]["status"] == "readback_only"

@@ -1255,6 +1255,12 @@ def _stage6_next_handoff_readback(
 
     persistent_plan = _as_dict(resident_host.get("persistent_supervision_plan"))
     persistent_enablement = _as_dict(resident_host.get("persistent_supervision_enablement"))
+    enablement_authority_readiness = _as_dict(
+        resident_host.get("persistent_supervision_enablement_authority_readiness")
+    )
+    enablement_execution_readiness = _as_dict(
+        resident_host.get("persistent_supervision_enablement_execution_readiness")
+    )
     missing_required = [
         _safe_str(item).strip() for item in _as_list(persistent_plan.get("missing_required_before_enable"))
     ]
@@ -1287,6 +1293,74 @@ def _stage6_next_handoff_readback(
         and not bool(first_missing_handoff.get("would_execute"))
         and not bool(first_missing_handoff.get("would_mutate"))
     )
+    first_missing_handoff_is_live_unsupervised_process = (
+        _safe_str(first_missing_handoff.get("blocker")).strip() == "resident_host_process_not_supervised"
+        and _safe_str(first_missing_handoff.get("requirement_state")).strip() == "foreground_observed_not_supervised"
+    )
+    enablement_authority_blockers = [
+        _safe_str(item).strip() for item in _as_list(enablement_authority_readiness.get("blockers"))
+    ]
+    enablement_execution_blockers = [
+        _safe_str(item).strip() for item in _as_list(enablement_execution_readiness.get("blockers"))
+    ]
+    enablement_authority_handoff_observed = (
+        _safe_str(enablement_authority_readiness.get("kind")).strip()
+        == "lens.host.persistent_supervision_enablement_authority.readiness_audit"
+        and _safe_str(enablement_authority_readiness.get("status")).strip() == "blocked"
+        and bool(enablement_authority_readiness.get("boundary_observed"))
+        and bool(enablement_authority_readiness.get("grant_boundary_observed"))
+        and bool(enablement_authority_readiness.get("grant_receipt_readback_ready"))
+        and not bool(enablement_authority_readiness.get("enablement_authority_granted"))
+        and "persistent_supervision_enablement_authority_not_granted" in enablement_authority_blockers
+        and _safe_str(enablement_execution_readiness.get("kind")).strip()
+        == "lens.host.persistent_supervision_enablement.execution_readiness_audit"
+        and _safe_str(enablement_execution_readiness.get("status")).strip() == "blocked"
+        and bool(enablement_execution_readiness.get("boundary_observed"))
+        and not bool(enablement_execution_readiness.get("persistent_supervision_execution_authority"))
+        and "persistent_supervision_execution_authority_not_granted" in enablement_execution_blockers
+        and not first_missing_handoff_is_live_unsupervised_process
+    )
+    enablement_authority_handoff: dict[str, Any] = {}
+    if enablement_authority_handoff_observed:
+        enablement_authority_handoff = {
+            "status": "blocked",
+            "previous_next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
+            "consumed_audit_next_smallest_truthful_gap": "persistent_supervision_enablement_denial_boundary",
+            "next_smallest_truthful_gap": "persistent_supervision_enablement_authority_not_granted",
+            "next_step": "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+            "proof_script": "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+            "route": _safe_str(enablement_authority_readiness.get("enablement_route")).strip()
+            or "/lens/host/persistent-supervision/enablement",
+            "request_route": _safe_str(enablement_authority_readiness.get("request_route")).strip(),
+            "grant_route": _safe_str(enablement_authority_readiness.get("authority_route")).strip(),
+            "grants_route": _safe_str(enablement_authority_readiness.get("grants_route")).strip(),
+            "readiness_route": _safe_str(enablement_authority_readiness.get("route")).strip(),
+            "execution_readiness_route": _safe_str(enablement_execution_readiness.get("route")).strip(),
+            "authority_required": "persistent_supervision_enablement_authority",
+            "authority_granted": False,
+            "enablement_denial_observed": bool(enablement_authority_readiness.get("boundary_observed")),
+            "execution_denial_observed": bool(enablement_execution_readiness.get("boundary_observed")),
+            "persistent_supervision_enablement_authority": bool(
+                enablement_authority_readiness.get("enablement_authority_granted")
+            ),
+            "service_config_write_authority": bool(
+                enablement_authority_readiness.get("service_config_write_authority")
+            ),
+            "persistent_supervision_execution_authority": bool(
+                enablement_execution_readiness.get("persistent_supervision_execution_authority")
+            ),
+            "receipt_write_authority": bool(enablement_execution_readiness.get("receipt_write_authority")),
+            "resident_claim_authority": bool(enablement_execution_readiness.get("resident_claim_authority")),
+            "resident_claim_allowed": bool(enablement_execution_readiness.get("resident_claim_allowed")),
+            "service_config_updated": bool(enablement_authority_readiness.get("service_config_updated")),
+            "applied": False,
+            "executed": bool(enablement_execution_readiness.get("executed")),
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+            "blockers": sorted(set(enablement_authority_blockers + enablement_execution_blockers)),
+        }
     prerequisites_observed = (
         bool(missing_required)
         and bool(enablement_missing_required)
@@ -1336,6 +1410,15 @@ def _stage6_next_handoff_readback(
             _safe_str(first_missing_handoff.get("readiness_route")).strip() or recommended_readiness_route
         )
         authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip() or authority_required
+
+    if enablement_authority_handoff_observed:
+        recommended_handoff_source = "persistent_supervision_enablement_authority_denial_handoff"
+        next_gap = _safe_str(enablement_authority_handoff.get("next_smallest_truthful_gap")).strip()
+        recommended_next_slice = _safe_str(enablement_authority_handoff.get("next_step")).strip()
+        recommended_proof_script = _safe_str(enablement_authority_handoff.get("proof_script")).strip()
+        recommended_route = _safe_str(enablement_authority_handoff.get("route")).strip()
+        recommended_readiness_route = _safe_str(enablement_authority_handoff.get("readiness_route")).strip()
+        authority_required = _safe_str(enablement_authority_handoff.get("authority_required")).strip()
 
     if activation_execution_handoff_ready:
         activation_next_gap = _safe_str(activation_execution_handoff.get("next_smallest_truthful_gap")).strip()
@@ -1407,6 +1490,8 @@ def _stage6_next_handoff_readback(
         "persistent_supervision_required_prerequisites_handoff": prerequisites_handoff,
         "activation_execution_handoff_observed": activation_execution_handoff_ready,
         "activation_execution_handoff": activation_execution_handoff if activation_execution_handoff_ready else {},
+        "persistent_supervision_enablement_authority_handoff_observed": enablement_authority_handoff_observed,
+        "persistent_supervision_enablement_authority_handoff": enablement_authority_handoff,
         "resident_runtime_candidate_handoff_observed": resident_candidate_observed,
         "resident_runtime_candidate_handoff": resident_candidate_handoff,
         "governance": {

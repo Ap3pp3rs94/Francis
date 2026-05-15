@@ -173,6 +173,8 @@ $SupervisorFreshnessStatus = [string](
 )
 $PersistentSupervisionPlanReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_plan' -Default ([ordered]@{})
 $PersistentSupervisionEnablementReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement' -Default ([ordered]@{})
+$PersistentSupervisionEnablementAuthorityReadiness = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement_authority_readiness' -Default ([ordered]@{})
+$PersistentSupervisionEnablementExecutionReadiness = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement_execution_readiness' -Default ([ordered]@{})
 $PersistentSupervisionMissingRequiredBeforeEnable = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $PersistentSupervisionPlanReadback -Name 'missing_required_before_enable'
 )
@@ -201,6 +203,66 @@ $PersistentSupervisionFirstMissingRequirementHandoffReady = (
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_mutate' -Default $false)
 )
+$FirstMissingHandoffIsLiveUnsupervisedProcess = (
+  [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'blocker' -Default '') -eq 'resident_host_process_not_supervised' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'requirement_state' -Default '') -eq 'foreground_observed_not_supervised'
+)
+$EnablementAuthorityBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'blockers' -Default @()
+)
+$EnablementExecutionBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'blockers' -Default @()
+)
+$PersistentSupervisionEnablementAuthorityHandoffObserved = (
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_enablement_authority.readiness_audit' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'status' -Default '') -eq 'blocked' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'grant_boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'grant_receipt_readback_ready' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'enablement_authority_granted' -Default $true) -and
+  $EnablementAuthorityBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_enablement_execution.readiness_audit' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'status' -Default '') -eq 'blocked' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'boundary_observed' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'persistent_supervision_execution_authority' -Default $true) -and
+  $EnablementExecutionBlockers -contains 'persistent_supervision_execution_authority_not_granted' -and
+  -not $FirstMissingHandoffIsLiveUnsupervisedProcess
+)
+$PersistentSupervisionEnablementAuthorityHandoff = [ordered]@{}
+if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
+  $PersistentSupervisionEnablementAuthorityHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'persistent_supervision_authority_not_granted'
+    consumed_audit_next_smallest_truthful_gap = 'persistent_supervision_enablement_denial_boundary'
+    next_smallest_truthful_gap = 'persistent_supervision_enablement_authority_not_granted'
+    next_step = 'prove_persistent_supervision_enablement_authority_after_candidate_handoff'
+    proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
+    route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'enablement_route' -Default '/lens/host/persistent-supervision/enablement')
+    request_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'request_route' -Default '')
+    grant_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'authority_route' -Default '')
+    grants_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'grants_route' -Default '')
+    readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'route' -Default '')
+    execution_readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'route' -Default '')
+    authority_required = 'persistent_supervision_enablement_authority'
+    authority_granted = $false
+    enablement_denial_observed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'boundary_observed' -Default $false)
+    execution_denial_observed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'boundary_observed' -Default $false)
+    persistent_supervision_enablement_authority = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'enablement_authority_granted' -Default $false)
+    service_config_write_authority = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'service_config_write_authority' -Default $false)
+    persistent_supervision_execution_authority = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'persistent_supervision_execution_authority' -Default $false)
+    receipt_write_authority = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'receipt_write_authority' -Default $false)
+    resident_claim_authority = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'resident_claim_authority' -Default $false)
+    resident_claim_allowed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'resident_claim_allowed' -Default $false)
+    service_config_updated = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementAuthorityReadiness -Name 'service_config_updated' -Default $false)
+    applied = $false
+    executed = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReadiness -Name 'executed' -Default $false)
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    blockers = [string[]]@($EnablementAuthorityBlockers + $EnablementExecutionBlockers | Sort-Object -Unique)
+  }
+}
 $PersistentSupervisionRequiredPrerequisitesObserved = (
   @($PersistentSupervisionMissingRequiredBeforeEnable).Count -gt 0 -and
   @($PersistentSupervisionEnablementMissingRequiredBeforeEnable).Count -gt 0 -and
@@ -379,6 +441,15 @@ if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
     $AuthorityRequired = $FirstMissingAuthorityRequired
   }
 }
+if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
+  $RecommendedHandoffSource = 'persistent_supervision_enablement_authority_denial_handoff'
+  $RecommendedNextGap = [string]$PersistentSupervisionEnablementAuthorityHandoff.next_smallest_truthful_gap
+  $RecommendedNextSlice = [string]$PersistentSupervisionEnablementAuthorityHandoff.next_step
+  $RecommendedProofScript = [string]$PersistentSupervisionEnablementAuthorityHandoff.proof_script
+  $RecommendedRoute = [string]$PersistentSupervisionEnablementAuthorityHandoff.route
+  $RecommendedReadinessRoute = [string]$PersistentSupervisionEnablementAuthorityHandoff.readiness_route
+  $AuthorityRequired = [string]$PersistentSupervisionEnablementAuthorityHandoff.authority_required
+}
 if ($ActivationExecutionHandoffReady) {
   $ActivationExecutionNextGap = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'next_smallest_truthful_gap' -Default '')
   $ActivationExecutionNextSlice = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'next_step' -Default '')
@@ -447,6 +518,7 @@ $Checks = @(
   New-Check -Id 'family_chain_handoff' -Status 'summon_family_chain_handoff_ready' -Passed $FamilyChainHandoffObserved -Evidence 'summon_anywhere.handoff.summon_anywhere_family_chain_completion_audit_handoff' -Reason 'The summon blocker family chain can still be consumed by audit.'
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'first_missing_requirement_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $PersistentSupervisionFirstMissingRequirementHandoffReady -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice.'
+  New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
   New-Check -Id 'side_effects_denied' -Status 'readback_only' -Passed $SideEffectsDenied -Evidence 'handoff governance flags' -Reason 'The handoff script must not grant or imply execution authority.'
@@ -484,6 +556,8 @@ $Payload = [ordered]@{
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionFirstMissingRequiredBeforeEnable
   persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionFirstMissingRequirementHandoff
   persistent_supervision_required_prerequisites_handoff = $PersistentSupervisionRequiredPrerequisitesHandoff
+  persistent_supervision_enablement_authority_handoff_observed = $PersistentSupervisionEnablementAuthorityHandoffObserved
+  persistent_supervision_enablement_authority_handoff = $PersistentSupervisionEnablementAuthorityHandoff
   latest_activation_execution_handoff_observed = $ActivationExecutionHandoffReady
   latest_activation_execution_handoff = $(if ($ActivationExecutionHandoffReady) { $ActivationExecutionHandoff } else { [ordered]@{} })
   activation_execution_handoff_observed = $ActivationExecutionHandoffReady

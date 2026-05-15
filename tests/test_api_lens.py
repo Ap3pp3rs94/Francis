@@ -1501,6 +1501,8 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         next_handoff["persistent_supervision_required_prerequisites_handoff"]["next_smallest_truthful_gap"]
         == "persistent_supervision_required_prerequisites_missing"
     )
+    assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is False
+    assert next_handoff["persistent_supervision_enablement_authority_handoff"] == {}
     assert next_handoff["resident_runtime_candidate_handoff_observed"] is False
     assert next_handoff["resident_runtime_candidate_handoff"] == {}
     assert next_handoff["governance"]["execution_authority"] is False
@@ -4856,6 +4858,154 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_execute_body["governance"]["resident_claim_authority"] is False
 
 
+def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> None:
+    from francis.lens.status import _stage6_next_handoff_readback
+
+    closure_readback = {
+        "ready_to_close": False,
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "blocked_criteria": ["summon_anywhere"],
+        "criteria": [
+            {
+                "id": "summon_anywhere",
+                "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                "handoff": {
+                    "next_step": "resolve_summon_anywhere_blockers_before_stage6_closure",
+                    "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+                    "status_route": "/lens/status",
+                    "readiness_route": "/lens/summon/readiness",
+                    "authority_required": "resident_runtime_execution_authority",
+                },
+            }
+        ],
+    }
+    first_missing_handoff = {
+        "id": "resident_host_process",
+        "blocker": "resident_host_process_missing",
+        "requirement_state": "missing",
+        "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+        "next_step": "resolve_resident_host_process_before_persistent_supervision_enablement",
+        "proof_script": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    resident_host = {
+        "persistent_supervision_plan": {
+            "required_before_enable_ready": False,
+            "missing_required_before_enable": ["resident_host_process"],
+            "first_missing_required_before_enable": "resident_host_process",
+            "first_missing_requirement_handoff": first_missing_handoff,
+        },
+        "persistent_supervision_enablement": {
+            "required_before_enable_ready": False,
+            "missing_required_before_enable": ["resident_host_process"],
+            "first_missing_required_before_enable": "resident_host_process",
+            "first_missing_requirement_handoff": first_missing_handoff,
+        },
+        "persistent_supervision_enablement_authority_readiness": {
+            "kind": "lens.host.persistent_supervision_enablement_authority.readiness_audit",
+            "status": "blocked",
+            "route": "/lens/host/persistent-supervision/enablement/authority/readiness",
+            "request_route": "/lens/host/persistent-supervision/enablement/authority/request",
+            "authority_route": "/lens/host/persistent-supervision/enablement/authority",
+            "grants_route": "/lens/host/persistent-supervision/enablement/authority/grants",
+            "enablement_route": "/lens/host/persistent-supervision/enablement",
+            "boundary_observed": True,
+            "grant_boundary_observed": True,
+            "grant_receipt_readback_ready": True,
+            "enablement_authority_granted": False,
+            "service_config_write_authority": False,
+            "service_config_updated": False,
+            "blockers": [
+                "persistent_supervision_enablement_authority_not_granted",
+                "service_config_write_authority_not_granted",
+            ],
+        },
+        "persistent_supervision_enablement_execution_readiness": {
+            "kind": "lens.host.persistent_supervision_enablement.execution_readiness_audit",
+            "status": "blocked",
+            "route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+            "boundary_observed": True,
+            "persistent_supervision_execution_authority": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "resident_claim_allowed": False,
+            "executed": False,
+            "blockers": [
+                "persistent_supervision_execution_authority_not_granted",
+                "resident_claim_authority_not_granted",
+            ],
+        },
+    }
+
+    next_handoff = _stage6_next_handoff_readback(
+        closure_readback=closure_readback,
+        resident_host=resident_host,
+    )
+
+    assert next_handoff["next_smallest_truthful_gap"] == ("persistent_supervision_enablement_authority_not_granted")
+    assert next_handoff["recommended_next_slice"] == (
+        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
+    )
+    assert next_handoff["recommended_handoff_source"] == ("persistent_supervision_enablement_authority_denial_handoff")
+    assert next_handoff["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_route"] == "/lens/host/persistent-supervision/enablement"
+    assert next_handoff["recommended_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/readiness"
+    )
+    assert next_handoff["authority_required"] == "persistent_supervision_enablement_authority"
+    assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is True
+    enablement_handoff = next_handoff["persistent_supervision_enablement_authority_handoff"]
+    assert enablement_handoff["next_smallest_truthful_gap"] == (
+        "persistent_supervision_enablement_authority_not_granted"
+    )
+    assert enablement_handoff["proof_script"] == (
+        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert enablement_handoff["request_route"] == "/lens/host/persistent-supervision/enablement/authority/request"
+    assert enablement_handoff["grant_route"] == "/lens/host/persistent-supervision/enablement/authority"
+    assert enablement_handoff["grants_route"] == "/lens/host/persistent-supervision/enablement/authority/grants"
+    assert enablement_handoff["readiness_route"] == ("/lens/host/persistent-supervision/enablement/authority/readiness")
+    assert enablement_handoff["execution_readiness_route"] == (
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+    )
+    assert enablement_handoff["authority_required"] == "persistent_supervision_enablement_authority"
+    assert enablement_handoff["authority_granted"] is False
+    assert enablement_handoff["enablement_denial_observed"] is True
+    assert enablement_handoff["execution_denial_observed"] is True
+    assert enablement_handoff["persistent_supervision_enablement_authority"] is False
+    assert enablement_handoff["service_config_write_authority"] is False
+    assert enablement_handoff["persistent_supervision_execution_authority"] is False
+    assert enablement_handoff["resident_claim_authority"] is False
+    assert enablement_handoff["resident_claim_allowed"] is False
+    assert enablement_handoff["service_config_updated"] is False
+    assert enablement_handoff["applied"] is False
+    assert enablement_handoff["executed"] is False
+    assert enablement_handoff["read_only_contract"] is True
+    assert enablement_handoff["diagnostic_only"] is True
+    assert enablement_handoff["would_execute"] is False
+    assert enablement_handoff["would_mutate"] is False
+    assert "persistent_supervision_enablement_authority_not_granted" in enablement_handoff["blockers"]
+    assert "persistent_supervision_execution_authority_not_granted" in enablement_handoff["blockers"]
+
+    first_missing_handoff["blocker"] = "resident_host_process_not_supervised"
+    first_missing_handoff["requirement_state"] = "foreground_observed_not_supervised"
+    live_process_handoff = _stage6_next_handoff_readback(
+        closure_readback=closure_readback,
+        resident_host=resident_host,
+    )
+    assert live_process_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert live_process_handoff["persistent_supervision_enablement_authority_handoff_observed"] is False
+    assert live_process_handoff["persistent_supervision_enablement_authority_handoff"] == {}
+
+
 def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
@@ -5534,6 +5684,10 @@ def test_lens_persistent_supervision_enablement_authority_request_creates_approv
     assert criterion["next_smallest_truthful_gap"] == (
         "persistent_supervision_enablement_authority_exact_approval_request"
     )
+    next_handoff = status_body["stage6_readiness"]["next_handoff"]
+    assert next_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is False
+    assert next_handoff["persistent_supervision_enablement_authority_handoff"] == {}
     command = next(
         item
         for item in status_body["command_palette"]["commands"]
