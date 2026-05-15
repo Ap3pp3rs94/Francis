@@ -5775,6 +5775,11 @@ function SystemPanel(props: {
             {lensStage6NextHandoff.sourceHandoffLoaded ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                 source handoff
+                {lensStage6NextHandoff.sourceHandoffId ? (
+                  <>
+                    {" "}id <code>{lensStage6NextHandoff.sourceHandoffId}</code>
+                  </>
+                ) : null}
                 {lensStage6NextHandoff.sourceHandoffStatus ? (
                   <>
                     {" "}status <code>{lensStage6NextHandoff.sourceHandoffStatus}</code>
@@ -5789,6 +5794,28 @@ function SystemPanel(props: {
                 {lensStage6NextHandoff.sourceHandoffBlockers.length ? (
                   <>
                     {" / "}blockers <code>{lensStage6NextHandoff.sourceHandoffBlockers.join(", ")}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensStage6NextHandoff.sourceHandoffNextStep ||
+            lensStage6NextHandoff.sourceHandoffAcceptanceCriterion ||
+            lensStage6NextHandoff.sourceHandoffAuthorityRequired ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                source target
+                {lensStage6NextHandoff.sourceHandoffNextStep ? (
+                  <>
+                    {" "}next <code>{lensStage6NextHandoff.sourceHandoffNextStep}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.sourceHandoffAcceptanceCriterion ? (
+                  <>
+                    {" / "}criterion <code>{lensStage6NextHandoff.sourceHandoffAcceptanceCriterion}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.sourceHandoffAuthorityRequired ? (
+                  <>
+                    {" / "}authority <code>{lensStage6NextHandoff.sourceHandoffAuthorityRequired}</code>
                   </>
                 ) : null}
               </div>

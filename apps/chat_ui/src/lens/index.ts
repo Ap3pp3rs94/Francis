@@ -410,6 +410,10 @@ export type LensStage6NextHandoffPresentation = {
   enablementAuthorityHandoffObserved: boolean;
   residentCandidateHandoffObserved: boolean;
   sourceHandoffLoaded: boolean;
+  sourceHandoffId: string;
+  sourceHandoffNextStep: string;
+  sourceHandoffAcceptanceCriterion: string;
+  sourceHandoffAuthorityRequired: string;
   sourceHandoffStatus: string;
   sourceHandoffReadOnlyContract: boolean;
   sourceHandoffDiagnosticOnly: boolean;
@@ -602,6 +606,11 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
               ? safeRecord(handoff?.resident_runtime_candidate_handoff)
               : {};
   const sourceHandoffLoaded = Object.keys(sourceHandoff).length > 0;
+  const sourceHandoffId = safeString(sourceHandoff.id).trim();
+  const sourceHandoffNextStep =
+    safeString(sourceHandoff.next_step).trim() || safeString(sourceHandoff.recommended_next_slice).trim();
+  const sourceHandoffAcceptanceCriterion = safeString(sourceHandoff.acceptance_criterion).trim();
+  const sourceHandoffAuthorityRequired = safeString(sourceHandoff.authority_required).trim();
   const sourceHandoffStatus = safeString(sourceHandoff.status).trim();
   const sourceHandoffReadOnlyContract = safeBoolean(sourceHandoff.read_only_contract, false);
   const sourceHandoffDiagnosticOnly = safeBoolean(sourceHandoff.diagnostic_only, false);
@@ -690,6 +699,10 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     enablementAuthorityHandoffObserved,
     residentCandidateHandoffObserved,
     sourceHandoffLoaded,
+    sourceHandoffId,
+    sourceHandoffNextStep,
+    sourceHandoffAcceptanceCriterion,
+    sourceHandoffAuthorityRequired,
     sourceHandoffStatus,
     sourceHandoffReadOnlyContract,
     sourceHandoffDiagnosticOnly,

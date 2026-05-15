@@ -571,6 +571,8 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             previous_next_smallest_truthful_gap: "persistent_supervision_authority_not_granted",
             consumed_audit_next_smallest_truthful_gap: "persistent_supervision_enablement_denial_boundary",
             next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
+            next_step: "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+            authority_required: "persistent_supervision_enablement_authority",
             read_only_contract: true,
             diagnostic_only: true,
             would_execute: false,
@@ -937,6 +939,13 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(handoffPresentation.enablementAuthorityHandoffObserved, true);
     assert.equal(handoffPresentation.residentCandidateHandoffObserved, false);
     assert.equal(handoffPresentation.sourceHandoffLoaded, true);
+    assert.equal(handoffPresentation.sourceHandoffId, "");
+    assert.equal(
+      handoffPresentation.sourceHandoffNextStep,
+      "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+    );
+    assert.equal(handoffPresentation.sourceHandoffAcceptanceCriterion, "");
+    assert.equal(handoffPresentation.sourceHandoffAuthorityRequired, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.sourceHandoffStatus, "blocked");
     assert.equal(handoffPresentation.sourceHandoffReadOnlyContract, true);
     assert.equal(handoffPresentation.sourceHandoffDiagnosticOnly, true);
@@ -1086,6 +1095,10 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     enablementAuthorityHandoffObserved: false,
     residentCandidateHandoffObserved: false,
     sourceHandoffLoaded: false,
+    sourceHandoffId: "",
+    sourceHandoffNextStep: "",
+    sourceHandoffAcceptanceCriterion: "",
+    sourceHandoffAuthorityRequired: "",
     sourceHandoffStatus: "",
     sourceHandoffReadOnlyContract: false,
     sourceHandoffDiagnosticOnly: false,
