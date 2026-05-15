@@ -5708,9 +5708,24 @@ function SystemPanel(props: {
                 <span style={badgeStyle("blocked")}>authority {lensStage6NextHandoff.authority}</span>
               ) : null}
             </div>
+            {lensStage6NextHandoff.stageGap ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                stage gap <code>{lensStage6NextHandoff.stageGap}</code>
+              </div>
+            ) : null}
             {lensStage6NextHandoff.currentGap ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                 current gap <code>{lensStage6NextHandoff.currentGap}</code>
+              </div>
+            ) : null}
+            {lensStage6NextHandoff.firstBlockedCriterion ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                first blocked <code>{lensStage6NextHandoff.firstBlockedCriterion}</code>
+                {lensStage6NextHandoff.firstBlockedCriterionGap ? (
+                  <>
+                    {" / "}gap <code>{lensStage6NextHandoff.firstBlockedCriterionGap}</code>
+                  </>
+                ) : null}
               </div>
             ) : null}
             {lensStage6NextHandoff.currentHandoff ? (
@@ -5749,6 +5764,16 @@ function SystemPanel(props: {
                 {lensStage6NextHandoff.prerequisiteAuthority ? (
                   <>
                     {" / "}authority <code>{lensStage6NextHandoff.prerequisiteAuthority}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensStage6NextHandoff.missingPrerequisites.length ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                missing prerequisites <code>{lensStage6NextHandoff.missingPrerequisites.join(", ")}</code>
+                {lensStage6NextHandoff.firstMissingPrerequisite ? (
+                  <>
+                    {" / "}first <code>{lensStage6NextHandoff.firstMissingPrerequisite}</code>
                   </>
                 ) : null}
               </div>

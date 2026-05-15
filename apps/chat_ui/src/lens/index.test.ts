@@ -872,6 +872,7 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(handoffPresentation.status, "readback_ready");
     assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
     assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
+    assert.equal(handoffPresentation.stageGap, "summon_anywhere_blockers");
     assert.equal(handoffPresentation.currentGap, "persistent_supervision_enablement_authority_not_granted");
     assert.equal(
       handoffPresentation.currentHandoff,
@@ -885,6 +886,8 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.currentRoute,
       "/lens/host/persistent-supervision/enablement/authority/readiness",
     );
+    assert.equal(handoffPresentation.firstBlockedCriterion, "summon_anywhere");
+    assert.equal(handoffPresentation.firstBlockedCriterionGap, "");
     assert.equal(handoffPresentation.prerequisiteSource, "persistent_supervision_required_prerequisites_handoff");
     assert.equal(
       handoffPresentation.prerequisiteHandoff,
@@ -899,6 +902,8 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.prerequisiteAuthority,
       "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
     );
+    assert.deepEqual(handoffPresentation.missingPrerequisites, ["resident_host_process", "tray_presence"]);
+    assert.equal(handoffPresentation.firstMissingPrerequisite, "resident_host_process");
     assert.equal(handoffPresentation.firstMissingSource, "persistent_supervision_first_missing_requirement_handoff");
     assert.equal(
       handoffPresentation.firstMissingHandoff,
@@ -950,15 +955,20 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     status: "readback",
     source: "",
     authority: "",
+    stageGap: "",
     currentGap: "",
     currentHandoff: "",
     currentProof: "",
     currentRoute: "",
+    firstBlockedCriterion: "",
+    firstBlockedCriterionGap: "",
     prerequisiteSource: "",
     prerequisiteHandoff: "",
     prerequisiteProof: "",
     prerequisiteRoute: "",
     prerequisiteAuthority: "",
+    missingPrerequisites: [],
+    firstMissingPrerequisite: "",
     firstMissingSource: "",
     firstMissingHandoff: "",
     firstMissingProof: "",

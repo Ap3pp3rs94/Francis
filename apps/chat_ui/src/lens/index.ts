@@ -377,15 +377,20 @@ export type LensStage6NextHandoffPresentation = {
   status: string;
   source: string;
   authority: string;
+  stageGap: string;
   currentGap: string;
   currentHandoff: string;
   currentProof: string;
   currentRoute: string;
+  firstBlockedCriterion: string;
+  firstBlockedCriterionGap: string;
   prerequisiteSource: string;
   prerequisiteHandoff: string;
   prerequisiteProof: string;
   prerequisiteRoute: string;
   prerequisiteAuthority: string;
+  missingPrerequisites: string[];
+  firstMissingPrerequisite: string;
   firstMissingSource: string;
   firstMissingHandoff: string;
   firstMissingProof: string;
@@ -497,12 +502,15 @@ export function shouldOpenLensStatusPanel(search: string, hash = ""): boolean {
 export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensStage6NextHandoffPresentation {
   const status = safeString(handoff?.status).trim() || "readback";
   const source = safeString(handoff?.recommended_handoff_source).trim();
+  const stageGap = safeString(handoff?.stage_next_smallest_truthful_gap).trim();
   const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
   const currentHandoff = safeString(handoff?.recommended_next_slice).trim();
   const currentProof = safeString(handoff?.recommended_proof_script).trim();
   const currentRoute =
     safeString(handoff?.recommended_readiness_route).trim() || safeString(handoff?.recommended_route).trim();
   const authority = safeString(handoff?.authority_required).trim();
+  const firstBlockedCriterion = safeString(handoff?.first_blocked_criterion).trim();
+  const firstBlockedCriterionGap = safeString(handoff?.first_blocked_criterion_next_smallest_truthful_gap).trim();
   const prerequisiteSource = safeString(handoff?.recommended_prerequisites_handoff_source).trim();
   const prerequisiteHandoff = safeString(handoff?.recommended_prerequisites_next_slice).trim();
   const prerequisiteProof = safeString(handoff?.recommended_prerequisites_proof_script).trim();
@@ -510,6 +518,8 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     safeString(handoff?.recommended_prerequisites_readiness_route).trim() ||
     safeString(handoff?.recommended_prerequisites_route).trim();
   const prerequisiteAuthority = safeString(handoff?.recommended_prerequisites_authority_required).trim();
+  const missingPrerequisites = safeStringList(handoff?.persistent_supervision_missing_required_before_enable);
+  const firstMissingPrerequisite = safeString(handoff?.persistent_supervision_first_missing_required_before_enable).trim();
   const firstMissingSource = safeString(handoff?.recommended_first_missing_handoff_source).trim();
   const firstMissingHandoff = safeString(handoff?.recommended_first_missing_next_slice).trim();
   const firstMissingProof = safeString(handoff?.recommended_first_missing_proof_script).trim();
@@ -519,19 +529,24 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const firstMissingAuthority = safeString(handoff?.recommended_first_missing_authority_required).trim();
 
   return {
-    loaded: Boolean(currentGap || source),
+    loaded: Boolean(stageGap || currentGap || source || firstBlockedCriterion || missingPrerequisites.length),
     status,
     source,
     authority,
+    stageGap,
     currentGap,
     currentHandoff,
     currentProof,
     currentRoute,
+    firstBlockedCriterion,
+    firstBlockedCriterionGap,
     prerequisiteSource,
     prerequisiteHandoff,
     prerequisiteProof,
     prerequisiteRoute,
     prerequisiteAuthority,
+    missingPrerequisites,
+    firstMissingPrerequisite,
     firstMissingSource,
     firstMissingHandoff,
     firstMissingProof,

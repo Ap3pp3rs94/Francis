@@ -27443,6 +27443,35 @@ completion:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens chat UI blocker-context readback on `2026-05-15`:
+
+- Extended `presentStage6NextHandoff` in `apps\chat_ui\src\lens\index.ts` so
+  the typed next-handoff projection carries the stage-level gap, first blocked
+  criterion, first blocked criterion gap, missing persistent-supervision
+  prerequisites, and first missing prerequisite already parsed from the Lens
+  status contract.
+- Updated `apps\chat_ui\src\App.tsx` so the existing Stage 6 next-handoff panel
+  renders that blocker context as read-only operator evidence when loaded.
+- Added focused assertions in `apps\chat_ui\src\lens\index.test.ts` for the
+  stage gap, first blocked criterion, missing prerequisite list, and
+  missing-contract empty-state projection.
+- This is operator-surface readback hardening only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens chat UI blocker-context readback:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
