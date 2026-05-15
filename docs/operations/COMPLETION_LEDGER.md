@@ -27384,6 +27384,35 @@ Latest validation for the Stage 6 Lens status-panel URL intent:
   server started, and the temporary child processes were stopped. No browser
   proof is claimed for this slice.`
 
+Stage 6 Lens chat UI next-handoff presentation contract on `2026-05-15`:
+
+- Added a typed, read-only `presentStage6NextHandoff` projection in
+  `apps\chat_ui\src\lens\index.ts` so the operator panel's Stage 6
+  next-handoff readback is derived through a tested Lens client contract.
+- Updated `apps\chat_ui\src\App.tsx` to render the existing Stage 6
+  next-handoff panel from that projection. The panel remains read-only and
+  continues to show current handoff, prerequisite handoff, first-missing
+  handoff, proof scripts/routes, and authority labels when loaded.
+- Added Lens UI contract coverage in `apps\chat_ui\src\lens\index.test.ts`
+  for both loaded and missing next-handoff presentation states.
+- This is operator-surface contract hardening only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens chat UI next-handoff presentation
+contract:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

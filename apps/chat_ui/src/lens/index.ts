@@ -372,6 +372,24 @@ export type LensStage6NextHandoff = {
   governance: Record<string, unknown>;
 };
 
+export type LensStage6NextHandoffPresentation = {
+  loaded: boolean;
+  status: string;
+  source: string;
+  authority: string;
+  currentGap: string;
+  currentHandoff: string;
+  currentProof: string;
+  currentRoute: string;
+  prerequisiteSource: string;
+  prerequisiteHandoff: string;
+  prerequisiteProof: string;
+  firstMissingSource: string;
+  firstMissingHandoff: string;
+  firstMissingProof: string;
+  firstMissingAuthority: string;
+};
+
 export type LensStage6Readiness = {
   stage?: string;
   claim?: string;
@@ -471,6 +489,42 @@ export function shouldOpenLensStatusPanel(search: string, hash = ""): boolean {
     .toLowerCase();
   const lensPanel = (searchParams.get("lens_panel") || hashParams.get("lens_panel") || "").trim().toLowerCase();
   return francisLens === "status" || lensPanel === "status";
+}
+
+export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensStage6NextHandoffPresentation {
+  const status = safeString(handoff?.status).trim() || "readback";
+  const source = safeString(handoff?.recommended_handoff_source).trim();
+  const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
+  const currentHandoff = safeString(handoff?.recommended_next_slice).trim();
+  const currentProof = safeString(handoff?.recommended_proof_script).trim();
+  const currentRoute =
+    safeString(handoff?.recommended_readiness_route).trim() || safeString(handoff?.recommended_route).trim();
+  const authority = safeString(handoff?.authority_required).trim();
+  const prerequisiteSource = safeString(handoff?.recommended_prerequisites_handoff_source).trim();
+  const prerequisiteHandoff = safeString(handoff?.recommended_prerequisites_next_slice).trim();
+  const prerequisiteProof = safeString(handoff?.recommended_prerequisites_proof_script).trim();
+  const firstMissingSource = safeString(handoff?.recommended_first_missing_handoff_source).trim();
+  const firstMissingHandoff = safeString(handoff?.recommended_first_missing_next_slice).trim();
+  const firstMissingProof = safeString(handoff?.recommended_first_missing_proof_script).trim();
+  const firstMissingAuthority = safeString(handoff?.recommended_first_missing_authority_required).trim();
+
+  return {
+    loaded: Boolean(currentGap || source),
+    status,
+    source,
+    authority,
+    currentGap,
+    currentHandoff,
+    currentProof,
+    currentRoute,
+    prerequisiteSource,
+    prerequisiteHandoff,
+    prerequisiteProof,
+    firstMissingSource,
+    firstMissingHandoff,
+    firstMissingProof,
+    firstMissingAuthority,
+  };
 }
 
 function safeNumber(value: unknown, fallback = 0): number {

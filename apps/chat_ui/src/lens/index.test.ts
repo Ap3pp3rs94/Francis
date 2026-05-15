@@ -5,6 +5,7 @@ import {
   LensApiError,
   LensClient,
   parseLensStatus,
+  presentStage6NextHandoff,
   shouldOpenLensCommandPalette,
   shouldOpenLensStatusPanel,
 } from "./index.ts";
@@ -866,6 +867,43 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       true,
     );
     assert.equal(snapshot.stage6_readiness.next_handoff.governance.execution_authority, false);
+    const handoffPresentation = presentStage6NextHandoff(snapshot.stage6_readiness.next_handoff);
+    assert.equal(handoffPresentation.loaded, true);
+    assert.equal(handoffPresentation.status, "readback_ready");
+    assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
+    assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
+    assert.equal(handoffPresentation.currentGap, "persistent_supervision_enablement_authority_not_granted");
+    assert.equal(
+      handoffPresentation.currentHandoff,
+      "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+    );
+    assert.equal(
+      handoffPresentation.currentProof,
+      "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+    );
+    assert.equal(
+      handoffPresentation.currentRoute,
+      "/lens/host/persistent-supervision/enablement/authority/readiness",
+    );
+    assert.equal(handoffPresentation.prerequisiteSource, "persistent_supervision_required_prerequisites_handoff");
+    assert.equal(
+      handoffPresentation.prerequisiteHandoff,
+      "resolve_persistent_supervision_required_prerequisites_before_enablement",
+    );
+    assert.equal(
+      handoffPresentation.prerequisiteProof,
+      "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
+    );
+    assert.equal(handoffPresentation.firstMissingSource, "persistent_supervision_first_missing_requirement_handoff");
+    assert.equal(
+      handoffPresentation.firstMissingHandoff,
+      "resolve_resident_host_process_before_persistent_supervision_enablement",
+    );
+    assert.equal(
+      handoffPresentation.firstMissingProof,
+      "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+    );
+    assert.equal(handoffPresentation.firstMissingAuthority, "process_supervision_authority");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_only");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.resident_overlay, false);
@@ -898,6 +936,26 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
   } finally {
     restoreFetch();
   }
+});
+
+test("presentStage6NextHandoff returns an unloaded readback when the contract is missing", () => {
+  assert.deepEqual(presentStage6NextHandoff(undefined), {
+    loaded: false,
+    status: "readback",
+    source: "",
+    authority: "",
+    currentGap: "",
+    currentHandoff: "",
+    currentProof: "",
+    currentRoute: "",
+    prerequisiteSource: "",
+    prerequisiteHandoff: "",
+    prerequisiteProof: "",
+    firstMissingSource: "",
+    firstMissingHandoff: "",
+    firstMissingProof: "",
+    firstMissingAuthority: "",
+  });
 });
 
 test("parseLensStatus drops malformed nested items and preserves governance defaults", () => {
