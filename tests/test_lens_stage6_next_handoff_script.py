@@ -118,6 +118,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
 
     process_handoff = payload["first_blocker_family_completion_audit_handoff"]
     assert process_handoff["authority_required"] == "process_supervision_authority"
+    assert process_handoff["authority_granted"] is False
     assert process_handoff["read_only_contract"] is True
     assert process_handoff["diagnostic_only"] is True
     assert process_handoff["would_execute"] is False
@@ -125,6 +126,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
 
     family_chain_handoff = payload["summon_anywhere_family_chain_completion_audit_handoff"]
     assert family_chain_handoff["authority_required"] == "resident_runtime_execution_authority"
+    assert family_chain_handoff["authority_granted"] is False
     assert family_chain_handoff["blocked_families"] == [
         "resident_host",
         "tray_presence",

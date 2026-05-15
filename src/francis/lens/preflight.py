@@ -493,6 +493,7 @@ def _summon_anywhere_family_chain_completion_audit_handoff(
             first_blocker_family_handoff.get("authority_required"),
             "summon_hotkey_overlay_and_process_authority",
         ),
+        "authority_granted": False,
         "read_only_contract": True,
         "diagnostic_only": True,
         "would_execute": False,
