@@ -4463,6 +4463,21 @@ function SystemPanel(props: {
   const lensStage6ClosureCriteria = lensStage6Closure?.criteria ?? [];
   const lensStage6ClosureNextGap = safeString(lensStage6Closure?.next_smallest_truthful_gap).trim();
   const lensStage6NextHandoff = presentStage6NextHandoff(lensStage6Readiness?.next_handoff);
+  const lensStage6GovernanceReadback = [
+    ["status readback", lensStage6NextHandoff.usesLensStatusReadback],
+    ["approval", lensStage6NextHandoff.approvalDecisionAuthority],
+    ["launch", lensStage6NextHandoff.localProcessLaunchAuthority],
+    ["restart", lensStage6NextHandoff.processRestartAuthority],
+    ["service install", lensStage6NextHandoff.serviceInstallAuthority],
+    ["service control", lensStage6NextHandoff.serviceControlAuthority],
+    ["hotkey", lensStage6NextHandoff.hotkeyRegistrationAuthority],
+    ["tray", lensStage6NextHandoff.trayRegistrationAuthority],
+    ["overlay", lensStage6NextHandoff.overlayControlAuthority],
+    ["summon", lensStage6NextHandoff.summonAuthority],
+    ["memory write", lensStage6NextHandoff.memoryWrite],
+    ["receipt write", lensStage6NextHandoff.receiptWriteAuthority],
+    ["mutation", lensStage6NextHandoff.mutationAuthorityGranted],
+  ] as const;
   const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
   const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
   const lensHudBadges = lensHud?.badges ?? [];
@@ -5735,6 +5750,14 @@ function SystemPanel(props: {
               <span style={badgeStyle(lensStage6NextHandoff.residentCandidateHandoffObserved ? "readback" : "blocked")}>
                 resident candidate {lensStage6NextHandoff.residentCandidateHandoffObserved ? "true" : "false"}
               </span>
+            </div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+              governance{" "}
+              <code>
+                {lensStage6GovernanceReadback
+                  .map(([label, value]) => `${label}=${value ? "true" : "false"}`)
+                  .join(", ")}
+              </code>
             </div>
             {lensStage6NextHandoff.sourceHandoffLoaded ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>

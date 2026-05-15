@@ -389,9 +389,22 @@ export type LensStage6NextHandoffPresentation = {
   authority: string;
   readOnlyContract: boolean;
   diagnosticOnly: boolean;
+  usesLensStatusReadback: boolean;
   executionAuthority: boolean;
+  approvalDecisionAuthority: boolean;
+  localProcessLaunchAuthority: boolean;
   processSupervisionAuthority: boolean;
+  processRestartAuthority: boolean;
+  serviceInstallAuthority: boolean;
+  serviceControlAuthority: boolean;
+  hotkeyRegistrationAuthority: boolean;
+  trayRegistrationAuthority: boolean;
+  overlayControlAuthority: boolean;
+  summonAuthority: boolean;
+  memoryWrite: boolean;
+  receiptWriteAuthority: boolean;
   residentClaimAuthority: boolean;
+  mutationAuthorityGranted: boolean;
   prerequisitesObserved: boolean;
   activationExecutionHandoffObserved: boolean;
   enablementAuthorityHandoffObserved: boolean;
@@ -539,9 +552,22 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const readyToClose = safeBoolean(handoff?.ready_to_close, false);
   const readOnlyContract = safeBoolean(governance.read_only_contract, false);
   const diagnosticOnly = safeBoolean(governance.diagnostic_only, false);
+  const usesLensStatusReadback = safeBoolean(governance.uses_lens_status_readback, false);
   const executionAuthority = safeBoolean(governance.execution_authority, false);
+  const approvalDecisionAuthority = safeBoolean(governance.approval_decision_authority, false);
+  const localProcessLaunchAuthority = safeBoolean(governance.local_process_launch_authority, false);
   const processSupervisionAuthority = safeBoolean(governance.process_supervision_authority, false);
+  const processRestartAuthority = safeBoolean(governance.process_restart_authority, false);
+  const serviceInstallAuthority = safeBoolean(governance.service_install_authority, false);
+  const serviceControlAuthority = safeBoolean(governance.service_control_authority, false);
+  const hotkeyRegistrationAuthority = safeBoolean(governance.hotkey_registration_authority, false);
+  const trayRegistrationAuthority = safeBoolean(governance.tray_registration_authority, false);
+  const overlayControlAuthority = safeBoolean(governance.overlay_control_authority, false);
+  const summonAuthority = safeBoolean(governance.summon_authority, false);
+  const memoryWrite = safeBoolean(governance.memory_write, false);
+  const receiptWriteAuthority = safeBoolean(governance.receipt_write_authority, false);
   const residentClaimAuthority = safeBoolean(governance.resident_claim_authority, false);
+  const mutationAuthorityGranted = safeBoolean(governance.mutation_authority_granted, false);
   const prerequisitesObserved = safeBoolean(handoff?.persistent_supervision_required_prerequisites_observed, false);
   const activationExecutionHandoffObserved = safeBoolean(handoff?.activation_execution_handoff_observed, false);
   const enablementAuthorityHandoffObserved = safeBoolean(
@@ -611,9 +637,22 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     authority,
     readOnlyContract,
     diagnosticOnly,
+    usesLensStatusReadback,
     executionAuthority,
+    approvalDecisionAuthority,
+    localProcessLaunchAuthority,
     processSupervisionAuthority,
+    processRestartAuthority,
+    serviceInstallAuthority,
+    serviceControlAuthority,
+    hotkeyRegistrationAuthority,
+    trayRegistrationAuthority,
+    overlayControlAuthority,
+    summonAuthority,
+    memoryWrite,
+    receiptWriteAuthority,
     residentClaimAuthority,
+    mutationAuthorityGranted,
     prerequisitesObserved,
     activationExecutionHandoffObserved,
     enablementAuthorityHandoffObserved,

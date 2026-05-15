@@ -584,9 +584,22 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           governance: {
             read_only_contract: true,
             diagnostic_only: true,
+            uses_lens_status_readback: true,
             execution_authority: false,
+            approval_decision_authority: false,
+            local_process_launch_authority: false,
             process_supervision_authority: false,
+            process_restart_authority: false,
+            service_install_authority: false,
+            service_control_authority: false,
+            hotkey_registration_authority: false,
+            tray_registration_authority: false,
+            overlay_control_authority: false,
+            summon_authority: false,
+            memory_write: false,
+            receipt_write_authority: false,
             resident_claim_authority: false,
+            mutation_authority_granted: false,
           },
         },
         criteria: [
@@ -890,9 +903,22 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(handoffPresentation.readyToClose, false);
     assert.equal(handoffPresentation.readOnlyContract, true);
     assert.equal(handoffPresentation.diagnosticOnly, true);
+    assert.equal(handoffPresentation.usesLensStatusReadback, true);
     assert.equal(handoffPresentation.executionAuthority, false);
+    assert.equal(handoffPresentation.approvalDecisionAuthority, false);
+    assert.equal(handoffPresentation.localProcessLaunchAuthority, false);
     assert.equal(handoffPresentation.processSupervisionAuthority, false);
+    assert.equal(handoffPresentation.processRestartAuthority, false);
+    assert.equal(handoffPresentation.serviceInstallAuthority, false);
+    assert.equal(handoffPresentation.serviceControlAuthority, false);
+    assert.equal(handoffPresentation.hotkeyRegistrationAuthority, false);
+    assert.equal(handoffPresentation.trayRegistrationAuthority, false);
+    assert.equal(handoffPresentation.overlayControlAuthority, false);
+    assert.equal(handoffPresentation.summonAuthority, false);
+    assert.equal(handoffPresentation.memoryWrite, false);
+    assert.equal(handoffPresentation.receiptWriteAuthority, false);
     assert.equal(handoffPresentation.residentClaimAuthority, false);
+    assert.equal(handoffPresentation.mutationAuthorityGranted, false);
     assert.equal(handoffPresentation.prerequisitesObserved, true);
     assert.equal(handoffPresentation.activationExecutionHandoffObserved, false);
     assert.equal(handoffPresentation.enablementAuthorityHandoffObserved, true);
@@ -1010,9 +1036,22 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     authority: "",
     readOnlyContract: false,
     diagnosticOnly: false,
+    usesLensStatusReadback: false,
     executionAuthority: false,
+    approvalDecisionAuthority: false,
+    localProcessLaunchAuthority: false,
     processSupervisionAuthority: false,
+    processRestartAuthority: false,
+    serviceInstallAuthority: false,
+    serviceControlAuthority: false,
+    hotkeyRegistrationAuthority: false,
+    trayRegistrationAuthority: false,
+    overlayControlAuthority: false,
+    summonAuthority: false,
+    memoryWrite: false,
+    receiptWriteAuthority: false,
     residentClaimAuthority: false,
+    mutationAuthorityGranted: false,
     prerequisitesObserved: false,
     activationExecutionHandoffObserved: false,
     enablementAuthorityHandoffObserved: false,
