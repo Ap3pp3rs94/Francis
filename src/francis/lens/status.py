@@ -1528,6 +1528,7 @@ def _stage6_next_handoff_readback(
         "recommended_prerequisites_authority_required": _safe_str(
             prerequisites_handoff.get("authority_required")
         ).strip(),
+        "recommended_prerequisites_authority_granted": bool(prerequisites_handoff.get("authority_granted")),
         "recommended_first_missing_handoff_source": (
             "persistent_supervision_first_missing_requirement_handoff" if first_missing_handoff_ready else ""
         ),
@@ -1536,6 +1537,7 @@ def _stage6_next_handoff_readback(
         "recommended_first_missing_route": _safe_str(first_missing_handoff.get("route")).strip(),
         "recommended_first_missing_readiness_route": _safe_str(first_missing_handoff.get("readiness_route")).strip(),
         "recommended_first_missing_authority_required": recommended_first_missing_authority_required,
+        "recommended_first_missing_authority_granted": bool(first_missing_handoff.get("authority_granted")),
         "first_blocked_criterion": first_blocked_criterion,
         "first_blocked_criterion_next_smallest_truthful_gap": criterion_next_gap,
         "persistent_supervision_required_prerequisites_observed": prerequisites_observed,

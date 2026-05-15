@@ -1023,6 +1023,7 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
         "next_smallest_truthful_gap": next_gap,
         "acceptance_criterion": "system_resident_presence",
         "authority_required": authority_required,
+        "authority_granted": False,
         "read_only_contract": True,
         "diagnostic_only": True,
         "would_execute": False,

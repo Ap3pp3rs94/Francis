@@ -28012,6 +28012,38 @@ Latest validation for the Stage 6 Lens next-handoff summary authority contract:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens next-handoff source authority-grant readback on `2026-05-15`:
+
+- Updated `src\francis\lens\host_manifest.py` so prerequisite handoffs generated
+  for missing persistent-supervision dependencies now expose explicit
+  `authority_granted: false` beside their `authority_required` field.
+- Updated `src\francis\lens\status.py` so `stage6_readiness.next_handoff`
+  mirrors source-level authority grant state for both
+  `recommended_prerequisites_authority_granted` and
+  `recommended_first_missing_authority_granted`.
+- Updated `tests\test_api_lens.py` so the Stage 6 Lens status contract and the
+  lower-level persistent-supervision plan/enablement contracts assert the current
+  denied authority boundary.
+- This is source-handoff readback contract tightening only. It does not run the
+  Stage 6 completion audit, does not close Stage 6, and does not grant runtime
+  launch, product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens next-handoff source authority-grant
+readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority tests\test_api_lens.py::test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

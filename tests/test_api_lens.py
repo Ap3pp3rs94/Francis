@@ -1487,6 +1487,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["recommended_prerequisites_authority_required"] == (
         "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     )
+    assert next_handoff["recommended_prerequisites_authority_granted"] is False
     assert next_handoff["recommended_first_missing_handoff_source"] == (
         "persistent_supervision_first_missing_requirement_handoff"
     )
@@ -1499,6 +1500,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["recommended_first_missing_route"] == "/lens/host"
     assert next_handoff["recommended_first_missing_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert next_handoff["recommended_first_missing_authority_required"] == "process_supervision_authority"
+    assert next_handoff["recommended_first_missing_authority_granted"] is False
     assert next_handoff["first_blocked_criterion"] == "summon_anywhere"
     assert next_handoff["persistent_supervision_required_prerequisites_observed"] is True
     assert next_handoff["persistent_supervision_missing_required_before_enable"] == [
@@ -1526,6 +1528,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["diagnostic_only"] is True
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_execute"] is False
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["would_mutate"] is False
+    assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["authority_granted"] is False
     assert (
         next_handoff["persistent_supervision_required_prerequisites_handoff"]["id"]
         == "persistent_supervision_required_prerequisites"
@@ -1542,6 +1545,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "overlay_window",
         "summon_binding",
     ]
+    assert next_handoff["persistent_supervision_required_prerequisites_handoff"]["authority_granted"] is False
     assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is False
     assert next_handoff["persistent_supervision_enablement_authority_handoff"] == {}
     assert next_handoff["resident_runtime_candidate_handoff_observed"] is False
@@ -5167,6 +5171,7 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert plan_first_missing_handoff["read_only_contract"] is True
     assert plan_first_missing_handoff["would_execute"] is False
     assert plan_first_missing_handoff["would_mutate"] is False
+    assert plan_first_missing_handoff["authority_granted"] is False
     assert "process_supervision_disabled" in body["blockers"]
     assert "persistent_supervision_disabled" in body["blockers"]
     assert "process_restart_authority_not_granted" in body["blockers"]
@@ -5234,6 +5239,7 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert enablement_first_missing_handoff["read_only_contract"] is True
     assert enablement_first_missing_handoff["would_execute"] is False
     assert enablement_first_missing_handoff["would_mutate"] is False
+    assert enablement_first_missing_handoff["authority_granted"] is False
     dependency_readback = enablement_body["enablement_dependency_readback"]
     assert [item["id"] for item in dependency_readback] == expected_enablement_prerequisites
     dependencies_by_id = {item["id"]: item for item in dependency_readback}
