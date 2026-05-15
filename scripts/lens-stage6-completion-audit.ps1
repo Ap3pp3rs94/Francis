@@ -2282,6 +2282,8 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 }
 
+$RecommendedAuthorityGranted = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'authority_granted' -Default $false)
+
 $Payload = [ordered]@{
   ok = $true
   kind = 'lens.stage6.completion_audit'
@@ -2309,6 +2311,7 @@ $Payload = [ordered]@{
   recommended_next_slice = $RecommendedNextSlice
   recommended_proof_script = $RecommendedProofScript
   authority_required = $RecommendedAuthorityRequired
+  authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'

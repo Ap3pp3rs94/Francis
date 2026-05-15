@@ -46,6 +46,18 @@ def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodin
     assert "StandardErrorEncoding" not in script
 
 
+def test_lens_stage6_completion_audit_projects_recommended_authority_grant_state() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+    authority_grant_projection = (
+        "$RecommendedAuthorityGranted = [bool](Get-PropertyValue -Payload $RecommendedHandoff "
+        "-Name 'authority_granted' -Default $false)"
+    )
+
+    assert authority_grant_projection in script
+    assert "authority_granted = $RecommendedAuthorityGranted" in script
+    assert script.index(authority_grant_projection) < script.index("authority_granted = $RecommendedAuthorityGranted")
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -130,6 +142,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
     )
     assert payload["authority_required"] == "persistent_supervision_enablement_authority"
+    assert payload["authority_granted"] is False
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["status"] == "blocked"
     assert recommended_handoff["previous_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
