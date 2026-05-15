@@ -1324,6 +1324,7 @@ def _stage6_next_handoff_readback(
     enablement_authority_handoff: dict[str, Any] = {}
     if enablement_authority_handoff_observed:
         enablement_authority_handoff = {
+            "id": "persistent_supervision_enablement_authority",
             "status": "blocked",
             "previous_next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
             "consumed_audit_next_smallest_truthful_gap": "persistent_supervision_enablement_denial_boundary",
@@ -1337,6 +1338,7 @@ def _stage6_next_handoff_readback(
             "grants_route": _safe_str(enablement_authority_readiness.get("grants_route")).strip(),
             "readiness_route": _safe_str(enablement_authority_readiness.get("route")).strip(),
             "execution_readiness_route": _safe_str(enablement_execution_readiness.get("route")).strip(),
+            "acceptance_criterion": "system_resident_presence",
             "authority_required": "persistent_supervision_enablement_authority",
             "authority_granted": False,
             "enablement_denial_observed": bool(enablement_authority_readiness.get("boundary_observed")),

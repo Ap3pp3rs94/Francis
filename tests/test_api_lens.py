@@ -5018,6 +5018,7 @@ def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> N
     assert next_handoff["recommended_first_missing_authority_required"] == "process_supervision_authority"
     assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is True
     enablement_handoff = next_handoff["persistent_supervision_enablement_authority_handoff"]
+    assert enablement_handoff["id"] == "persistent_supervision_enablement_authority"
     assert enablement_handoff["next_smallest_truthful_gap"] == (
         "persistent_supervision_enablement_authority_not_granted"
     )
@@ -5031,6 +5032,7 @@ def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> N
     assert enablement_handoff["execution_readiness_route"] == (
         "/lens/host/persistent-supervision/enablement/execution/readiness"
     )
+    assert enablement_handoff["acceptance_criterion"] == "system_resident_presence"
     assert enablement_handoff["authority_required"] == "persistent_supervision_enablement_authority"
     assert enablement_handoff["authority_granted"] is False
     assert enablement_handoff["enablement_denial_observed"] is True

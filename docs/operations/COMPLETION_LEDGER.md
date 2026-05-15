@@ -27684,6 +27684,38 @@ Latest validation for the Stage 6 Lens chat UI source-handoff target readback:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens next-handoff source target contract on `2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so the
+  `persistent_supervision_enablement_authority_handoff` source record now
+  carries explicit source target identity: `id:
+  persistent_supervision_enablement_authority` and `acceptance_criterion:
+  system_resident_presence`.
+- Updated `tests\test_api_lens.py` and `apps\chat_ui\src\lens\index.test.ts`
+  so the backend contract and UI projection assert those source target fields.
+- This is source-handoff API/readback contract tightening only. It does not run
+  the Stage 6 completion audit, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens next-handoff source target contract:
+
+- `python -m pytest tests\test_api_lens.py::test_stage6_next_handoff_promotes_audited_enablement_authority_denial -q`
+  Result: `passed; 1 test`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -567,11 +567,13 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           activation_execution_handoff: {},
           persistent_supervision_enablement_authority_handoff_observed: true,
           persistent_supervision_enablement_authority_handoff: {
+            id: "persistent_supervision_enablement_authority",
             status: "blocked",
             previous_next_smallest_truthful_gap: "persistent_supervision_authority_not_granted",
             consumed_audit_next_smallest_truthful_gap: "persistent_supervision_enablement_denial_boundary",
             next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
             next_step: "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+            acceptance_criterion: "system_resident_presence",
             authority_required: "persistent_supervision_enablement_authority",
             read_only_contract: true,
             diagnostic_only: true,
@@ -939,12 +941,12 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(handoffPresentation.enablementAuthorityHandoffObserved, true);
     assert.equal(handoffPresentation.residentCandidateHandoffObserved, false);
     assert.equal(handoffPresentation.sourceHandoffLoaded, true);
-    assert.equal(handoffPresentation.sourceHandoffId, "");
+    assert.equal(handoffPresentation.sourceHandoffId, "persistent_supervision_enablement_authority");
     assert.equal(
       handoffPresentation.sourceHandoffNextStep,
       "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
     );
-    assert.equal(handoffPresentation.sourceHandoffAcceptanceCriterion, "");
+    assert.equal(handoffPresentation.sourceHandoffAcceptanceCriterion, "system_resident_presence");
     assert.equal(handoffPresentation.sourceHandoffAuthorityRequired, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.sourceHandoffStatus, "blocked");
     assert.equal(handoffPresentation.sourceHandoffReadOnlyContract, true);
