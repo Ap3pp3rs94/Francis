@@ -28109,6 +28109,42 @@ projection:
 - `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
   Result: `failed; process timed out after 420s and was killed; not counted as completion-audit proof`
 
+Stage 6 Lens completion-audit full-test timeout budget correction on
+`2026-05-15`:
+
+- Updated `tests\test_lens_stage6_completion_audit_script.py` so the opt-in full
+  completion-audit pytest wrapper no longer kills the parent audit process after
+  a fixed `420s`.
+- The wrapper now budgets for the current serial child-proof envelope
+  (`15` expected child proofs at `120s` each, plus overhead) and supports an
+  explicit `FRANCIS_STAGE6_FULL_COMPLETION_AUDIT_TIMEOUT_SECONDS` override for
+  local diagnostics.
+- Added a focused harness contract test proving the outer timeout covers the
+  serial child-proof timeout budget and that the override is honored.
+- This is validation-harness hardening only. It does not run the full Stage 6
+  completion audit successfully, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens completion-audit full-test timeout budget
+correction:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- Full opt-in completion audit was not rerun in this slice after the timeout
+  budget correction.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,9 @@ import pytest
 from powershell_script_runner import run_powershell_script
 
 _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS = 120
+_AUDIT_EXPECTED_SERIAL_CHILD_PROOFS = 15
 _FULL_AUDIT_ENV = "FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST"
+_FULL_AUDIT_TIMEOUT_ENV = "FRANCIS_STAGE6_FULL_COMPLETION_AUDIT_TIMEOUT_SECONDS"
 
 
 def _powershell() -> str:
@@ -25,13 +28,22 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _full_audit_timeout_seconds(environ: Mapping[str, str] | None = None) -> int:
+    values = os.environ if environ is None else environ
+    configured = values.get(_FULL_AUDIT_TIMEOUT_ENV, "").strip()
+    if configured:
+        return int(configured)
+    serial_child_budget = _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS * _AUDIT_EXPECTED_SERIAL_CHILD_PROOFS
+    return serial_child_budget + 180
+
+
 def _run_audit(*args: str) -> subprocess.CompletedProcess[str]:
     return run_powershell_script(
         _powershell(),
         _repo_root() / "scripts" / "lens-stage6-completion-audit.ps1",
         args,
         cwd=_repo_root(),
-        timeout_seconds=420,
+        timeout_seconds=_full_audit_timeout_seconds(),
     )
 
 
@@ -56,6 +68,13 @@ def test_lens_stage6_completion_audit_projects_recommended_authority_grant_state
     assert authority_grant_projection in script
     assert "authority_granted = $RecommendedAuthorityGranted" in script
     assert script.index(authority_grant_projection) < script.index("authority_granted = $RecommendedAuthorityGranted")
+
+
+def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
+    expected_minimum = _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS * _AUDIT_EXPECTED_SERIAL_CHILD_PROOFS
+
+    assert _full_audit_timeout_seconds({}) >= expected_minimum
+    assert _full_audit_timeout_seconds({_FULL_AUDIT_TIMEOUT_ENV: "777"}) == 777
 
 
 @pytest.mark.skipif(
