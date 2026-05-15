@@ -4450,6 +4450,29 @@ function SystemPanel(props: {
   const lensStage6Closure = lensStage6Readiness?.closure_readback;
   const lensStage6ClosureCriteria = lensStage6Closure?.criteria ?? [];
   const lensStage6ClosureNextGap = safeString(lensStage6Closure?.next_smallest_truthful_gap).trim();
+  const lensStage6NextHandoff = lensStage6Readiness?.next_handoff;
+  const lensStage6NextHandoffStatus = safeString(lensStage6NextHandoff?.status).trim();
+  const lensStage6NextHandoffGap = safeString(lensStage6NextHandoff?.next_smallest_truthful_gap).trim();
+  const lensStage6NextHandoffSource = safeString(lensStage6NextHandoff?.recommended_handoff_source).trim();
+  const lensStage6NextHandoffSlice = safeString(lensStage6NextHandoff?.recommended_next_slice).trim();
+  const lensStage6NextHandoffProof = safeString(lensStage6NextHandoff?.recommended_proof_script).trim();
+  const lensStage6NextHandoffRoute =
+    safeString(lensStage6NextHandoff?.recommended_readiness_route).trim() ||
+    safeString(lensStage6NextHandoff?.recommended_route).trim();
+  const lensStage6NextHandoffAuthority = safeString(lensStage6NextHandoff?.authority_required).trim();
+  const lensStage6PrerequisiteHandoffSource = safeString(
+    lensStage6NextHandoff?.recommended_prerequisites_handoff_source,
+  ).trim();
+  const lensStage6PrerequisiteSlice = safeString(lensStage6NextHandoff?.recommended_prerequisites_next_slice).trim();
+  const lensStage6PrerequisiteProof = safeString(lensStage6NextHandoff?.recommended_prerequisites_proof_script).trim();
+  const lensStage6FirstMissingHandoffSource = safeString(
+    lensStage6NextHandoff?.recommended_first_missing_handoff_source,
+  ).trim();
+  const lensStage6FirstMissingSlice = safeString(lensStage6NextHandoff?.recommended_first_missing_next_slice).trim();
+  const lensStage6FirstMissingProof = safeString(lensStage6NextHandoff?.recommended_first_missing_proof_script).trim();
+  const lensStage6FirstMissingAuthority = safeString(
+    lensStage6NextHandoff?.recommended_first_missing_authority_required,
+  ).trim();
   const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
   const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
   const lensHudBadges = lensHud?.badges ?? [];
@@ -5673,6 +5696,87 @@ function SystemPanel(props: {
             </div>
             {lensCommandPalette?.message ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{lensCommandPalette.message}</div>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${THEME.panelBorder}`,
+              borderRadius: 8,
+              padding: 8,
+              background: "#121212",
+              overflowWrap: "anywhere",
+            }}
+          >
+            <div style={{ fontSize: 11, color: THEME.muted }}>Stage 6 next handoff</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle(lensStage6NextHandoffStatus || "readback")}>
+                {lensStage6NextHandoffStatus || "readback"}
+              </span>
+              {lensStage6NextHandoffSource ? (
+                <span style={badgeStyle("readback")}>{lensStage6NextHandoffSource}</span>
+              ) : null}
+              {lensStage6NextHandoffAuthority ? (
+                <span style={badgeStyle("blocked")}>authority {lensStage6NextHandoffAuthority}</span>
+              ) : null}
+            </div>
+            {lensStage6NextHandoffGap ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                current gap <code>{lensStage6NextHandoffGap}</code>
+              </div>
+            ) : null}
+            {lensStage6NextHandoffSlice ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                current handoff <code>{lensStage6NextHandoffSlice}</code>
+              </div>
+            ) : null}
+            {lensStage6NextHandoffProof ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                proof <code>{lensStage6NextHandoffProof}</code>
+              </div>
+            ) : null}
+            {lensStage6NextHandoffRoute ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                route <code>{lensStage6NextHandoffRoute}</code>
+              </div>
+            ) : null}
+            {lensStage6PrerequisiteHandoffSource ? (
+              <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 7 }}>
+                prerequisite <code>{lensStage6PrerequisiteHandoffSource}</code>
+                {lensStage6PrerequisiteSlice ? (
+                  <>
+                    {" / "}handoff <code>{lensStage6PrerequisiteSlice}</code>
+                  </>
+                ) : null}
+                {lensStage6PrerequisiteProof ? (
+                  <>
+                    {" / "}proof <code>{lensStage6PrerequisiteProof}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensStage6FirstMissingHandoffSource ? (
+              <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                first missing <code>{lensStage6FirstMissingHandoffSource}</code>
+                {lensStage6FirstMissingSlice ? (
+                  <>
+                    {" / "}handoff <code>{lensStage6FirstMissingSlice}</code>
+                  </>
+                ) : null}
+                {lensStage6FirstMissingProof ? (
+                  <>
+                    {" / "}proof <code>{lensStage6FirstMissingProof}</code>
+                  </>
+                ) : null}
+                {lensStage6FirstMissingAuthority ? (
+                  <>
+                    {" / "}authority <code>{lensStage6FirstMissingAuthority}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {!lensStage6NextHandoffGap && !lensStage6NextHandoffSource ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>No next-handoff readback loaded.</div>
             ) : null}
           </div>
 

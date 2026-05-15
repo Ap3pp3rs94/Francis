@@ -27327,6 +27327,34 @@ readback correction:
 - `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
   Result: `passed`
 
+Stage 6 Lens chat UI next-handoff summary projection on `2026-05-15`:
+
+- Updated `apps\chat_ui\src\lens\index.ts` so the Lens client parses
+  `stage6_readiness.next_handoff` as a typed read-only contract, including the
+  top-level `recommended_prerequisites_*` and `recommended_first_missing_*`
+  fields.
+- Updated `apps\chat_ui\src\App.tsx` so the operator Lens panel shows a compact
+  `Stage 6 next handoff` readback with the current selected handoff, the broad
+  prerequisite handoff, and the concrete first-missing handoff.
+- This is an operator-surface projection only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 chat UI next-handoff summary projection:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test -- src/lens/index.test.ts`
+  Result: `passed; the package script ran the full configured UI test suite`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

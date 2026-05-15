@@ -334,10 +334,49 @@ export type LensStage6ClosureReadback = {
   governance: Record<string, unknown>;
 };
 
+export type LensStage6NextHandoff = {
+  kind?: string;
+  status?: string;
+  ready_to_close: boolean;
+  stage_next_smallest_truthful_gap?: string;
+  next_smallest_truthful_gap?: string;
+  recommended_next_slice?: string;
+  recommended_handoff_source?: string;
+  recommended_proof_script?: string;
+  recommended_route?: string;
+  recommended_readiness_route?: string;
+  authority_required?: string;
+  recommended_prerequisites_handoff_source?: string;
+  recommended_prerequisites_next_slice?: string;
+  recommended_prerequisites_proof_script?: string;
+  recommended_prerequisites_route?: string;
+  recommended_prerequisites_readiness_route?: string;
+  recommended_prerequisites_authority_required?: string;
+  recommended_first_missing_handoff_source?: string;
+  recommended_first_missing_next_slice?: string;
+  recommended_first_missing_proof_script?: string;
+  recommended_first_missing_route?: string;
+  recommended_first_missing_readiness_route?: string;
+  recommended_first_missing_authority_required?: string;
+  first_blocked_criterion?: string;
+  first_blocked_criterion_next_smallest_truthful_gap?: string;
+  persistent_supervision_required_prerequisites_observed: boolean;
+  persistent_supervision_missing_required_before_enable: string[];
+  persistent_supervision_first_missing_required_before_enable?: string;
+  persistent_supervision_first_missing_requirement_handoff: Record<string, unknown>;
+  persistent_supervision_required_prerequisites_handoff: Record<string, unknown>;
+  persistent_supervision_enablement_authority_handoff_observed: boolean;
+  persistent_supervision_enablement_authority_handoff: Record<string, unknown>;
+  resident_runtime_candidate_handoff_observed: boolean;
+  resident_runtime_candidate_handoff: Record<string, unknown>;
+  governance: Record<string, unknown>;
+};
+
 export type LensStage6Readiness = {
   stage?: string;
   claim?: string;
   closure_readback: LensStage6ClosureReadback;
+  next_handoff: LensStage6NextHandoff;
   criteria: LensStage6Criterion[];
 };
 
@@ -1010,6 +1049,69 @@ function parseStage6ClosureReadback(value: unknown): LensStage6ClosureReadback {
   };
 }
 
+function parseStage6NextHandoff(value: unknown): LensStage6NextHandoff {
+  const raw = safeRecord(value);
+  return {
+    kind: safeString(raw.kind).trim(),
+    status: safeString(raw.status).trim(),
+    ready_to_close: safeBoolean(raw.ready_to_close, false),
+    stage_next_smallest_truthful_gap: safeString(raw.stage_next_smallest_truthful_gap).trim() || undefined,
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap).trim() || undefined,
+    recommended_next_slice: safeString(raw.recommended_next_slice).trim() || undefined,
+    recommended_handoff_source: safeString(raw.recommended_handoff_source).trim() || undefined,
+    recommended_proof_script: safeString(raw.recommended_proof_script).trim() || undefined,
+    recommended_route: safeString(raw.recommended_route).trim() || undefined,
+    recommended_readiness_route: safeString(raw.recommended_readiness_route).trim() || undefined,
+    authority_required: safeString(raw.authority_required).trim() || undefined,
+    recommended_prerequisites_handoff_source:
+      safeString(raw.recommended_prerequisites_handoff_source).trim() || undefined,
+    recommended_prerequisites_next_slice: safeString(raw.recommended_prerequisites_next_slice).trim() || undefined,
+    recommended_prerequisites_proof_script: safeString(raw.recommended_prerequisites_proof_script).trim() || undefined,
+    recommended_prerequisites_route: safeString(raw.recommended_prerequisites_route).trim() || undefined,
+    recommended_prerequisites_readiness_route:
+      safeString(raw.recommended_prerequisites_readiness_route).trim() || undefined,
+    recommended_prerequisites_authority_required:
+      safeString(raw.recommended_prerequisites_authority_required).trim() || undefined,
+    recommended_first_missing_handoff_source:
+      safeString(raw.recommended_first_missing_handoff_source).trim() || undefined,
+    recommended_first_missing_next_slice: safeString(raw.recommended_first_missing_next_slice).trim() || undefined,
+    recommended_first_missing_proof_script: safeString(raw.recommended_first_missing_proof_script).trim() || undefined,
+    recommended_first_missing_route: safeString(raw.recommended_first_missing_route).trim() || undefined,
+    recommended_first_missing_readiness_route:
+      safeString(raw.recommended_first_missing_readiness_route).trim() || undefined,
+    recommended_first_missing_authority_required:
+      safeString(raw.recommended_first_missing_authority_required).trim() || undefined,
+    first_blocked_criterion: safeString(raw.first_blocked_criterion).trim() || undefined,
+    first_blocked_criterion_next_smallest_truthful_gap:
+      safeString(raw.first_blocked_criterion_next_smallest_truthful_gap).trim() || undefined,
+    persistent_supervision_required_prerequisites_observed: safeBoolean(
+      raw.persistent_supervision_required_prerequisites_observed,
+      false,
+    ),
+    persistent_supervision_missing_required_before_enable: safeStringList(
+      raw.persistent_supervision_missing_required_before_enable,
+    ),
+    persistent_supervision_first_missing_required_before_enable:
+      safeString(raw.persistent_supervision_first_missing_required_before_enable).trim() || undefined,
+    persistent_supervision_first_missing_requirement_handoff: safeRecord(
+      raw.persistent_supervision_first_missing_requirement_handoff,
+    ),
+    persistent_supervision_required_prerequisites_handoff: safeRecord(
+      raw.persistent_supervision_required_prerequisites_handoff,
+    ),
+    persistent_supervision_enablement_authority_handoff_observed: safeBoolean(
+      raw.persistent_supervision_enablement_authority_handoff_observed,
+      false,
+    ),
+    persistent_supervision_enablement_authority_handoff: safeRecord(
+      raw.persistent_supervision_enablement_authority_handoff,
+    ),
+    resident_runtime_candidate_handoff_observed: safeBoolean(raw.resident_runtime_candidate_handoff_observed, false),
+    resident_runtime_candidate_handoff: safeRecord(raw.resident_runtime_candidate_handoff),
+    governance: safeRecord(raw.governance),
+  };
+}
+
 function parseStage6Readiness(value: unknown): LensStage6Readiness {
   const raw = safeRecord(value);
   const criteria = Array.isArray(raw.criteria)
@@ -1019,6 +1121,7 @@ function parseStage6Readiness(value: unknown): LensStage6Readiness {
     stage: safeString(raw.stage).trim(),
     claim: safeString(raw.claim).trim(),
     closure_readback: parseStage6ClosureReadback(raw.closure_readback),
+    next_handoff: parseStage6NextHandoff(raw.next_handoff),
     criteria,
   };
 }

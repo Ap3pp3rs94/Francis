@@ -506,6 +506,57 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             resident_claim_authority: false,
           },
         },
+        next_handoff: {
+          kind: "lens.stage6.next_handoff.readback",
+          status: "readback_ready",
+          ready_to_close: false,
+          stage_next_smallest_truthful_gap: "summon_anywhere_blockers",
+          next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
+          recommended_next_slice: "prove_persistent_supervision_enablement_authority_after_candidate_handoff",
+          recommended_handoff_source: "persistent_supervision_enablement_authority_denial_handoff",
+          recommended_proof_script: "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
+          recommended_route: "/lens/host/persistent-supervision/enablement",
+          recommended_readiness_route: "/lens/host/persistent-supervision/enablement/authority/readiness",
+          authority_required: "persistent_supervision_enablement_authority",
+          recommended_prerequisites_handoff_source: "persistent_supervision_required_prerequisites_handoff",
+          recommended_prerequisites_next_slice: "resolve_persistent_supervision_required_prerequisites_before_enablement",
+          recommended_prerequisites_proof_script: "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
+          recommended_prerequisites_route: "/lens/host/persistent-supervision",
+          recommended_prerequisites_readiness_route: "/lens/host/persistent-supervision/enablement",
+          recommended_prerequisites_authority_required:
+            "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+          recommended_first_missing_handoff_source: "persistent_supervision_first_missing_requirement_handoff",
+          recommended_first_missing_next_slice: "resolve_resident_host_process_before_persistent_supervision_enablement",
+          recommended_first_missing_proof_script: "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+          recommended_first_missing_route: "/lens/host",
+          recommended_first_missing_readiness_route: "/lens/host/runtime-loop/readiness",
+          recommended_first_missing_authority_required: "process_supervision_authority",
+          first_blocked_criterion: "summon_anywhere",
+          persistent_supervision_required_prerequisites_observed: true,
+          persistent_supervision_missing_required_before_enable: ["resident_host_process", "tray_presence"],
+          persistent_supervision_first_missing_required_before_enable: "resident_host_process",
+          persistent_supervision_first_missing_requirement_handoff: {
+            id: "resident_host_process",
+            next_step: "resolve_resident_host_process_before_persistent_supervision_enablement",
+            proof_script: "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+          },
+          persistent_supervision_required_prerequisites_handoff: {
+            next_smallest_truthful_gap: "persistent_supervision_required_prerequisites_missing",
+          },
+          persistent_supervision_enablement_authority_handoff_observed: true,
+          persistent_supervision_enablement_authority_handoff: {
+            next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
+          },
+          resident_runtime_candidate_handoff_observed: false,
+          resident_runtime_candidate_handoff: {},
+          governance: {
+            read_only_contract: true,
+            diagnostic_only: true,
+            execution_authority: false,
+            process_supervision_authority: false,
+            resident_claim_authority: false,
+          },
+        },
         criteria: [
           {
             id: "hud_layer_runtime",
@@ -753,6 +804,53 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     );
     assert.equal(snapshot.stage6_readiness.closure_readback.governance.execution_authority, false);
     assert.equal(snapshot.stage6_readiness.closure_readback.governance.resident_claim_authority, false);
+    assert.equal(snapshot.stage6_readiness.next_handoff.status, "readback_ready");
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.next_smallest_truthful_gap,
+      "persistent_supervision_enablement_authority_not_granted",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_handoff_source,
+      "persistent_supervision_enablement_authority_denial_handoff",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_prerequisites_handoff_source,
+      "persistent_supervision_required_prerequisites_handoff",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_prerequisites_next_slice,
+      "resolve_persistent_supervision_required_prerequisites_before_enablement",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_prerequisites_proof_script,
+      "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_first_missing_handoff_source,
+      "persistent_supervision_first_missing_requirement_handoff",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_first_missing_next_slice,
+      "resolve_resident_host_process_before_persistent_supervision_enablement",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_first_missing_proof_script,
+      "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.recommended_first_missing_authority_required,
+      "process_supervision_authority",
+    );
+    assert.equal(snapshot.stage6_readiness.next_handoff.persistent_supervision_required_prerequisites_observed, true);
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.persistent_supervision_missing_required_before_enable[0],
+      "resident_host_process",
+    );
+    assert.equal(
+      snapshot.stage6_readiness.next_handoff.persistent_supervision_enablement_authority_handoff_observed,
+      true,
+    );
+    assert.equal(snapshot.stage6_readiness.next_handoff.governance.execution_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_only");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.resident_overlay, false);
