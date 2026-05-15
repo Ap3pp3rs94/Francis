@@ -27060,6 +27060,40 @@ handoff readback correction:
   Result: `passed with expected PowerShell line-ending warning for
   scripts\lens-resident-supervision-persistence-boundary-proof.ps1`
 
+Stage 6 Lens persistent-supervision authority-chain handoff source correction
+on `2026-05-15`:
+
+- Updated `scripts\lens-persistent-supervision-enablement-authority-proof.ps1`,
+  `scripts\lens-persistent-supervision-execution-authority-proof.ps1`, and
+  `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1` so
+  each top-level payload and nested `handoff` object explicitly names its
+  `recommended_handoff_source`.
+- The handoff chain now names:
+  `persistent_supervision_enablement_authority_handoff`,
+  `persistent_supervision_execution_authority_handoff`, and
+  `persistent_supervision_resident_claim_boundary_handoff`.
+- This is an auditability/readback correction only. It does not grant runtime
+  launch, process supervision, process restart, service install/control,
+  service config write, persistent-supervision execution, resident claim,
+  memory write, product execution, approval-decision, or mutation authority.
+  Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 persistent-supervision authority-chain
+handoff source correction:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py tests\test_lens_persistent_supervision_execution_authority_proof_script.py tests\test_lens_persistent_supervision_resident_claim_boundary_proof_script.py`
+  Result: `passed`
+- `[System.Management.Automation.Language.Parser]::ParseFile(...)` for the
+  three touched proof scripts
+  Result: `passed`
+- Direct proof readbacks for the three touched scripts returned
+  `status=proof_passed` and matching top-level/nested
+  `recommended_handoff_source` values.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

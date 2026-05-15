@@ -106,6 +106,7 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
         payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
     )
     assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
     assert payload["stage6_completion_audit_script"] == "scripts/lens-stage6-completion-audit.ps1"
     assert payload["persistent_supervision_execution_route"] == "/lens/host/persistent-supervision/enablement/execution"
     assert (
@@ -114,6 +115,7 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
     )
     assert payload["persistent_supervision_plan_script"] == "scripts/lens-persistent-supervision-plan.ps1"
     assert payload["handoff"] == {
+        "recommended_handoff_source": "persistent_supervision_resident_claim_boundary_handoff",
         "status": "audit_needed",
         "previous_next_smallest_truthful_gap": "persistent_supervision_resident_claim_authority_boundary",
         "next_smallest_truthful_gap": "stage6_lens_completion_audit",

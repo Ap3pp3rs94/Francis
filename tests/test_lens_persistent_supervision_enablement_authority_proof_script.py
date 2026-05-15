@@ -81,6 +81,7 @@ def test_lens_persistent_supervision_enablement_authority_proof_grants_bounded_a
         payload["recommended_proof_script"]
         == "scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status"
     )
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_authority_handoff"
     assert payload["persistent_supervision_enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert (
         payload["enablement_authority_request_route"]
@@ -98,6 +99,7 @@ def test_lens_persistent_supervision_enablement_authority_proof_grants_bounded_a
         == "/lens/host/persistent-supervision/enablement/execution/readiness"
     )
     assert payload["handoff"] == {
+        "recommended_handoff_source": "persistent_supervision_enablement_authority_handoff",
         "status": "blocked",
         "previous_next_smallest_truthful_gap": "persistent_supervision_enablement_disabled",
         "next_smallest_truthful_gap": "persistent_supervision_execution_authority_or_resident_claim_boundary",

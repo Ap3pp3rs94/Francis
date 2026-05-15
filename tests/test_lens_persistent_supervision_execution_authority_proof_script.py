@@ -84,6 +84,7 @@ def test_lens_persistent_supervision_execution_authority_proof_stops_at_resident
         payload["recommended_proof_script"]
         == "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
     )
+    assert payload["recommended_handoff_source"] == "persistent_supervision_execution_authority_handoff"
     assert payload["persistent_supervision_execution_route"] == "/lens/host/persistent-supervision/enablement/execution"
     assert (
         payload["persistent_supervision_execution_request_route"]
@@ -102,6 +103,7 @@ def test_lens_persistent_supervision_execution_authority_proof_stops_at_resident
         == "/lens/host/persistent-supervision/enablement/execution/readiness"
     )
     assert payload["handoff"] == {
+        "recommended_handoff_source": "persistent_supervision_execution_authority_handoff",
         "status": "blocked",
         "previous_next_smallest_truthful_gap": (
             "persistent_supervision_execution_authority_or_resident_claim_boundary"
