@@ -27299,6 +27299,34 @@ correction:
 - PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
   Result: `passed`
 
+Stage 6 Lens public next-handoff prerequisite summary readback correction on
+`2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so `/lens/status`
+  `stage6_readiness.next_handoff` mirrors the Stage 6 next-handoff proof
+  script's top-level `recommended_prerequisites_*` and
+  `recommended_first_missing_*` summary fields.
+- The public readback now keeps the selected next-handoff recommendation
+  unchanged while preserving the broad prerequisite handoff and the concrete
+  first-missing handoff for operator surfaces that consume `/lens/status`.
+- This is an auditability/readback correction only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 public next-handoff prerequisite summary
+readback correction:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_stage6_next_handoff_promotes_audited_enablement_authority_denial tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

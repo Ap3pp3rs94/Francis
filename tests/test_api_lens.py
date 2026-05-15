@@ -1470,6 +1470,32 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert next_handoff["recommended_route"] == "/lens/host"
     assert next_handoff["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert next_handoff["authority_required"] == ("resident_host_process_tray_hotkey_overlay_and_summon_prerequisites")
+    assert next_handoff["recommended_prerequisites_handoff_source"] == (
+        "persistent_supervision_required_prerequisites_handoff"
+    )
+    assert next_handoff["recommended_prerequisites_next_slice"] == (
+        "resolve_persistent_supervision_required_prerequisites_before_enablement"
+    )
+    assert next_handoff["recommended_prerequisites_proof_script"] == (
+        "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_prerequisites_route"] == "/lens/host/persistent-supervision"
+    assert next_handoff["recommended_prerequisites_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert next_handoff["recommended_prerequisites_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert next_handoff["recommended_first_missing_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert next_handoff["recommended_first_missing_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert next_handoff["recommended_first_missing_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_first_missing_route"] == "/lens/host"
+    assert next_handoff["recommended_first_missing_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert next_handoff["recommended_first_missing_authority_required"] == "process_supervision_authority"
     assert next_handoff["first_blocked_criterion"] == "summon_anywhere"
     assert next_handoff["persistent_supervision_required_prerequisites_observed"] is True
     assert next_handoff["persistent_supervision_missing_required_before_enable"] == [
@@ -4961,6 +4987,25 @@ def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> N
         "/lens/host/persistent-supervision/enablement/authority/readiness"
     )
     assert next_handoff["authority_required"] == "persistent_supervision_enablement_authority"
+    assert next_handoff["recommended_prerequisites_handoff_source"] == (
+        "persistent_supervision_required_prerequisites_handoff"
+    )
+    assert next_handoff["recommended_prerequisites_next_slice"] == (
+        "resolve_persistent_supervision_required_prerequisites_before_enablement"
+    )
+    assert next_handoff["recommended_prerequisites_proof_script"] == (
+        "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_first_missing_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert next_handoff["recommended_first_missing_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert next_handoff["recommended_first_missing_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["recommended_first_missing_authority_required"] == "process_supervision_authority"
     assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is True
     enablement_handoff = next_handoff["persistent_supervision_enablement_authority_handoff"]
     assert enablement_handoff["next_smallest_truthful_gap"] == (

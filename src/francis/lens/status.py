@@ -1469,6 +1469,14 @@ def _stage6_next_handoff_readback(
         recommended_readiness_route = _safe_str(resident_candidate_handoff.get("readiness_route")).strip()
         authority_required = _safe_str(resident_candidate_handoff.get("authority_required")).strip()
 
+    recommended_first_missing_authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip()
+    first_missing_handoff_next_gap = _safe_str(first_missing_handoff.get("next_smallest_truthful_gap")).strip()
+    if first_missing_handoff_ready:
+        if first_missing_handoff_next_gap == "resident_host_process_not_supervised":
+            recommended_first_missing_authority_required = "process_supervision_authority"
+        elif first_missing_handoff_next_gap == "resident_supervision_not_persistent":
+            recommended_first_missing_authority_required = "persistent_process_supervision_authority"
+
     return {
         "kind": "lens.stage6.next_handoff.readback",
         "status": "readback_ready",
@@ -1481,6 +1489,24 @@ def _stage6_next_handoff_readback(
         "recommended_route": recommended_route,
         "recommended_readiness_route": recommended_readiness_route,
         "authority_required": authority_required,
+        "recommended_prerequisites_handoff_source": (
+            "persistent_supervision_required_prerequisites_handoff" if prerequisites_observed else ""
+        ),
+        "recommended_prerequisites_next_slice": _safe_str(prerequisites_handoff.get("next_step")).strip(),
+        "recommended_prerequisites_proof_script": _safe_str(prerequisites_handoff.get("proof_script")).strip(),
+        "recommended_prerequisites_route": _safe_str(prerequisites_handoff.get("route")).strip(),
+        "recommended_prerequisites_readiness_route": _safe_str(prerequisites_handoff.get("readiness_route")).strip(),
+        "recommended_prerequisites_authority_required": _safe_str(
+            prerequisites_handoff.get("authority_required")
+        ).strip(),
+        "recommended_first_missing_handoff_source": (
+            "persistent_supervision_first_missing_requirement_handoff" if first_missing_handoff_ready else ""
+        ),
+        "recommended_first_missing_next_slice": _safe_str(first_missing_handoff.get("next_step")).strip(),
+        "recommended_first_missing_proof_script": _safe_str(first_missing_handoff.get("proof_script")).strip(),
+        "recommended_first_missing_route": _safe_str(first_missing_handoff.get("route")).strip(),
+        "recommended_first_missing_readiness_route": _safe_str(first_missing_handoff.get("readiness_route")).strip(),
+        "recommended_first_missing_authority_required": recommended_first_missing_authority_required,
         "first_blocked_criterion": first_blocked_criterion,
         "first_blocked_criterion_next_smallest_truthful_gap": criterion_next_gap,
         "persistent_supervision_required_prerequisites_observed": prerequisites_observed,
