@@ -28044,6 +28044,36 @@ readback:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens next-handoff proof authority-grant projection on `2026-05-15`:
+
+- Updated `scripts\lens-stage6-next-handoff.ps1` so the proof payload now emits
+  top-level `authority_granted` beside `authority_required`.
+- The proof payload now also mirrors
+  `recommended_prerequisites_authority_granted` and
+  `recommended_first_missing_authority_granted`, matching the `/lens/status`
+  next-handoff readback contract.
+- Updated `tests\test_lens_stage6_next_handoff_script.py` so all current proof
+  scenarios assert that recommended authority remains explicitly not granted.
+- This is proof-projection/readback contract tightening only. It does not run
+  the Stage 6 completion audit, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens next-handoff proof authority-grant
+projection:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; 5 tests`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

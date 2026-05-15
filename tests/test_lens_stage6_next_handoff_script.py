@@ -75,6 +75,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement"
     assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
     assert payload["authority_required"] == "persistent_supervision_enablement_authority"
+    assert payload["authority_granted"] is False
     assert payload["recommended_prerequisites_handoff_source"] == (
         "persistent_supervision_required_prerequisites_handoff"
     )
@@ -89,6 +90,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["recommended_prerequisites_authority_required"] == (
         "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     )
+    assert payload["recommended_prerequisites_authority_granted"] is False
     assert payload["recommended_first_missing_handoff_source"] == (
         "persistent_supervision_first_missing_requirement_handoff"
     )
@@ -101,6 +103,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["recommended_first_missing_route"] == "/lens/host"
     assert payload["recommended_first_missing_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["recommended_first_missing_authority_required"] == "process_supervision_authority"
+    assert payload["recommended_first_missing_authority_granted"] is False
     assert payload["blocked_criteria"] == [
         "summon_anywhere",
         "helpful_not_noisy",
@@ -176,6 +179,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert first_missing_handoff["diagnostic_only"] is True
     assert first_missing_handoff["would_execute"] is False
     assert first_missing_handoff["would_mutate"] is False
+    assert first_missing_handoff["authority_granted"] is False
     persistent_prerequisites_handoff = payload["persistent_supervision_required_prerequisites_handoff"]
     assert (
         persistent_prerequisites_handoff["next_step"]
@@ -397,6 +401,7 @@ def test_lens_stage6_next_handoff_consumes_activation_execution_handoff(tmp_path
         "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
     )
     assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
     assert payload["latest_activation_execution_handoff_observed"] is True
     handoff = payload["latest_activation_execution_handoff"]
     assert handoff["id"] == "resident_host_process"
@@ -453,6 +458,7 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
     assert payload["recommended_route"] == "/lens/host"
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["authority_required"] == "persistent_process_supervision_authority"
+    assert payload["authority_granted"] is False
     assert payload["resident_runtime_candidate_handoff_observed"] is True
 
     handoff = payload["resident_runtime_candidate_handoff"]
@@ -514,6 +520,8 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
         "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
     )
     assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
+    assert payload["authority_required"] == "persistent_process_supervision_authority"
+    assert payload["authority_granted"] is False
     assert payload["resident_runtime_candidate_handoff_observed"] is True
 
     handoff = payload["resident_runtime_candidate_handoff"]

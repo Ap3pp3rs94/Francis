@@ -361,6 +361,7 @@ $RecommendedProofScript = $FamilyProofScript
 $RecommendedRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '')
 $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '')
 $AuthorityRequired = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '')
+$AuthorityGranted = [bool](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_granted' -Default $false)
 $RecommendedHandoffSource = 'first_blocker_family_handoff'
 
 $ClosureObserved = (
@@ -404,6 +405,7 @@ if (
   }
   $RecommendedProofScript = $CompletionAuditProofScript
   $AuthorityRequired = [string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'authority_required' -Default '')
+  $AuthorityGranted = [bool](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'authority_granted' -Default $false)
 }
 if ($PersistentSupervisionRequiredPrerequisitesObserved) {
   $RecommendedHandoffSource = 'persistent_supervision_required_prerequisites_handoff'
@@ -413,6 +415,7 @@ if ($PersistentSupervisionRequiredPrerequisitesObserved) {
   $RecommendedRoute = '/lens/host/persistent-supervision'
   $RecommendedReadinessRoute = '/lens/host/persistent-supervision/enablement'
   $AuthorityRequired = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
+  $AuthorityGranted = [bool](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'authority_granted' -Default $false)
 }
 if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
   $FirstMissingNextGap = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')
@@ -421,6 +424,7 @@ if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
   $FirstMissingRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'route' -Default '')
   $FirstMissingReadinessRoute = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'readiness_route' -Default '')
   $FirstMissingAuthorityRequired = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default '')
+  $FirstMissingAuthorityGranted = [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_granted' -Default $false)
 
   if (-not [string]::IsNullOrWhiteSpace($FirstMissingNextGap)) {
     $RecommendedHandoffSource = 'persistent_supervision_first_missing_requirement_handoff'
@@ -440,6 +444,7 @@ if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
   }
   if (-not [string]::IsNullOrWhiteSpace($FirstMissingAuthorityRequired)) {
     $AuthorityRequired = $FirstMissingAuthorityRequired
+    $AuthorityGranted = $FirstMissingAuthorityGranted
   }
 }
 if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
@@ -450,6 +455,7 @@ if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
   $RecommendedRoute = [string]$PersistentSupervisionEnablementAuthorityHandoff.route
   $RecommendedReadinessRoute = [string]$PersistentSupervisionEnablementAuthorityHandoff.readiness_route
   $AuthorityRequired = [string]$PersistentSupervisionEnablementAuthorityHandoff.authority_required
+  $AuthorityGranted = [bool]$PersistentSupervisionEnablementAuthorityHandoff.authority_granted
 }
 if ($ActivationExecutionHandoffReady) {
   $ActivationExecutionNextGap = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'next_smallest_truthful_gap' -Default '')
@@ -458,6 +464,7 @@ if ($ActivationExecutionHandoffReady) {
   $ActivationExecutionRoute = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'route' -Default '')
   $ActivationExecutionReadinessRoute = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'readiness_route' -Default '')
   $ActivationExecutionAuthorityRequired = [string](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'authority_required' -Default '')
+  $ActivationExecutionAuthorityGranted = [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'authority_granted' -Default $false)
 
   if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionNextGap)) {
     $RecommendedHandoffSource = 'activation_execution_handoff'
@@ -477,6 +484,7 @@ if ($ActivationExecutionHandoffReady) {
   }
   if (-not [string]::IsNullOrWhiteSpace($ActivationExecutionAuthorityRequired)) {
     $AuthorityRequired = $ActivationExecutionAuthorityRequired
+    $AuthorityGranted = $ActivationExecutionAuthorityGranted
   }
 }
 if ($ResidentRuntimeCandidateHandoffObserved) {
@@ -487,6 +495,7 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
   $RecommendedRoute = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'route' -Default '')
   $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'readiness_route' -Default '')
   $AuthorityRequired = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'authority_required' -Default '')
+  $AuthorityGranted = [bool](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'authority_granted' -Default $false)
 }
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
@@ -560,18 +569,21 @@ $Payload = [ordered]@{
   recommended_route = $RecommendedRoute
   recommended_readiness_route = $RecommendedReadinessRoute
   authority_required = $AuthorityRequired
+  authority_granted = $AuthorityGranted
   recommended_prerequisites_handoff_source = $(if ($PersistentSupervisionRequiredPrerequisitesObserved) { 'persistent_supervision_required_prerequisites_handoff' } else { '' })
   recommended_prerequisites_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'next_step' -Default '')
   recommended_prerequisites_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'proof_script' -Default '')
   recommended_prerequisites_route = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'route' -Default '')
   recommended_prerequisites_readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'readiness_route' -Default '')
   recommended_prerequisites_authority_required = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'authority_required' -Default '')
+  recommended_prerequisites_authority_granted = [bool](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'authority_granted' -Default $false)
   recommended_first_missing_handoff_source = $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'persistent_supervision_first_missing_requirement_handoff' } else { '' })
   recommended_first_missing_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'next_step' -Default '')
   recommended_first_missing_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'proof_script' -Default '')
   recommended_first_missing_route = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'route' -Default '')
   recommended_first_missing_readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'readiness_route' -Default '')
   recommended_first_missing_authority_required = $RecommendedFirstMissingAuthorityRequired
+  recommended_first_missing_authority_granted = [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_granted' -Default $false)
   blocked_criteria = $BlockedCriteria
   ready_criteria = $ReadyCriteria
   first_blocker_family_handoff = $FirstBlockerFamilyHandoff
