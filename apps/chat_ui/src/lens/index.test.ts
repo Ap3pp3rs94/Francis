@@ -894,6 +894,11 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.prerequisiteProof,
       "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status",
     );
+    assert.equal(handoffPresentation.prerequisiteRoute, "/lens/host/persistent-supervision/enablement");
+    assert.equal(
+      handoffPresentation.prerequisiteAuthority,
+      "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+    );
     assert.equal(handoffPresentation.firstMissingSource, "persistent_supervision_first_missing_requirement_handoff");
     assert.equal(
       handoffPresentation.firstMissingHandoff,
@@ -903,6 +908,7 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.firstMissingProof,
       "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
     );
+    assert.equal(handoffPresentation.firstMissingRoute, "/lens/host/runtime-loop/readiness");
     assert.equal(handoffPresentation.firstMissingAuthority, "process_supervision_authority");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.id, "hud_layer_runtime");
     assert.equal(snapshot.stage6_readiness.criteria[0]?.status, "readback_only");
@@ -951,9 +957,12 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     prerequisiteSource: "",
     prerequisiteHandoff: "",
     prerequisiteProof: "",
+    prerequisiteRoute: "",
+    prerequisiteAuthority: "",
     firstMissingSource: "",
     firstMissingHandoff: "",
     firstMissingProof: "",
+    firstMissingRoute: "",
     firstMissingAuthority: "",
   });
 });

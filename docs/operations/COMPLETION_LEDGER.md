@@ -27413,6 +27413,36 @@ contract:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens chat UI handoff route/authority readback completion on
+`2026-05-15`:
+
+- Extended the typed `presentStage6NextHandoff` projection in
+  `apps\chat_ui\src\lens\index.ts` to include the prerequisite handoff route,
+  prerequisite authority label, and first-missing handoff route already carried
+  by the Lens status contract.
+- Updated `apps\chat_ui\src\App.tsx` so the existing Stage 6 next-handoff panel
+  renders those route and authority values when loaded. The readback remains
+  display-only and does not create new commands, writes, or execution paths.
+- Added focused assertions in `apps\chat_ui\src\lens\index.test.ts` covering
+  the route precedence and missing-contract empty-state projection.
+- This is operator-surface readback completion only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens chat UI handoff route/authority readback
+completion:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

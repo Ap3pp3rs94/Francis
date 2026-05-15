@@ -384,9 +384,12 @@ export type LensStage6NextHandoffPresentation = {
   prerequisiteSource: string;
   prerequisiteHandoff: string;
   prerequisiteProof: string;
+  prerequisiteRoute: string;
+  prerequisiteAuthority: string;
   firstMissingSource: string;
   firstMissingHandoff: string;
   firstMissingProof: string;
+  firstMissingRoute: string;
   firstMissingAuthority: string;
 };
 
@@ -503,9 +506,16 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const prerequisiteSource = safeString(handoff?.recommended_prerequisites_handoff_source).trim();
   const prerequisiteHandoff = safeString(handoff?.recommended_prerequisites_next_slice).trim();
   const prerequisiteProof = safeString(handoff?.recommended_prerequisites_proof_script).trim();
+  const prerequisiteRoute =
+    safeString(handoff?.recommended_prerequisites_readiness_route).trim() ||
+    safeString(handoff?.recommended_prerequisites_route).trim();
+  const prerequisiteAuthority = safeString(handoff?.recommended_prerequisites_authority_required).trim();
   const firstMissingSource = safeString(handoff?.recommended_first_missing_handoff_source).trim();
   const firstMissingHandoff = safeString(handoff?.recommended_first_missing_next_slice).trim();
   const firstMissingProof = safeString(handoff?.recommended_first_missing_proof_script).trim();
+  const firstMissingRoute =
+    safeString(handoff?.recommended_first_missing_readiness_route).trim() ||
+    safeString(handoff?.recommended_first_missing_route).trim();
   const firstMissingAuthority = safeString(handoff?.recommended_first_missing_authority_required).trim();
 
   return {
@@ -520,9 +530,12 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     prerequisiteSource,
     prerequisiteHandoff,
     prerequisiteProof,
+    prerequisiteRoute,
+    prerequisiteAuthority,
     firstMissingSource,
     firstMissingHandoff,
     firstMissingProof,
+    firstMissingRoute,
     firstMissingAuthority,
   };
 }

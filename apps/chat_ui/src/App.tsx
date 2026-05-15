@@ -5741,6 +5741,16 @@ function SystemPanel(props: {
                     {" / "}proof <code>{lensStage6NextHandoff.prerequisiteProof}</code>
                   </>
                 ) : null}
+                {lensStage6NextHandoff.prerequisiteRoute ? (
+                  <>
+                    {" / "}route <code>{lensStage6NextHandoff.prerequisiteRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.prerequisiteAuthority ? (
+                  <>
+                    {" / "}authority <code>{lensStage6NextHandoff.prerequisiteAuthority}</code>
+                  </>
+                ) : null}
               </div>
             ) : null}
             {lensStage6NextHandoff.firstMissingSource ? (
@@ -5754,6 +5764,11 @@ function SystemPanel(props: {
                 {lensStage6NextHandoff.firstMissingProof ? (
                   <>
                     {" / "}proof <code>{lensStage6NextHandoff.firstMissingProof}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.firstMissingRoute ? (
+                  <>
+                    {" / "}route <code>{lensStage6NextHandoff.firstMissingRoute}</code>
                   </>
                 ) : null}
                 {lensStage6NextHandoff.firstMissingAuthority ? (
