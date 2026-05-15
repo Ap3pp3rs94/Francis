@@ -5723,6 +5723,9 @@ function SystemPanel(props: {
               ) : null}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle(lensStage6NextHandoff.activationExecutionHandoffObserved ? "readback" : "blocked")}>
+                activation handoff {lensStage6NextHandoff.activationExecutionHandoffObserved ? "true" : "false"}
+              </span>
               <span style={badgeStyle(lensStage6NextHandoff.prerequisitesObserved ? "readback" : "blocked")}>
                 prerequisites observed {lensStage6NextHandoff.prerequisitesObserved ? "true" : "false"}
               </span>
@@ -5733,6 +5736,27 @@ function SystemPanel(props: {
                 resident candidate {lensStage6NextHandoff.residentCandidateHandoffObserved ? "true" : "false"}
               </span>
             </div>
+            {lensStage6NextHandoff.sourceHandoffLoaded ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                source handoff
+                {lensStage6NextHandoff.sourceHandoffStatus ? (
+                  <>
+                    {" "}status <code>{lensStage6NextHandoff.sourceHandoffStatus}</code>
+                  </>
+                ) : null}
+                {" / "}read-only <code>{lensStage6NextHandoff.sourceHandoffReadOnlyContract ? "true" : "false"}</code>
+                {" / "}diagnostic <code>{lensStage6NextHandoff.sourceHandoffDiagnosticOnly ? "true" : "false"}</code>
+                {" / "}would execute <code>{lensStage6NextHandoff.sourceHandoffWouldExecute ? "true" : "false"}</code>
+                {" / "}would mutate <code>{lensStage6NextHandoff.sourceHandoffWouldMutate ? "true" : "false"}</code>
+                {" / "}authority granted{" "}
+                <code>{lensStage6NextHandoff.sourceHandoffAuthorityGranted ? "true" : "false"}</code>
+                {lensStage6NextHandoff.sourceHandoffBlockers.length ? (
+                  <>
+                    {" / "}blockers <code>{lensStage6NextHandoff.sourceHandoffBlockers.join(", ")}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {lensStage6NextHandoff.stageGap ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                 stage gap <code>{lensStage6NextHandoff.stageGap}</code>

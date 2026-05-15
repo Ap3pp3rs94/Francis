@@ -563,9 +563,21 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           persistent_supervision_required_prerequisites_handoff: {
             next_smallest_truthful_gap: "persistent_supervision_required_prerequisites_missing",
           },
+          activation_execution_handoff_observed: false,
+          activation_execution_handoff: {},
           persistent_supervision_enablement_authority_handoff_observed: true,
           persistent_supervision_enablement_authority_handoff: {
+            status: "blocked",
             next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
+            read_only_contract: true,
+            diagnostic_only: true,
+            would_execute: false,
+            would_mutate: false,
+            authority_granted: false,
+            blockers: [
+              "persistent_supervision_enablement_authority_not_granted",
+              "persistent_supervision_execution_authority_not_granted",
+            ],
           },
           resident_runtime_candidate_handoff_observed: false,
           resident_runtime_candidate_handoff: {},
@@ -882,8 +894,20 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(handoffPresentation.processSupervisionAuthority, false);
     assert.equal(handoffPresentation.residentClaimAuthority, false);
     assert.equal(handoffPresentation.prerequisitesObserved, true);
+    assert.equal(handoffPresentation.activationExecutionHandoffObserved, false);
     assert.equal(handoffPresentation.enablementAuthorityHandoffObserved, true);
     assert.equal(handoffPresentation.residentCandidateHandoffObserved, false);
+    assert.equal(handoffPresentation.sourceHandoffLoaded, true);
+    assert.equal(handoffPresentation.sourceHandoffStatus, "blocked");
+    assert.equal(handoffPresentation.sourceHandoffReadOnlyContract, true);
+    assert.equal(handoffPresentation.sourceHandoffDiagnosticOnly, true);
+    assert.equal(handoffPresentation.sourceHandoffWouldExecute, false);
+    assert.equal(handoffPresentation.sourceHandoffWouldMutate, false);
+    assert.equal(handoffPresentation.sourceHandoffAuthorityGranted, false);
+    assert.deepEqual(handoffPresentation.sourceHandoffBlockers, [
+      "persistent_supervision_enablement_authority_not_granted",
+      "persistent_supervision_execution_authority_not_granted",
+    ]);
     assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
     assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.stageGap, "summon_anywhere_blockers");
@@ -990,8 +1014,17 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     processSupervisionAuthority: false,
     residentClaimAuthority: false,
     prerequisitesObserved: false,
+    activationExecutionHandoffObserved: false,
     enablementAuthorityHandoffObserved: false,
     residentCandidateHandoffObserved: false,
+    sourceHandoffLoaded: false,
+    sourceHandoffStatus: "",
+    sourceHandoffReadOnlyContract: false,
+    sourceHandoffDiagnosticOnly: false,
+    sourceHandoffWouldExecute: false,
+    sourceHandoffWouldMutate: false,
+    sourceHandoffAuthorityGranted: false,
+    sourceHandoffBlockers: [],
     stageGap: "",
     currentGap: "",
     currentHandoff: "",

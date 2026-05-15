@@ -371,6 +371,8 @@ export type LensStage6NextHandoff = {
   persistent_supervision_first_missing_required_before_enable?: string;
   persistent_supervision_first_missing_requirement_handoff: Record<string, unknown>;
   persistent_supervision_required_prerequisites_handoff: Record<string, unknown>;
+  activation_execution_handoff_observed: boolean;
+  activation_execution_handoff: Record<string, unknown>;
   persistent_supervision_enablement_authority_handoff_observed: boolean;
   persistent_supervision_enablement_authority_handoff: Record<string, unknown>;
   resident_runtime_candidate_handoff_observed: boolean;
@@ -391,8 +393,17 @@ export type LensStage6NextHandoffPresentation = {
   processSupervisionAuthority: boolean;
   residentClaimAuthority: boolean;
   prerequisitesObserved: boolean;
+  activationExecutionHandoffObserved: boolean;
   enablementAuthorityHandoffObserved: boolean;
   residentCandidateHandoffObserved: boolean;
+  sourceHandoffLoaded: boolean;
+  sourceHandoffStatus: string;
+  sourceHandoffReadOnlyContract: boolean;
+  sourceHandoffDiagnosticOnly: boolean;
+  sourceHandoffWouldExecute: boolean;
+  sourceHandoffWouldMutate: boolean;
+  sourceHandoffAuthorityGranted: boolean;
+  sourceHandoffBlockers: string[];
   stageGap: string;
   currentGap: string;
   currentHandoff: string;
@@ -532,12 +543,33 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const processSupervisionAuthority = safeBoolean(governance.process_supervision_authority, false);
   const residentClaimAuthority = safeBoolean(governance.resident_claim_authority, false);
   const prerequisitesObserved = safeBoolean(handoff?.persistent_supervision_required_prerequisites_observed, false);
+  const activationExecutionHandoffObserved = safeBoolean(handoff?.activation_execution_handoff_observed, false);
   const enablementAuthorityHandoffObserved = safeBoolean(
     handoff?.persistent_supervision_enablement_authority_handoff_observed,
     false,
   );
   const residentCandidateHandoffObserved = safeBoolean(handoff?.resident_runtime_candidate_handoff_observed, false);
   const source = safeString(handoff?.recommended_handoff_source).trim();
+  const sourceHandoff =
+    source === "activation_execution_handoff"
+      ? safeRecord(handoff?.activation_execution_handoff)
+      : source === "persistent_supervision_enablement_authority_denial_handoff"
+        ? safeRecord(handoff?.persistent_supervision_enablement_authority_handoff)
+        : source === "persistent_supervision_first_missing_requirement_handoff"
+          ? safeRecord(handoff?.persistent_supervision_first_missing_requirement_handoff)
+          : source === "persistent_supervision_required_prerequisites_handoff"
+            ? safeRecord(handoff?.persistent_supervision_required_prerequisites_handoff)
+            : source === "resident_runtime_candidate_handoff"
+              ? safeRecord(handoff?.resident_runtime_candidate_handoff)
+              : {};
+  const sourceHandoffLoaded = Object.keys(sourceHandoff).length > 0;
+  const sourceHandoffStatus = safeString(sourceHandoff.status).trim();
+  const sourceHandoffReadOnlyContract = safeBoolean(sourceHandoff.read_only_contract, false);
+  const sourceHandoffDiagnosticOnly = safeBoolean(sourceHandoff.diagnostic_only, false);
+  const sourceHandoffWouldExecute = safeBoolean(sourceHandoff.would_execute, false);
+  const sourceHandoffWouldMutate = safeBoolean(sourceHandoff.would_mutate, false);
+  const sourceHandoffAuthorityGranted = safeBoolean(sourceHandoff.authority_granted, false);
+  const sourceHandoffBlockers = safeStringList(sourceHandoff.blockers);
   const stageGap = safeString(handoff?.stage_next_smallest_truthful_gap).trim();
   const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
   const currentHandoff = safeString(handoff?.recommended_next_slice).trim();
@@ -583,8 +615,17 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     processSupervisionAuthority,
     residentClaimAuthority,
     prerequisitesObserved,
+    activationExecutionHandoffObserved,
     enablementAuthorityHandoffObserved,
     residentCandidateHandoffObserved,
+    sourceHandoffLoaded,
+    sourceHandoffStatus,
+    sourceHandoffReadOnlyContract,
+    sourceHandoffDiagnosticOnly,
+    sourceHandoffWouldExecute,
+    sourceHandoffWouldMutate,
+    sourceHandoffAuthorityGranted,
+    sourceHandoffBlockers,
     stageGap,
     currentGap,
     currentHandoff,
@@ -1258,6 +1299,8 @@ function parseStage6NextHandoff(value: unknown): LensStage6NextHandoff {
     persistent_supervision_required_prerequisites_handoff: safeRecord(
       raw.persistent_supervision_required_prerequisites_handoff,
     ),
+    activation_execution_handoff_observed: safeBoolean(raw.activation_execution_handoff_observed, false),
+    activation_execution_handoff: safeRecord(raw.activation_execution_handoff),
     persistent_supervision_enablement_authority_handoff_observed: safeBoolean(
       raw.persistent_supervision_enablement_authority_handoff_observed,
       false,
