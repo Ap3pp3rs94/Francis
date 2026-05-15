@@ -1383,6 +1383,7 @@ def _stage6_next_handoff_readback(
             "missing_required_before_enable": missing_required,
             "first_missing_required_before_enable": first_missing,
             "first_missing_requirement_handoff": first_missing_handoff,
+            "blockers": missing_required,
             "acceptance_criterion": "system_resident_presence",
             "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
             "authority_granted": False,

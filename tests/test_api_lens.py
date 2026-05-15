@@ -1534,6 +1534,13 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         next_handoff["persistent_supervision_required_prerequisites_handoff"]["next_smallest_truthful_gap"]
         == "persistent_supervision_required_prerequisites_missing"
     )
+    assert next_handoff["persistent_supervision_required_prerequisites_handoff"]["blockers"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
     assert next_handoff["persistent_supervision_enablement_authority_handoff_observed"] is False
     assert next_handoff["persistent_supervision_enablement_authority_handoff"] == {}
     assert next_handoff["resident_runtime_candidate_handoff_observed"] is False
@@ -5016,6 +5023,9 @@ def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> N
         == "persistent_supervision_required_prerequisites"
     )
     assert next_handoff["persistent_supervision_required_prerequisites_handoff"]["status"] == "blocked"
+    assert next_handoff["persistent_supervision_required_prerequisites_handoff"]["blockers"] == [
+        "resident_host_process"
+    ]
     assert next_handoff["recommended_first_missing_handoff_source"] == (
         "persistent_supervision_first_missing_requirement_handoff"
     )
