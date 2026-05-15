@@ -1692,12 +1692,14 @@ def _stage6_closure_readback(
                     "previous_next_smallest_truthful_gap": "resident_surface_runtime_missing",
                     "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
                     "authority_required": "process_supervision_authority",
+                    "authority_granted": False,
                     "read_only_contract": True,
                     "diagnostic_only": True,
                     "would_execute": False,
                     "would_mutate": False,
                 },
                 "authority_required": "resident_runtime_execution_authority",
+                "authority_granted": False,
                 "resident_runtime_authority_grant_readiness_route": (
                     "/lens/resident-runtime/authority-grant/readiness"
                 ),
