@@ -27501,6 +27501,41 @@ Latest validation for the Stage 6 Lens chat UI governance/readiness readback:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens selected-handoff route promotion on `2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so
+  `stage6_readiness.next_handoff` promotes the selected handoff's read-only
+  request, requests, grant, grants, denial, and execution-readiness routes when
+  those routes are already present on the source handoff.
+- Updated `apps\chat_ui\src\lens\index.ts` and `apps\chat_ui\src\App.tsx` so
+  the operator Lens panel parses and renders those route values as text-only
+  readback. This does not create buttons, write calls, or new execution paths.
+- Added focused backend and UI assertions in `tests\test_api_lens.py` and
+  `apps\chat_ui\src\lens\index.test.ts` for the promoted route family and
+  missing-contract defaults.
+- This is selected-handoff route readback only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens selected-handoff route promotion:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_stage6_next_handoff_promotes_audited_enablement_authority_denial -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

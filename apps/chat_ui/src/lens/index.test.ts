@@ -533,6 +533,10 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           recommended_proof_script: "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status",
           recommended_route: "/lens/host/persistent-supervision/enablement",
           recommended_readiness_route: "/lens/host/persistent-supervision/enablement/authority/readiness",
+          recommended_request_route: "/lens/host/persistent-supervision/enablement/authority/request",
+          recommended_grant_route: "/lens/host/persistent-supervision/enablement/authority",
+          recommended_grants_route: "/lens/host/persistent-supervision/enablement/authority/grants",
+          recommended_execution_readiness_route: "/lens/host/persistent-supervision/enablement/execution/readiness",
           authority_required: "persistent_supervision_enablement_authority",
           recommended_prerequisites_handoff_source: "persistent_supervision_required_prerequisites_handoff",
           recommended_prerequisites_next_slice: "resolve_persistent_supervision_required_prerequisites_before_enablement",
@@ -896,6 +900,19 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       handoffPresentation.currentRoute,
       "/lens/host/persistent-supervision/enablement/authority/readiness",
     );
+    assert.equal(
+      handoffPresentation.currentRequestRoute,
+      "/lens/host/persistent-supervision/enablement/authority/request",
+    );
+    assert.equal(handoffPresentation.currentGrantRoute, "/lens/host/persistent-supervision/enablement/authority");
+    assert.equal(
+      handoffPresentation.currentGrantsRoute,
+      "/lens/host/persistent-supervision/enablement/authority/grants",
+    );
+    assert.equal(
+      handoffPresentation.currentExecutionReadinessRoute,
+      "/lens/host/persistent-supervision/enablement/execution/readiness",
+    );
     assert.equal(handoffPresentation.firstBlockedCriterion, "summon_anywhere");
     assert.equal(handoffPresentation.firstBlockedCriterionGap, "");
     assert.equal(handoffPresentation.prerequisiteSource, "persistent_supervision_required_prerequisites_handoff");
@@ -980,6 +997,12 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     currentHandoff: "",
     currentProof: "",
     currentRoute: "",
+    currentRequestRoute: "",
+    currentRequestsRoute: "",
+    currentGrantRoute: "",
+    currentGrantsRoute: "",
+    currentDenialsRoute: "",
+    currentExecutionReadinessRoute: "",
     firstBlockedCriterion: "",
     firstBlockedCriterionGap: "",
     prerequisiteSource: "",

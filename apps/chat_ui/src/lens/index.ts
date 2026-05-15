@@ -345,6 +345,12 @@ export type LensStage6NextHandoff = {
   recommended_proof_script?: string;
   recommended_route?: string;
   recommended_readiness_route?: string;
+  recommended_request_route?: string;
+  recommended_requests_route?: string;
+  recommended_grant_route?: string;
+  recommended_grants_route?: string;
+  recommended_denials_route?: string;
+  recommended_execution_readiness_route?: string;
   authority_required?: string;
   recommended_prerequisites_handoff_source?: string;
   recommended_prerequisites_next_slice?: string;
@@ -392,6 +398,12 @@ export type LensStage6NextHandoffPresentation = {
   currentHandoff: string;
   currentProof: string;
   currentRoute: string;
+  currentRequestRoute: string;
+  currentRequestsRoute: string;
+  currentGrantRoute: string;
+  currentGrantsRoute: string;
+  currentDenialsRoute: string;
+  currentExecutionReadinessRoute: string;
   firstBlockedCriterion: string;
   firstBlockedCriterionGap: string;
   prerequisiteSource: string;
@@ -532,6 +544,12 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const currentProof = safeString(handoff?.recommended_proof_script).trim();
   const currentRoute =
     safeString(handoff?.recommended_readiness_route).trim() || safeString(handoff?.recommended_route).trim();
+  const currentRequestRoute = safeString(handoff?.recommended_request_route).trim();
+  const currentRequestsRoute = safeString(handoff?.recommended_requests_route).trim();
+  const currentGrantRoute = safeString(handoff?.recommended_grant_route).trim();
+  const currentGrantsRoute = safeString(handoff?.recommended_grants_route).trim();
+  const currentDenialsRoute = safeString(handoff?.recommended_denials_route).trim();
+  const currentExecutionReadinessRoute = safeString(handoff?.recommended_execution_readiness_route).trim();
   const authority = safeString(handoff?.authority_required).trim();
   const firstBlockedCriterion = safeString(handoff?.first_blocked_criterion).trim();
   const firstBlockedCriterionGap = safeString(handoff?.first_blocked_criterion_next_smallest_truthful_gap).trim();
@@ -572,6 +590,12 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     currentHandoff,
     currentProof,
     currentRoute,
+    currentRequestRoute,
+    currentRequestsRoute,
+    currentGrantRoute,
+    currentGrantsRoute,
+    currentDenialsRoute,
+    currentExecutionReadinessRoute,
     firstBlockedCriterion,
     firstBlockedCriterionGap,
     prerequisiteSource,
@@ -1191,6 +1215,12 @@ function parseStage6NextHandoff(value: unknown): LensStage6NextHandoff {
     recommended_proof_script: safeString(raw.recommended_proof_script).trim() || undefined,
     recommended_route: safeString(raw.recommended_route).trim() || undefined,
     recommended_readiness_route: safeString(raw.recommended_readiness_route).trim() || undefined,
+    recommended_request_route: safeString(raw.recommended_request_route).trim() || undefined,
+    recommended_requests_route: safeString(raw.recommended_requests_route).trim() || undefined,
+    recommended_grant_route: safeString(raw.recommended_grant_route).trim() || undefined,
+    recommended_grants_route: safeString(raw.recommended_grants_route).trim() || undefined,
+    recommended_denials_route: safeString(raw.recommended_denials_route).trim() || undefined,
+    recommended_execution_readiness_route: safeString(raw.recommended_execution_readiness_route).trim() || undefined,
     authority_required: safeString(raw.authority_required).trim() || undefined,
     recommended_prerequisites_handoff_source:
       safeString(raw.recommended_prerequisites_handoff_source).trim() || undefined,

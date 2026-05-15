@@ -1246,6 +1246,7 @@ def _stage6_next_handoff_readback(
     next_gap = criterion_next_gap or stage_next_gap or "stage6_lens_completion_audit"
     recommended_next_slice = _safe_str(criterion_handoff.get("next_step")).strip() or next_gap
     recommended_handoff_source = "closure_readback"
+    recommended_handoff = criterion_handoff
     recommended_proof_script = _safe_str(criterion_handoff.get("proof_script")).strip()
     recommended_route = (
         _safe_str(criterion_handoff.get("route")).strip() or _safe_str(criterion_handoff.get("status_route")).strip()
@@ -1387,6 +1388,7 @@ def _stage6_next_handoff_readback(
             "would_mutate": False,
         }
         recommended_handoff_source = "persistent_supervision_required_prerequisites_handoff"
+        recommended_handoff = prerequisites_handoff
         next_gap = "persistent_supervision_required_prerequisites_missing"
         recommended_next_slice = "resolve_persistent_supervision_required_prerequisites_before_enablement"
         recommended_proof_script = "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
@@ -1399,6 +1401,7 @@ def _stage6_next_handoff_readback(
         first_missing_next_slice = _safe_str(first_missing_handoff.get("next_step")).strip()
         if first_missing_next_gap:
             recommended_handoff_source = "persistent_supervision_first_missing_requirement_handoff"
+            recommended_handoff = first_missing_handoff
             next_gap = first_missing_next_gap
         if first_missing_next_slice:
             recommended_next_slice = first_missing_next_slice
@@ -1413,6 +1416,7 @@ def _stage6_next_handoff_readback(
 
     if enablement_authority_handoff_observed:
         recommended_handoff_source = "persistent_supervision_enablement_authority_denial_handoff"
+        recommended_handoff = enablement_authority_handoff
         next_gap = _safe_str(enablement_authority_handoff.get("next_smallest_truthful_gap")).strip()
         recommended_next_slice = _safe_str(enablement_authority_handoff.get("next_step")).strip()
         recommended_proof_script = _safe_str(enablement_authority_handoff.get("proof_script")).strip()
@@ -1425,6 +1429,7 @@ def _stage6_next_handoff_readback(
         activation_next_slice = _safe_str(activation_execution_handoff.get("next_step")).strip()
         if activation_next_gap:
             recommended_handoff_source = "activation_execution_handoff"
+            recommended_handoff = activation_execution_handoff
             next_gap = activation_next_gap
         if activation_next_slice:
             recommended_next_slice = activation_next_slice
@@ -1463,6 +1468,7 @@ def _stage6_next_handoff_readback(
             "would_mutate": False,
         }
         recommended_handoff_source = "resident_runtime_candidate_handoff"
+        recommended_handoff = resident_candidate_handoff
         recommended_next_slice = _safe_str(resident_candidate_handoff.get("recommended_next_slice")).strip()
         recommended_proof_script = _safe_str(resident_candidate_handoff.get("proof_script")).strip()
         recommended_route = _safe_str(resident_candidate_handoff.get("route")).strip()
@@ -1488,6 +1494,18 @@ def _stage6_next_handoff_readback(
         "recommended_proof_script": recommended_proof_script,
         "recommended_route": recommended_route,
         "recommended_readiness_route": recommended_readiness_route,
+        "recommended_request_route": _safe_str(recommended_handoff.get("request_route")).strip()
+        or _safe_str(recommended_handoff.get("authority_request_route")).strip(),
+        "recommended_requests_route": _safe_str(recommended_handoff.get("requests_route")).strip()
+        or _safe_str(recommended_handoff.get("authority_requests_route")).strip(),
+        "recommended_grant_route": _safe_str(recommended_handoff.get("grant_route")).strip()
+        or _safe_str(recommended_handoff.get("authority_route")).strip(),
+        "recommended_grants_route": _safe_str(recommended_handoff.get("grants_route")).strip()
+        or _safe_str(recommended_handoff.get("authority_grants_route")).strip(),
+        "recommended_denials_route": _safe_str(recommended_handoff.get("denials_route")).strip()
+        or _safe_str(recommended_handoff.get("authority_denials_route")).strip(),
+        "recommended_execution_readiness_route": _safe_str(recommended_handoff.get("execution_readiness_route")).strip()
+        or _safe_str(recommended_handoff.get("execution_route")).strip(),
         "authority_required": authority_required,
         "recommended_prerequisites_handoff_source": (
             "persistent_supervision_required_prerequisites_handoff" if prerequisites_observed else ""

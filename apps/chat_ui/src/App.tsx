@@ -5768,6 +5768,45 @@ function SystemPanel(props: {
                 route <code>{lensStage6NextHandoff.currentRoute}</code>
               </div>
             ) : null}
+            {lensStage6NextHandoff.currentRequestRoute ||
+            lensStage6NextHandoff.currentRequestsRoute ||
+            lensStage6NextHandoff.currentGrantRoute ||
+            lensStage6NextHandoff.currentGrantsRoute ||
+            lensStage6NextHandoff.currentDenialsRoute ||
+            lensStage6NextHandoff.currentExecutionReadinessRoute ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                {lensStage6NextHandoff.currentRequestRoute ? (
+                  <>
+                    request <code>{lensStage6NextHandoff.currentRequestRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.currentRequestsRoute ? (
+                  <>
+                    {" / "}requests <code>{lensStage6NextHandoff.currentRequestsRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.currentGrantRoute ? (
+                  <>
+                    {" / "}grant <code>{lensStage6NextHandoff.currentGrantRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.currentGrantsRoute ? (
+                  <>
+                    {" / "}grants <code>{lensStage6NextHandoff.currentGrantsRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.currentDenialsRoute ? (
+                  <>
+                    {" / "}denials <code>{lensStage6NextHandoff.currentDenialsRoute}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.currentExecutionReadinessRoute ? (
+                  <>
+                    {" / "}execution readiness <code>{lensStage6NextHandoff.currentExecutionReadinessRoute}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {lensStage6NextHandoff.prerequisiteSource ? (
               <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 7 }}>
                 prerequisite <code>{lensStage6NextHandoff.prerequisiteSource}</code>
