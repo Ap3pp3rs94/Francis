@@ -568,6 +568,8 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
           persistent_supervision_enablement_authority_handoff_observed: true,
           persistent_supervision_enablement_authority_handoff: {
             status: "blocked",
+            previous_next_smallest_truthful_gap: "persistent_supervision_authority_not_granted",
+            consumed_audit_next_smallest_truthful_gap: "persistent_supervision_enablement_denial_boundary",
             next_smallest_truthful_gap: "persistent_supervision_enablement_authority_not_granted",
             read_only_contract: true,
             diagnostic_only: true,
@@ -934,6 +936,11 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
       "persistent_supervision_enablement_authority_not_granted",
       "persistent_supervision_execution_authority_not_granted",
     ]);
+    assert.equal(handoffPresentation.sourceHandoffPreviousGap, "persistent_supervision_authority_not_granted");
+    assert.equal(
+      handoffPresentation.sourceHandoffConsumedAuditGap,
+      "persistent_supervision_enablement_denial_boundary",
+    );
     assert.equal(handoffPresentation.source, "persistent_supervision_enablement_authority_denial_handoff");
     assert.equal(handoffPresentation.authority, "persistent_supervision_enablement_authority");
     assert.equal(handoffPresentation.stageGap, "summon_anywhere_blockers");
@@ -1064,6 +1071,8 @@ test("presentStage6NextHandoff returns an unloaded readback when the contract is
     sourceHandoffWouldMutate: false,
     sourceHandoffAuthorityGranted: false,
     sourceHandoffBlockers: [],
+    sourceHandoffPreviousGap: "",
+    sourceHandoffConsumedAuditGap: "",
     stageGap: "",
     currentGap: "",
     currentHandoff: "",

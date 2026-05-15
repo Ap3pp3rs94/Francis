@@ -5780,6 +5780,22 @@ function SystemPanel(props: {
                 ) : null}
               </div>
             ) : null}
+            {lensStage6NextHandoff.sourceHandoffPreviousGap ||
+            lensStage6NextHandoff.sourceHandoffConsumedAuditGap ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                source lineage
+                {lensStage6NextHandoff.sourceHandoffPreviousGap ? (
+                  <>
+                    {" "}previous <code>{lensStage6NextHandoff.sourceHandoffPreviousGap}</code>
+                  </>
+                ) : null}
+                {lensStage6NextHandoff.sourceHandoffConsumedAuditGap ? (
+                  <>
+                    {" / "}consumed audit <code>{lensStage6NextHandoff.sourceHandoffConsumedAuditGap}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {lensStage6NextHandoff.stageGap ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                 stage gap <code>{lensStage6NextHandoff.stageGap}</code>

@@ -27596,6 +27596,35 @@ readback:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens chat UI source-handoff lineage readback on `2026-05-15`:
+
+- Extended `presentStage6NextHandoff` in `apps\chat_ui\src\lens\index.ts` so
+  the selected source handoff projection carries the source record's previous
+  next-smallest truthful gap and consumed-audit gap when those fields are
+  already present in the Lens status contract.
+- Updated `apps\chat_ui\src\App.tsx` so the existing Stage 6 next-handoff panel
+  renders that lineage as text-only context beside the source handoff readback.
+  This does not create buttons, write calls, route invocations, or execution
+  paths.
+- Added focused assertions in `apps\chat_ui\src\lens\index.test.ts` for the
+  source-handoff lineage projection and missing-contract defaults.
+- This is operator-surface lineage readback only. It does not run the Stage 6
+  completion audit, does not close Stage 6, and does not grant runtime launch,
+  product execution, process supervision, process restart, service
+  install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens chat UI source-handoff lineage readback:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src/lens/index.test.ts`
+  Result: `passed; 6 tests`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

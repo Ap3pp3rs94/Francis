@@ -417,6 +417,8 @@ export type LensStage6NextHandoffPresentation = {
   sourceHandoffWouldMutate: boolean;
   sourceHandoffAuthorityGranted: boolean;
   sourceHandoffBlockers: string[];
+  sourceHandoffPreviousGap: string;
+  sourceHandoffConsumedAuditGap: string;
   stageGap: string;
   currentGap: string;
   currentHandoff: string;
@@ -596,6 +598,8 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
   const sourceHandoffWouldMutate = safeBoolean(sourceHandoff.would_mutate, false);
   const sourceHandoffAuthorityGranted = safeBoolean(sourceHandoff.authority_granted, false);
   const sourceHandoffBlockers = safeStringList(sourceHandoff.blockers);
+  const sourceHandoffPreviousGap = safeString(sourceHandoff.previous_next_smallest_truthful_gap).trim();
+  const sourceHandoffConsumedAuditGap = safeString(sourceHandoff.consumed_audit_next_smallest_truthful_gap).trim();
   const stageGap = safeString(handoff?.stage_next_smallest_truthful_gap).trim();
   const currentGap = safeString(handoff?.next_smallest_truthful_gap).trim();
   const currentHandoff = safeString(handoff?.recommended_next_slice).trim();
@@ -665,6 +669,8 @@ export function presentStage6NextHandoff(handoff?: LensStage6NextHandoff): LensS
     sourceHandoffWouldMutate,
     sourceHandoffAuthorityGranted,
     sourceHandoffBlockers,
+    sourceHandoffPreviousGap,
+    sourceHandoffConsumedAuditGap,
     stageGap,
     currentGap,
     currentHandoff,
