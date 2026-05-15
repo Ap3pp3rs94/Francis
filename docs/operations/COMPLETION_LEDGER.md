@@ -27804,6 +27804,38 @@ contract:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens next-handoff resident candidate authority contract on
+`2026-05-15`:
+
+- Updated `src\francis\lens\status.py` so the
+  `resident_runtime_candidate_handoff` source record now carries explicit
+  `authority_granted: false` beside its existing
+  `authority_required: persistent_process_supervision_authority` boundary.
+- Updated `scripts\lens-stage6-next-handoff.ps1` so the proof wrapper emits the
+  same resident-candidate authority boundary for fresh and receipt-backed
+  resident-candidate handoffs.
+- Updated `tests\test_api_lens.py` and
+  `tests\test_lens_stage6_next_handoff_script.py` so the API readback, fresh
+  wrapper handoff, and receipt-backed wrapper handoff all assert the explicit
+  denied authority boundary.
+- This is source-handoff API/readback contract tightening only. It does not run
+  the Stage 6 completion audit, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens next-handoff resident candidate authority
+contract:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

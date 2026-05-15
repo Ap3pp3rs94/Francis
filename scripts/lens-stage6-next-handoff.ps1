@@ -336,6 +336,7 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
     blocked_reason = 'resident_supervision_not_persistent'
     acceptance_criterion = 'system_resident_presence'
     authority_required = 'persistent_process_supervision_authority'
+    authority_granted = $false
     previous_diagnostic_proof_observed = $true
     read_only_contract = $true
     diagnostic_only = $true

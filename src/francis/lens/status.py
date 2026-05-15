@@ -1467,6 +1467,7 @@ def _stage6_next_handoff_readback(
             "readiness_route": "/lens/host/runtime-loop/readiness",
             "acceptance_criterion": "system_resident_presence",
             "authority_required": "persistent_process_supervision_authority",
+            "authority_granted": False,
             "read_only_contract": True,
             "diagnostic_only": True,
             "would_execute": False,

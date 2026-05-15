@@ -457,6 +457,8 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
     assert handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
     assert handoff["previous_diagnostic_proof_observed"] is True
+    assert handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert handoff["authority_granted"] is False
     assert handoff["read_only_contract"] is True
     assert handoff["diagnostic_only"] is True
     assert handoff["would_execute"] is False
@@ -520,6 +522,8 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
     assert handoff["candidate_observed_by_fresh_supervisor"] is False
     assert handoff["candidate_observed_by_supervision_execution_receipt"] is True
     assert handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert handoff["authority_required"] == "persistent_process_supervision_authority"
+    assert handoff["authority_granted"] is False
     assert handoff["read_only_contract"] is True
     assert handoff["diagnostic_only"] is True
     assert handoff["would_execute"] is False
