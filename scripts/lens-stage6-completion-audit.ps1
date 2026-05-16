@@ -1265,6 +1265,8 @@ $ResidentRuntimeHotkeySummonBoundaryObserved = (
   [bool]$ResidentRuntimeHotkeySummonBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeHotkeySummonBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeHotkeySummonBoundaryProof.fourth_authority_family_consumed -and
+  [string]$ResidentRuntimeHotkeySummonBoundaryProof.authority_required -eq 'hotkey_registration_and_summon_authority' -and
+  -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeHotkeySummonBoundaryProof.process_restart_authority -and
