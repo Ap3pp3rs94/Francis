@@ -594,6 +594,8 @@ $PersistentSupervisionServiceInstallPlanProofObserved = (
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_authority -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority -and
+  [string]$PersistentSupervisionServiceInstallPlanProof.authority_required -eq 'install_service_install_and_service_control_authority' -and
+  -not [bool]$PersistentSupervisionServiceInstallPlanProof.authority_granted -and
   -not [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof -and
   [string]$PersistentSupervisionServiceInstallPlanProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable -contains 'resident_host_process' -and
@@ -3498,6 +3500,8 @@ $Payload = [ordered]@{
     install_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.install_authority
     service_install_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.service_install_authority
     service_control_authority = [bool]$PersistentSupervisionServiceInstallPlanProof.service_control_authority
+    authority_required = [string]$PersistentSupervisionServiceInstallPlanProof.authority_required
+    authority_granted = [bool]$PersistentSupervisionServiceInstallPlanProof.authority_granted
     wrapper_created_by_proof = [bool]$PersistentSupervisionServiceInstallPlanProof.wrapper_created_by_proof
     blocked_by = [string[]]@($PersistentSupervisionServiceInstallPlanProofBlockedBy)
     required_before_enable = [string[]]@($PersistentSupervisionServiceInstallPlanProofRequiredBeforeEnable)

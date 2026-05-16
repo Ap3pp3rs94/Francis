@@ -69,6 +69,8 @@ def test_lens_persistent_supervision_service_install_plan_proof_reads_config_gat
     assert payload["install_authority"] is False
     assert payload["service_install_authority"] is False
     assert payload["service_control_authority"] is False
+    assert payload["authority_required"] == "install_service_install_and_service_control_authority"
+    assert payload["authority_granted"] is False
     assert payload["wrapper_created_by_proof"] is False
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["required_before_enable"] == [

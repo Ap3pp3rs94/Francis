@@ -143,6 +143,9 @@ def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readb
     assert "authority_granted = [bool]$PersistentSupervisionExecutionAuthorityProof.authority_granted" in script
     assert "authority_required = [string]$PersistentSupervisionResidentClaimBoundaryProof.authority_required" in script
     assert "authority_granted = [bool]$PersistentSupervisionResidentClaimBoundaryProof.authority_granted" in script
+    assert "authority_required = [string]$PersistentSupervisionServiceInstallPlanProof.authority_required" in script
+    assert "authority_granted = [bool]$PersistentSupervisionServiceInstallPlanProof.authority_granted" in script
+    assert "-not [bool]$PersistentSupervisionServiceInstallPlanProof.authority_granted" in script
 
 
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
@@ -2134,6 +2137,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert service_install_plan["install_authority"] is False
     assert service_install_plan["service_install_authority"] is False
     assert service_install_plan["service_control_authority"] is False
+    assert service_install_plan["authority_required"] == "install_service_install_and_service_control_authority"
+    assert service_install_plan["authority_granted"] is False
     assert service_install_plan["wrapper_created_by_proof"] is False
     assert service_install_plan["required_before_enable"] == expected_persistent_prerequisites
     if os.name == "nt":
