@@ -457,6 +457,24 @@ def test_lens_stage6_completion_audit_observes_summon_authority_required_authori
     assert granted_gate in script
 
 
+def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gates() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$SummonAnywhereFamilyChainProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority'"
+    ) in script
+    assert "-not [bool]$SummonAnywhereFamilyChainProof.authority_granted" in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'process_supervision_authority'"
+    ) in script
+    assert "-not [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted" in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required -eq "
+        "'summon_hotkey_overlay_and_process_authority'"
+    ) in script
+    assert "-not [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(

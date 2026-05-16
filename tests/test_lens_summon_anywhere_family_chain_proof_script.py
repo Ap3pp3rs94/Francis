@@ -38,6 +38,26 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() -> None:
+    script = (_repo_root() / "scripts" / "lens-summon-anywhere-family-chain-proof.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_required' -Default '') "
+        "-eq 'process_supervision_authority'"
+    ) in script
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $true)"
+        in script
+    )
+    assert (
+        "[string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default '') "
+        "-eq 'summon_hotkey_overlay_and_process_authority'"
+    ) in script
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $true)" in script
+    )
+
+
 def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> None:
     proc = _run_proof(
         "-Mode",

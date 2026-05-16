@@ -1789,6 +1789,8 @@ $SummonAnywhereFamilyChainProofObserved = (
   [string]$SummonAnywhereFamilyChainProof.acceptance_criterion -eq 'summon_anywhere' -and
   [string]$SummonAnywhereFamilyChainProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
   [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
+  -not [bool]$SummonAnywhereFamilyChainProof.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProof.family_chain_observed -and
   [bool]$SummonAnywhereFamilyChainProof.resident_host_family_handoff_observed -and
   [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_observed -and
@@ -1799,6 +1801,8 @@ $SummonAnywhereFamilyChainProofObserved = (
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted -and
   $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
   $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
   $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
@@ -1808,6 +1812,8 @@ $SummonAnywhereFamilyChainProofObserved = (
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family -eq 'authority' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
+  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed -and
   $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and

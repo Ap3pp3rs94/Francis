@@ -330,6 +330,8 @@ $ResidentHostFamilyHandoffObserved = (
   [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'resident_host_lifecycle_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'handoff_aligned' -Default $false) -and
   [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
+  [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $true) -and
   (
     $ResidentHostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -or
     $ResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
@@ -349,6 +351,8 @@ $FinalAuthorityHandoffObserved = (
   [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_summon_blocker_family' -Default '') -eq 'summon_binding' -and
   [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'summon_authority_blocker_family' -Default '') -eq 'authority' -and
   [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default '') -eq 'summon_hotkey_overlay_and_process_authority' -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $true) -and
   $AuthorityBlockers -contains 'summon_authority_not_granted' -and
   $AuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $AuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
