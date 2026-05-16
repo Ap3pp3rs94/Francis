@@ -86,6 +86,7 @@ def test_lens_persistent_supervision_execution_authority_proof_stops_at_resident
     )
     assert payload["recommended_handoff_source"] == "persistent_supervision_execution_authority_handoff"
     assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_granted"] is False
     assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/execution"
     assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/execution/readiness"
     assert payload["persistent_supervision_execution_route"] == "/lens/host/persistent-supervision/enablement/execution"
