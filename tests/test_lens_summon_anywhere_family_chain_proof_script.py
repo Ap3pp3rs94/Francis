@@ -41,14 +41,23 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() -> None:
     script = (_repo_root() / "scripts" / "lens-summon-anywhere-family-chain-proof.ps1").read_text(encoding="utf-8")
 
+    assert "'-ConsumeProcessSupervisionHandoff'" in script
     assert (
         "[string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_required' -Default '') "
-        "-eq 'process_supervision_authority'"
+        "-eq 'none_new_stage6_completion_audit'"
     ) in script
     assert (
         "-not [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $true)"
         in script
     )
+    assert (
+        "[string](Get-PropertyValue -Payload $ResidentHostProcessSupervisionHandoff -Name 'authority_required' "
+        "-Default '') -eq 'none_new_stage6_completion_audit'"
+    ) in script
+    assert (
+        "[string](Get-PropertyValue -Payload $ResidentHostProcessSupervisionHandoffRecommendedHandoff "
+        "-Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit'"
+    ) in script
     assert (
         "[string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default '') "
         "-eq 'summon_hotkey_overlay_and_process_authority'"
@@ -115,10 +124,28 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     )
 
     resident_host = payload["resident_host"]
-    assert resident_host["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert resident_host["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert resident_host["authority_required"] == "process_supervision_authority"
+    assert resident_host["process_supervision_handoff_observed"] is True
+    assert resident_host["authority_required"] == "none_new_stage6_completion_audit"
     assert resident_host["authority_granted"] is False
+    process_handoff = resident_host["process_supervision_handoff"]
+    assert process_handoff["status"] == "proof_passed"
+    assert process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert process_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert process_handoff["authority_granted"] is False
+    recommended_handoff = process_handoff["recommended_handoff"]
+    assert recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_restart_process"] is False
+    assert recommended_handoff["would_install_service"] is False
+    assert recommended_handoff["would_start_service"] is False
+    assert recommended_handoff["would_claim_resident"] is False
     assert resident_host["runtime_blockers"] == ["lens_host_persistent_supervision_prerequisites_pending"]
     assert resident_host["surface_blockers"] == [
         "tray_host_missing",
@@ -156,8 +183,8 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
         "wraps_summon_resident_host_blocker_proof": True,
         "wraps_summon_authority_blocker_proof": True,
         "read_only_contract": True,
-        "bounded_local_process_launch": False,
-        "temporary_runtime_state_write": False,
+        "bounded_local_process_launch": True,
+        "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
         "approval_decision_authority": False,

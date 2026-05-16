@@ -29886,6 +29886,48 @@ process-handoff readback gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='process_handoff_authority_required';Expression={$_.resident_host_process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.resident_host_process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.resident_host_process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.resident_host_process_supervision_handoff.recommended_handoff.authority_granted}},resident_host_process_supervision_handoff_observed,handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=none_new_stage6_completion_audit; authority_granted=false; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; resident_host_process_supervision_handoff_observed=true; handoff_aligned=true; side_effects_denied=true`
 
+Stage 6 Lens summon family-chain resident-host process-handoff readback gate on
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-anywhere-family-chain-proof.ps1` so the summon
+  family-chain proof now runs the resident-host bridge with
+  `-ConsumeProcessSupervisionHandoff`, and requires the resident-host segment to
+  report `authority_required=none_new_stage6_completion_audit` with
+  `authority_granted=false`.
+- The family-chain proof now projects the resident-host process-supervision
+  handoff and its recommended handoff under `resident_host`, including the same
+  no-new-authority readback and read-only/non-mutating contract fields.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the Stage 6 completion
+  audit must observe that stronger family-chain resident-host process-handoff
+  readback before counting the summon family-chain proof as observed. The audit
+  payload now projects the nested family-chain resident-host process handoff for
+  operator/audit inspection.
+- Updated focused summon family-chain and completion-audit tests for the
+  resident-host process-handoff readback contract.
+- This is summon-anywhere family-chain readback hardening only. It does not run
+  or close the full Stage 6 completion audit, does not grant process
+  supervision, process restart, service install/control, summon, hotkey, overlay,
+  resident-claim, memory, approval-decision, receipt, capture, sensing, or
+  mutation authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon family-chain resident-host
+process-handoff readback gate:
+
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readback tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gates -q`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_consumes_handoffs -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-anywhere-family-chain-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -DataDir data\test_runs\summon-family-chain-readback -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='resident_host_next';Expression={$_.resident_host.next_smallest_truthful_gap}},@{Name='resident_host_authority_required';Expression={$_.resident_host.authority_required}},@{Name='resident_host_authority_granted';Expression={$_.resident_host.authority_granted}},@{Name='process_handoff_observed';Expression={$_.resident_host.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.resident_host.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.resident_host.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.resident_host.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.resident_host.process_supervision_handoff.recommended_handoff.authority_granted}},handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=summon_hotkey_overlay_and_process_authority; authority_granted=false; resident_host_next=stage6_lens_completion_audit; resident_host_authority_required=none_new_stage6_completion_audit; resident_host_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; handoff_aligned=true; side_effects_denied=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
