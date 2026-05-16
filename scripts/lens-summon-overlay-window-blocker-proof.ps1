@@ -144,6 +144,9 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
 $TrayBridgeResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $TrayPresenceBridgeScript -ScriptArgs $TrayBridgeArgs
 $TrayBridgePayload = $TrayBridgeResult.payload
 $TrayBridgeGovernance = Get-PropertyValue -Payload $TrayBridgePayload -Name 'governance'
+$TrayBridgePreviousResidentHostBridge = Get-PropertyValue -Payload $TrayBridgePayload -Name 'previous_resident_host_bridge'
+$TrayBridgePreviousResidentHostProcessHandoff = Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'process_supervision_handoff'
+$TrayBridgePreviousResidentHostProcessRecommendedHandoff = Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'recommended_handoff'
 
 $OverlayBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
@@ -169,6 +172,20 @@ $SummonOverlayFamilyObserved = (
   [string]$SummonBlockedFamilies[2] -eq 'overlay_window' -and
   $SummonOverlayBlockers -contains 'overlay_window_missing'
 )
+$TrayBridgePreviousResidentHostReadbackObserved = (
+  [bool](Get-PropertyValue -Payload $TrayBridgePayload -Name 'previous_resident_host_bridge_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'summon_next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'process_supervision_handoff_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'authority_granted' -Default $true)
+)
 $TrayPresenceBridgeObserved = (
   [int]$TrayBridgeResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'kind' -Default '') -eq 'lens.summon_tray_presence_blocker.proof' -and
@@ -177,6 +194,7 @@ $TrayPresenceBridgeObserved = (
   [bool](Get-PropertyValue -Payload $TrayBridgePayload -Name 'tray_presence_boundary_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $TrayBridgePayload -Name 'handoff_aligned' -Default $false) -and
   [bool](Get-PropertyValue -Payload $TrayBridgePayload -Name 'side_effects_denied' -Default $false) -and
+  $TrayBridgePreviousResidentHostReadbackObserved -and
   [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'next_summon_blocker_family' -Default '') -eq 'overlay_window' -and
   [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_overlay_window_blocker_boundary'
 )
@@ -240,6 +258,7 @@ $SideEffectsDenied = (
 $Checks = @(
   (New-Check -Id 'summon_overlay_window_family' -Status $(if ($SummonOverlayFamilyObserved) { 'third_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonOverlayFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep overlay_window as the third blocked acceptance family after tray_presence.'),
   (New-Check -Id 'previous_tray_presence_bridge' -Status $(if ($TrayPresenceBridgeObserved) { 'previous_family_observed' } else { 'missing_or_unexpected' }) -Passed $TrayPresenceBridgeObserved -Evidence 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' -Reason 'The overlay-window handoff should preserve the previous tray-presence bridge context before moving to the third blocker family.'),
+  (New-Check -Id 'previous_tray_presence_resident_host_readback' -Status $(if ($TrayBridgePreviousResidentHostReadbackObserved) { 'previous_handoff_observed' } else { 'missing_or_unexpected' }) -Passed $TrayBridgePreviousResidentHostReadbackObserved -Evidence 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' -Reason 'The overlay-window handoff must preserve the tray-presence bridge resident-host process-supervision readback before moving to the overlay-window family.'),
   (New-Check -Id 'overlay_window_boundary' -Status $(if ($OverlayBoundaryObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $OverlayBoundaryObserved -Evidence 'scripts/lens-resident-runtime-overlay-window-boundary-proof.ps1 -Mode Status' -Reason 'The resident-runtime overlay-window boundary proof must remain blocked and read-only.'),
   (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon overlay_window blocker group + resident runtime overlay boundary proof' -Reason 'The summon overlay_window blocker must map to direct overlay preflight and resident-runtime overlay boundary without changing authority.'),
   (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon, tray bridge, and overlay boundary governance payloads' -Reason 'The bridge proof must remain diagnostic/readback only and grant no overlay, capture, sensing, summon, hotkey, tray, process, service, memory, approval-decision, or resident-claim authority.')
@@ -265,6 +284,41 @@ $Payload = [ordered]@{
   next_smallest_truthful_gap = 'summon_global_hotkey_binding_blocker_boundary'
   summon_overlay_family_observed = $SummonOverlayFamilyObserved
   previous_tray_presence_bridge_observed = $TrayPresenceBridgeObserved
+  previous_tray_presence_bridge_resident_host_readback_observed = $TrayBridgePreviousResidentHostReadbackObserved
+  previous_tray_presence_bridge = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'status' -Default 'missing')
+    next_summon_blocker_family = [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'next_summon_blocker_family' -Default '')
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $TrayBridgePayload -Name 'next_smallest_truthful_gap' -Default '')
+    previous_resident_host_bridge_observed = [bool](Get-PropertyValue -Payload $TrayBridgePayload -Name 'previous_resident_host_bridge_observed' -Default $false)
+    previous_resident_host_bridge = [ordered]@{
+      status = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'status' -Default 'missing')
+      first_summon_blocker_family = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'first_summon_blocker_family' -Default '')
+      summon_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'summon_next_smallest_truthful_gap' -Default '')
+      next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'next_smallest_truthful_gap' -Default '')
+      authority_required = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'authority_required' -Default '')
+      authority_granted = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'authority_granted' -Default $false)
+      process_supervision_handoff_observed = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostBridge -Name 'process_supervision_handoff_observed' -Default $false)
+      process_supervision_handoff = [ordered]@{
+        status = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'status' -Default '')
+        next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'next_smallest_truthful_gap' -Default '')
+        authority_required = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'authority_required' -Default '')
+        authority_granted = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessHandoff -Name 'authority_granted' -Default $false)
+        recommended_handoff = [ordered]@{
+          authority_required = [string](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'authority_required' -Default '')
+          authority_granted = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'authority_granted' -Default $false)
+          read_only_contract = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'read_only_contract' -Default $false)
+          diagnostic_only = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'diagnostic_only' -Default $false)
+          would_execute = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_execute' -Default $false)
+          would_mutate = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_mutate' -Default $false)
+          would_supervise_process = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_supervise_process' -Default $false)
+          would_restart_process = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_restart_process' -Default $false)
+          would_install_service = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_install_service' -Default $false)
+          would_start_service = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_start_service' -Default $false)
+          would_claim_resident = [bool](Get-PropertyValue -Payload $TrayBridgePreviousResidentHostProcessRecommendedHandoff -Name 'would_claim_resident' -Default $false)
+        }
+      }
+    }
+  }
   overlay_window_boundary_observed = $OverlayBoundaryObserved
   handoff_aligned = $HandoffAligned
   side_effects_denied = $SideEffectsDenied
@@ -297,6 +351,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     wraps_summon_anywhere_blockers_proof = $true
     wraps_summon_tray_presence_blocker_proof = $true
+    tray_presence_previous_resident_host_bridge_readback = $TrayBridgePreviousResidentHostReadbackObserved
     wraps_resident_runtime_overlay_window_boundary_proof = $true
     overlay_preflight_readback = [bool](Get-PropertyValue -Payload $OverlayBoundaryGovernance -Name 'overlay_preflight_readback' -Default $false)
     read_only_contract = $true
