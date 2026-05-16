@@ -60,6 +60,8 @@ def test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequi
     assert "$PrerequisitesProofFamilyChainTimeoutSeconds" in script
     assert "$PrerequisitesProofFirstMissingRequirementTimeoutSeconds" in script
     assert "$PrerequisitesProofTimeoutSeconds" in script
+    assert "francis-lens-persistent-supervision-prerequisites-proof" in script
+    assert "'-DataDir', $PrerequisitesProofDataDir" in script
     assert "'-ChildProofTimeoutSeconds', [string]$PrerequisitesProofChildTimeoutSeconds" in script
     assert "-TimeoutSeconds $PrerequisitesProofTimeoutSeconds" in script
 

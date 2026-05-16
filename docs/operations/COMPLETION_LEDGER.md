@@ -30287,6 +30287,42 @@ data-root hardening:
 - `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_blocker_proof_is_readback_only -q`
   Result: `passed; 1 test`
 
+Stage 6 Lens Windows 3.13 persistent-supervision transition child-data-root
+hardening on `2026-05-16`:
+
+- Followed up GitHub Actions run `25968770833`, where Windows 3.13 failed in
+  `tests/test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only`.
+- The failure was not a timeout. The transition wrapper reported
+  `child_proof_timeouts=[]`, but its nested prerequisites proof returned
+  `exit_code=1` after running under the long pytest data-root path.
+- Updated the transition-plan proof to invoke the nested prerequisites proof
+  with its own short temp data root while preserving the outer transition
+  proof's supplied `DataDir` for the transition readback and the other child
+  proofs.
+- Updated the static transition-plan budget contract test to require the short
+  prerequisites child data-root handoff.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant persistent supervision, service install/control, process
+  supervision/restart, resident claim, tray, hotkey, overlay, summon, memory,
+  approval-decision, receipt, capture, sensing, window-management, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens Windows 3.13 persistent-supervision
+transition child-data-root hardening:
+
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed; 1 file already formatted; local Ruff cache write reported access denied but did not fail the check`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `passed; 1 test`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper -q`
+  Result: `passed; 1 test`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
