@@ -128,6 +128,17 @@ def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_mis
     )
 
 
+def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "authority_required = [string]$PersistentSupervisionEnablementAuthorityProof.authority_required" in script
+    assert "authority_granted = [bool]$PersistentSupervisionEnablementAuthorityProof.authority_granted" in script
+    assert "authority_required = [string]$PersistentSupervisionExecutionAuthorityProof.authority_required" in script
+    assert "authority_granted = [bool]$PersistentSupervisionExecutionAuthorityProof.authority_granted" in script
+    assert "authority_required = [string]$PersistentSupervisionResidentClaimBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$PersistentSupervisionResidentClaimBoundaryProof.authority_granted" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -841,6 +852,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "/lens/host/persistent-supervision/enablement/authority" in (persistent_enablement_authority["evidence"])
     assert persistent_enablement_authority["host_supervision_authority_grant_receipt_id"]
     assert persistent_enablement_authority["persistent_supervision_enablement_authority_grant_receipt_id"]
+    assert (
+        persistent_enablement_authority["authority_required"]
+        == "persistent_supervision_execution_authority_and_resident_claim_authority"
+    )
+    assert persistent_enablement_authority["authority_granted"] is False
     assert persistent_enablement_authority["persistent_supervision_enablement_authority"] is True
     assert persistent_enablement_authority["service_config_write_authority"] is False
     assert persistent_enablement_authority["persistent_supervision_execution_authority"] is False
@@ -884,6 +900,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_execution_authority["host_supervision_authority_grant_receipt_id"]
     assert persistent_execution_authority["persistent_supervision_enablement_authority_grant_receipt_id"]
     assert persistent_execution_authority["persistent_supervision_execution_authority_grant_receipt_id"]
+    assert persistent_execution_authority["authority_required"] == "resident_claim_authority"
+    assert persistent_execution_authority["authority_granted"] is False
     assert persistent_execution_authority["persistent_supervision_enablement_authority"] is True
     assert persistent_execution_authority["service_config_write_authority"] is True
     assert persistent_execution_authority["persistent_supervision_execution_authority"] is True
@@ -928,6 +946,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_resident_claim_boundary["persistent_supervision_plan_observed"] is True
     assert persistent_resident_claim_boundary["side_effects_denied"] is True
     assert persistent_resident_claim_boundary["final_persistent_supervision_authority_family_consumed"] is True
+    assert persistent_resident_claim_boundary["authority_required"] == "none_new_stage6_completion_audit"
+    assert persistent_resident_claim_boundary["authority_granted"] is False
     assert persistent_resident_claim_boundary["persistent_supervision_enablement_authority"] is True
     assert persistent_resident_claim_boundary["service_config_write_authority"] is True
     assert persistent_resident_claim_boundary["persistent_supervision_execution_authority"] is True

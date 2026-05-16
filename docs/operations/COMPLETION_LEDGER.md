@@ -28397,6 +28397,41 @@ boundary proof projection:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_proof_script,authority_required,authority_granted,@{Name='handoff_authority_granted';Expression={$_.handoff.authority_granted}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_granted=false; handoff_authority_granted=false`
 
+Stage 6 Lens completion-audit persistent authority child readbacks on
+`2026-05-15`:
+
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the completion-audit
+  embedded child proof readbacks preserve `authority_required` and
+  `authority_granted` from the persistent-supervision enablement-authority,
+  execution-authority, and resident-claim boundary proofs.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` with a focused
+  static contract check plus live-audit assertions for those embedded child
+  fields.
+- This is completion-audit payload/readback contract tightening only. It does
+  not close Stage 6, does not grant resident claim authority, persistent runtime
+  mutation, process supervision, process restart, service install/control, local
+  product execution, memory write, receipt write, tray, hotkey, overlay, summon,
+  capture, sensing, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 Lens completion-audit persistent authority
+child readbacks:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper -q`
+  Result: `passed; 6 tests`
+- `python -m ruff format tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file reformatted`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- A live `scripts\lens-stage6-completion-audit.ps1 -Mode Status` readback was
+  started for these fields but stopped after it exceeded the useful validation
+  window without a structured result; it is not counted as completion-audit
+  proof.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
