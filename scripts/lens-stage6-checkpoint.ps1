@@ -1206,6 +1206,8 @@ $ResidentRuntimeGrantedBoundaryProofPassed = (
   $ResidentRuntimeGrantedBoundaryExitCode -eq 0 -and
   [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.granted_boundary_proof' -and
   [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
+  [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'authority_granted' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_runtime_execution_authority' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'runtime_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_claim_allowed' -Default $true) -and
@@ -2188,6 +2190,8 @@ $Payload = [ordered]@{
     ok = $ResidentRuntimeGrantedBoundaryProofPassed
     exit_code = $ResidentRuntimeGrantedBoundaryExitCode
     evidence = @('scripts/lens-resident-runtime-boundary-proof.ps1', '/lens/resident-runtime/execute', '/lens/resident-runtime/denials')
+    authority_required = [string](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'authority_required' -Default '')
+    authority_granted = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'authority_granted' -Default $false)
     resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_runtime_execution_authority' -Default $false)
     runtime_ready = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'runtime_ready' -Default $false)
     resident_claim_allowed = [bool](Get-PropertyValue -Payload $ResidentRuntimeGrantedBoundaryPayload -Name 'resident_claim_allowed' -Default $false)

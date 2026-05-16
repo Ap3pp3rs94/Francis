@@ -813,6 +813,11 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "scripts/lens-resident-runtime-boundary-proof.ps1"
         in payload["resident_runtime_granted_boundary_proof"]["evidence"]
     )
+    assert (
+        payload["resident_runtime_granted_boundary_proof"]["authority_required"]
+        == "resident_runtime_execution_authority"
+    )
+    assert payload["resident_runtime_granted_boundary_proof"]["authority_granted"] is True
     assert payload["resident_runtime_granted_boundary_proof"]["resident_runtime_execution_authority"] is True
     assert payload["resident_runtime_granted_boundary_proof"]["runtime_ready"] is False
     assert payload["resident_runtime_granted_boundary_proof"]["resident_claim_allowed"] is False

@@ -1104,6 +1104,8 @@ $ResidentRuntimeGrantedBoundaryProofBlockers = ConvertTo-StringArray -Value $Res
 $ResidentRuntimeGrantedBoundaryProofObserved = (
   [bool]$ResidentRuntimeGrantedBoundaryProof.ok -and
   [string]$ResidentRuntimeGrantedBoundaryProof.status -eq 'proof_passed' -and
+  [string]$ResidentRuntimeGrantedBoundaryProof.authority_required -eq 'resident_runtime_execution_authority' -and
+  [bool]$ResidentRuntimeGrantedBoundaryProof.authority_granted -and
   [bool]$ResidentRuntimeGrantedBoundaryProof.resident_runtime_execution_authority -and
   -not [bool]$ResidentRuntimeGrantedBoundaryProof.applied -and
   -not [bool]$ResidentRuntimeGrantedBoundaryProof.executed -and
@@ -2648,6 +2650,8 @@ $Payload = [ordered]@{
     ok = $ResidentRuntimeGrantedBoundaryProofObserved
     exit_code = [int]$ResidentRuntimeGrantedBoundaryProof.exit_code
     evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeGrantedBoundaryProof.evidence)
+    authority_required = [string]$ResidentRuntimeGrantedBoundaryProof.authority_required
+    authority_granted = [bool]$ResidentRuntimeGrantedBoundaryProof.authority_granted
     resident_runtime_execution_authority = [bool]$ResidentRuntimeGrantedBoundaryProof.resident_runtime_execution_authority
     runtime_ready = [bool]$ResidentRuntimeGrantedBoundaryProof.runtime_ready
     resident_claim_allowed = [bool]$ResidentRuntimeGrantedBoundaryProof.resident_claim_allowed

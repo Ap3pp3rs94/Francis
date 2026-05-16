@@ -291,6 +291,8 @@ def _run() -> tuple[int, dict[str, Any]]:
         "resident_runtime_authority_approval_id": authority_approval_id,
         "authority_grant_receipt_id": str(grant_receipt.get("receipt_id") or ""),
         "runtime_denial_receipt_id": str(denial_receipt.get("receipt_id") or ""),
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": authority_granted,
         "resident_runtime_execution_authority": authority_granted,
         "runtime_ready": False,
         "resident_claim_allowed": False,
