@@ -158,6 +158,13 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child
     assert "authority_granted = [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "authority_required = [string]$ResidentHostProcessSupervisionBlockerProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -1917,6 +1924,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert process_handoff["process_supervision_boundary_observed"] is True
     assert process_handoff["handoff_consumed"] is True
     assert process_handoff["authority_denied"] is True
+    assert process_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert process_handoff["authority_granted"] is False
     assert process_handoff["resident_host_process_state"] == "foreground_observed_not_supervised"
     assert process_handoff["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert process_handoff["supervision_ready"] is False

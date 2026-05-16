@@ -431,6 +431,7 @@ $Payload = [ordered]@{
   recommended_next_slice = 'run_stage6_lens_completion_audit_after_process_supervision_handoff_readback'
   recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
   authority_required = 'none_new_stage6_completion_audit'
+  authority_granted = $false
   recommended_handoff = [ordered]@{
     id = 'stage6_lens_completion_audit'
     status = 'audit_needed'
