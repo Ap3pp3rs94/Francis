@@ -1310,6 +1310,8 @@ $ResidentRuntimeOverlayWindowBoundaryObserved = (
   [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeOverlayWindowBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeOverlayWindowBoundaryProof.fifth_authority_family_consumed -and
+  [string]$ResidentRuntimeOverlayWindowBoundaryProof.authority_required -eq 'overlay_control_window_management_capture_authority' -and
+  -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeOverlayWindowBoundaryProof.process_restart_authority -and

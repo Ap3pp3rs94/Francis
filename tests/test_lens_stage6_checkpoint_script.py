@@ -1093,6 +1093,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_overlay_boundary["authority_blockers_proof_observed"] is True
     assert runtime_overlay_boundary["side_effects_denied"] is True
     assert runtime_overlay_boundary["fifth_authority_family_consumed"] is True
+    assert runtime_overlay_boundary["authority_required"] == "overlay_control_window_management_capture_authority"
+    assert runtime_overlay_boundary["authority_granted"] is False
     assert runtime_overlay_boundary["local_process_launch_authority"] is False
     assert runtime_overlay_boundary["process_supervision_authority"] is False
     assert runtime_overlay_boundary["process_restart_authority"] is False
