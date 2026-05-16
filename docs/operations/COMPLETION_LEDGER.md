@@ -28962,6 +28962,40 @@ plan authority denial readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,install_authority,service_install_authority,service_control_authority | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; authority_required=install_service_install_and_service_control_authority; authority_granted=false; install_authority=false; service_install_authority=false; service_control_authority=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the
+  `persistent_supervision_enablement_denial_boundary` now preserves
+  `authority_required=persistent_supervision_enablement_authority` beside its
+  existing `authority_granted=false` readback.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the checkpoint-derived
+  enablement denial boundary must carry that authority label before it counts as
+  observed, and so the completion-audit payload reports the same field.
+- Updated `tests\test_lens_stage6_checkpoint_script.py` and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused checkpoint
+  and audit-projection assertions for the denied enablement authority label.
+- This is checkpoint/audit readback contract tightening only. It does not run
+  or close the full Stage 6 completion audit, does not grant persistent
+  supervision enablement, execution, resident claim, service install/control,
+  process supervision, process restart, memory write, receipt write,
+  approval-decision, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 Lens persistent-supervision enablement denial
+authority label readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_checkpoint_enablement_denial_authority_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='authority_required';Expression={$_.persistent_supervision_enablement_denial_boundary.authority_required}},@{Name='authority_granted';Expression={$_.persistent_supervision_enablement_denial_boundary.authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=persistent_supervision_enablement_authority; authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

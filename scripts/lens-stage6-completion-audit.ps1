@@ -841,6 +841,7 @@ $PersistentSupervisionEnablementDenialObserved = (
   [bool]$PersistentSupervisionEnablementDenial.boundary_ready -and
   -not [bool]$PersistentSupervisionEnablementDenial.applied -and
   -not [bool]$PersistentSupervisionEnablementDenial.executed -and
+  [string]$PersistentSupervisionEnablementDenial.authority_required -eq 'persistent_supervision_enablement_authority' -and
   -not [bool]$PersistentSupervisionEnablementDenial.authority_granted -and
   -not [bool]$PersistentSupervisionEnablementDenial.enablement_ready -and
   -not [bool]$PersistentSupervisionEnablementDenial.resident_claim_allowed -and
@@ -3516,6 +3517,7 @@ $Payload = [ordered]@{
     boundary_ready = [bool]$PersistentSupervisionEnablementDenial.boundary_ready
     applied = [bool]$PersistentSupervisionEnablementDenial.applied
     executed = [bool]$PersistentSupervisionEnablementDenial.executed
+    authority_required = [string]$PersistentSupervisionEnablementDenial.authority_required
     authority_granted = [bool]$PersistentSupervisionEnablementDenial.authority_granted
     enablement_ready = [bool]$PersistentSupervisionEnablementDenial.enablement_ready
     resident_claim_allowed = [bool]$PersistentSupervisionEnablementDenial.resident_claim_allowed

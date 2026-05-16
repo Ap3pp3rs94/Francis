@@ -1912,6 +1912,7 @@ $Payload = [ordered]@{
     boundary_ready = $PersistentSupervisionEnablementDenialBoundaryReady
     applied = $PersistentSupervisionEnablementDenialApplied
     executed = $PersistentSupervisionEnablementDenialExecuted
+    authority_required = 'persistent_supervision_enablement_authority'
     authority_granted = $PersistentSupervisionEnablementDenialAuthorityGranted
     enablement_ready = $PersistentSupervisionEnablementDenialEnablementReady
     resident_claim_allowed = $PersistentSupervisionEnablementDenialResidentClaimAllowed

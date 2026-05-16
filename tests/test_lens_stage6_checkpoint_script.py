@@ -672,6 +672,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["persistent_supervision_enablement_denial_boundary"]["boundary_ready"] is True
     assert payload["persistent_supervision_enablement_denial_boundary"]["applied"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["executed"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["authority_required"] == (
+        "persistent_supervision_enablement_authority"
+    )
     assert payload["persistent_supervision_enablement_denial_boundary"]["authority_granted"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["enablement_ready"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["resident_claim_allowed"] is False
