@@ -28295,6 +28295,39 @@ authority-grant projection:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,authority_required,authority_granted,@{Name='handoff_authority_granted';Expression={$_.handoff.authority_granted}} | ConvertTo-Json -Depth 4`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; authority_granted=false; handoff_authority_granted=false`
 
+Stage 6 Lens persistent-supervision enablement-authority proof projection on
+`2026-05-15`:
+
+- Updated `scripts\lens-persistent-supervision-enablement-authority-proof.ps1`
+  so its top-level payload now emits `authority_granted=false` beside
+  `authority_required=persistent_supervision_execution_authority_and_resident_claim_authority`.
+- The proof already granted only the bounded persistent-supervision enablement
+  authority fixture while preserving service-config write, persistent execution,
+  resident claim, memory write, runtime launch, and mutation denial. The new
+  top-level readback makes the next required authority boundary explicit without
+  requiring operators to inspect the nested handoff.
+- Updated `tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  to assert the top-level authority denial.
+- This is proof/readback contract tightening only. It does not grant persistent
+  execution authority, resident-claim authority, service-config write authority,
+  process supervision, process restart, service install/control, local product
+  execution, memory write, tray, hotkey, overlay, summon, capture, sensing, or
+  mutation authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens persistent-supervision
+enablement-authority proof projection:
+
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_authority_proof_script.py -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_authority_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-persistent-supervision-enablement-authority-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,authority_required,authority_granted,@{Name='handoff_authority_granted';Expression={$_.handoff.authority_granted}} | ConvertTo-Json -Depth 4`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_execution_authority_or_resident_claim_boundary; authority_granted=false; handoff_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
