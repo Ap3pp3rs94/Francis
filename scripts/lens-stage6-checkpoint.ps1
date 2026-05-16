@@ -2177,6 +2177,7 @@ $Payload = [ordered]@{
     overlay_control_authority = $false
     memory_write = $false
     receipt_write_authority = $false
+    resident_claim_authority_required = 'resident_claim_authority'
     resident_claim_authority = $false
     blockers = $RuntimeBoundaryBlockers
   }

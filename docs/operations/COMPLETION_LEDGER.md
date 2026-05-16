@@ -29316,6 +29316,42 @@ authority label readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='overlay_control_authority_required';Expression={$_.resident_runtime_authority_boundary.overlay_control_authority_required}},@{Name='overlay_control_authority';Expression={$_.resident_runtime_authority_boundary.overlay_control_authority}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; overlay_control_authority_required=overlay_control_authority; overlay_control_authority=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the
+  `resident_runtime_authority_boundary` now preserves
+  `resident_claim_authority_required=resident_claim_authority` beside its
+  existing `resident_claim_authority=false` readback.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the checkpoint-derived
+  resident runtime execution boundary must carry that resident claim authority
+  label before it counts as observed, and so the completion-audit payload
+  reports the same field.
+- Updated `tests\test_lens_stage6_checkpoint_script.py` and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused checkpoint
+  and audit-projection assertions for the denied resident claim authority
+  label.
+- This is checkpoint/audit readback contract tightening only. It does not run
+  or close the full Stage 6 completion audit, does not grant resident claim,
+  overlay control, tray registration, service control, process supervision,
+  local process launch, resident runtime execution, memory write, receipt
+  write, or mutation authority. Stage 6 remains active at 2/5 checkpoint
+  criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime resident claim
+authority label readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_resident_claim_authority_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='resident_claim_authority_required';Expression={$_.resident_runtime_authority_boundary.resident_claim_authority_required}},@{Name='resident_claim_authority';Expression={$_.resident_runtime_authority_boundary.resident_claim_authority}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; resident_claim_authority_required=resident_claim_authority; resident_claim_authority=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

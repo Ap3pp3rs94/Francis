@@ -280,6 +280,16 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_overlay_control
     assert "overlay_control_authority = $false" in script
 
 
+def test_lens_stage6_completion_audit_preserves_resident_runtime_resident_claim_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "[string]$ResidentRuntimeBoundary.resident_claim_authority_required -eq 'resident_claim_authority'" in script
+    assert (
+        "resident_claim_authority_required = [string]$ResidentRuntimeBoundary.resident_claim_authority_required"
+    ) in script
+    assert "resident_claim_authority = $false" in script
+
+
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -1025,6 +1035,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert resident_runtime_boundary["overlay_control_authority"] is False
     assert resident_runtime_boundary["memory_write"] is False
     assert resident_runtime_boundary["receipt_write_authority"] is False
+    assert resident_runtime_boundary["resident_claim_authority_required"] == "resident_claim_authority"
     assert resident_runtime_boundary["resident_claim_authority"] is False
     assert "resident_runtime_execution_authority_not_granted" in resident_runtime_boundary["blockers"]
     assert "local_process_launch_authority_not_granted" in resident_runtime_boundary["blockers"]

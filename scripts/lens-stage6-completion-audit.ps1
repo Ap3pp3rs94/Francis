@@ -1094,6 +1094,7 @@ $ResidentRuntimeBoundaryObserved = (
   $ResidentRuntimeBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
   [string]$ResidentRuntimeBoundary.overlay_control_authority_required -eq 'overlay_control_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+  [string]$ResidentRuntimeBoundary.resident_claim_authority_required -eq 'resident_claim_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'resident_claim_authority_not_granted'
 )
 $ResidentRuntimeGrantedBoundaryProof = $Checkpoint.resident_runtime_granted_boundary_proof
@@ -2635,6 +2636,7 @@ $Payload = [ordered]@{
     overlay_control_authority = $false
     memory_write = $false
     receipt_write_authority = $false
+    resident_claim_authority_required = [string]$ResidentRuntimeBoundary.resident_claim_authority_required
     resident_claim_authority = $false
     blockers = [string[]]@($ResidentRuntimeBoundaryBlockers)
   }
