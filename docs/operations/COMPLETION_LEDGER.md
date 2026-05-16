@@ -30241,6 +30241,52 @@ suite-timeout hardening:
 - `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
   Result: `passed; 7 tests`
 
+Stage 6 Lens Windows 3.12 summon overlay bridge data-root hardening on
+`2026-05-16`:
+
+- Followed up GitHub Actions run `25967081260`, where Ubuntu 3.12, Ubuntu
+  3.13, and Windows 3.13 passed but Windows 3.12 failed in
+  `tests/test_lens_summon_overlay_window_blocker_proof_script.py::test_lens_summon_overlay_window_blocker_proof_is_readback_only`.
+- The failure was in the nested summon family bridge:
+  overlay-window proof -> tray-presence bridge -> resident-host bridge ->
+  resident-host process-supervision handoff. The outer payload preserved the
+  failure truthfully as a missing previous tray/resident-host readback rather
+  than claiming the overlay family had progressed.
+- Split the overlay and tray bridge `DataDir` usage into separate child proof
+  roots so sibling boundary proofs no longer share the same runtime data root
+  during long Windows CI pytest runs.
+- Added `-DataDir` support to
+  `scripts/lens-summon-resident-host-blocker-proof.ps1` and use it only to
+  scope `FRANCIS_DATA_DIR` while invoking the consumed process-supervision
+  handoff proof. The script restores the previous environment after the child
+  proof returns.
+- Updated the direct resident-host bridge test to exercise
+  `-ConsumeProcessSupervisionHandoff` with an explicit temp data root.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, service, tray, hotkey, overlay, summon, memory,
+  approval-decision, receipt, capture, sensing, window-management, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens Windows 3.12 summon overlay bridge
+data-root hardening:
+
+- PowerShell parser check for
+  `scripts\lens-summon-overlay-window-blocker-proof.ps1`,
+  `scripts\lens-summon-tray-presence-blocker-proof.ps1`, and
+  `scripts\lens-summon-resident-host-blocker-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff -q`
+  Result: `passed; 1 test`
+- `python -m pytest tests\test_lens_summon_overlay_window_blocker_proof_script.py::test_lens_summon_overlay_window_blocker_proof_is_readback_only -q`
+  Result: `passed; 1 test`
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_blocker_proof_is_readback_only -q`
+  Result: `passed; 1 test`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

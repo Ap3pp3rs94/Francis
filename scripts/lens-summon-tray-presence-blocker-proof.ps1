@@ -143,10 +143,14 @@ $SummonTrayPresenceBlockers = ConvertTo-StringArray -Value (
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 
-$ResidentHostBridgeResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostBridgeScript -ScriptArgs @(
+$ResidentHostBridgeArgs = @(
   '-Mode', 'Status',
   '-ConsumeProcessSupervisionHandoff'
 )
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ResidentHostBridgeArgs += @('-DataDir', (Join-Path $DataDir 'proofs\summon-resident-host-bridge\data'))
+}
+$ResidentHostBridgeResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostBridgeScript -ScriptArgs $ResidentHostBridgeArgs
 $ResidentHostBridgePayload = $ResidentHostBridgeResult.payload
 $ResidentHostBridgeGovernance = Get-PropertyValue -Payload $ResidentHostBridgePayload -Name 'governance'
 $ResidentHostBridgeProcessSupervisionHandoff = Get-PropertyValue -Payload $ResidentHostBridgePayload -Name 'resident_host_process_supervision_handoff'
@@ -154,7 +158,7 @@ $ResidentHostBridgeProcessSupervisionHandoffRecommendedHandoff = Get-PropertyVal
 
 $TrayBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-  $TrayBoundaryArgs += @('-DataDir', $DataDir)
+  $TrayBoundaryArgs += @('-DataDir', (Join-Path $DataDir 'proofs\resident-runtime-tray-presence-boundary\data'))
 }
 $TrayBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $TrayBoundaryScript -ScriptArgs $TrayBoundaryArgs
 $TrayBoundaryPayload = $TrayBoundaryResult.payload

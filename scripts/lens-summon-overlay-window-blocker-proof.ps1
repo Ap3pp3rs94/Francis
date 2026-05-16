@@ -139,7 +139,7 @@ $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 
 $TrayBridgeArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-  $TrayBridgeArgs += @('-DataDir', $DataDir)
+  $TrayBridgeArgs += @('-DataDir', (Join-Path $DataDir 'proofs\summon-tray-presence-bridge\data'))
 }
 $TrayBridgeResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $TrayPresenceBridgeScript -ScriptArgs $TrayBridgeArgs
 $TrayBridgePayload = $TrayBridgeResult.payload
@@ -150,7 +150,7 @@ $TrayBridgePreviousResidentHostProcessRecommendedHandoff = Get-PropertyValue -Pa
 
 $OverlayBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-  $OverlayBoundaryArgs += @('-DataDir', $DataDir)
+  $OverlayBoundaryArgs += @('-DataDir', (Join-Path $DataDir 'proofs\resident-runtime-overlay-window-boundary\data'))
 }
 $OverlayBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayBoundaryScript -ScriptArgs $OverlayBoundaryArgs
 $OverlayBoundaryPayload = $OverlayBoundaryResult.payload

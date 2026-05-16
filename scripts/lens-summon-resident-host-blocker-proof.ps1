@@ -14,6 +14,8 @@ param(
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20,
 
+  [string]$DataDir = '',
+
   [switch]$ConsumeProcessSupervisionHandoff
 )
 
@@ -96,7 +98,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [string]$DataRoot = ''
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -107,8 +111,21 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
+  $HadPreviousDataRoot = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataRoot = [string]$env:FRANCIS_DATA_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+      $env:FRANCIS_DATA_DIR = $DataRoot
+    }
+    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    if ($HadPreviousDataRoot) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataRoot
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null
   try {
@@ -247,7 +264,7 @@ if ($ConsumeProcessSupervisionHandoff) {
     '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
     '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
     '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
-  )
+  ) -DataRoot $DataDir
   $HostProcessHandoffPayload = $HostProcessHandoffResult.payload
   $HostProcessHandoffGovernance = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'governance'
   $HostProcessHandoffRecommendedHandoff = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'recommended_handoff'

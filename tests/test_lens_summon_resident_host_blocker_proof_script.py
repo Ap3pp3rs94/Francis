@@ -37,10 +37,12 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
+def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) -> None:
     proc = _run_proof(
         "-Mode",
         "Status",
+        "-DataDir",
+        str(tmp_path / "data"),
         "-ConsumeProcessSupervisionHandoff",
         "-StartupTimeoutSeconds",
         "20",
