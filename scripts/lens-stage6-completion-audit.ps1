@@ -1155,6 +1155,8 @@ $ResidentRuntimeProcessSupervisionBoundaryObserved = (
   [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.first_authority_family_consumed -and
+  [string]$ResidentRuntimeProcessSupervisionBoundaryProof.authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.process_restart_authority -and

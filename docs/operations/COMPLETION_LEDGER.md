@@ -29424,6 +29424,36 @@ authority lease readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='granted_authority_required';Expression={$_.resident_runtime_granted_boundary_proof.authority_required}},@{Name='granted_authority_granted';Expression={$_.resident_runtime_granted_boundary_proof.authority_granted}},@{Name='resident_runtime_execution_authority';Expression={$_.resident_runtime_granted_boundary_proof.resident_runtime_execution_authority}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; granted_authority_required=resident_runtime_execution_authority; granted_authority_granted=true; resident_runtime_execution_authority=true`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the resident runtime
+  process supervision child proof must carry
+  `authority_required=process_supervision_authority` and
+  `authority_granted=false` before the completion audit counts that child proof
+  as observed.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` with focused
+  static coverage for that observation gate while preserving the existing
+  checkpoint readback assertions.
+- This is completion-audit readback hardening only. It does not run or close
+  the full Stage 6 completion audit, does not grant process supervision,
+  service control, tray, hotkey, overlay, resident claim, memory write, receipt
+  write, or mutation authority. Stage 6 remains active at 2/5 checkpoint
+  criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime process supervision
+child-proof authority observation gate:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_resident_runtime_process_supervision_authority_gate -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='process_supervision_authority_required';Expression={$_.resident_runtime_process_supervision_boundary_proof.authority_required}},@{Name='process_supervision_authority_granted';Expression={$_.resident_runtime_process_supervision_boundary_proof.authority_granted}},@{Name='process_supervision_boundary_ok';Expression={$_.resident_runtime_process_supervision_boundary_proof.ok}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; process_supervision_authority_required=process_supervision_authority; process_supervision_authority_granted=false; process_supervision_boundary_ok=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
