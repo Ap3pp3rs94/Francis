@@ -29580,6 +29580,39 @@ child-proof authority observation gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='overlay_window_authority_required';Expression={$_.resident_runtime_overlay_window_boundary_proof.authority_required}},@{Name='overlay_window_authority_granted';Expression={$_.resident_runtime_overlay_window_boundary_proof.authority_granted}},@{Name='overlay_window_boundary_ok';Expression={$_.resident_runtime_overlay_window_boundary_proof.ok}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; overlay_window_authority_required=overlay_control_window_management_capture_authority; overlay_window_authority_granted=false; overlay_window_boundary_ok=true`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the resident runtime resident
+  claim child proof projects `authority_required=resident_claim_authority` and
+  `authority_granted=false` from the child proof.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the resident runtime
+  resident claim child proof must carry
+  `authority_required=resident_claim_authority` and
+  `authority_granted=false` before the completion audit counts that child proof
+  as observed.
+- Updated `tests\test_lens_stage6_checkpoint_script.py` and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused checkpoint
+  readback and audit observation coverage for that authority gate.
+- This is completion-audit readback hardening only. It does not run or close
+  the full Stage 6 completion audit, does not grant resident claim, memory
+  write, receipt write, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime resident claim
+child-proof authority observation gate:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_resident_runtime_resident_claim_authority_gate -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='resident_claim_authority_required';Expression={$_.resident_runtime_resident_claim_boundary_proof.authority_required}},@{Name='resident_claim_authority_granted';Expression={$_.resident_runtime_resident_claim_boundary_proof.authority_granted}},@{Name='resident_claim_boundary_ok';Expression={$_.resident_runtime_resident_claim_boundary_proof.ok}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; resident_claim_authority_required=resident_claim_authority; resident_claim_authority_granted=false; resident_claim_boundary_ok=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

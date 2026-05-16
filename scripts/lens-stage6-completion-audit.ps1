@@ -1357,6 +1357,8 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
   [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeResidentClaimBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeResidentClaimBoundaryProof.sixth_authority_family_consumed -and
+  [string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required -eq 'resident_claim_authority' -and
+  -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.process_restart_authority -and

@@ -386,6 +386,18 @@ def test_lens_stage6_completion_audit_observes_resident_runtime_overlay_window_a
     assert granted_gate in script
 
 
+def test_lens_stage6_completion_audit_observes_resident_runtime_resident_claim_authority_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    required_gate = (
+        "[string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required -eq 'resident_claim_authority'"
+    )
+    granted_gate = "-not [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted"
+
+    assert required_gate in script
+    assert granted_gate in script
+
+
 def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
