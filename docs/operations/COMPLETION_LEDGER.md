@@ -29678,6 +29678,35 @@ OS-binding authority required-authority gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='os_binding_authority_required';Expression={$_.os_binding_authority_request_readback.authority_required}},@{Name='os_binding_authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='os_binding_authority_ok';Expression={$_.os_binding_authority_request_readback.ok}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_anywhere_blockers; os_binding_authority_required=os_level_command_palette_binding_authority; os_binding_authority_granted=false; os_binding_authority_ok=true`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the Stage 6
+  completion audit must observe the summon-authority blocker proof's
+  `authority_required=summon_hotkey_overlay_and_process_authority` readback
+  and `authority_granted=false` denial before counting that child proof as
+  observed.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` with a focused
+  structural regression test for the summon-authority required-authority gate.
+- This is completion-audit readback hardening only. It does not grant summon,
+  hotkey, overlay, process, memory, approval-decision, sensing, capture, or
+  resident authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon-authority blocker proof
+required-authority gate:
+
+- `python -m pytest tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_authority_required_authority_gate -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-authority-blocker-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='authority_required';Expression={$_.authority_required}},@{Name='authority_granted';Expression={$_.authority_granted}},@{Name='handoff_aligned';Expression={$_.handoff_aligned}},@{Name='side_effects_denied';Expression={$_.side_effects_denied}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=summon_hotkey_overlay_and_process_authority; authority_granted=false; handoff_aligned=true; side_effects_denied=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

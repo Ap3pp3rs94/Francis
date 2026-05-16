@@ -1677,6 +1677,8 @@ $SummonAuthorityBlockerProofObserved = (
   [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
   [string]$SummonAuthorityBlockerProof.direct_summon_preflight_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
   [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAuthorityBlockerProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
+  -not [bool]$SummonAuthorityBlockerProof.authority_granted -and
   [bool]$SummonAuthorityBlockerProof.summon_authority_family_observed -and
   [bool]$SummonAuthorityBlockerProof.previous_summon_binding_bridge_observed -and
   [bool]$SummonAuthorityBlockerProof.summon_preflight_authority_observed -and
