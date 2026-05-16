@@ -3230,6 +3230,8 @@ $Payload = [ordered]@{
     )
     previous_next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.previous_next_smallest_truthful_gap
     next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
+    authority_required = [string]$ResidentHostRuntimeBoundaryProof.authority_required
+    authority_granted = [bool]$ResidentHostRuntimeBoundaryProof.authority_granted
     runtime_handoff_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_handoff_observed
     bounded_runtime_observed = [bool]$ResidentHostRuntimeBoundaryProof.bounded_runtime_observed
     runtime_heartbeat_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_heartbeat_observed

@@ -70,6 +70,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
         "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
     )
     assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "resident_host_process_supervision"
     assert recommended_handoff["status"] == "blocked"

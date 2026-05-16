@@ -440,6 +440,7 @@ $Payload = [ordered]@{
   recommended_next_slice = 'consume_resident_host_process_supervision_handoff_before_stage6_closure'
   recommended_proof_script = 'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status'
   authority_required = 'process_supervision_authority'
+  authority_granted = $false
   recommended_handoff = [ordered]@{
     id = 'resident_host_process_supervision'
     status = 'blocked'

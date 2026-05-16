@@ -161,6 +161,8 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child
 def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "authority_required = [string]$ResidentHostRuntimeBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentHostRuntimeBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$ResidentHostProcessSupervisionBlockerProof.authority_required" in script
     assert "authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted" in script
 
@@ -1867,6 +1869,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_boundary["exit_code"] == 0
     assert runtime_boundary["previous_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert runtime_boundary["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert runtime_boundary["authority_required"] == "process_supervision_authority"
+    assert runtime_boundary["authority_granted"] is False
     assert runtime_boundary["runtime_handoff_observed"] is True
     assert runtime_boundary["bounded_runtime_observed"] is True
     assert runtime_boundary["runtime_heartbeat_observed"] is True
