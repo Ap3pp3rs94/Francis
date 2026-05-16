@@ -696,6 +696,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["persistent_supervision_enablement_denial_boundary"]["approval_decision_authority"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["process_supervision_authority"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["process_restart_authority"] is False
+    assert payload["persistent_supervision_enablement_denial_boundary"]["service_config_write_authority_required"] == (
+        "service_config_write_authority"
+    )
     assert payload["persistent_supervision_enablement_denial_boundary"]["service_config_write_authority"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["service_control_authority"] is False
     assert payload["persistent_supervision_enablement_denial_boundary"]["memory_write"] is False

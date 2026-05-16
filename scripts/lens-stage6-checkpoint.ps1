@@ -1923,6 +1923,7 @@ $Payload = [ordered]@{
     local_process_launch_authority = $false
     process_supervision_authority = $false
     process_restart_authority = $false
+    service_config_write_authority_required = 'service_config_write_authority'
     service_config_write_authority = $false
     service_install_authority = $false
     service_control_authority = $false

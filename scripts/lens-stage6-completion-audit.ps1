@@ -848,6 +848,7 @@ $PersistentSupervisionEnablementDenialObserved = (
   -not [bool]$PersistentSupervisionEnablementDenial.service_config_updated -and
   -not [bool]$PersistentSupervisionEnablementDenial.authority_grant_active -and
   $PersistentSupervisionEnablementDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
+  [string]$PersistentSupervisionEnablementDenial.service_config_write_authority_required -eq 'service_config_write_authority' -and
   $PersistentSupervisionEnablementDenialBlockers -contains 'service_config_write_authority_not_granted'
 )
 $PersistentSupervisionEnablementExecutionDenial = $Checkpoint.persistent_supervision_enablement_execution_denial_boundary
@@ -3530,6 +3531,7 @@ $Payload = [ordered]@{
     local_process_launch_authority = $false
     process_supervision_authority = $false
     process_restart_authority = $false
+    service_config_write_authority_required = [string]$PersistentSupervisionEnablementDenial.service_config_write_authority_required
     service_config_write_authority = $false
     service_install_authority = $false
     service_control_authority = $false
