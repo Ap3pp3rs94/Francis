@@ -2168,6 +2168,7 @@ $Payload = [ordered]@{
     process_supervision_authority = $false
     process_restart_authority = $false
     service_install_authority = $false
+    service_control_authority_required = 'service_control_authority'
     service_control_authority = $false
     hotkey_registration_authority = $false
     tray_registration_authority = $false

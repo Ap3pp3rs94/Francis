@@ -29209,6 +29209,41 @@ authority label readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='process_supervision_authority_required';Expression={$_.resident_runtime_authority_boundary.process_supervision_authority_required}},@{Name='process_supervision_authority';Expression={$_.resident_runtime_authority_boundary.process_supervision_authority}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; process_supervision_authority_required=process_supervision_authority; process_supervision_authority=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the
+  `resident_runtime_authority_boundary` now preserves
+  `service_control_authority_required=service_control_authority` beside its
+  existing `service_control_authority=false` readback.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the checkpoint-derived
+  resident runtime execution boundary must carry that service control authority
+  label before it counts as observed, and so the completion-audit payload
+  reports the same field.
+- Updated `tests\test_lens_stage6_checkpoint_script.py` and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused checkpoint
+  and audit-projection assertions for the denied service control authority
+  label.
+- This is checkpoint/audit readback contract tightening only. It does not run
+  or close the full Stage 6 completion audit, does not grant service control,
+  process supervision, local process launch, resident runtime execution, tray,
+  overlay, resident claim, memory write, receipt write, or mutation authority.
+  Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime service control
+authority label readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_service_control_authority_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='service_control_authority_required';Expression={$_.resident_runtime_authority_boundary.service_control_authority_required}},@{Name='service_control_authority';Expression={$_.resident_runtime_authority_boundary.service_control_authority}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; service_control_authority_required=service_control_authority; service_control_authority=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

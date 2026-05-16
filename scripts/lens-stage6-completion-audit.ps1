@@ -1088,6 +1088,7 @@ $ResidentRuntimeBoundaryObserved = (
   $ResidentRuntimeBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string]$ResidentRuntimeBoundary.process_supervision_authority_required -eq 'process_supervision_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'process_supervision_authority_not_granted' -and
+  [string]$ResidentRuntimeBoundary.service_control_authority_required -eq 'service_control_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'service_control_authority_not_granted' -and
   $ResidentRuntimeBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
   $ResidentRuntimeBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
@@ -2623,6 +2624,7 @@ $Payload = [ordered]@{
     process_supervision_authority = $false
     process_restart_authority = $false
     service_install_authority = $false
+    service_control_authority_required = [string]$ResidentRuntimeBoundary.service_control_authority_required
     service_control_authority = $false
     hotkey_registration_authority = $false
     tray_registration_authority = $false
