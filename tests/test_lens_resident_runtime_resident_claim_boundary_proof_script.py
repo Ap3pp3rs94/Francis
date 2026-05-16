@@ -48,6 +48,8 @@ def test_lens_resident_runtime_resident_claim_boundary_is_readback_only() -> Non
     assert payload["authority_family"] == "resident_claim"
     assert payload["previous_authority_family"] == "overlay_window"
     assert payload["next_authority_family"] == ""
+    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_granted"] is False
     assert payload["resident_claim_boundary_observed"] is True
     assert payload["previous_overlay_window_family_observed"] is True
     assert payload["authority_blockers_proof_observed"] is True

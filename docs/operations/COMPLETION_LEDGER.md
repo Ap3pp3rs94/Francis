@@ -28432,6 +28432,44 @@ child readbacks:
   window without a structured result; it is not counted as completion-audit
   proof.
 
+Stage 6 Lens resident-runtime resident-claim authority readback projection on
+`2026-05-15`:
+
+- Updated `scripts\lens-resident-runtime-resident-claim-boundary-proof.ps1` so
+  its top-level payload now emits `authority_required=resident_claim_authority`
+  and `authority_granted=false` beside the existing resident-claim family
+  readback.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `resident_runtime_resident_claim_boundary_proof` readback preserves those
+  authority fields.
+- Updated
+  `tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py`
+  and `tests\test_lens_stage6_completion_audit_script.py` with focused
+  assertions for the direct proof and completion-audit embedding.
+- This is proof/readback contract tightening only. It does not grant resident
+  claim authority, resident surface runtime, process supervision, process
+  restart, service install/control, local product execution, memory write,
+  receipt write, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime resident-claim authority
+readback projection:
+
+- `python -m pytest tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff format tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file reformatted`
+- `python -m ruff check tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-resident-claim-boundary-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-resident-claim-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_family,authority_required,authority_granted,@{Name='resident_claim_authority_granted';Expression={$_.resident_claim.authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=resident_claim_authority; authority_granted=false; resident_claim_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

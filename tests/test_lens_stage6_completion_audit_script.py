@@ -139,6 +139,13 @@ def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readb
     assert "authority_granted = [bool]$PersistentSupervisionResidentClaimBoundaryProof.authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "authority_required = [string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -1381,6 +1388,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_resident_claim_boundary["authority_blockers_proof_observed"] is True
     assert runtime_resident_claim_boundary["side_effects_denied"] is True
     assert runtime_resident_claim_boundary["sixth_authority_family_consumed"] is True
+    assert runtime_resident_claim_boundary["authority_required"] == "resident_claim_authority"
+    assert runtime_resident_claim_boundary["authority_granted"] is False
     assert runtime_resident_claim_boundary["local_process_launch_authority"] is False
     assert runtime_resident_claim_boundary["process_supervision_authority"] is False
     assert runtime_resident_claim_boundary["process_restart_authority"] is False
