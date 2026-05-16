@@ -28668,6 +28668,49 @@ authority readback projection:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-process-supervision-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_family,authority_required,authority_granted,@{Name='process_supervision_authority_granted';Expression={$_.process_supervision.authority_granted}},@{Name='required_before';Expression={$_.process_supervision.required_before -join ','}},@{Name='blockers';Expression={$_.blockers -join ','}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_runtime_service_control_authority_boundary; authority_required=process_supervision_authority; authority_granted=false; process_supervision_authority_granted=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-resident-runtime-authority-blockers-proof.ps1` so its
+  top-level payload now emits
+  `authority_required=process_supervision_authority` and
+  `authority_granted=false` beside the split resident-runtime authority-family
+  readback.
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the checkpoint source used by
+  the completion audit carries the same resident-runtime authority-blockers
+  denial fields.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `resident_runtime_authority_blockers_proof` readback preserves those authority
+  fields from the checkpoint payload.
+- Updated `tests\test_lens_resident_runtime_authority_blockers_proof_script.py`,
+  `tests\test_lens_stage6_checkpoint_script.py`, and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused assertions
+  for the direct proof, checkpoint source, and completion-audit embedding.
+- This is proof/readback contract tightening only. It does not grant process
+  supervision, local process launch, process restart, service install/control,
+  tray presence, tray registration, tray icon, notification, hotkey
+  registration, summon, overlay control, resident claim, local product
+  execution, memory write, receipt write, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime authority-blockers
+readback projection:
+
+- `python -m pytest tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q`
+  Result: `passed; 2 tests`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-authority-blockers-proof.ps1`,
+  `scripts\lens-stage6-checkpoint.ps1`, and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='resident_runtime_execution_authority';Expression={$_.governance.resident_runtime_execution_authority}},@{Name='process_supervision_authority_granted';Expression={$_.authority_blocker_groups.process_supervision.authority_granted}},@{Name='remaining';Expression={$_.remaining_authority_families -join ','}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_runtime_process_supervision_authority_boundary; authority_required=process_supervision_authority; authority_granted=false; resident_runtime_execution_authority=true; process_supervision_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

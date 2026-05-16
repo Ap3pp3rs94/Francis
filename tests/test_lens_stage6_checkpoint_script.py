@@ -816,6 +816,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_authority_blockers["next_smallest_truthful_gap"] == (
         "resident_runtime_process_supervision_authority_boundary"
     )
+    assert runtime_authority_blockers["authority_required"] == "process_supervision_authority"
+    assert runtime_authority_blockers["authority_granted"] is False
     assert runtime_authority_blockers["remaining_authority_families"] == [
         "process_supervision",
         "service_control",

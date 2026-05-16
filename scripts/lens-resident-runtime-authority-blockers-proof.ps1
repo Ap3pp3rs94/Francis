@@ -232,6 +232,8 @@ $Payload = [ordered]@{
   }
   authority_blocker_groups = $Groups
   remaining_authority_families = $RemainingFamilies
+  authority_required = 'process_supervision_authority'
+  authority_granted = $false
   summary = [ordered]@{
     blocker_total = [int]$Blockers.Count
     authority_family_total = 6

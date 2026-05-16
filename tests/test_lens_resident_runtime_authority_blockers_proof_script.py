@@ -49,6 +49,8 @@ def test_lens_resident_runtime_authority_blockers_proof_splits_combined_gap(
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["next_smallest_truthful_gap"] == "resident_runtime_process_supervision_authority_boundary"
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
 
     boundary = payload["boundary_proof"]
     assert boundary["ok"] is True

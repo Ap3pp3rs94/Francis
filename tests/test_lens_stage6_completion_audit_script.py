@@ -142,6 +142,8 @@ def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readb
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "authority_required = [string]$ResidentRuntimeAuthorityBlockersProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentRuntimeAuthorityBlockersProof.authority_granted" in script
     assert "authority_required = [string]$ResidentRuntimeProcessSupervisionBoundaryProof.authority_required" in script
     assert "authority_granted = [bool]$ResidentRuntimeProcessSupervisionBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$ResidentRuntimeServiceControlBoundaryProof.authority_required" in script
@@ -1139,6 +1141,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_authority_blockers["next_smallest_truthful_gap"] == (
         "resident_runtime_process_supervision_authority_boundary"
     )
+    assert runtime_authority_blockers["authority_required"] == "process_supervision_authority"
+    assert runtime_authority_blockers["authority_granted"] is False
     assert runtime_authority_blockers["remaining_authority_families"] == [
         "process_supervision",
         "service_control",
