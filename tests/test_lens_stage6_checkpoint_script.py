@@ -941,6 +941,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_tray_boundary["authority_blockers_proof_observed"] is True
     assert runtime_tray_boundary["side_effects_denied"] is True
     assert runtime_tray_boundary["third_authority_family_consumed"] is True
+    assert runtime_tray_boundary["authority_required"] == "tray_presence_authority"
+    assert runtime_tray_boundary["authority_granted"] is False
     assert runtime_tray_boundary["resident_runtime_execution_authority"] is True
     assert runtime_tray_boundary["local_process_launch_authority"] is False
     assert runtime_tray_boundary["process_supervision_authority"] is False

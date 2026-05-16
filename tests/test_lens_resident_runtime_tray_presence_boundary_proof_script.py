@@ -54,6 +54,8 @@ def test_lens_resident_runtime_tray_presence_boundary_is_readback_only() -> None
     assert payload["authority_blockers_proof_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["third_authority_family_consumed"] is True
+    assert payload["authority_required"] == "tray_presence_authority"
+    assert payload["authority_granted"] is False
     assert payload["resident_runtime_execution_authority"] is True
     assert payload["local_process_launch_authority"] is False
     assert payload["process_supervision_authority"] is False

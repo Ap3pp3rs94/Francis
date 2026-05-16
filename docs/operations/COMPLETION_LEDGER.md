@@ -28542,6 +28542,46 @@ readback projection:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-hotkey-summon-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_family,authority_required,authority_granted,@{Name='hotkey_summon_authority_granted';Expression={$_.hotkey_summon.authority_granted}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_runtime_overlay_window_authority_boundary; authority_required=hotkey_registration_and_summon_authority; authority_granted=false; hotkey_summon_authority_granted=false`
 
+`2026-05-15`:
+
+- Updated `scripts\lens-resident-runtime-tray-presence-boundary-proof.ps1` so
+  its top-level payload now emits
+  `authority_required=tray_presence_authority` and
+  `authority_granted=false` beside the existing tray-presence family readback.
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the checkpoint source used by
+  the completion audit carries the same tray authority denial fields.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `resident_runtime_tray_presence_boundary_proof` readback preserves those
+  authority fields from the checkpoint payload.
+- Updated
+  `tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py`,
+  `tests\test_lens_stage6_checkpoint_script.py`, and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused assertions
+  for the direct proof, checkpoint source, and completion-audit embedding.
+- This is proof/readback contract tightening only. It does not grant tray
+  presence, tray registration, tray icon, notification, hotkey registration,
+  summon, overlay control, resident claim, process supervision, process
+  restart, service install/control, local product execution, memory write,
+  receipt write, capture, sensing, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime tray-presence authority
+readback projection:
+
+- `python -m pytest tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_tray_presence_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-tray-presence-boundary-proof.ps1`,
+  `scripts\lens-stage6-checkpoint.ps1`, and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-tray-presence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_family,authority_required,authority_granted,@{Name='tray_presence_authority_granted';Expression={$_.tray_presence.authority_granted}},@{Name='required_before';Expression={$_.tray_presence.required_before -join ','}},@{Name='blockers';Expression={$_.blockers -join ','}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_runtime_hotkey_summon_authority_boundary; authority_required=tray_presence_authority; authority_granted=false; tray_presence_authority_granted=false; required_before=resident_claim`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
