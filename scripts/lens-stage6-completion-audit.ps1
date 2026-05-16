@@ -1086,6 +1086,7 @@ $ResidentRuntimeBoundaryObserved = (
   -not [bool]$ResidentRuntimeBoundary.executed -and
   [string]$ResidentRuntimeBoundary.local_process_launch_authority_required -eq 'local_process_launch_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
+  [string]$ResidentRuntimeBoundary.process_supervision_authority_required -eq 'process_supervision_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'process_supervision_authority_not_granted' -and
   $ResidentRuntimeBoundaryBlockers -contains 'service_control_authority_not_granted' -and
   $ResidentRuntimeBoundaryBlockers -contains 'tray_registration_authority_not_granted' -and
@@ -2618,6 +2619,7 @@ $Payload = [ordered]@{
     approval_decision_authority = $false
     local_process_launch_authority_required = [string]$ResidentRuntimeBoundary.local_process_launch_authority_required
     local_process_launch_authority = $false
+    process_supervision_authority_required = [string]$ResidentRuntimeBoundary.process_supervision_authority_required
     process_supervision_authority = $false
     process_restart_authority = $false
     service_install_authority = $false

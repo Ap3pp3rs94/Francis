@@ -2164,6 +2164,7 @@ $Payload = [ordered]@{
     approval_decision_authority = $false
     local_process_launch_authority_required = 'local_process_launch_authority'
     local_process_launch_authority = $false
+    process_supervision_authority_required = 'process_supervision_authority'
     process_supervision_authority = $false
     process_restart_authority = $false
     service_install_authority = $false

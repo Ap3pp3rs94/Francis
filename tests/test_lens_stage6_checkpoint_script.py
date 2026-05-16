@@ -778,6 +778,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "local_process_launch_authority"
     )
     assert payload["resident_runtime_authority_boundary"]["local_process_launch_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["process_supervision_authority_required"] == (
+        "process_supervision_authority"
+    )
     assert payload["resident_runtime_authority_boundary"]["process_supervision_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["service_install_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["service_control_authority"] is False

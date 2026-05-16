@@ -231,6 +231,19 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_local_process_a
     assert "local_process_launch_authority = $false" in script
 
 
+def test_lens_stage6_completion_audit_preserves_resident_runtime_process_supervision_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$ResidentRuntimeBoundary.process_supervision_authority_required -eq 'process_supervision_authority'"
+    ) in script
+    assert (
+        "process_supervision_authority_required = "
+        "[string]$ResidentRuntimeBoundary.process_supervision_authority_required"
+    ) in script
+    assert "process_supervision_authority = $false" in script
+
+
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -965,6 +978,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert resident_runtime_boundary["approval_decision_authority"] is False
     assert resident_runtime_boundary["local_process_launch_authority_required"] == "local_process_launch_authority"
     assert resident_runtime_boundary["local_process_launch_authority"] is False
+    assert resident_runtime_boundary["process_supervision_authority_required"] == "process_supervision_authority"
     assert resident_runtime_boundary["process_supervision_authority"] is False
     assert resident_runtime_boundary["service_control_authority"] is False
     assert resident_runtime_boundary["tray_registration_authority"] is False
