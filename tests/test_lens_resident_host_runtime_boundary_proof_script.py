@@ -38,6 +38,18 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_host_runtime_boundary_requires_prior_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-host-runtime-boundary-proof.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_required' -Default '') "
+        "-eq 'process_supervision_authority'"
+    ) in script
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_granted' -Default $true)"
+    ) in script
+
+
 def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority() -> None:
     proc = _run_proof(
         "-Mode",

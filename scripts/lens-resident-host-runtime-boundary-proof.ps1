@@ -302,7 +302,9 @@ $RuntimeHandoffObserved = (
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'kind' -Default '') -eq 'lens.summon_resident_host_blocker.proof' -and
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host'
+  [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_granted' -Default $true)
 )
 $BoundedRuntimeObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and

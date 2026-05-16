@@ -298,13 +298,18 @@ $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $Pow
 )
 $ResidentHostRuntimeBoundaryProof = $ResidentHostRuntimeBoundaryProofResult.payload
 $ResidentHostRuntimeBoundaryProofBlockers = ConvertTo-StringArray -Value $ResidentHostRuntimeBoundaryProof.blockers
+$ResidentHostRuntimeBoundaryProofRecommendedHandoff = $ResidentHostRuntimeBoundaryProof.recommended_handoff
 $ResidentHostRuntimeBoundaryProofObserved = (
   [int]$ResidentHostRuntimeBoundaryProofResult.exit_code -eq 0 -and
   [string]$ResidentHostRuntimeBoundaryProof.kind -eq 'lens.resident_host.runtime_blocker_boundary.proof' -and
   [bool]$ResidentHostRuntimeBoundaryProof.ok -and
   [string]$ResidentHostRuntimeBoundaryProof.status -eq 'proof_passed' -and
   [string]$ResidentHostRuntimeBoundaryProof.previous_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap -eq 'resident_host_process_not_supervised'
+  [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
+  [string]$ResidentHostRuntimeBoundaryProof.authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$ResidentHostRuntimeBoundaryProof.authority_granted -and
+  [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_granted
 )
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
@@ -3293,6 +3298,13 @@ $Payload = [ordered]@{
     next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
     authority_required = [string]$ResidentHostRuntimeBoundaryProof.authority_required
     authority_granted = [bool]$ResidentHostRuntimeBoundaryProof.authority_granted
+    recommended_handoff = [ordered]@{
+      id = [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.id
+      status = [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.status
+      next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.next_smallest_truthful_gap
+      authority_required = [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_required
+      authority_granted = [bool]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_granted
+    }
     runtime_handoff_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_handoff_observed
     bounded_runtime_observed = [bool]$ResidentHostRuntimeBoundaryProof.bounded_runtime_observed
     runtime_heartbeat_observed = [bool]$ResidentHostRuntimeBoundaryProof.runtime_heartbeat_observed
