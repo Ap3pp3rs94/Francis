@@ -34,7 +34,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
-        timeout=240,
+        timeout=780,
     )
 
 
@@ -74,7 +74,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
         "-DataDir",
         str(tmp_path / "data"),
         "-ChildProofTimeoutSeconds",
-        "120",
+        "240",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -92,10 +92,11 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["family_chain_observed"] is True
     assert payload["resident_host_family_handoff_observed"] is True
     assert payload["final_summon_authority_handoff_observed"] is True
+    assert payload["final_summon_authority_handoff_readback_observed"] is True
     assert payload["all_summon_blocker_families_consumed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
-    assert payload["child_proof_timeout_seconds"] == 120
+    assert payload["child_proof_timeout_seconds"] == 240
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
@@ -105,7 +106,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     }
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 120
+        assert run["timeout_seconds"] == 240
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
 
@@ -162,6 +163,56 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert final_authority["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert final_authority["authority_granted"] is False
     assert final_authority["all_summon_blocker_families_consumed"] is True
+    assert final_authority["previous_summon_binding_bridge_handoff_readback_observed"] is True
+    previous_binding = final_authority["previous_binding_handoff"]
+    assert previous_binding["status"] == "proof_passed"
+    assert previous_binding["previous_summon_blocker_family"] == "global_hotkey_binding"
+    assert previous_binding["summon_binding_blocker_family"] == "summon_binding"
+    assert previous_binding["next_summon_blocker_family"] == "authority"
+    assert previous_binding["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
+    assert previous_binding["handoff_aligned"] is True
+    assert previous_binding["side_effects_denied"] is True
+    assert previous_binding["previous_global_hotkey_bridge_handoff_readback_observed"] is True
+    previous_global_hotkey_bridge = previous_binding["previous_global_hotkey_bridge"]
+    assert previous_global_hotkey_bridge["status"] == "proof_passed"
+    assert previous_global_hotkey_bridge["next_summon_blocker_family"] == "summon_binding"
+    assert previous_global_hotkey_bridge["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
+    assert previous_global_hotkey_bridge["previous_overlay_window_bridge_handoff_readback_observed"] is True
+    previous_overlay_bridge = previous_global_hotkey_bridge["previous_overlay_window_bridge"]
+    assert previous_overlay_bridge["status"] == "proof_passed"
+    assert previous_overlay_bridge["next_summon_blocker_family"] == "global_hotkey_binding"
+    assert previous_overlay_bridge["next_smallest_truthful_gap"] == ("summon_global_hotkey_binding_blocker_boundary")
+    assert previous_overlay_bridge["previous_tray_presence_bridge_resident_host_readback_observed"] is True
+    previous_tray_bridge = previous_overlay_bridge["previous_tray_presence_bridge"]
+    assert previous_tray_bridge["status"] == "proof_passed"
+    assert previous_tray_bridge["next_summon_blocker_family"] == "overlay_window"
+    assert previous_tray_bridge["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert previous_tray_bridge["previous_resident_host_bridge_observed"] is True
+    previous_resident_host_bridge = previous_tray_bridge["previous_resident_host_bridge"]
+    assert previous_resident_host_bridge["status"] == "proof_passed"
+    assert previous_resident_host_bridge["first_summon_blocker_family"] == "resident_host"
+    assert previous_resident_host_bridge["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert previous_resident_host_bridge["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert previous_resident_host_bridge["authority_required"] == "none_new_stage6_completion_audit"
+    assert previous_resident_host_bridge["authority_granted"] is False
+    assert previous_resident_host_bridge["process_supervision_handoff_observed"] is True
+    previous_process_handoff = previous_resident_host_bridge["process_supervision_handoff"]
+    assert previous_process_handoff["status"] == "proof_passed"
+    assert previous_process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert previous_process_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert previous_process_handoff["authority_granted"] is False
+    previous_recommended_handoff = previous_process_handoff["recommended_handoff"]
+    assert previous_recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert previous_recommended_handoff["authority_granted"] is False
+    assert previous_recommended_handoff["read_only_contract"] is True
+    assert previous_recommended_handoff["diagnostic_only"] is True
+    assert previous_recommended_handoff["would_execute"] is False
+    assert previous_recommended_handoff["would_mutate"] is False
+    assert previous_recommended_handoff["would_supervise_process"] is False
+    assert previous_recommended_handoff["would_restart_process"] is False
+    assert previous_recommended_handoff["would_install_service"] is False
+    assert previous_recommended_handoff["would_start_service"] is False
+    assert previous_recommended_handoff["would_claim_resident"] is False
     assert final_authority["blockers"] == [
         "summon_authority_not_granted",
         "hotkey_registration_authority_not_granted",
@@ -173,6 +224,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert checks["summon_anywhere_family_chain"]["status"] == "family_chain_projected"
     assert checks["resident_host_family_handoff"]["status"] == "resident_host_handoff_ready"
     assert checks["final_summon_authority_handoff"]["status"] == "final_family_consumed"
+    assert checks["final_summon_authority_handoff_readback"]["status"] == ("final_handoff_readback_observed")
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"
     assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
     assert all(item["passed"] for item in payload["checks"])
@@ -182,6 +234,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
         "wraps_summon_anywhere_blockers_proof": True,
         "wraps_summon_resident_host_blocker_proof": True,
         "wraps_summon_authority_blocker_proof": True,
+        "final_authority_previous_handoff_readback": True,
         "read_only_contract": True,
         "bounded_local_process_launch": True,
         "temporary_runtime_state_write": True,

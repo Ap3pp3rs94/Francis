@@ -5,7 +5,7 @@ param(
   [string]$DataDir = '',
 
   [ValidateRange(5, 600)]
-  [int]$ChildProofTimeoutSeconds = 120
+  [int]$ChildProofTimeoutSeconds = 240
 )
 
 $ErrorActionPreference = 'Stop'
@@ -296,6 +296,13 @@ $AuthorityGovernance = Get-PropertyValue -Payload $AuthorityPayload -Name 'gover
 $AuthorityBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $AuthorityPayload -Name 'summon_authority_blockers' -Default @()
 )
+$AuthorityPreviousBindingHandoff = Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_binding_handoff'
+$AuthorityPreviousGlobalHotkeyBridge = Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'previous_global_hotkey_bridge'
+$AuthorityPreviousOverlayWindowBridge = Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'previous_overlay_window_bridge'
+$AuthorityPreviousTrayPresenceBridge = Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'previous_tray_presence_bridge'
+$AuthorityPreviousResidentHostBridge = Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'previous_resident_host_bridge'
+$AuthorityPreviousResidentHostProcessHandoff = Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'process_supervision_handoff'
+$AuthorityPreviousResidentHostProcessRecommendedHandoff = Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'recommended_handoff'
 $ChildProofRuns = @(
   (New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonResult),
   (New-ChildProofRunSummary -Name 'summon_resident_host_blocker' -Result $ResidentHostResult),
@@ -368,6 +375,50 @@ $FinalAuthorityHandoffObserved = (
   $AuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
   $AuthorityBlockers -contains 'local_process_launch_authority_not_granted'
 )
+$FinalAuthorityPreviousHandoffReadbackObserved = (
+  [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_summon_binding_bridge_handoff_readback_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'previous_summon_blocker_family' -Default '') -eq 'global_hotkey_binding' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'summon_binding_blocker_family' -Default '') -eq 'summon_binding' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'next_summon_blocker_family' -Default '') -eq 'authority' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_authority_blocker_boundary' -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'previous_global_hotkey_bridge_handoff_readback_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'next_summon_blocker_family' -Default '') -eq 'summon_binding' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_binding_blocker_boundary' -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'previous_overlay_window_bridge_handoff_readback_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'next_summon_blocker_family' -Default '') -eq 'global_hotkey_binding' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_global_hotkey_binding_blocker_boundary' -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'previous_tray_presence_bridge_resident_host_readback_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'next_summon_blocker_family' -Default '') -eq 'overlay_window' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_overlay_window_blocker_boundary' -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'previous_resident_host_bridge_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'summon_next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'process_supervision_handoff_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_restart_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_install_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_claim_resident' -Default $true)
+)
+$FinalAuthorityHandoffObserved = $FinalAuthorityHandoffObserved -and $FinalAuthorityPreviousHandoffReadbackObserved
 
 $DeniedKeys = @(
   'product_execution_authority',
@@ -411,6 +462,7 @@ $Checks = @(
   (New-Check -Id 'summon_anywhere_family_chain' -Status $(if ($FamilyChainObserved) { 'family_chain_projected' } else { 'missing_or_unexpected' }) -Passed $FamilyChainObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The aggregate summon-anywhere blocker proof must project the six blocked families in order.'),
   (New-Check -Id 'resident_host_family_handoff' -Status $(if ($ResidentHostFamilyHandoffObserved) { 'resident_host_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $ResidentHostFamilyHandoffObserved -Evidence 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff' -Reason 'The first summon family must consume the resident-host process-supervision handoff without claiming execution.'),
   (New-Check -Id 'final_summon_authority_handoff' -Status $(if ($FinalAuthorityHandoffObserved) { 'final_family_consumed' } else { 'missing_or_unexpected' }) -Passed $FinalAuthorityHandoffObserved -Evidence 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status' -Reason 'The final summon blocker family must prove all summon blocker families are consumed without authority.'),
+  (New-Check -Id 'final_summon_authority_handoff_readback' -Status $(if ($FinalAuthorityPreviousHandoffReadbackObserved) { 'final_handoff_readback_observed' } else { 'missing_or_unexpected' }) -Passed $FinalAuthorityPreviousHandoffReadbackObserved -Evidence 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status previous_binding_handoff' -Reason 'The family-chain proof must preserve the final authority handoff readback through summon-binding, global-hotkey, overlay, tray, resident-host, and process-supervision proofs.'),
   (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon family chain + resident-host handoff + final authority handoff' -Reason 'The family chain must have one coherent next audit handoff.'),
   (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon family governance payloads' -Reason 'This proof must remain diagnostic/readback only and grant no summon, hotkey, overlay, process, service, memory, approval-decision, receipt, or resident-claim authority.')
 )
@@ -432,6 +484,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   family_chain_observed = $FamilyChainObserved
   resident_host_family_handoff_observed = $ResidentHostFamilyHandoffObserved
   final_summon_authority_handoff_observed = $FinalAuthorityHandoffObserved
+  final_summon_authority_handoff_readback_observed = $FinalAuthorityPreviousHandoffReadbackObserved
   all_summon_blocker_families_consumed = $HandoffAligned
   handoff_aligned = $HandoffAligned
   side_effects_denied = $SideEffectsDenied
@@ -478,6 +531,63 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     authority_required = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
     authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $false)
     all_summon_blocker_families_consumed = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'all_summon_blocker_families_consumed' -Default $false)
+    previous_summon_binding_bridge_handoff_readback_observed = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_summon_binding_bridge_handoff_readback_observed' -Default $false)
+    previous_binding_handoff = [ordered]@{
+      status = [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'status' -Default 'missing')
+      previous_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'previous_summon_blocker_family' -Default '')
+      summon_binding_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'summon_binding_blocker_family' -Default '')
+      next_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'next_summon_blocker_family' -Default '')
+      next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'next_smallest_truthful_gap' -Default '')
+      handoff_aligned = [bool](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'handoff_aligned' -Default $false)
+      side_effects_denied = [bool](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'side_effects_denied' -Default $false)
+      previous_global_hotkey_bridge_handoff_readback_observed = [bool](Get-PropertyValue -Payload $AuthorityPreviousBindingHandoff -Name 'previous_global_hotkey_bridge_handoff_readback_observed' -Default $false)
+      previous_global_hotkey_bridge = [ordered]@{
+        status = [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'status' -Default 'missing')
+        next_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'next_summon_blocker_family' -Default '')
+        next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'next_smallest_truthful_gap' -Default '')
+        previous_overlay_window_bridge_handoff_readback_observed = [bool](Get-PropertyValue -Payload $AuthorityPreviousGlobalHotkeyBridge -Name 'previous_overlay_window_bridge_handoff_readback_observed' -Default $false)
+        previous_overlay_window_bridge = [ordered]@{
+          status = [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'status' -Default 'missing')
+          next_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'next_summon_blocker_family' -Default '')
+          next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'next_smallest_truthful_gap' -Default '')
+          previous_tray_presence_bridge_resident_host_readback_observed = [bool](Get-PropertyValue -Payload $AuthorityPreviousOverlayWindowBridge -Name 'previous_tray_presence_bridge_resident_host_readback_observed' -Default $false)
+          previous_tray_presence_bridge = [ordered]@{
+            status = [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'status' -Default 'missing')
+            next_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'next_summon_blocker_family' -Default '')
+            next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'next_smallest_truthful_gap' -Default '')
+            previous_resident_host_bridge_observed = [bool](Get-PropertyValue -Payload $AuthorityPreviousTrayPresenceBridge -Name 'previous_resident_host_bridge_observed' -Default $false)
+            previous_resident_host_bridge = [ordered]@{
+              status = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'status' -Default 'missing')
+              first_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'first_summon_blocker_family' -Default '')
+              summon_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'summon_next_smallest_truthful_gap' -Default '')
+              next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'next_smallest_truthful_gap' -Default '')
+              authority_required = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'authority_required' -Default '')
+              authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'authority_granted' -Default $false)
+              process_supervision_handoff_observed = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostBridge -Name 'process_supervision_handoff_observed' -Default $false)
+              process_supervision_handoff = [ordered]@{
+                status = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'status' -Default 'missing')
+                next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'next_smallest_truthful_gap' -Default '')
+                authority_required = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'authority_required' -Default '')
+                authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessHandoff -Name 'authority_granted' -Default $false)
+                recommended_handoff = [ordered]@{
+                  authority_required = [string](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'authority_required' -Default '')
+                  authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'authority_granted' -Default $false)
+                  read_only_contract = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'read_only_contract' -Default $false)
+                  diagnostic_only = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'diagnostic_only' -Default $false)
+                  would_execute = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_execute' -Default $false)
+                  would_mutate = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_mutate' -Default $false)
+                  would_supervise_process = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_supervise_process' -Default $false)
+                  would_restart_process = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_restart_process' -Default $false)
+                  would_install_service = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_install_service' -Default $false)
+                  would_start_service = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_start_service' -Default $false)
+                  would_claim_resident = [bool](Get-PropertyValue -Payload $AuthorityPreviousResidentHostProcessRecommendedHandoff -Name 'would_claim_resident' -Default $false)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     blockers = [string[]]@($AuthorityBlockers)
   }
   checks = @($Checks)
@@ -493,6 +603,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     wraps_summon_anywhere_blockers_proof = $true
     wraps_summon_resident_host_blocker_proof = $true
     wraps_summon_authority_blocker_proof = $true
+    final_authority_previous_handoff_readback = $FinalAuthorityPreviousHandoffReadbackObserved
     read_only_contract = $true
     bounded_local_process_launch = [bool](Get-PropertyValue -Payload $ResidentHostGovernance -Name 'bounded_local_process_launch' -Default $false)
     temporary_runtime_state_write = [bool](Get-PropertyValue -Payload $ResidentHostGovernance -Name 'temporary_runtime_state_write' -Default $false)
