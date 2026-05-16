@@ -2162,6 +2162,7 @@ $Payload = [ordered]@{
     executed = $RuntimeBoundaryExecuted
     execution_authority = $false
     approval_decision_authority = $false
+    local_process_launch_authority_required = 'local_process_launch_authority'
     local_process_launch_authority = $false
     process_supervision_authority = $false
     process_restart_authority = $false
