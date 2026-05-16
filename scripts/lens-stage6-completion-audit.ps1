@@ -1189,6 +1189,8 @@ $ResidentRuntimeServiceControlBoundaryObserved = (
   [bool]$ResidentRuntimeServiceControlBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeServiceControlBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeServiceControlBoundaryProof.second_authority_family_consumed -and
+  [string]$ResidentRuntimeServiceControlBoundaryProof.authority_required -eq 'service_control_authority' -and
+  -not [bool]$ResidentRuntimeServiceControlBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeServiceControlBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeServiceControlBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeServiceControlBoundaryProof.process_restart_authority -and
