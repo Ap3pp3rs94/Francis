@@ -860,6 +860,7 @@ $PersistentSupervisionEnablementExecutionDenialObserved = (
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.executed -and
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.ready -and
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.approval_ready -and
+  [string]$PersistentSupervisionEnablementExecutionDenial.enablement_authority_required -eq 'persistent_supervision_enablement_authority' -and
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.enablement_authority_granted -and
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.persistent_supervision_enablement_allowed -and
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.service_config_updated -and
@@ -3546,6 +3547,7 @@ $Payload = [ordered]@{
     executed = [bool]$PersistentSupervisionEnablementExecutionDenial.executed
     ready = [bool]$PersistentSupervisionEnablementExecutionDenial.ready
     approval_ready = [bool]$PersistentSupervisionEnablementExecutionDenial.approval_ready
+    enablement_authority_required = [string]$PersistentSupervisionEnablementExecutionDenial.enablement_authority_required
     enablement_authority_granted = [bool]$PersistentSupervisionEnablementExecutionDenial.enablement_authority_granted
     persistent_supervision_enablement_allowed = [bool]$PersistentSupervisionEnablementExecutionDenial.persistent_supervision_enablement_allowed
     service_config_updated = [bool]$PersistentSupervisionEnablementExecutionDenial.service_config_updated

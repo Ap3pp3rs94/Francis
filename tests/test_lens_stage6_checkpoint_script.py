@@ -711,6 +711,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert execution_denial["executed"] is False
     assert execution_denial["ready"] is False
     assert execution_denial["approval_ready"] is False
+    assert execution_denial["enablement_authority_required"] == "persistent_supervision_enablement_authority"
     assert execution_denial["enablement_authority_granted"] is False
     assert execution_denial["persistent_supervision_enablement_allowed"] is False
     assert execution_denial["service_config_updated"] is False

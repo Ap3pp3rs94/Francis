@@ -1945,6 +1945,7 @@ $Payload = [ordered]@{
     executed = $PersistentSupervisionEnablementExecutionDenialExecuted
     ready = $PersistentSupervisionEnablementExecutionDenialReady
     approval_ready = $PersistentSupervisionEnablementExecutionDenialApprovalReady
+    enablement_authority_required = 'persistent_supervision_enablement_authority'
     enablement_authority_granted = $PersistentSupervisionEnablementExecutionDenialEnablementAuthorityGranted
     persistent_supervision_enablement_allowed = $PersistentSupervisionEnablementExecutionDenialEnablementAllowed
     service_config_updated = $PersistentSupervisionEnablementExecutionDenialServiceConfigUpdated
