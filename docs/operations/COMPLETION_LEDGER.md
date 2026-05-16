@@ -28237,10 +28237,11 @@ Stage 6 Lens completion-audit first-prerequisite readback projection on
   still resolves first to `resident_host_process` without reopening nested proof
   JSON.
 - Updated `tests\test_lens_stage6_completion_audit_script.py` with a fast
-  static contract check and opt-in full-audit assertions for the next live audit
-  run.
-- This is readback/projection hardening only. It does not run the full Stage 6
-  completion audit in this slice, does not close Stage 6, and does not grant
+  static contract check plus opt-in full-audit assertions proving the live audit
+  keeps the same first-prerequisite readback.
+- This is readback/projection hardening only. The full opt-in completion audit
+  now passes with the projection asserted, but the evidence does not close Stage
+  6 and does not grant
   runtime launch, product execution, process supervision, process restart,
   service install/control, service config write, persistent-supervision
   enablement/execution, resident claim, memory write, receipt write,
@@ -28260,6 +28261,8 @@ readback projection:
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+- `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
+  Result: `passed; 1 test; first missing prerequisite readback asserted`
 
 ## 6. Update rule
 
