@@ -350,6 +350,16 @@ def test_lens_stage6_completion_audit_observes_resident_runtime_service_control_
     assert granted_gate in script
 
 
+def test_lens_stage6_completion_audit_observes_resident_runtime_tray_presence_authority_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    required_gate = "[string]$ResidentRuntimeTrayPresenceBoundaryProof.authority_required -eq 'tray_presence_authority'"
+    granted_gate = "-not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.authority_granted"
+
+    assert required_gate in script
+    assert granted_gate in script
+
+
 def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 

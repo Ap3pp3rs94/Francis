@@ -1225,6 +1225,8 @@ $ResidentRuntimeTrayPresenceBoundaryObserved = (
   [bool]$ResidentRuntimeTrayPresenceBoundaryProof.authority_blockers_proof_observed -and
   [bool]$ResidentRuntimeTrayPresenceBoundaryProof.side_effects_denied -and
   [bool]$ResidentRuntimeTrayPresenceBoundaryProof.third_authority_family_consumed -and
+  [string]$ResidentRuntimeTrayPresenceBoundaryProof.authority_required -eq 'tray_presence_authority' -and
+  -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.authority_granted -and
   -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.local_process_launch_authority -and
   -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.process_supervision_authority -and
   -not [bool]$ResidentRuntimeTrayPresenceBoundaryProof.process_restart_authority -and
