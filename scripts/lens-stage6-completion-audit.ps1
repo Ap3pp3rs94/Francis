@@ -390,6 +390,7 @@ $ResidentSupervisionPersistenceBoundaryProofObserved = (
   [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_requirement_state -eq 'resident_candidate_observed_not_persistent' -and
   [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_blocker -eq 'resident_supervision_not_persistent' -and
   [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required -eq 'persistent_process_supervision_authority' -and
+  -not [bool]$ResidentSupervisionPersistenceBoundaryProof.authority_granted -and
   $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'resident_supervision_not_persistent' -and
   $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'persistent_supervision_authority_not_granted' -and
   $ResidentSupervisionPersistenceBoundaryProofBlockers -contains 'persistent_process_supervision_authority_required' -and
@@ -3372,6 +3373,7 @@ $Payload = [ordered]@{
     resident_host_process_requirement_state = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_requirement_state
     resident_host_process_blocker = [string]$ResidentSupervisionPersistenceBoundaryProof.resident_host_process_blocker
     authority_required = [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required
+    authority_granted = [bool]$ResidentSupervisionPersistenceBoundaryProof.authority_granted
     plan_route = [string]$ResidentSupervisionPersistenceBoundaryProof.plan_route
     enablement_route = [string]$ResidentSupervisionPersistenceBoundaryProof.enablement_route
     checks = @($ResidentSupervisionPersistenceBoundaryProof.checks)

@@ -28858,6 +28858,38 @@ readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='resident_host_authority_required';Expression={$_.resident_host.authority_required}},@{Name='resident_host_authority_granted';Expression={$_.resident_host.authority_granted}},authority_required,authority_granted | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; resident_host_authority_required=process_supervision_authority; resident_host_authority_granted=false; authority_required=summon_hotkey_overlay_and_process_authority; authority_granted=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `resident_supervision_persistence_boundary_proof` readback now preserves
+  `authority_granted=false` beside
+  `authority_required=persistent_process_supervision_authority`.
+- Tightened the audit observed gate so the resident-supervision persistence
+  boundary is not considered observed if the child proof grants authority.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` with focused
+  static and opt-in audit-output assertions for the resident-supervision
+  persistence authority denial.
+- This is persistent-supervision boundary readback contract tightening only. It
+  does not run or close the full Stage 6 completion audit, does not grant
+  process supervision, persistent process supervision, service install/control,
+  execution, resident claim, memory write, receipt write, approval-decision, or
+  mutation authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-supervision persistence
+authority denial readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_resident_supervision_persistence_boundary_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-resident-supervision-persistence-boundary-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='handoff_authority_required';Expression={$_.handoff.authority_required}},@{Name='handoff_authority_granted';Expression={$_.handoff.authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; authority_required=persistent_process_supervision_authority; authority_granted=false; handoff_authority_required=persistent_process_supervision_authority; handoff_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

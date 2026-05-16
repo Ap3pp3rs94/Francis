@@ -131,6 +131,9 @@ def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_mis
 def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "authority_required = [string]$ResidentSupervisionPersistenceBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentSupervisionPersistenceBoundaryProof.authority_granted" in script
+    assert "-not [bool]$ResidentSupervisionPersistenceBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$PersistentSupervisionEnablementAuthorityProof.authority_required" in script
     assert "authority_granted = [bool]$PersistentSupervisionEnablementAuthorityProof.authority_granted" in script
     assert "authority_required = [string]$PersistentSupervisionExecutionAuthorityProof.authority_required" in script
@@ -573,6 +576,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     )
     assert resident_persistence_boundary["resident_host_process_blocker"] == "resident_supervision_not_persistent"
     assert resident_persistence_boundary["authority_required"] == "persistent_process_supervision_authority"
+    assert resident_persistence_boundary["authority_granted"] is False
     assert resident_persistence_boundary["plan_route"] == "/lens/host/persistent-supervision"
     assert resident_persistence_boundary["enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert all(item["passed"] for item in resident_persistence_boundary["checks"])
