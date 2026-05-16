@@ -2171,6 +2171,7 @@ $Payload = [ordered]@{
     service_control_authority_required = 'service_control_authority'
     service_control_authority = $false
     hotkey_registration_authority = $false
+    tray_registration_authority_required = 'tray_registration_authority'
     tray_registration_authority = $false
     overlay_control_authority = $false
     memory_write = $false
