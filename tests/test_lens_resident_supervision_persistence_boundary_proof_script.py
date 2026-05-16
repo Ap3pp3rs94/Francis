@@ -86,6 +86,7 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     assert payload["resident_host_process_requirement_state"] == "resident_candidate_observed_not_persistent"
     assert payload["resident_host_process_blocker"] == "resident_supervision_not_persistent"
     assert payload["authority_required"] == "persistent_process_supervision_authority"
+    assert payload["authority_granted"] is False
     assert payload["plan_route"] == "/lens/host/persistent-supervision"
     assert payload["enablement_route"] == "/lens/host/persistent-supervision/enablement"
 

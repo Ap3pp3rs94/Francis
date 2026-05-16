@@ -537,6 +537,7 @@ $Payload = [ordered]@{
   resident_host_process_requirement_state = [string](Get-PropertyValue -Payload $PlanResidentDependency -Name 'requirement_state' -Default '')
   resident_host_process_blocker = [string](Get-PropertyValue -Payload $PlanResidentDependency -Name 'blocker' -Default '')
   authority_required = [string](Get-PropertyValue -Payload $PlanHandoff -Name 'authority_required' -Default '')
+  authority_granted = $false
   plan_route = '/lens/host/persistent-supervision'
   enablement_route = '/lens/host/persistent-supervision/enablement'
   checks = @($Checks)
