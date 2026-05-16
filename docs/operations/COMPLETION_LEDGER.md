@@ -29103,6 +29103,42 @@ service-config write authority label readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='service_config_write_authority_required';Expression={$_.persistent_supervision_enablement_denial_boundary.service_config_write_authority_required}},@{Name='service_config_write_authority';Expression={$_.persistent_supervision_enablement_denial_boundary.service_config_write_authority}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; service_config_write_authority_required=service_config_write_authority; service_config_write_authority=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the
+  `persistent_supervision_enablement_execution_denial_boundary` now preserves
+  `service_config_write_authority_required=service_config_write_authority`
+  beside its existing `service_config_write_authority=false` readback.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the checkpoint-derived
+  execution denial boundary must carry that service-config write authority label
+  before it counts as observed, and so the completion-audit payload reports the
+  same field.
+- Updated `tests\test_lens_stage6_checkpoint_script.py` and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused checkpoint
+  and audit-projection assertions for the denied execution service-config write
+  authority label.
+- This is checkpoint/audit readback contract tightening only. It does not run
+  or close the full Stage 6 completion audit, does not grant service config
+  write, persistent supervision enablement, execution, resident claim,
+  service install/control, process supervision, process restart, memory write,
+  receipt write, approval-decision, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens persistent-supervision execution denial
+service-config write authority label readback:
+
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_checkpoint_execution_service_config_authority_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='service_config_write_authority_required';Expression={$_.persistent_supervision_enablement_execution_denial_boundary.service_config_write_authority_required}},@{Name='service_config_write_authority';Expression={$_.persistent_supervision_enablement_execution_denial_boundary.service_config_write_authority}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; service_config_write_authority_required=service_config_write_authority; service_config_write_authority=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1957,6 +1957,7 @@ $Payload = [ordered]@{
     process_supervision_authority = $false
     process_restart_authority = $false
     persistent_supervision_enablement_authority = $false
+    service_config_write_authority_required = 'service_config_write_authority'
     service_config_write_authority = $false
     persistent_supervision_execution_authority_required = 'persistent_supervision_execution_authority'
     persistent_supervision_execution_authority = $false

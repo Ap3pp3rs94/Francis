@@ -868,6 +868,7 @@ $PersistentSupervisionEnablementExecutionDenialObserved = (
   -not [bool]$PersistentSupervisionEnablementExecutionDenial.resident_claim_allowed -and
   $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'approval_id_required' -and
   $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'persistent_supervision_enablement_authority_not_granted' -and
+  [string]$PersistentSupervisionEnablementExecutionDenial.service_config_write_authority_required -eq 'service_config_write_authority' -and
   $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'service_config_write_authority_not_granted' -and
   [string]$PersistentSupervisionEnablementExecutionDenial.persistent_supervision_execution_authority_required -eq 'persistent_supervision_execution_authority' -and
   $PersistentSupervisionEnablementExecutionDenialBlockers -contains 'persistent_supervision_execution_authority_not_granted'
@@ -3561,6 +3562,7 @@ $Payload = [ordered]@{
     process_supervision_authority = $false
     process_restart_authority = $false
     persistent_supervision_enablement_authority = $false
+    service_config_write_authority_required = [string]$PersistentSupervisionEnablementExecutionDenial.service_config_write_authority_required
     service_config_write_authority = $false
     persistent_supervision_execution_authority_required = [string]$PersistentSupervisionEnablementExecutionDenial.persistent_supervision_execution_authority_required
     persistent_supervision_execution_authority = $false
