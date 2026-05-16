@@ -266,7 +266,7 @@ if ($null -eq $PowerShell) {
 
 $ResidentHostBridgeForegroundRunSeconds = 2
 $ResidentHostBridgeHostLaunchRunSeconds = 3
-$ResidentHostBridgeSupervisorRunSeconds = 8
+$ResidentHostBridgeSupervisorRunSeconds = 3
 
 $SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
 $SummonPayload = $SummonResult.payload

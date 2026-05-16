@@ -30451,6 +30451,48 @@ narrowing:
   Result:
   `passed; warned that Git will normalize scripts\lens-process-supervision-authority-boundary-proof.ps1 from LF to CRLF next time Git touches it`
 
+Stage 6 Lens summon-family nested observation narrowing on `2026-05-16`:
+
+- Followed up green GitHub Actions run `25972847414`, which confirmed CI was no
+  longer failing after the Windows proof-hardening sequence but still showed
+  Stage 6/Lens proofs as the CI long pole.
+- In that run, the Windows 3.13 Pytest slowest paths still included
+  `persistent_supervision_enablement_transition_plan_is_readback_only`
+  at `208.06s`, `persistent_supervision_prerequisites_align_to_summon_family_chain`
+  at `192.01s`, `lens_summon_anywhere_family_chain_consumes_handoffs` at
+  `161.25s`, and the tray-presence summon bridge at `56.38s`.
+- Narrowed the resident-host bridge supervisor observation used by the
+  summon-family chain and tray-presence bridge from `8s` to `3s`. The proof
+  chain still runs the same child proofs and preserves the resident-host
+  process-supervision handoff readback; only the duplicated nested observation
+  window changed.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, service install/control, process
+  supervision/restart, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens summon-family nested observation
+narrowing:
+
+- PowerShell parser check for
+  `scripts\lens-summon-anywhere-family-chain-proof.ps1` and
+  `scripts\lens-summon-tray-presence-blocker-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_bridge_uses_bounded_resident_host_probe -q`
+  Result: `passed; 2 tests`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_consumes_handoffs -q --durations=8 --durations-min=1`
+  Result: `passed; slowest call 121.99s`
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_blocker_proof_is_readback_only -q --durations=8 --durations-min=1`
+  Result: `passed; slowest call 44.24s`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q --durations=8 --durations-min=1`
+  Result: `passed; slowest call 146.27s`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

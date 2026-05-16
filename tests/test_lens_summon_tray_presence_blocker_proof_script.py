@@ -42,7 +42,7 @@ def test_lens_summon_tray_presence_bridge_uses_bounded_resident_host_probe() -> 
 
     assert "$ResidentHostBridgeForegroundRunSeconds = 2" in script
     assert "$ResidentHostBridgeHostLaunchRunSeconds = 3" in script
-    assert "$ResidentHostBridgeSupervisorRunSeconds = 8" in script
+    assert "$ResidentHostBridgeSupervisorRunSeconds = 3" in script
     assert "[string]$ResidentHostBridgeForegroundRunSeconds" in script
     assert "[string]$ResidentHostBridgeHostLaunchRunSeconds" in script
     assert "[string]$ResidentHostBridgeSupervisorRunSeconds" in script
