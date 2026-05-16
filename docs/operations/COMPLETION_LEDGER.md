@@ -28778,6 +28778,46 @@ authority-grant readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,process_supervision_handoff_observed | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; authority_required=process_supervision_authority; authority_granted=false; process_supervision_handoff_observed=true`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-authority-blocker-proof.ps1` so the final
+  summon-authority blocker handoff now emits explicit top-level
+  `authority_required=summon_hotkey_overlay_and_process_authority` and
+  `authority_granted=false`.
+- Updated `scripts\lens-summon-anywhere-family-chain-proof.ps1` so the composed
+  summon-anywhere family-chain proof carries the same top-level authority
+  denial and preserves it inside `final_authority`.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `summon_authority_blocker_proof` and `summon_anywhere_family_chain_proof`
+  readbacks preserve both authority fields.
+- Updated `tests\test_lens_summon_authority_blocker_proof_script.py`,
+  `tests\test_lens_summon_anywhere_family_chain_proof_script.py`, and
+  `tests\test_lens_stage6_completion_audit_script.py` with focused assertions
+  for the direct proofs, family-chain projection, and completion-audit
+  projection.
+- This is summon-anywhere authority/readback contract tightening only. It does
+  not run or close the full Stage 6 completion audit, does not grant summon,
+  hotkey registration, overlay control, local process launch, process
+  supervision, service install/control, tray, resident claim, memory write,
+  receipt write, capture, sensing, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon-anywhere final authority handoff
+readback:
+
+- `python -m pytest tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readback -q`
+  Result: `passed; 3 tests`
+- `python -m ruff check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_authority_blocker_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-summon-authority-blocker-proof.ps1`,
+  `scripts\lens-summon-anywhere-family-chain-proof.ps1`, and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='final_authority_required';Expression={$_.final_authority.authority_required}},@{Name='final_authority_granted';Expression={$_.final_authority.authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=summon_hotkey_overlay_and_process_authority; authority_granted=false; final_authority_required=summon_hotkey_overlay_and_process_authority; final_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

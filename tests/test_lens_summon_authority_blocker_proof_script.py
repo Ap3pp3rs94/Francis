@@ -56,6 +56,8 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert payload["previous_binding_next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
     assert payload["direct_summon_preflight_next_smallest_truthful_gap"] == ("summon_anywhere_blockers")
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["authority_granted"] is False
     assert payload["summon_authority_family_observed"] is True
     assert payload["previous_summon_binding_bridge_observed"] is True
     assert payload["summon_preflight_authority_observed"] is True

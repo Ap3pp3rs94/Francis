@@ -167,6 +167,17 @@ def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_auth
     assert "authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "authority_required = [string]$SummonAuthorityBlockerProof.authority_required" in script
+    assert "authority_granted = [bool]$SummonAuthorityBlockerProof.authority_granted" in script
+    assert "authority_required = [string]$SummonAnywhereFamilyChainProof.authority_required" in script
+    assert "authority_granted = [bool]$SummonAnywhereFamilyChainProof.authority_granted" in script
+    assert "authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required" in script
+    assert "authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -1679,6 +1690,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "summon_anywhere_blockers"
     )
     assert summon_authority_blocker_proof["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert summon_authority_blocker_proof["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert summon_authority_blocker_proof["authority_granted"] is False
     assert summon_authority_blocker_proof["summon_authority_family_observed"] is True
     assert summon_authority_blocker_proof["previous_summon_binding_bridge_observed"] is True
     assert summon_authority_blocker_proof["summon_preflight_authority_observed"] is True
@@ -1772,6 +1785,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["acceptance_criterion"] == "summon_anywhere"
     assert summon_anywhere_family_chain_proof["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_anywhere_family_chain_proof["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert summon_anywhere_family_chain_proof["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert summon_anywhere_family_chain_proof["authority_granted"] is False
     assert summon_anywhere_family_chain_proof["family_chain_observed"] is True
     assert summon_anywhere_family_chain_proof["resident_host_family_handoff_observed"] is True
     assert summon_anywhere_family_chain_proof["final_summon_authority_handoff_observed"] is True
@@ -1812,6 +1827,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert family_chain_final_authority["summon_authority_blocker_family"] == "authority"
     assert family_chain_final_authority["next_summon_blocker_family"] == "stage6_lens_completion_audit"
     assert family_chain_final_authority["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert family_chain_final_authority["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert family_chain_final_authority["authority_granted"] is False
     assert family_chain_final_authority["all_summon_blocker_families_consumed"] is True
     assert "summon_authority_not_granted" in family_chain_final_authority["blockers"]
     family_chain_governance = summon_anywhere_family_chain_proof["governance"]

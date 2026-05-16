@@ -413,6 +413,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   acceptance_criterion = 'summon_anywhere'
   summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
   next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+  authority_required = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
+  authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $false)
   family_chain_observed = $FamilyChainObserved
   resident_host_family_handoff_observed = $ResidentHostFamilyHandoffObserved
   final_summon_authority_handoff_observed = $FinalAuthorityHandoffObserved
@@ -437,6 +439,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     summon_authority_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'summon_authority_blocker_family' -Default '')
     next_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'next_summon_blocker_family' -Default '')
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'next_smallest_truthful_gap' -Default '')
+    authority_required = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
+    authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $false)
     all_summon_blocker_families_consumed = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'all_summon_blocker_families_consumed' -Default $false)
     blockers = [string[]]@($AuthorityBlockers)
   }

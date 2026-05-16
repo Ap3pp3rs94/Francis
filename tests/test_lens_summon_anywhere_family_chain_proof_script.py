@@ -58,6 +58,8 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["authority_granted"] is False
     assert payload["family_chain_observed"] is True
     assert payload["resident_host_family_handoff_observed"] is True
     assert payload["final_summon_authority_handoff_observed"] is True
@@ -108,6 +110,8 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert final_authority["summon_authority_blocker_family"] == "authority"
     assert final_authority["next_summon_blocker_family"] == "stage6_lens_completion_audit"
     assert final_authority["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert final_authority["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert final_authority["authority_granted"] is False
     assert final_authority["all_summon_blocker_families_consumed"] is True
     assert final_authority["blockers"] == [
         "summon_authority_not_granted",
