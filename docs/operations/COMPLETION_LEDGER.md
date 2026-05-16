@@ -29851,6 +29851,41 @@ authority gates:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='recommended_authority_required';Expression={$_.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.recommended_handoff.authority_granted}},@{Name='process_boundary_authority_required';Expression={$_.proof.process_boundary_authority_required}},@{Name='process_boundary_authority_granted';Expression={$_.proof.process_boundary_authority_granted}},@{Name='process_supervision_authority_required';Expression={$_.proof.process_supervision_authority_required}},@{Name='process_supervision_authority_granted';Expression={$_.proof.process_supervision_authority_granted}},@{Name='process_restart_authority_required';Expression={$_.proof.process_restart_authority_required}},@{Name='process_restart_authority_granted';Expression={$_.proof.process_restart_authority_granted}},@{Name='service_install_authority_required';Expression={$_.proof.service_install_authority_required}},@{Name='service_install_authority_granted';Expression={$_.proof.service_install_authority_granted}},@{Name='service_control_authority_required';Expression={$_.proof.service_control_authority_required}},@{Name='service_control_authority_granted';Expression={$_.proof.service_control_authority_granted}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=none_new_stage6_completion_audit; authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; process_boundary_authority_required=process_supervision_and_service_control; process_boundary_authority_granted=false; process_supervision_authority_required=process_supervision_authority; process_supervision_authority_granted=false; process_restart_authority_required=process_restart_authority; process_restart_authority_granted=false; service_install_authority_required=service_install_authority; service_install_authority_granted=false; service_control_authority_required=service_control_authority; service_control_authority_granted=false`
 
+Stage 6 Lens summon resident-host bridge process-handoff readback gate on
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-resident-host-blocker-proof.ps1` so the summon
+  resident-host bridge must observe the resident-host process-supervision
+  handoff proof's explicit `authority_required=none_new_stage6_completion_audit`
+  denial before counting the process handoff as consumed.
+- The bridge now also requires the child proof's `recommended_handoff` to carry
+  the same `authority_required=none_new_stage6_completion_audit` and
+  `authority_granted=false` readback, and projects that recommended handoff
+  inside `resident_host_process_supervision_handoff` for operator/audit
+  inspection.
+- Updated the focused summon resident-host proof test for that child handoff
+  readback contract.
+- This is summon-anywhere resident-host bridge readback hardening only. It does
+  not run or close the full Stage 6 completion audit, does not grant process
+  supervision, process restart, service install/control, summon, hotkey, overlay,
+  resident-claim, memory, approval-decision, receipt, capture, sensing, or
+  mutation authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon resident-host bridge
+process-handoff readback gate:
+
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-resident-host-blocker-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='process_handoff_authority_required';Expression={$_.resident_host_process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.resident_host_process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.resident_host_process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.resident_host_process_supervision_handoff.recommended_handoff.authority_granted}},resident_host_process_supervision_handoff_observed,handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=none_new_stage6_completion_audit; authority_granted=false; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; resident_host_process_supervision_handoff_observed=true; handoff_aligned=true; side_effects_denied=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

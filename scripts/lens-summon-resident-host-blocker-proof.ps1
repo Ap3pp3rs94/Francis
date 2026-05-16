@@ -238,6 +238,7 @@ $HostGovernance = Get-PropertyValue -Payload $HostPayload -Name 'governance'
 $HostProcessHandoffResult = [ordered]@{ exit_code = 0; payload = $null; output = '' }
 $HostProcessHandoffPayload = $null
 $HostProcessHandoffGovernance = $null
+$HostProcessHandoffRecommendedHandoff = $null
 $HostProcessHandoffBlockers = @()
 if ($ConsumeProcessSupervisionHandoff) {
   $HostProcessHandoffResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostProcessSupervisionHandoffProofScript -ScriptArgs @(
@@ -249,6 +250,7 @@ if ($ConsumeProcessSupervisionHandoff) {
   )
   $HostProcessHandoffPayload = $HostProcessHandoffResult.payload
   $HostProcessHandoffGovernance = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'governance'
+  $HostProcessHandoffRecommendedHandoff = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'recommended_handoff'
   $HostProcessHandoffBlockers = ConvertTo-StringArray -Value (
     Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'blockers' -Default @()
   )
@@ -308,6 +310,10 @@ $HostProcessSupervisionHandoffObserved = (
   [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'process_supervision_boundary_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'handoff_consumed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_denied' -Default $false) -and
+  [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'authority_granted' -Default $true) -and
   [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'previous_next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
   [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
   [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'resident_host_process_blocker' -Default '') -eq 'resident_host_process_not_supervised' -and
@@ -504,6 +510,30 @@ $Payload = [ordered]@{
     authority_denied = [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_denied' -Default $false)
     resident_host_process_state = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'resident_host_process_state' -Default '')
     resident_host_process_blocker = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'resident_host_process_blocker' -Default '')
+    recommended_handoff = [ordered]@{
+      id = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'id' -Default '')
+      status = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'status' -Default '')
+      previous_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'previous_next_smallest_truthful_gap' -Default '')
+      next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '')
+      next_step = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'next_step' -Default '')
+      proof_script = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'proof_script' -Default '')
+      route = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'route' -Default '')
+      readiness_route = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'readiness_route' -Default '')
+      acceptance_criterion = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'acceptance_criterion' -Default '')
+      blocker = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'blocker' -Default '')
+      requirement_state = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'requirement_state' -Default '')
+      authority_required = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'authority_required' -Default '')
+      authority_granted = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'authority_granted' -Default $false)
+      read_only_contract = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'read_only_contract' -Default $false)
+      diagnostic_only = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'diagnostic_only' -Default $false)
+      would_execute = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_execute' -Default $false)
+      would_mutate = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_mutate' -Default $false)
+      would_supervise_process = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_supervise_process' -Default $false)
+      would_restart_process = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_restart_process' -Default $false)
+      would_install_service = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_install_service' -Default $false)
+      would_start_service = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_start_service' -Default $false)
+      would_claim_resident = [bool](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'would_claim_resident' -Default $false)
+    }
   }
   resident_host_surface_blockers = [string[]]@($HostSurfaceBlockers)
   checks = @($Checks)
