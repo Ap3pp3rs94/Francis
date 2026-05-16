@@ -753,6 +753,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   recommended_next_slice = [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_step' -Default '')
   recommended_proof_script = [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'proof_script' -Default '')
   authority_required = [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'authority_required' -Default '')
+  authority_granted = [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'authority_granted' -Default $false)
   recommended_handoff = $EnablementFirstMissingRequirementHandoff
   persistent_supervision_plan_readback_observed = $PlanRouteReadbackObserved
   persistent_supervision_enablement_readback_observed = $EnablementRouteReadbackObserved

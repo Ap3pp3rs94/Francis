@@ -28890,6 +28890,41 @@ authority denial readback:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='handoff_authority_required';Expression={$_.handoff.authority_required}},@{Name='handoff_authority_granted';Expression={$_.handoff.authority_granted}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_authority_not_granted; authority_required=persistent_process_supervision_authority; authority_granted=false; handoff_authority_required=persistent_process_supervision_authority; handoff_authority_granted=false`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-persistent-supervision-prerequisites-proof.ps1` so the
+  top-level prerequisites proof now preserves `authority_granted=false` beside
+  `authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites`.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the embedded
+  `persistent_supervision_prerequisites_proof` readback preserves both
+  authority fields and its observed gate rejects an authority-granted child
+  proof.
+- Updated `tests\test_lens_persistent_supervision_prerequisites_proof_script.py`
+  and `tests\test_lens_stage6_completion_audit_script.py` with focused
+  assertions for the direct proof and completion-audit projection.
+- This is persistent-supervision prerequisites readback contract tightening
+  only. It does not run or close the full Stage 6 completion audit, does not
+  grant resident-host process, tray, hotkey, overlay, summon, persistent
+  supervision enablement, execution, resident claim, memory write,
+  receipt write, approval-decision, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens persistent-supervision prerequisites
+authority denial readback:
+
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='handoff_authority_required';Expression={$_.recommended_handoff.authority_required}},@{Name='handoff_authority_granted';Expression={$_.recommended_handoff.authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites; authority_granted=false; handoff_authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites; handoff_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

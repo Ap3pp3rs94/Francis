@@ -497,6 +497,8 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
   [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$PersistentSupervisionPrerequisitesProof.authority_required -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  -not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed -and
@@ -3446,6 +3448,8 @@ $Payload = [ordered]@{
     guard_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap
     family_chain_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap
     next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap
+    authority_required = [string]$PersistentSupervisionPrerequisitesProof.authority_required
+    authority_granted = [bool]$PersistentSupervisionPrerequisitesProof.authority_granted
     persistent_supervision_plan_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed
     persistent_supervision_enablement_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed
     required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_observed

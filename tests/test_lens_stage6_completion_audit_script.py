@@ -126,6 +126,9 @@ def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_mis
         "first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff"
         in script
     )
+    assert "authority_required = [string]$PersistentSupervisionPrerequisitesProof.authority_required" in script
+    assert "authority_granted = [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
+    assert "-not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
 
 
 def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks() -> None:
@@ -2015,6 +2018,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     )
     assert prerequisites_proof["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert prerequisites_proof["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert prerequisites_proof["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert prerequisites_proof["authority_granted"] is False
     assert prerequisites_proof["persistent_supervision_plan_readback_observed"] is True
     assert prerequisites_proof["persistent_supervision_enablement_readback_observed"] is True
     assert prerequisites_proof["required_before_enable_observed"] is True

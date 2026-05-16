@@ -74,6 +74,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     )
     assert payload["recommended_proof_script"] == ("scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status")
     assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["authority_granted"] is False
     assert payload["persistent_supervision_plan_readback_observed"] is True
     assert payload["persistent_supervision_enablement_readback_observed"] is True
     assert payload["required_before_enable_observed"] is True
