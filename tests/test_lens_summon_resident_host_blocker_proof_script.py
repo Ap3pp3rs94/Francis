@@ -51,7 +51,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
         "-HostLaunchRunSeconds",
         "3",
         "-SupervisorRunSeconds",
-        "20",
+        "3",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout

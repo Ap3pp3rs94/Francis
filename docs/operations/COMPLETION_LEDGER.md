@@ -30493,6 +30493,34 @@ narrowing:
 - `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q --durations=8 --durations-min=1`
   Result: `passed; slowest call 146.27s`
 
+Stage 6 Lens direct proof-test supervisor-window narrowing on `2026-05-16`:
+
+- Followed up green GitHub Actions run `25973820484`, which confirmed there are
+  no current `main` CI failures after the Stage 6/Lens Windows hardening
+  sequence. The remaining trend is proof-runtime concentration in the Lens
+  validation tail, especially direct resident-host and summon handoff tests.
+- Narrowed the direct test-harness supervisor observation requests from `20s`
+  to `3s` for the process-supervision authority-boundary proof, resident-host
+  process-supervision handoff proof, and summon resident-host handoff proof.
+  The proof scripts, defaults, live behavior, and authority contracts remain
+  unchanged.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens direct proof-test supervisor-window
+narrowing:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_blocks_supervision_and_service_activation tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff -q --durations=8 --durations-min=1`
+  Result:
+  `passed; slowest calls: summon_resident_host=36.15s, resident_host_process_supervision=32.88s, process_supervision_authority_boundary=12.13s`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

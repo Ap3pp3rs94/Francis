@@ -49,7 +49,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
         "-HostLaunchRunSeconds",
         "3",
         "-SupervisorRunSeconds",
-        "20",
+        "3",
         "-ChildProofTimeoutSeconds",
         "180",
     )
@@ -104,7 +104,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["startup_timeout_seconds"] == 20
     assert payload["foreground_run_seconds"] == 2
     assert payload["host_launch_run_seconds"] == 3
-    assert payload["supervisor_run_seconds"] == 20
+    assert payload["supervisor_run_seconds"] == 3
     assert payload["child_proof_timeout_seconds"] == 180
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
