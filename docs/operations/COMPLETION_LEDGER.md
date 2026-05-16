@@ -30323,6 +30323,41 @@ transition child-data-root hardening:
 - `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper -q`
   Result: `passed; 1 test`
 
+Stage 6 Lens Windows 3.12 live-operator HTTP readback timeout hardening on
+`2026-05-16`:
+
+- Followed up GitHub Actions run `25969364554`, where Windows 3.12 failed in
+  `tests/test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority`.
+- The proof started a temporary API process but failed to read
+  `/lens/status?limit=5`: the payload reported `live_http_status_readback=false`
+  and `status_error="The operation has timed out."`.
+- The same CI job showed Lens status tests taking about 10 seconds under
+  Windows load, while the live-operator proof used a fixed 3-second HTTP
+  request timeout. That made the startup loop too brittle even when the API was
+  alive but the status route was slow.
+- Widened the live-operator proof's per-request HTTP read timeout to a bounded
+  15-30 seconds derived from the startup window and exposed the value in the
+  proof payload. The CI-facing test now uses the full 120-second startup window
+  already allowed by the script and a 420-second wrapper budget.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not create a resident host, tray, hotkey, overlay, summon-anywhere behavior,
+  telemetry, memory writes, service/process authority, approval-decision
+  authority, capture/sensing/window-management authority, or mutation
+  authority, and the truthful next gap remains
+  `resident_surface_runtime_missing`.
+
+Latest validation for the Stage 6 Lens Windows 3.12 live-operator HTTP
+readback timeout hardening:
+
+- PowerShell parser check for `scripts\lens-live-operator-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_live_operator_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_live_operator_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
+  Result: `passed; 1 test`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -136,10 +136,13 @@ function New-Check {
 }
 
 function Invoke-HttpJson {
-  param([string]$Uri)
+  param(
+    [string]$Uri,
+    [int]$TimeoutSeconds = 15
+  )
 
   try {
-    $Payload = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 3
+    $Payload = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec $TimeoutSeconds
     return [ordered]@{
       ok = $true
       payload = $Payload
@@ -161,6 +164,7 @@ function Wait-ForLensStatus {
     [int]$TimeoutSeconds
   )
 
+  $HttpRequestTimeoutSeconds = [Math]::Min(30, [Math]::Max(15, $TimeoutSeconds))
   $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   $LastResult = [ordered]@{
     ok = $false
@@ -175,7 +179,7 @@ function Wait-ForLensStatus {
         error = 'api_process_exited_before_status_readback'
       }
     }
-    $LastResult = Invoke-HttpJson -Uri $Uri
+    $LastResult = Invoke-HttpJson -Uri $Uri -TimeoutSeconds $HttpRequestTimeoutSeconds
     if ([bool](Get-PropertyValue -Payload $LastResult -Name 'ok' -Default $false)) {
       $Payload = Get-PropertyValue -Payload $LastResult -Name 'payload'
       if ([string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq 'lens.status') {
@@ -438,6 +442,7 @@ $Payload = [ordered]@{
   data_root = $ProofDataRoot
   base_url = $BaseUrl
   status_route = '/lens/status?limit=5'
+  http_request_timeout_seconds = [Math]::Min(30, [Math]::Max(15, $StartupTimeoutSeconds))
   live_http_status_readback = $HttpStatusReadback
   operator_experience_proof = $ProofPassed
   helpful_not_noisy_readback = $NotNoisyBoundary
