@@ -48,6 +48,30 @@ function Get-PowerShellPath {
   return ''
 }
 
+function Get-PythonPath {
+  $WindowsVenv = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+  if (Test-Path -LiteralPath $WindowsVenv -PathType Leaf) {
+    & $WindowsVenv --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+      return $WindowsVenv
+    }
+  }
+
+  $UnixVenv = Join-Path $RepoRoot '.venv/bin/python'
+  if (Test-Path -LiteralPath $UnixVenv -PathType Leaf) {
+    & $UnixVenv --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+      return $UnixVenv
+    }
+  }
+
+  $Python = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -ne $Python) {
+    return [string]$Python.Source
+  }
+  return ''
+}
+
 function Get-PropertyValue {
   param(
     [object]$Payload,
@@ -277,6 +301,86 @@ function Invoke-JsonScriptWithProofRetry {
   return $LastProof
 }
 
+function Invoke-ActivationBoundary {
+  param(
+    [string]$PythonPath,
+    [string]$ProofDataRoot
+  )
+
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'python_unavailable'
+      timed_out = $false
+      timeout_seconds = 60
+      duration_ms = 0
+    }
+  }
+
+  $Source = @'
+import json
+
+from francis.lens.activation import lens_resident_surface_activation_boundary
+
+print(json.dumps(lens_resident_surface_activation_boundary(limit=5)))
+'@
+
+  $HadPreviousDataDir = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
+  $TempSourcePath = ''
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($ProofDataRoot)) {
+      $env:FRANCIS_DATA_DIR = $ProofDataRoot
+    }
+    $TempSourcePath = [System.IO.Path]::GetTempFileName()
+    Set-Content -LiteralPath $TempSourcePath -Value $Source -Encoding ASCII
+    $Output = & $PythonPath $TempSourcePath 2>&1
+    $ExitCode = $LASTEXITCODE
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = 60
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  } finally {
+    if (-not [string]::IsNullOrWhiteSpace($TempSourcePath) -and (Test-Path -LiteralPath $TempSourcePath -PathType Leaf)) {
+      Remove-Item -LiteralPath $TempSourcePath -ErrorAction SilentlyContinue
+    }
+    if ($HadPreviousDataDir) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataDir
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
+  $Timer.Stop()
+
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $Payload = $null
+  }
+
+  return [ordered]@{
+    exit_code = $ExitCode
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    timeout_seconds = 60
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+  }
+}
+
 function New-ChildProofRunSummary {
   param(
     [string]$Name,
@@ -326,23 +430,21 @@ function Get-CriterionById {
 }
 
 $PowerShellPath = Get-PowerShellPath
-$ResidentOverlayActivationBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-overlay-activation-boundary-proof.ps1'
+$PythonPath = Get-PythonPath
 $HostSupervisionProofPath = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
-$EffectiveResidentSurfaceForegroundRunSeconds = [Math]::Max(40, $ResidentSurfaceForegroundRunSeconds)
+$ActivationBoundaryDataRoot = [System.IO.Path]::GetFullPath(
+  (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-process-supervision-activation-boundary\" + [guid]::NewGuid().ToString('N') + "\data"))
+)
+$EffectiveResidentSurfaceForegroundRunSeconds = 0
 
-$ActivationBoundaryResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs @(
-  '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
-  '-ResidentSurfaceForegroundRunSeconds', [string]$EffectiveResidentSurfaceForegroundRunSeconds
-) -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
+$ActivationBoundaryResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ActivationBoundaryDataRoot
 $HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
 ) -ExpectedKind 'lens.host.supervision_readiness_proof'
 $ChildProofRuns = @(
-  (New-ChildProofRunSummary -Name 'resident_overlay_activation_boundary' -Result $ActivationBoundaryResult),
+  (New-ChildProofRunSummary -Name 'resident_surface_activation_boundary' -Result $ActivationBoundaryResult),
   (New-ChildProofRunSummary -Name 'host_supervision' -Result $HostSupervisionResult)
 )
 $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
@@ -350,22 +452,27 @@ $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] }
 $ActivationBoundaryPayload = Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'payload'
 $HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
 $ActivationBoundaryGovernance = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'governance'
+$ActivationBoundaryExecution = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'execution'
 $HostSupervisionGovernance = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'governance'
 $HostSupervisionProof = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'proof'
 $ServicePlanBlockedBy = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_plan_blocked_by' -Default @())
 
 $ActivationBoundaryObserved = (
-  [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_overlay_activation_boundary.proof' -and
-  [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'activation_boundary_observed' -Default $false) -and
+  [int](Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_surface.activation_boundary' -and
+  [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'status' -Default '') -eq 'blocked' -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'boundary_ready' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'resident_claim_allowed' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'execution_ready' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_launch_process' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_install_service' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_start_service' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_register_hotkey' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_open_overlay' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_write_memory' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'would_decide_approval' -Default $true)
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'executed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'applied' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_launch_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_install_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_register_hotkey' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_open_overlay' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_decide_approval' -Default $true)
 )
 $HostSupervisionObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
@@ -379,8 +486,8 @@ $ProcessSupervisionDenied = (
   $HostSupervisionObserved -and
   [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'process_supervision_status' -Default '') -in @('blocked', 'enabled') -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervised' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_supervision_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_restart_authority' -Default $true)
+  -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'process_supervision_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'process_restart_authority' -Default $false)
 )
 $ServiceActivationPlanBlocked = (
   $HostSupervisionObserved -and
@@ -396,14 +503,14 @@ $ServiceActivationPlanBlocked = (
 $AuthorityBoundary = (
   $ActivationBoundaryObserved -and
   $HostSupervisionObserved -and
-  [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'boundary_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'diagnostic_only' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'approval_decision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'memory_write' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'resident_overlay_activation_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_restart_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'process_supervision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'activation_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'local_process_launch_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_control_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'tray_registration_authority' -Default $true) -and
@@ -413,7 +520,7 @@ $AuthorityBoundary = (
 )
 
 $Checks = @(
-  (New-Check -Id 'resident_overlay_activation_boundary' -Status $(if ($ActivationBoundaryObserved) { 'activation_boundary_observed' } else { 'failed' }) -Passed $ActivationBoundaryObserved -Evidence 'scripts/lens-resident-overlay-activation-boundary-proof.ps1 -Mode Status' -Reason 'The resident overlay activation boundary must be observed without rerunning the full Stage 6 checkpoint.')
+  (New-Check -Id 'resident_surface_activation_boundary' -Status $(if ($ActivationBoundaryObserved) { 'activation_boundary_observed' } else { 'failed' }) -Passed $ActivationBoundaryObserved -Evidence 'lens_resident_surface_activation_boundary' -Reason 'The resident surface activation denial boundary must be observed without rerunning the full overlay/live-operator proof package.')
   (New-Check -Id 'host_supervision_boundary' -Status $(if ($HostSupervisionObserved) { 'supervision_blocked' } else { 'failed' }) -Passed $HostSupervisionObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The host supervision proof must remain observable and blocked.')
   (New-Check -Id 'process_supervision_denied' -Status $(if ($ProcessSupervisionDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $ProcessSupervisionDenied -Evidence 'process_supervision_authority + process_restart_authority' -Reason 'Resident process supervision and restart authority remain denied.')
   (New-Check -Id 'service_activation_plan_blocked' -Status $(if ($ServiceActivationPlanBlocked) { 'blocked_no_service_activation' } else { 'unexpected_service_activation' }) -Passed $ServiceActivationPlanBlocked -Evidence 'service_plan' -Reason 'The service plan does not install, start, or manage a resident host service.')
@@ -449,6 +556,7 @@ $Payload = [ordered]@{
   supervisor_run_seconds = $SupervisorRunSeconds
   resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
   effective_resident_surface_foreground_run_seconds = $EffectiveResidentSurfaceForegroundRunSeconds
+  activation_boundary_mode = 'direct_resident_surface_activation_boundary'
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
@@ -463,6 +571,7 @@ $Payload = [ordered]@{
   service_control_authority_required = 'service_control_authority'
   service_control_authority_granted = $false
   stage6_checkpoint_observed = $false
+  resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
   resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
   host_supervision_boundary_observed = $HostSupervisionObserved
   process_supervision_boundary_observed = $ProcessSupervisionDenied
@@ -495,10 +604,12 @@ $Payload = [ordered]@{
     checkpoint_stage_state = ''
     checkpoint_system_resident_status = ''
     checkpoint_next_smallest_truthful_gap = ''
+    activation_boundary_source = 'direct_resident_surface_activation_boundary'
     activation_boundary_status = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'status' -Default '')
     activation_boundary_ok = [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'ok' -Default $false)
     activation_boundary_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
-    resident_overlay_boundary_observed = [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'resident_overlay_boundary_observed' -Default $false)
+    resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
+    resident_overlay_boundary_observed = $false
     host_supervision_status = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '')
     host_supervision_ready = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervision_ready' -Default $false)
     host_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'ready_for_resident_claim' -Default $false)
@@ -515,12 +626,14 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     diagnostic_only = $true
     checkpoint_readback = $false
+    resident_surface_activation_boundary_readback = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_readback = $ActivationBoundaryObserved
-    live_http_readback = [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'live_http_readback' -Default $false)
-    temporary_api_process = [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'temporary_api_process' -Default $false)
+    live_http_readback = $false
+    temporary_api_process = $false
     bounded_host_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_host_launch' -Default $false)
     bounded_process_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_process_launch' -Default $false)
     bounded_supervisor_observation = $HostSupervisionObserved
+    resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
     resident_host_supervision_authority_denial_boundary_observed = $false
     resident_host_supervision_authority_denial_receipt_readback_observed = $false
@@ -550,7 +663,7 @@ $Payload = [ordered]@{
     denial_receipt_write_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Stage 6 process supervision authority remains a boundary: overlay activation proof and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.'
+  message = 'Stage 6 process supervision authority remains a boundary: resident surface activation denial and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.'
 }
 
 $Payload | ConvertTo-Json -Depth 10

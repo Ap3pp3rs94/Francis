@@ -30399,6 +30399,58 @@ Latest validation for the Stage 6 Lens CI proof-runtime hardening:
 - `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q --durations=8 --durations-min=1`
   Result: `passed; slowest call 271.94s`
 
+Stage 6 Lens process-supervision activation readback narrowing on
+`2026-05-16`:
+
+- Followed up green GitHub Actions run `25971263882`, which confirmed the prior
+  proof-runtime hardening but still left Stage 6/Lens proof composition as the
+  CI long pole. The slowest remaining paths included the transition plan,
+  prerequisites, summon-anywhere family chain, and the process-supervision
+  authority-boundary proof.
+- Locally measured the process-supervision authority-boundary proof before this
+  change. It passed, but the nested resident-overlay activation-boundary child
+  consumed about 63.78 seconds while host supervision consumed about
+  10.87 seconds. That showed the parent proof was still paying for the full
+  overlay/live-operator activation proof package even though this boundary only
+  needs activation-denial truth plus host-supervision truth.
+- Changed `scripts\lens-process-supervision-authority-boundary-proof.ps1` to
+  read the direct `lens_resident_surface_activation_boundary` denial contract
+  from an isolated temporary data root. The direct resident-overlay activation
+  proof remains unchanged for the surfaces that need full overlay/live-operator
+  evidence.
+- The process-supervision proof now reports
+  `activation_boundary_mode=direct_resident_surface_activation_boundary`,
+  `effective_resident_surface_foreground_run_seconds=0`, and keeps the legacy
+  resident-overlay-observed fields as compatibility aliases for downstream
+  consumers.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and the truthful next gap remains `stage6_lens_completion_audit`.
+
+Latest validation for the Stage 6 Lens process-supervision activation readback
+narrowing:
+
+- PowerShell parser check for
+  `scripts\lens-process-supervision-authority-boundary-proof.ps1`.
+  Result: `passed; parser ok`
+- Direct proof run:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20`
+  Result:
+  `passed; activation_ms=1003; host_supervision_ms=10861; child_proof_timeouts=[]; next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_blocks_supervision_and_service_activation -q --durations=5 --durations-min=1`
+  Result: `passed; slowest call 12.02s`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff -q --durations=5 --durations-min=1`
+  Result: `passed; slowest call 32.87s`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize scripts\lens-process-supervision-authority-boundary-proof.ps1 from LF to CRLF next time Git touches it`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

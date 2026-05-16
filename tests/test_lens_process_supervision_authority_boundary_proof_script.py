@@ -57,15 +57,18 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["mode"] == "status"
+    assert payload["activation_boundary_mode"] == "direct_resident_surface_activation_boundary"
+    assert payload["effective_resident_surface_foreground_run_seconds"] == 0
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
-    assert set(child_proof_runs) == {"resident_overlay_activation_boundary", "host_supervision"}
+    assert set(child_proof_runs) == {"resident_surface_activation_boundary", "host_supervision"}
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 360
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
+    assert child_proof_runs["resident_surface_activation_boundary"]["timeout_seconds"] == 60
+    assert child_proof_runs["host_supervision"]["timeout_seconds"] == 360
     assert payload["authority_required"] == "process_supervision_and_service_control"
     assert payload["authority_granted"] is False
     assert payload["process_supervision_authority_required"] == "process_supervision_authority"
@@ -77,6 +80,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["service_control_authority_required"] == "service_control_authority"
     assert payload["service_control_authority_granted"] is False
     assert payload["stage6_checkpoint_observed"] is False
+    assert payload["resident_surface_activation_boundary_observed"] is True
     assert payload["resident_overlay_activation_boundary_observed"] is True
     assert payload["host_supervision_boundary_observed"] is True
     assert payload["process_supervision_boundary_observed"] is True
@@ -104,7 +108,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["would_decide_approval"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["resident_overlay_activation_boundary"]["status"] == "activation_boundary_observed"
+    assert checks["resident_surface_activation_boundary"]["status"] == "activation_boundary_observed"
     assert checks["host_supervision_boundary"]["status"] == "supervision_blocked"
     assert checks["process_supervision_denied"]["status"] == "blocked"
     assert checks["service_activation_plan_blocked"]["status"] == "blocked_no_service_activation"
@@ -116,13 +120,15 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert proof["checkpoint_stage_state"] == ""
     assert proof["checkpoint_system_resident_status"] == ""
     assert proof["checkpoint_next_smallest_truthful_gap"] == ""
-    assert proof["activation_boundary_status"] in {"proof_passed", "proof_failed"}
-    assert isinstance(proof["activation_boundary_ok"], bool)
+    assert proof["activation_boundary_source"] == "direct_resident_surface_activation_boundary"
+    assert proof["activation_boundary_status"] == "blocked"
+    assert proof["activation_boundary_ok"] is True
     assert (
         proof["activation_boundary_next_smallest_truthful_gap"]
-        == "resident_overlay_activation_checkpoint_consumption_or_process_supervision_authority_boundary"
+        == "approve_resident_runtime_execution_authority_grant_receipt"
     )
-    assert isinstance(proof["resident_overlay_boundary_observed"], bool)
+    assert proof["resident_surface_activation_boundary_observed"] is True
+    assert proof["resident_overlay_boundary_observed"] is False
     assert proof["host_supervision_status"] == "proof_passed"
     assert proof["host_supervision_ready"] is False
     assert proof["host_ready_for_resident_claim"] is False
@@ -143,7 +149,8 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert "service_control_authority_not_granted" in payload["blockers"]
     assert "resident_host_process_not_supervised" in payload["blockers"]
     assert "resident_supervision_disabled" in payload["blockers"]
-    assert "resident_overlay_activation_not_authorized" in payload["blockers"]
+    assert "resident_runtime_execution_authority_not_granted" in payload["blockers"]
+    assert "local_process_launch_authority_not_granted" in payload["blockers"]
     assert "operator_experience_proof_missing" not in payload["blockers"]
     assert "live_operator_experience_proof_missing" not in payload["blockers"]
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
@@ -151,12 +158,14 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     governance = payload["governance"]
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is False
+    assert governance["resident_surface_activation_boundary_readback"] is True
     assert governance["resident_overlay_activation_boundary_readback"] is True
-    assert isinstance(governance["live_http_readback"], bool)
-    assert isinstance(governance["temporary_api_process"], bool)
+    assert governance["live_http_readback"] is False
+    assert governance["temporary_api_process"] is False
     assert governance["bounded_host_launch"] is True
     assert governance["bounded_process_launch"] is True
     assert governance["bounded_supervisor_observation"] is True
+    assert governance["resident_surface_activation_boundary_observed"] is True
     assert governance["resident_overlay_activation_boundary_observed"] is True
     assert governance["resident_host_supervision_authority_denial_boundary_observed"] is False
     assert governance["resident_host_supervision_authority_denial_receipt_readback_observed"] is False
