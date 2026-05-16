@@ -52,6 +52,7 @@ def _write_lens_status(path: Path) -> None:
                     "request_route": "/lens/os-binding/authority/request",
                     "readiness_route": "/lens/os-binding/readiness",
                     "plan_route": "/lens/os-binding/plan",
+                    "authority_required": "os_level_command_palette_binding_authority",
                     "pending_count": 0,
                     "approved_count": 0,
                     "rejected_count": 0,
@@ -220,6 +221,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert authority_request_readback["plan_route"] == "/lens/os-binding/plan"
     assert authority_request_readback["stage6_criterion_status"] == "none"
     assert authority_request_readback["stage6_criterion_readback_ready"] is True
+    assert authority_request_readback["authority_required"] == "os_level_command_palette_binding_authority"
     assert authority_request_readback["pending_count"] == 0
     assert authority_request_readback["approved_count"] == 0
     assert authority_request_readback["total_count"] == 0

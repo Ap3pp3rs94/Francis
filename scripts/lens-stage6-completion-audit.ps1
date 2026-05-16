@@ -1545,6 +1545,7 @@ $OsBindingAuthorityRequestReadbackObserved = (
 )
 $SummonAnywhereBlockersProofGroups = $SummonAnywhereBlockersProof.blocker_groups
 $SummonAnywhereBlockersProofGovernance = $SummonAnywhereBlockersProof.governance
+$SummonAnywhereBlockersProofAuthorityRequestReadback = $SummonAnywhereBlockersProof.os_binding_authority_request_readback
 $SummonAnywhereBlockersProofFamilies = ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families
 $SummonAnywhereBlockersProofResidentHostBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.resident_host
 $SummonAnywhereBlockersProofTrayBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.tray_presence
@@ -1614,6 +1615,7 @@ $SummonAnywhereBlockersProofObserved = (
   [bool]$SummonAnywhereBlockersProof.stage6_family_projection_observed -and
   [bool]$SummonAnywhereBlockersProof.side_effects_denied -and
   [bool]$SummonAnywhereBlockersProof.os_binding_authority_request_readback_observed -and
+  [string]$SummonAnywhereBlockersProofAuthorityRequestReadback.authority_required -eq 'os_level_command_palette_binding_authority' -and
   $SummonAnywhereBlockersProofFirstFamilyHandoffObserved -and
   [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'resident_host' -and
   $SummonAnywhereBlockersProofFamilies -contains 'resident_host' -and
@@ -3061,6 +3063,7 @@ $Payload = [ordered]@{
     plan_route = [string]$OsBindingAuthorityRequestReadback.plan_route
     stage6_criterion_status = [string]$OsBindingAuthorityRequestReadback.stage6_criterion_status
     stage6_criterion_readback_ready = [bool]$OsBindingAuthorityRequestReadback.stage6_criterion_readback_ready
+    authority_required = [string]$OsBindingAuthorityRequestReadback.authority_required
     pending_count = [int]$OsBindingAuthorityRequestReadback.pending_count
     approved_count = [int]$OsBindingAuthorityRequestReadback.approved_count
     rejected_count = [int]$OsBindingAuthorityRequestReadback.rejected_count

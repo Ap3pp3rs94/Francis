@@ -29645,6 +29645,39 @@ required-authority readback gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='os_binding_authority_required';Expression={$_.os_binding_authority_request_readback.authority_required}},@{Name='os_binding_authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='os_binding_authority_ok';Expression={$_.os_binding_authority_request_readback.ok}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; os_binding_authority_required=os_level_command_palette_binding_authority; os_binding_authority_granted=false; os_binding_authority_ok=true`
 
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-anywhere-blockers-proof.ps1` so the
+  summon-anywhere aggregate blocker proof must consume and project
+  `authority_required=os_level_command_palette_binding_authority` from the
+  OS-binding authority request readback before treating that readback as
+  observed.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the completion audit
+  must also observe that nested summon-anywhere proof readback authority, and
+  so the audit payload preserves the same top-level OS-binding
+  `authority_required` field.
+- Updated focused summon-anywhere proof and completion-audit tests for that
+  readback contract.
+- This is completion-audit readback hardening only. It does not create an
+  approval request, grant OS-binding authority, register a hotkey, open the
+  command palette, launch a process, control overlay state, write memory, or
+  mutate system state. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon-anywhere blocker proof
+OS-binding authority required-authority gate:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_anywhere_authority_request_required_authority_gate -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-summon-anywhere-blockers-proof.ps1`
+  and `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='os_binding_authority_required';Expression={$_.os_binding_authority_request_readback.authority_required}},@{Name='os_binding_authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='os_binding_authority_ok';Expression={$_.os_binding_authority_request_readback.ok}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_anywhere_blockers; os_binding_authority_required=os_level_command_palette_binding_authority; os_binding_authority_granted=false; os_binding_authority_ok=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

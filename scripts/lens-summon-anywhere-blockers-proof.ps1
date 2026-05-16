@@ -422,6 +422,7 @@ $OsBindingAuthorityRequestReadbackObserved = (
   [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'readiness_route' -Default '') -eq '/lens/os-binding/readiness' -and
   [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'plan_route' -Default '') -eq '/lens/os-binding/plan' -and
   $OsBindingReadinessAuthorityRequestReady -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_required' -Default '') -eq 'os_level_command_palette_binding_authority' -and
   $OsBindingReadinessAuthorityRequestsRoute -eq '/lens/os-binding/authority/requests' -and
   $OsBindingReadinessAuthorityRequestRoute -eq '/lens/os-binding/authority/request' -and
   $OsBindingReadinessEvidence -contains '/lens/os-binding/authority/requests' -and
@@ -534,6 +535,7 @@ $Payload = [ordered]@{
     plan_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'plan_route' -Default '')
     stage6_criterion_status = $OsBindingReadinessAuthorityRequestStatus
     stage6_criterion_readback_ready = $OsBindingReadinessAuthorityRequestReady
+    authority_required = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_required' -Default '')
     pending_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'pending_count' -Default 0)
     approved_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'approved_count' -Default 0)
     rejected_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'rejected_count' -Default 0)

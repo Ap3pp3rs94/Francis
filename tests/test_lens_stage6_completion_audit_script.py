@@ -408,6 +408,19 @@ def test_lens_stage6_completion_audit_observes_os_binding_authority_request_requ
 
     assert required_gate in script
     assert granted_gate in script
+    assert "authority_required = [string]$OsBindingAuthorityRequestReadback.authority_required" in script
+
+
+def test_lens_stage6_completion_audit_observes_summon_anywhere_authority_request_required_authority_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    required_gate = (
+        "[string]$SummonAnywhereBlockersProofAuthorityRequestReadback.authority_required -eq "
+        "'os_level_command_palette_binding_authority'"
+    )
+
+    assert "$SummonAnywhereBlockersProofAuthorityRequestReadback = " in script
+    assert required_gate in script
 
 
 def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
@@ -1935,6 +1948,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_blockers_proof["governance"]["hotkey_registration_authority"] is False
     assert summon_anywhere_blockers_proof["governance"]["resident_claim_authority"] is False
     assert summon_anywhere_blockers_proof["governance"]["mutation_authority_granted"] is False
+    assert summon_anywhere_blockers_proof["os_binding_authority_request_readback"]["authority_required"] == (
+        "os_level_command_palette_binding_authority"
+    )
 
     summon_authority_blocker_proof = payload["summon_authority_blocker_proof"]
     assert summon_authority_blocker_proof["status"] == "proof_passed"
