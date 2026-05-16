@@ -142,6 +142,8 @@ def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readb
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "authority_required = [string]$ResidentRuntimeHotkeySummonBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentRuntimeHotkeySummonBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$ResidentRuntimeOverlayWindowBoundaryProof.authority_required" in script
     assert "authority_granted = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required" in script
@@ -1292,6 +1294,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_hotkey_boundary["authority_blockers_proof_observed"] is True
     assert runtime_hotkey_boundary["side_effects_denied"] is True
     assert runtime_hotkey_boundary["fourth_authority_family_consumed"] is True
+    assert runtime_hotkey_boundary["authority_required"] == "hotkey_registration_and_summon_authority"
+    assert runtime_hotkey_boundary["authority_granted"] is False
     assert runtime_hotkey_boundary["resident_runtime_execution_authority"] is True
     assert runtime_hotkey_boundary["local_process_launch_authority"] is False
     assert runtime_hotkey_boundary["process_supervision_authority"] is False

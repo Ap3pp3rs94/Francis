@@ -48,6 +48,8 @@ def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None
     assert payload["authority_family"] == "hotkey_summon"
     assert payload["previous_authority_family"] == "tray_presence"
     assert payload["next_authority_family"] == "overlay_window"
+    assert payload["authority_required"] == "hotkey_registration_and_summon_authority"
+    assert payload["authority_granted"] is False
     assert payload["hotkey_summon_boundary_observed"] is True
     assert payload["previous_tray_presence_family_observed"] is True
     assert payload["summon_preflight_observed"] is True
