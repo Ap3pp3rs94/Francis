@@ -28223,6 +28223,44 @@ budget correction:
 - `FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST=1 python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q`
   Result: `passed; 1 test; child proof timeouts empty`
 
+Stage 6 Lens completion-audit first-prerequisite readback projection on
+`2026-05-15`:
+
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the completion-audit
+  payload now projects the consumed persistent-supervision prerequisite proof's
+  first concrete missing prerequisite at top level:
+  `persistent_supervision_first_missing_required_before_enable` and
+  `persistent_supervision_first_missing_requirement_handoff`.
+- The `resident_host_process_supervision_handoff_consumed` recommended handoff
+  now also carries `first_missing_required_before_enable` beside the existing
+  first-missing handoff object, so operators can see that the audited group gap
+  still resolves first to `resident_host_process` without reopening nested proof
+  JSON.
+- Updated `tests\test_lens_stage6_completion_audit_script.py` with a fast
+  static contract check and opt-in full-audit assertions for the next live audit
+  run.
+- This is readback/projection hardening only. It does not run the full Stage 6
+  completion audit in this slice, does not close Stage 6, and does not grant
+  runtime launch, product execution, process supervision, process restart,
+  service install/control, service config write, persistent-supervision
+  enablement/execution, resident claim, memory write, receipt write,
+  approval-decision, tray, hotkey, overlay, summon, capture, sensing, or mutation
+  authority. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens completion-audit first-prerequisite
+readback projection:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback -q`
+  Result: `passed; 5 tests`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

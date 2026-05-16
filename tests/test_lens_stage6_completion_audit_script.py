@@ -98,6 +98,36 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
 
 
+def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+    first_missing_projection = (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable = "
+        "[string]$PersistentSupervisionPrerequisitesProof.first_missing_required_before_enable"
+    )
+
+    assert first_missing_projection in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff = "
+        "$PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff"
+    ) in script
+    assert (
+        "persistent_supervision_first_missing_required_before_enable = "
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable"
+    ) in script
+    assert (
+        "persistent_supervision_first_missing_requirement_handoff = "
+        "$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff"
+    ) in script
+    assert (
+        "first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable"
+        in script
+    )
+    assert (
+        "first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff"
+        in script
+    )
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(
@@ -190,6 +220,14 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     )
     assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["authority_granted"] is False
+    assert payload["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
+    first_missing_handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
+    assert first_missing_handoff["id"] == "resident_host_process"
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert first_missing_handoff["read_only_contract"] is True
+    assert first_missing_handoff["diagnostic_only"] is True
+    assert first_missing_handoff["would_execute"] is False
+    assert first_missing_handoff["would_mutate"] is False
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["status"] == "blocked"
     assert recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
@@ -213,6 +251,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert recommended_handoff["resident_host_supervised"] is False
     assert recommended_handoff["service_installed"] is False
     assert recommended_handoff["service_managed"] is False
+    assert recommended_handoff["first_missing_required_before_enable"] == "resident_host_process"
+    assert recommended_handoff["first_missing_requirement_handoff"] == first_missing_handoff
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
@@ -1906,6 +1946,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     ]
     assert prerequisites_proof["required_before_enable"] == expected_persistent_prerequisites
     assert prerequisites_proof["missing_required_before_enable"] == expected_persistent_prerequisites
+    assert prerequisites_proof["first_missing_required_before_enable"] == "resident_host_process"
+    assert prerequisites_proof["first_missing_requirement_handoff"] == first_missing_handoff
     assert prerequisites_proof["guard_readback"]["observed"] is True
     assert prerequisites_proof["guard_readback"]["blocked_requirements"] == ["required_before_enable"]
     assert prerequisites_proof["guard_readback"]["blockers"] == [

@@ -482,6 +482,8 @@ $PersistentSupervisionPrerequisitesProof = $PersistentSupervisionPrerequisitesPr
 $PersistentSupervisionPrerequisitesProofGovernance = $PersistentSupervisionPrerequisitesProof.governance
 $PersistentSupervisionPrerequisitesRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.required_before_enable
 $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.missing_required_before_enable
+$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable = [string]$PersistentSupervisionPrerequisitesProof.first_missing_required_before_enable
+$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff
 $PersistentSupervisionPrerequisitesProofObserved = (
   [int]$PersistentSupervisionPrerequisitesProofResult.exit_code -eq 0 -and
   [string]$PersistentSupervisionPrerequisitesProof.kind -eq 'lens.persistent_supervision.prerequisites.proof' -and
@@ -2259,7 +2261,8 @@ if (
     resident_host_supervised = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_supervised
     service_installed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_installed
     service_managed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_managed
-    first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff
+    first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
+    first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
@@ -2317,6 +2320,8 @@ $Payload = [ordered]@{
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
+  persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
+  persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
@@ -3428,6 +3433,8 @@ $Payload = [ordered]@{
     side_effects_bounded = [bool]$PersistentSupervisionPrerequisitesProof.side_effects_bounded
     required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesRequiredBeforeEnable)
     missing_required_before_enable = [string[]]@($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable)
+    first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
+    first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
     dependency_readback = @($PersistentSupervisionPrerequisitesProof.dependency_readback)
     family_chain = $PersistentSupervisionPrerequisitesProof.family_chain
     first_missing_requirement_proof = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof
