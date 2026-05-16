@@ -792,6 +792,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "tray_registration_authority"
     )
     assert payload["resident_runtime_authority_boundary"]["tray_registration_authority"] is False
+    assert payload["resident_runtime_authority_boundary"]["overlay_control_authority_required"] == (
+        "overlay_control_authority"
+    )
     assert payload["resident_runtime_authority_boundary"]["overlay_control_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["memory_write"] is False
     assert payload["resident_runtime_authority_boundary"]["receipt_write_authority"] is False

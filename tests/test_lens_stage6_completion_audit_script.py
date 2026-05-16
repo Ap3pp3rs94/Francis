@@ -268,6 +268,18 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_tray_registrati
     assert "tray_registration_authority = $false" in script
 
 
+def test_lens_stage6_completion_audit_preserves_resident_runtime_overlay_control_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$ResidentRuntimeBoundary.overlay_control_authority_required -eq 'overlay_control_authority'" in script
+    )
+    assert (
+        "overlay_control_authority_required = [string]$ResidentRuntimeBoundary.overlay_control_authority_required"
+    ) in script
+    assert "overlay_control_authority = $false" in script
+
+
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -1009,6 +1021,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert resident_runtime_boundary["tray_registration_authority_required"] == "tray_registration_authority"
     assert resident_runtime_boundary["tray_registration_authority"] is False
     assert resident_runtime_boundary["hotkey_registration_authority"] is False
+    assert resident_runtime_boundary["overlay_control_authority_required"] == "overlay_control_authority"
     assert resident_runtime_boundary["overlay_control_authority"] is False
     assert resident_runtime_boundary["memory_write"] is False
     assert resident_runtime_boundary["receipt_write_authority"] is False

@@ -2173,6 +2173,7 @@ $Payload = [ordered]@{
     hotkey_registration_authority = $false
     tray_registration_authority_required = 'tray_registration_authority'
     tray_registration_authority = $false
+    overlay_control_authority_required = 'overlay_control_authority'
     overlay_control_authority = $false
     memory_write = $false
     receipt_write_authority = $false
