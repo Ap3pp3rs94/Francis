@@ -29998,6 +29998,42 @@ handoff readback gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-overlay-window-blocker-proof.ps1 -Mode Status -DataDir data\test_runs\summon-overlay-window-readback | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,previous_tray_presence_bridge_observed,previous_tray_presence_bridge_resident_host_readback_observed,@{Name='previous_tray_next';Expression={$_.previous_tray_presence_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_next';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_authority_required';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.authority_required}},@{Name='previous_resident_host_authority_granted';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.authority_granted}},@{Name='process_handoff_observed';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_granted}},overlay_window_boundary_observed,handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_global_hotkey_binding_blocker_boundary; previous_tray_presence_bridge_observed=true; previous_tray_presence_bridge_resident_host_readback_observed=true; previous_tray_next=summon_overlay_window_blocker_boundary; previous_resident_host_next=stage6_lens_completion_audit; previous_resident_host_authority_required=none_new_stage6_completion_audit; previous_resident_host_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; overlay_window_boundary_observed=true; handoff_aligned=true; side_effects_denied=true`
 
+Stage 6 Lens summon global-hotkey overlay-window handoff readback gate on
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1` so the
+  global-hotkey bridge now requires the previous overlay-window bridge to
+  preserve its tray-presence and resident-host process-supervision readback
+  before moving to the global-hotkey blocker family.
+- The global-hotkey proof now projects the overlay-window bridge's nested
+  tray-presence bridge, resident-host bridge, process-supervision handoff, and
+  recommended handoff, including `authority_required=none_new_stage6_completion_audit`
+  with `authority_granted=false`.
+- Updated the focused summon global-hotkey proof test for that transitive
+  overlay-window to tray-presence to resident-host process-handoff readback
+  contract.
+- This is summon-anywhere global-hotkey bridge readback hardening only. It does
+  not run or close the full Stage 6 completion audit, does not grant process
+  supervision, process restart, service install/control, tray, notification,
+  summon, hotkey, overlay, resident-claim, memory, approval-decision, receipt,
+  capture, sensing, window-management, or mutation authority. Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon global-hotkey overlay-window
+handoff readback gate:
+
+- `python -m pytest tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py::test_lens_summon_global_hotkey_binding_blocker_proof_is_readback_only -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status -DataDir data\test_runs\summon-global-hotkey-readback | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,previous_overlay_window_bridge_observed,previous_overlay_window_bridge_handoff_readback_observed,@{Name='previous_overlay_next';Expression={$_.previous_overlay_window_bridge.next_smallest_truthful_gap}},@{Name='previous_tray_next';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_next';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_authority_required';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.authority_required}},@{Name='previous_resident_host_authority_granted';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.authority_granted}},@{Name='process_handoff_observed';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_granted}},hotkey_summon_boundary_observed,handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_binding_blocker_boundary; previous_overlay_window_bridge_observed=true; previous_overlay_window_bridge_handoff_readback_observed=true; previous_overlay_next=summon_global_hotkey_binding_blocker_boundary; previous_tray_next=summon_overlay_window_blocker_boundary; previous_resident_host_next=stage6_lens_completion_audit; previous_resident_host_authority_required=none_new_stage6_completion_audit; previous_resident_host_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; hotkey_summon_boundary_observed=true; handoff_aligned=true; side_effects_denied=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
