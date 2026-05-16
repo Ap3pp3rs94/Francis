@@ -86,7 +86,8 @@ if ($null -eq $PowerShell) {
 
 $BoundaryArgs = @('-Mode', $Mode)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-  $BoundaryArgs += @('-DataDir', $DataDir)
+  $BoundaryProofDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-runtime-boundary-proof\" + [guid]::NewGuid().ToString('N') + "\data")
+  $BoundaryArgs += @('-DataDir', $BoundaryProofDataRoot)
 }
 
 $BoundaryOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $BoundaryProofScript @BoundaryArgs 2>&1

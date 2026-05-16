@@ -27,12 +27,12 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         _repo_root() / "scripts" / "lens-live-operator-proof.ps1",
         args,
         cwd=_repo_root(),
-        timeout_seconds=90,
+        timeout_seconds=180,
     )
 
 
 def test_lens_live_operator_proof_reads_status_over_http_without_authority() -> None:
-    proc = _run_proof("-Mode", "Status", "-StartupTimeoutSeconds", "20")
+    proc = _run_proof("-Mode", "Status", "-StartupTimeoutSeconds", "60")
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)

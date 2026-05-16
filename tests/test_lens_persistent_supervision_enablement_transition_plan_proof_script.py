@@ -20,6 +20,17 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
+    return max(child_timeout_seconds, 240)
+
+
+def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
+    prerequisites_child_timeout = _prerequisites_child_timeout_seconds(child_timeout_seconds)
+    family_chain_timeout = (prerequisites_child_timeout * 3) + 60
+    first_missing_requirement_timeout = prerequisites_child_timeout
+    return family_chain_timeout + first_missing_requirement_timeout + 60
+
+
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -35,8 +46,22 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
-        timeout=360,
+        timeout=1800,
     )
+
+
+def test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper() -> None:
+    script = (_repo_root() / "scripts" / "lens-persistent-supervision-enablement-transition-plan-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$PrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
+    assert "$PrerequisitesProofFamilyChainChildProofCount = 3" in script
+    assert "$PrerequisitesProofFamilyChainTimeoutSeconds" in script
+    assert "$PrerequisitesProofFirstMissingRequirementTimeoutSeconds" in script
+    assert "$PrerequisitesProofTimeoutSeconds" in script
+    assert "'-ChildProofTimeoutSeconds', [string]$PrerequisitesProofChildTimeoutSeconds" in script
+    assert "-TimeoutSeconds $PrerequisitesProofTimeoutSeconds" in script
 
 
 def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only(
@@ -59,10 +84,16 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
         "resident_claim_boundary",
         "persistent_supervision_plan",
     ]
+    expected_child_timeouts = {
+        "persistent_supervision_prerequisites": _prerequisites_wrapper_timeout_seconds(240),
+        "service_install_plan": 240,
+        "resident_claim_boundary": 240,
+        "persistent_supervision_plan": 240,
+    }
     for run in child_runs:
         assert run["exit_code"] == 0
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 240
+        assert run["timeout_seconds"] == expected_child_timeouts[run["name"]]
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert payload["transition_plan_observed"] is True

@@ -146,3 +146,32 @@ def test_lens_resident_runtime_authority_blockers_proof_splits_combined_gap(
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_resident_runtime_authority_blockers_isolates_boundary_data_root(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-host"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "foreground_running",
+                "pid": 999999,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "lens-host.pid").write_text("999999", encoding="utf-8")
+
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["boundary_proof"]["status"] == "proof_passed"
+    assert payload["boundary_proof"]["ok"] is True
+    assert payload["summary"]["combined_gap_split"] is True

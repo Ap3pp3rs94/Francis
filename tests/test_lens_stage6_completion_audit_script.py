@@ -12,9 +12,8 @@ import pytest
 from powershell_script_runner import run_powershell_script
 
 _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS = 120
-_AUDIT_EXPECTED_SERIAL_CHILD_PROOFS = 18
-_AUDIT_TRANSITION_PLAN_SERIAL_CHILD_PROOFS = 4
 _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS = 60
+_FULL_AUDIT_WRAPPER_OVERHEAD_SECONDS = 180
 _FULL_AUDIT_ENV = "FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST"
 _FULL_AUDIT_TIMEOUT_ENV = "FRANCIS_STAGE6_FULL_COMPLETION_AUDIT_TIMEOUT_SECONDS"
 
@@ -35,14 +34,55 @@ def _full_audit_timeout_seconds(environ: Mapping[str, str] | None = None) -> int
     configured = values.get(_FULL_AUDIT_TIMEOUT_ENV, "").strip()
     if configured:
         return int(configured)
-    serial_child_budget = _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS * _AUDIT_EXPECTED_SERIAL_CHILD_PROOFS
-    return serial_child_budget + 180
+    serial_child_budget = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
+    return serial_child_budget + _FULL_AUDIT_WRAPPER_OVERHEAD_SECONDS
+
+
+def _family_chain_child_timeout_seconds(child_timeout_seconds: int) -> int:
+    return max(child_timeout_seconds, 240)
+
+
+def _family_chain_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
+    return (_family_chain_child_timeout_seconds(child_timeout_seconds) * 3) + 60
+
+
+def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
+    return max(child_timeout_seconds, 240)
+
+
+def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
+    prerequisites_child_timeout = _prerequisites_child_timeout_seconds(child_timeout_seconds)
+    return _family_chain_wrapper_timeout_seconds(prerequisites_child_timeout) + prerequisites_child_timeout + 60
 
 
 def _transition_plan_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
     return (
-        child_timeout_seconds * _AUDIT_TRANSITION_PLAN_SERIAL_CHILD_PROOFS
-    ) + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
+        _prerequisites_wrapper_timeout_seconds(child_timeout_seconds)
+        + (child_timeout_seconds * 3)
+        + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
+    )
+
+
+def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str, int]:
+    return {
+        "summon_anywhere_blockers": child_timeout_seconds,
+        "summon_authority_blocker": _family_chain_child_timeout_seconds(child_timeout_seconds),
+        "summon_anywhere_family_chain": _family_chain_wrapper_timeout_seconds(child_timeout_seconds),
+        "resident_host_runtime_boundary": child_timeout_seconds,
+        "process_supervision_boundary": child_timeout_seconds,
+        "resident_host_process_supervision_blocker": child_timeout_seconds,
+        "resident_supervision_persistence_boundary": min(child_timeout_seconds, 240),
+        "host_supervision_authority_request": child_timeout_seconds,
+        "persistent_supervision_plan": child_timeout_seconds,
+        "persistent_supervision_prerequisites": _prerequisites_wrapper_timeout_seconds(child_timeout_seconds),
+        "persistent_supervision_service_install_plan": child_timeout_seconds,
+        "persistent_supervision_enablement_authority": child_timeout_seconds,
+        "persistent_supervision_execution_authority": child_timeout_seconds,
+        "persistent_supervision_resident_claim_boundary": child_timeout_seconds,
+        "persistent_supervision_enablement_transition_plan": _transition_plan_wrapper_timeout_seconds(
+            child_timeout_seconds
+        ),
+    }
 
 
 def _arm_full_audit_faulthandler_timeout() -> None:
@@ -83,7 +123,7 @@ def test_lens_stage6_completion_audit_projects_recommended_authority_grant_state
 
 
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
-    expected_minimum = _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS * _AUDIT_EXPECTED_SERIAL_CHILD_PROOFS
+    expected_minimum = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
 
     assert _full_audit_timeout_seconds({}) >= expected_minimum
     assert _full_audit_timeout_seconds({_FULL_AUDIT_TIMEOUT_ENV: "777"}) == 777
@@ -92,10 +132,32 @@ def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget()
 def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
-    assert "$PersistentSupervisionEnablementTransitionPlanProofChildProofCount = 4" in script
-    assert "$ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofChildProofCount" in script
-    assert "'-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds" in script
+    assert (
+        "$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)"
+        in script
+    )
+    assert "$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 3" in script
+    assert "$PersistentSupervisionPrerequisitesProofTimeoutSeconds" in script
+    assert "[string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds" in script
+    assert (
+        "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesChildTimeoutSeconds = "
+        "[Math]::Max($ChildProofTimeoutSeconds, 240)" in script
+    )
+    assert "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainChildProofCount = 3" in script
+    assert "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" in script
+    assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
+    assert (
+        "$ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount"
+        in script
+    )
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
+    assert "$SummonAnywhereFamilyChainProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
+    assert "$SummonAnywhereFamilyChainProofChildProofCount = 3" in script
+    assert (
+        "$SummonAnywhereFamilyChainProofChildTimeoutSeconds * $SummonAnywhereFamilyChainProofChildProofCount"
+    ) in script
+    assert "'-ChildProofTimeoutSeconds', [string]$SummonAnywhereFamilyChainProofChildTimeoutSeconds" in script
+    assert "-TimeoutSeconds $SummonAnywhereFamilyChainProofTimeoutSeconds" in script
 
 
 def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback() -> None:
@@ -651,13 +713,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "persistent_supervision_resident_claim_boundary",
         "persistent_supervision_enablement_transition_plan",
     }
-    expected_child_proof_timeouts = {name: _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS for name in child_proof_runs} | {
-        "resident_supervision_persistence_boundary": min(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS, 240),
-        "persistent_supervision_prerequisites": min(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS, 240),
-        "persistent_supervision_enablement_transition_plan": _transition_plan_wrapper_timeout_seconds(
-            _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS
-        ),
-    }
+    expected_child_proof_timeouts = _expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS)
     for name, run in child_proof_runs.items():
         assert run["timed_out"] is False
         assert run["timeout_seconds"] == expected_child_proof_timeouts[name]
@@ -2220,10 +2276,13 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["family_chain_observed"] is True
     assert summon_anywhere_family_chain_proof["resident_host_family_handoff_observed"] is True
     assert summon_anywhere_family_chain_proof["final_summon_authority_handoff_observed"] is True
+    assert summon_anywhere_family_chain_proof["final_summon_authority_handoff_readback_observed"] is True
     assert summon_anywhere_family_chain_proof["all_summon_blocker_families_consumed"] is True
     assert summon_anywhere_family_chain_proof["handoff_aligned"] is True
     assert summon_anywhere_family_chain_proof["side_effects_denied"] is True
-    assert summon_anywhere_family_chain_proof["child_proof_timeout_seconds"] == _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS
+    assert summon_anywhere_family_chain_proof["child_proof_timeout_seconds"] == _family_chain_child_timeout_seconds(
+        _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS
+    )
     assert summon_anywhere_family_chain_proof["child_proof_timeouts"] == []
     family_child_proof_runs = {item["name"]: item for item in summon_anywhere_family_chain_proof["child_proof_runs"]}
     assert set(family_child_proof_runs) == {
@@ -2233,7 +2292,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     }
     for run in family_child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == _AUDIT_CHILD_PROOF_TIMEOUT_SECONDS
+        assert run["timeout_seconds"] == _family_chain_child_timeout_seconds(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS)
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert summon_anywhere_family_chain_proof["blocked_families"] == expected_summon_family_ids
@@ -2280,12 +2339,61 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert family_chain_final_authority["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert family_chain_final_authority["authority_granted"] is False
     assert family_chain_final_authority["all_summon_blocker_families_consumed"] is True
+    assert family_chain_final_authority["previous_summon_binding_bridge_handoff_readback_observed"] is True
+    family_chain_previous_binding = family_chain_final_authority["previous_binding_handoff"]
+    assert family_chain_previous_binding["status"] == "proof_passed"
+    assert family_chain_previous_binding["previous_summon_blocker_family"] == "global_hotkey_binding"
+    assert family_chain_previous_binding["summon_binding_blocker_family"] == "summon_binding"
+    assert family_chain_previous_binding["next_summon_blocker_family"] == "authority"
+    assert family_chain_previous_binding["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
+    assert family_chain_previous_binding["handoff_aligned"] is True
+    assert family_chain_previous_binding["side_effects_denied"] is True
+    assert family_chain_previous_binding["previous_global_hotkey_bridge_handoff_readback_observed"] is True
+    family_chain_previous_global = family_chain_previous_binding["previous_global_hotkey_bridge"]
+    assert family_chain_previous_global["status"] == "proof_passed"
+    assert family_chain_previous_global["next_summon_blocker_family"] == "summon_binding"
+    assert family_chain_previous_global["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
+    assert family_chain_previous_global["previous_overlay_window_bridge_handoff_readback_observed"] is True
+    family_chain_previous_overlay = family_chain_previous_global["previous_overlay_window_bridge"]
+    assert family_chain_previous_overlay["status"] == "proof_passed"
+    assert family_chain_previous_overlay["next_summon_blocker_family"] == "global_hotkey_binding"
+    assert family_chain_previous_overlay["next_smallest_truthful_gap"] == (
+        "summon_global_hotkey_binding_blocker_boundary"
+    )
+    assert family_chain_previous_overlay["previous_tray_presence_bridge_resident_host_readback_observed"] is True
+    family_chain_previous_tray = family_chain_previous_overlay["previous_tray_presence_bridge"]
+    assert family_chain_previous_tray["status"] == "proof_passed"
+    assert family_chain_previous_tray["next_summon_blocker_family"] == "overlay_window"
+    assert family_chain_previous_tray["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert family_chain_previous_tray["previous_resident_host_bridge_observed"] is True
+    family_chain_previous_resident_host = family_chain_previous_tray["previous_resident_host_bridge"]
+    assert family_chain_previous_resident_host["status"] == "proof_passed"
+    assert family_chain_previous_resident_host["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert family_chain_previous_resident_host["authority_required"] == "none_new_stage6_completion_audit"
+    assert family_chain_previous_resident_host["authority_granted"] is False
+    assert family_chain_previous_resident_host["process_supervision_handoff_observed"] is True
+    family_chain_previous_process = family_chain_previous_resident_host["process_supervision_handoff"]
+    assert family_chain_previous_process["authority_required"] == "none_new_stage6_completion_audit"
+    assert family_chain_previous_process["authority_granted"] is False
+    family_chain_previous_recommended = family_chain_previous_process["recommended_handoff"]
+    assert family_chain_previous_recommended["authority_required"] == "none_new_stage6_completion_audit"
+    assert family_chain_previous_recommended["authority_granted"] is False
+    assert family_chain_previous_recommended["read_only_contract"] is True
+    assert family_chain_previous_recommended["diagnostic_only"] is True
+    assert family_chain_previous_recommended["would_execute"] is False
+    assert family_chain_previous_recommended["would_mutate"] is False
+    assert family_chain_previous_recommended["would_supervise_process"] is False
+    assert family_chain_previous_recommended["would_restart_process"] is False
+    assert family_chain_previous_recommended["would_install_service"] is False
+    assert family_chain_previous_recommended["would_start_service"] is False
+    assert family_chain_previous_recommended["would_claim_resident"] is False
     assert "summon_authority_not_granted" in family_chain_final_authority["blockers"]
     family_chain_governance = summon_anywhere_family_chain_proof["governance"]
     assert family_chain_governance["diagnostic_only"] is True
     assert family_chain_governance["wraps_summon_anywhere_blockers_proof"] is True
     assert family_chain_governance["wraps_summon_resident_host_blocker_proof"] is True
     assert family_chain_governance["wraps_summon_authority_blocker_proof"] is True
+    assert family_chain_governance["final_authority_previous_handoff_readback"] is True
     assert family_chain_governance["read_only_contract"] is True
     assert family_chain_governance["bounded_local_process_launch"] is True
     assert family_chain_governance["temporary_runtime_state_write"] is True

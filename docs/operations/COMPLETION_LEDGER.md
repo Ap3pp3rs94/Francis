@@ -30152,6 +30152,55 @@ handoff readback gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -DataDir data\test_runs\summon-family-chain-readback -ChildProofTimeoutSeconds 240 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,final_summon_authority_handoff_observed,final_summon_authority_handoff_readback_observed,@{Name='final_authority_next';Expression={$_.final_authority.next_smallest_truthful_gap}},@{Name='previous_binding_next';Expression={$_.final_authority.previous_binding_handoff.next_smallest_truthful_gap}},@{Name='previous_global_next';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.next_smallest_truthful_gap}},@{Name='previous_overlay_next';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.next_smallest_truthful_gap}},@{Name='previous_tray_next';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_next';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.next_smallest_truthful_gap}},@{Name='previous_resident_host_authority_required';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.authority_required}},@{Name='previous_resident_host_authority_granted';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.authority_granted}},@{Name='process_handoff_observed';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.final_authority.previous_binding_handoff.previous_global_hotkey_bridge.previous_overlay_window_bridge.previous_tray_presence_bridge.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_granted}},handoff_aligned,side_effects_denied,child_proof_timeout_seconds,child_proof_timeouts | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; final_summon_authority_handoff_observed=true; final_summon_authority_handoff_readback_observed=true; final_authority_next=stage6_lens_completion_audit; previous_binding_next=summon_authority_blocker_boundary; previous_global_next=summon_binding_blocker_boundary; previous_overlay_next=summon_global_hotkey_binding_blocker_boundary; previous_tray_next=summon_overlay_window_blocker_boundary; previous_resident_host_next=stage6_lens_completion_audit; previous_resident_host_authority_required=none_new_stage6_completion_audit; previous_resident_host_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; handoff_aligned=true; side_effects_denied=true; child_proof_timeout_seconds=240; child_proof_timeouts=[]`
 
+Stage 6 Lens CI proof-budget and parent-data-root hardening on `2026-05-16`:
+
+- Investigated GitHub Actions run `25961971109`, where all pytest matrix jobs
+  failed after commit `46fbb69f`; the shared failure pattern was stale
+  proof-timeout budgeting around persistent-supervision prerequisites and
+  enablement transition readback, with an additional Windows live-operator
+  startup/readback fragility.
+- Updated the persistent-supervision prerequisites proof to isolate the nested
+  summon family-chain data root and budget the family-chain wrapper as three
+  serial children at a minimum 240 seconds plus wrapper overhead. The projected
+  family-chain result now reports its actual wrapper timeout.
+- Updated the persistent-supervision enablement transition proof and Stage 6
+  completion audit wrapper budgets so the prerequisites proof is treated as a
+  nested wrapper, not as a single flat child proof.
+- Updated the resident-runtime authority blockers proof so its granted-boundary
+  child uses an isolated short temp data root. This prevents stale parent
+  runtime files from causing false `no_runtime_started` failures and avoids
+  Windows long-path failures in nested pytest data roots.
+- Updated the live-operator pytest harness to allow a 60-second API startup
+  readback window for Windows CI while preserving the real HTTP readback
+  requirement.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, service, tray, hotkey, overlay, summon, memory,
+  approval-decision, receipt, capture, sensing, window-management, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens CI proof-budget and parent-data-root
+hardening:
+
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-authority-blockers-proof.ps1`,
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1`,
+  `scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1`,
+  and `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_resident_runtime_authority_blockers_proof_script.py tests\test_lens_live_operator_proof_script.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_lens_resident_runtime_authority_blockers_proof_script.py::test_lens_resident_runtime_authority_blockers_proof_splits_combined_gap tests\test_lens_resident_runtime_authority_blockers_proof_script.py::test_lens_resident_runtime_authority_blockers_isolates_boundary_data_root tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper -q`
+  Result: `passed; 6 tests`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status -DataDir <temp> -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=proof_passed; family_chain.status=proof_passed; family_chain.timeout_seconds=780; child proof timeouts empty; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=proof_passed; child_proof_timeouts=[]; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status -StartupTimeoutSeconds 60`
+  Result: `passed; status=proof_passed; live_http_status_readback=true; operator_experience_proof=true; resident_surface_content_readback=true; next_smallest_truthful_gap=resident_surface_runtime_missing`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
+  Result: `passed; 3 tests`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

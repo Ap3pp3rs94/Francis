@@ -222,10 +222,19 @@ if ([string]::IsNullOrWhiteSpace($ProofDataDir)) {
   $ProofDataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-persistent-supervision-enablement-transition-plan-proof\" + [guid]::NewGuid().ToString('N') + "\data")
 }
 $ProofDataDir = [System.IO.Path]::GetFullPath($ProofDataDir)
+$PrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
+$PrerequisitesProofFamilyChainChildProofCount = 3
+$PrerequisitesProofFamilyChainTimeoutSeconds = (
+  $PrerequisitesProofChildTimeoutSeconds * $PrerequisitesProofFamilyChainChildProofCount
+) + 60
+$PrerequisitesProofFirstMissingRequirementTimeoutSeconds = $PrerequisitesProofChildTimeoutSeconds
+$PrerequisitesProofTimeoutSeconds = (
+  $PrerequisitesProofFamilyChainTimeoutSeconds + $PrerequisitesProofFirstMissingRequirementTimeoutSeconds
+) + 60
 
 try {
   $env:FRANCIS_DATA_DIR = $ProofDataDir
-  $PrerequisitesResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $PrerequisitesProofScript -ScriptArgs @('-Mode', $Mode, '-DataDir', $ProofDataDir, '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds) -TimeoutSeconds $ChildProofTimeoutSeconds
+  $PrerequisitesResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $PrerequisitesProofScript -ScriptArgs @('-Mode', $Mode, '-DataDir', $ProofDataDir, '-ChildProofTimeoutSeconds', [string]$PrerequisitesProofChildTimeoutSeconds) -TimeoutSeconds $PrerequisitesProofTimeoutSeconds
   $ServicePlanResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ServicePlanProofScript -ScriptArgs @('-Mode', $Mode) -TimeoutSeconds $ChildProofTimeoutSeconds
   $ResidentClaimResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentClaimBoundaryProofScript -ScriptArgs @('-Mode', $Mode, '-DataDir', $ProofDataDir) -TimeoutSeconds $ChildProofTimeoutSeconds
   $PlanResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $PersistentSupervisionPlanScript -ScriptArgs @('-Mode', $Mode) -TimeoutSeconds $ChildProofTimeoutSeconds

@@ -435,17 +435,35 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
-$FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
-  '-NoProfile',
-  '-ExecutionPolicy',
-  'Bypass',
-  '-File',
-  $FamilyChainScript,
-  '-Mode',
-  'Status',
-  '-DataDir',
-  $ProofDataRoot
-) -TimeoutSeconds $ChildProofTimeoutSeconds
+$FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
+$FamilyChainChildProofCount = 3
+$FamilyChainTimeoutSeconds = (
+  $FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount
+) + 60
+$FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\summon-anywhere-family-chain\data'
+$BeforeFamilyChainDataDir = [string]$env:FRANCIS_DATA_DIR
+try {
+  $env:FRANCIS_DATA_DIR = $FamilyChainProofDataRoot
+  $FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    $FamilyChainScript,
+    '-Mode',
+    'Status',
+    '-DataDir',
+    $FamilyChainProofDataRoot,
+    '-ChildProofTimeoutSeconds',
+    [string]$FamilyChainChildProofTimeoutSeconds
+  ) -TimeoutSeconds $FamilyChainTimeoutSeconds
+} finally {
+  if ([string]::IsNullOrWhiteSpace($BeforeFamilyChainDataDir)) {
+    Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+  } else {
+    $env:FRANCIS_DATA_DIR = $BeforeFamilyChainDataDir
+  }
+}
 $FirstMissingRequirementProofDataRoot = Join-Path $ProofDataRoot 'proofs\resident-host-runtime-boundary\data'
 $BeforeFirstMissingRequirementDataDir = [string]$env:FRANCIS_DATA_DIR
 try {
@@ -778,6 +796,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     status = if ($FamilyChainObserved) { [string](Get-PropertyValue -Payload $FamilyChain -Name 'status' -Default '') } else { 'missing_or_failed' }
     exit_code = [int]$FamilyChainResult.exit_code
     timed_out = [bool]$FamilyChainResult.timed_out
+    timeout_seconds = [int]$FamilyChainResult.timeout_seconds
     duration_ms = [int]$FamilyChainResult.duration_ms
     blocked_families = [string[]]@($FamilyChainFamilies)
     handoff_count = @($FamilyChainHandoffs).Count

@@ -19,6 +19,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _family_chain_child_timeout_seconds(child_timeout_seconds: int) -> int:
+    return max(child_timeout_seconds, 240)
+
+
+def _family_chain_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
+    return (_family_chain_child_timeout_seconds(child_timeout_seconds) * 3) + 60
+
+
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -34,8 +42,23 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
-        timeout=210,
+        timeout=1200,
     )
+
+
+def test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper() -> None:
+    script = (_repo_root() / "scripts" / "lens-persistent-supervision-prerequisites-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
+    assert "$FamilyChainChildProofCount = 3" in script
+    assert "$FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount" in script
+    assert "$FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\\summon-anywhere-family-chain\\data'" in script
+    assert "$env:FRANCIS_DATA_DIR = $FamilyChainProofDataRoot" in script
+    assert "'-ChildProofTimeoutSeconds'," in script
+    assert "[string]$FamilyChainChildProofTimeoutSeconds" in script
+    assert "-TimeoutSeconds $FamilyChainTimeoutSeconds" in script
 
 
 def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
@@ -161,6 +184,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert family_chain["status"] == "proof_passed"
     assert family_chain["exit_code"] == 0
     assert family_chain["timed_out"] is False
+    assert family_chain["timeout_seconds"] == _family_chain_wrapper_timeout_seconds(180)
     assert family_chain["blocked_families"] == [
         "resident_host",
         "tray_presence",
