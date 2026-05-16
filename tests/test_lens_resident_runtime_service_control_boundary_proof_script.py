@@ -53,6 +53,8 @@ def test_lens_resident_runtime_service_control_boundary_is_readback_only() -> No
     assert payload["authority_blockers_proof_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["second_authority_family_consumed"] is True
+    assert payload["authority_required"] == "service_control_authority"
+    assert payload["authority_granted"] is False
     assert payload["resident_runtime_execution_authority"] is True
     assert payload["local_process_launch_authority"] is False
     assert payload["process_supervision_authority"] is False
