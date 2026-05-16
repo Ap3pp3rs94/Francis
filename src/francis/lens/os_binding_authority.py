@@ -2182,6 +2182,7 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "active_grant_receipt_id": active_grant_id,
         "decision_route": "/approvals/decision",
         "approval_action": LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION,
+        "authority_required": "os_level_command_palette_binding_authority",
         "pending_count": counts.get("pending", 0),
         "approved_count": counts.get("approved", 0),
         "rejected_count": counts.get("rejected", 0),

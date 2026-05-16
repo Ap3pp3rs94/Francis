@@ -29613,6 +29613,38 @@ child-proof authority observation gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='resident_claim_authority_required';Expression={$_.resident_runtime_resident_claim_boundary_proof.authority_required}},@{Name='resident_claim_authority_granted';Expression={$_.resident_runtime_resident_claim_boundary_proof.authority_granted}},@{Name='resident_claim_boundary_ok';Expression={$_.resident_runtime_resident_claim_boundary_proof.ok}} | ConvertTo-Json -Depth 6`
   Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; resident_claim_authority_required=resident_claim_authority; resident_claim_authority_granted=false; resident_claim_boundary_ok=true`
 
+`2026-05-16`:
+
+- Updated `src\francis\lens\os_binding_authority.py` and
+  `src\francis\lens\preflight.py` so the Lens OS-binding authority request
+  readback explicitly carries and preserves
+  `authority_required=os_level_command_palette_binding_authority`.
+- Updated `scripts\lens-stage6-checkpoint.ps1` so the Stage 6 checkpoint
+  projects that required-authority readback, and updated
+  `scripts\lens-stage6-completion-audit.ps1` so the completion audit must
+  observe it before counting the OS-binding authority request readback.
+- Updated focused API, checkpoint, and completion-audit tests for that
+  readback contract.
+- This is completion-audit readback hardening only. It does not create an
+  approval request, grant OS-binding authority, register a hotkey, open the
+  command palette, launch a process, control overlay state, write memory, or
+  mutate system state. Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens OS-binding authority request
+required-authority readback gate:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_os_binding_authority_request_creates_approval_only_readback tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_authority_grant_writes_receipt_without_binding tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_os_binding_authority_request_required_authority_gate -q`
+  Result: `passed; 5 tests`
+- `python -m ruff check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py src\francis\lens\preflight.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_stage6_checkpoint_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='os_binding_authority_required';Expression={$_.os_binding_authority_request_readback.authority_required}},@{Name='os_binding_authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='os_binding_authority_ok';Expression={$_.os_binding_authority_request_readback.ok}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked; next_smallest_truthful_gap=stage6_lens_completion_audit; os_binding_authority_required=os_level_command_palette_binding_authority; os_binding_authority_granted=false; os_binding_authority_ok=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

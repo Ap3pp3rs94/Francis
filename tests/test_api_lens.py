@@ -1125,6 +1125,7 @@ def test_lens_os_binding_authority_request_creates_approval_only_readback(
     assert readback_body["total_count"] == 1
     assert readback_body["latest"]["id"] == approval_id
     assert readback_body["latest"]["action"] == "lens.os_binding.command_palette_binding_authority"
+    assert readback_body["authority_required"] == "os_level_command_palette_binding_authority"
     assert readback_body["authority_granted"] is False
     assert readback_body["os_level_command_palette_binding_authority"] is False
     assert readback_body["os_level_command_palette"] is False
@@ -1149,6 +1150,7 @@ def test_lens_os_binding_authority_request_creates_approval_only_readback(
     assert readiness_authority["readback_ready"] is True
     assert readiness_authority["pending_count"] == 1
     assert readiness_authority["approved_count"] == 0
+    assert readiness_authority["authority_required"] == "os_level_command_palette_binding_authority"
     assert readiness_authority["total_count"] == 1
     assert readiness_authority["latest_approval_id"] == approval_id
     assert readiness_authority["authority_granted"] is False
@@ -1805,6 +1807,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding_authority_requests["pending_count"] == 0
     assert os_binding_authority_requests["approved_count"] == 0
     assert os_binding_authority_requests["total_count"] == 0
+    assert os_binding_authority_requests["authority_required"] == "os_level_command_palette_binding_authority"
     assert os_binding_authority_requests["authority_granted"] is False
     assert os_binding_authority_requests["os_level_command_palette_binding_authority"] is False
     assert body["command_palette"]["status"] == "readback_ready"
@@ -1858,10 +1861,16 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert os_binding["authority_request_readback"]["readback_ready"] is True
     assert os_binding["authority_request_readback"]["pending_count"] == 0
     assert os_binding["authority_request_readback"]["total_count"] == 0
+    assert (
+        os_binding["authority_request_readback"]["authority_required"] == "os_level_command_palette_binding_authority"
+    )
     assert os_binding["authority_request_readback"]["authority_granted"] is False
     os_binding_requirements = {item["id"]: item for item in os_binding["requirements"]}
     assert os_binding_requirements["authority_request_readback"]["ready"] is True
     assert os_binding_requirements["authority_request_readback"]["route"] == "/lens/os-binding/authority/requests"
+    assert os_binding_requirements["authority_request_readback"]["authority_required"] == (
+        "os_level_command_palette_binding_authority"
+    )
     assert os_binding_requirements["os_level_command_palette"]["readback_ready"] is True
     assert os_binding_requirements["os_level_command_palette"]["source_route"] == "/lens/status"
     assert os_binding["command_palette_contract"]["readback_ready"] is True

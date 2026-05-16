@@ -1387,6 +1387,10 @@ def _os_binding_authority_request_summary(readback: dict[str, Any] | None) -> di
         "readiness_route": _safe_str(payload.get("readiness_route"), "/lens/os-binding/readiness"),
         "plan_route": _safe_str(payload.get("plan_route"), "/lens/os-binding/plan"),
         "active_grant_receipt_id": _safe_str(payload.get("active_grant_receipt_id")).strip(),
+        "authority_required": _safe_str(
+            payload.get("authority_required"),
+            "os_level_command_palette_binding_authority",
+        ),
         "pending_count": _int_value(payload.get("pending_count")),
         "approved_count": _int_value(payload.get("approved_count")),
         "rejected_count": _int_value(payload.get("rejected_count")),

@@ -2872,6 +2872,7 @@ $Payload = [ordered]@{
     plan_route = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'plan_route' -Default '')
     stage6_criterion_status = $OsBindingReadinessAuthorityRequestStatus
     stage6_criterion_readback_ready = $OsBindingReadinessAuthorityRequestReady
+    authority_required = [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_required' -Default '')
     pending_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'pending_count' -Default 0)
     approved_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'approved_count' -Default 0)
     rejected_count = [int](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'rejected_count' -Default 0)

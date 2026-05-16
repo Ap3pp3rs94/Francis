@@ -1527,6 +1527,7 @@ $OsBindingAuthorityRequestReadbackObserved = (
   [string]$OsBindingAuthorityRequestReadback.readiness_route -eq '/lens/os-binding/readiness' -and
   [string]$OsBindingAuthorityRequestReadback.plan_route -eq '/lens/os-binding/plan' -and
   [bool]$OsBindingAuthorityRequestReadback.stage6_criterion_readback_ready -and
+  [string]$OsBindingAuthorityRequestReadback.authority_required -eq 'os_level_command_palette_binding_authority' -and
   -not [bool]$OsBindingAuthorityRequestReadback.authority_granted -and
   -not [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette_binding_authority -and
   -not [bool]$OsBindingAuthorityRequestReadback.os_level_command_palette -and

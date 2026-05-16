@@ -323,6 +323,7 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     authority_readback = readiness["authority_request_readback"]
     assert authority_readback["status"] == "authority_granted"
     assert authority_readback["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert authority_readback["authority_required"] == "os_level_command_palette_binding_authority"
     assert authority_readback["authority_granted"] is True
     assert authority_readback["os_level_command_palette_binding_authority"] is True
     assert readiness["authority_granted"] is True

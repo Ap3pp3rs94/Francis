@@ -398,6 +398,18 @@ def test_lens_stage6_completion_audit_observes_resident_runtime_resident_claim_a
     assert granted_gate in script
 
 
+def test_lens_stage6_completion_audit_observes_os_binding_authority_request_required_authority_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    required_gate = (
+        "[string]$OsBindingAuthorityRequestReadback.authority_required -eq 'os_level_command_palette_binding_authority'"
+    )
+    granted_gate = "-not [bool]$OsBindingAuthorityRequestReadback.authority_granted"
+
+    assert required_gate in script
+    assert granted_gate in script
+
+
 def test_lens_stage6_completion_audit_preserves_process_supervision_handoff_authority_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -1851,6 +1863,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert authority_request_readback["plan_route"] == "/lens/os-binding/plan"
     assert authority_request_readback["stage6_criterion_status"] == "none"
     assert authority_request_readback["stage6_criterion_readback_ready"] is True
+    assert authority_request_readback["authority_required"] == "os_level_command_palette_binding_authority"
     assert authority_request_readback["pending_count"] == 0
     assert authority_request_readback["approved_count"] == 0
     assert authority_request_readback["total_count"] == 0
