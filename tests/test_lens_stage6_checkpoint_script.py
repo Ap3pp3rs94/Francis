@@ -772,6 +772,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "service_control_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
     assert "tray_registration_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
     assert "overlay_control_authority_not_granted" in payload["resident_runtime_authority_boundary"]["blockers"]
+    assert payload["resident_runtime_authority_boundary"]["resident_runtime_execution_authority_required"] == (
+        "resident_runtime_execution_authority"
+    )
+    assert payload["resident_runtime_authority_boundary"]["resident_runtime_execution_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["execution_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["approval_decision_authority"] is False
     assert payload["resident_runtime_authority_boundary"]["local_process_launch_authority_required"] == (

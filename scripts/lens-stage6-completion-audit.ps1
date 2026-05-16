@@ -1084,6 +1084,8 @@ $ResidentRuntimeBoundaryObserved = (
   [string]$ResidentRuntimeBoundary.status -ne 'missing' -and
   -not [bool]$ResidentRuntimeBoundary.applied -and
   -not [bool]$ResidentRuntimeBoundary.executed -and
+  [string]$ResidentRuntimeBoundary.resident_runtime_execution_authority_required -eq 'resident_runtime_execution_authority' -and
+  $ResidentRuntimeBoundaryBlockers -contains 'resident_runtime_execution_authority_not_granted' -and
   [string]$ResidentRuntimeBoundary.local_process_launch_authority_required -eq 'local_process_launch_authority' -and
   $ResidentRuntimeBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string]$ResidentRuntimeBoundary.process_supervision_authority_required -eq 'process_supervision_authority' -and
@@ -2618,6 +2620,7 @@ $Payload = [ordered]@{
     evidence = [string[]]@(ConvertTo-StringArray -Value $ResidentRuntimeBoundary.evidence)
     applied = [bool]$ResidentRuntimeBoundary.applied
     executed = [bool]$ResidentRuntimeBoundary.executed
+    resident_runtime_execution_authority_required = [string]$ResidentRuntimeBoundary.resident_runtime_execution_authority_required
     resident_runtime_execution_authority = [bool]$ResidentRuntimeBoundary.resident_runtime_execution_authority
     execution_authority = $false
     approval_decision_authority = $false

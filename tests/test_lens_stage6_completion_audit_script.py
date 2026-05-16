@@ -290,6 +290,21 @@ def test_lens_stage6_completion_audit_preserves_resident_runtime_resident_claim_
     assert "resident_claim_authority = $false" in script
 
 
+def test_lens_stage6_completion_audit_preserves_resident_runtime_execution_authority_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$ResidentRuntimeBoundary.resident_runtime_execution_authority_required -eq 'resident_runtime_execution_authority'"
+    ) in script
+    assert (
+        "resident_runtime_execution_authority_required = [string]$ResidentRuntimeBoundary.resident_runtime_execution_authority_required"
+    ) in script
+    assert (
+        "resident_runtime_execution_authority = [bool]$ResidentRuntimeBoundary.resident_runtime_execution_authority"
+        in script
+    )
+
+
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -1019,6 +1034,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "/lens/resident-runtime/execute" in resident_runtime_boundary["evidence"]
     assert resident_runtime_boundary["applied"] is False
     assert resident_runtime_boundary["executed"] is False
+    assert (
+        resident_runtime_boundary["resident_runtime_execution_authority_required"]
+        == "resident_runtime_execution_authority"
+    )
     assert resident_runtime_boundary["resident_runtime_execution_authority"] is False
     assert resident_runtime_boundary["execution_authority"] is False
     assert resident_runtime_boundary["approval_decision_authority"] is False
