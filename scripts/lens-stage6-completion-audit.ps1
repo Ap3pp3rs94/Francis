@@ -325,6 +325,16 @@ $ProcessSupervisionBoundaryObserved = (
   [int]$ProcessSupervisionBoundaryResult.exit_code -eq 0 -and
   [string]$ProcessSupervisionBoundary.kind -eq 'lens.process_supervision_authority_boundary.proof' -and
   [bool]$ProcessSupervisionBoundary.ok -and
+  [string]$ProcessSupervisionBoundary.authority_required -eq 'process_supervision_and_service_control' -and
+  -not [bool]$ProcessSupervisionBoundary.authority_granted -and
+  [string]$ProcessSupervisionBoundary.process_supervision_authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted -and
+  [string]$ProcessSupervisionBoundary.process_restart_authority_required -eq 'process_restart_authority' -and
+  -not [bool]$ProcessSupervisionBoundary.process_restart_authority_granted -and
+  [string]$ProcessSupervisionBoundary.service_install_authority_required -eq 'service_install_authority' -and
+  -not [bool]$ProcessSupervisionBoundary.service_install_authority_granted -and
+  [string]$ProcessSupervisionBoundary.service_control_authority_required -eq 'service_control_authority' -and
+  -not [bool]$ProcessSupervisionBoundary.service_control_authority_granted -and
   [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed -and
   [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
 )
@@ -3356,6 +3366,16 @@ $Payload = [ordered]@{
       'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status',
       'scripts/lens-host-supervision-proof.ps1 -Mode Status'
     )
+    authority_required = [string]$ProcessSupervisionBoundary.authority_required
+    authority_granted = [bool]$ProcessSupervisionBoundary.authority_granted
+    process_supervision_authority_required = [string]$ProcessSupervisionBoundary.process_supervision_authority_required
+    process_supervision_authority_granted = [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted
+    process_restart_authority_required = [string]$ProcessSupervisionBoundary.process_restart_authority_required
+    process_restart_authority_granted = [bool]$ProcessSupervisionBoundary.process_restart_authority_granted
+    service_install_authority_required = [string]$ProcessSupervisionBoundary.service_install_authority_required
+    service_install_authority_granted = [bool]$ProcessSupervisionBoundary.service_install_authority_granted
+    service_control_authority_required = [string]$ProcessSupervisionBoundary.service_control_authority_required
+    service_control_authority_granted = [bool]$ProcessSupervisionBoundary.service_control_authority_granted
     stage6_checkpoint_observed = [bool]$ProcessSupervisionBoundary.stage6_checkpoint_observed
     resident_overlay_activation_boundary_observed = [bool]$ProcessSupervisionBoundary.resident_overlay_activation_boundary_observed
     host_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.host_supervision_boundary_observed

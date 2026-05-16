@@ -448,6 +448,59 @@ def test_lens_stage6_completion_audit_observes_resident_host_runtime_authority_g
     assert "-not [bool]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_observes_process_supervision_boundary_authority_gates() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$ProcessSupervisionBoundary.authority_required -eq 'process_supervision_and_service_control'"
+    ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.authority_granted" in script
+    assert (
+        "[string]$ProcessSupervisionBoundary.process_supervision_authority_required -eq 'process_supervision_authority'"
+    ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted" in script
+    assert (
+        "[string]$ProcessSupervisionBoundary.process_restart_authority_required -eq 'process_restart_authority'"
+    ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.process_restart_authority_granted" in script
+    assert (
+        "[string]$ProcessSupervisionBoundary.service_install_authority_required -eq 'service_install_authority'"
+    ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.service_install_authority_granted" in script
+    assert (
+        "[string]$ProcessSupervisionBoundary.service_control_authority_required -eq 'service_control_authority'"
+    ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.service_control_authority_granted" in script
+    assert "authority_required = [string]$ProcessSupervisionBoundary.authority_required" in script
+    assert "authority_granted = [bool]$ProcessSupervisionBoundary.authority_granted" in script
+    assert (
+        "process_supervision_authority_required = "
+        "[string]$ProcessSupervisionBoundary.process_supervision_authority_required"
+    ) in script
+    assert (
+        "process_supervision_authority_granted = "
+        "[bool]$ProcessSupervisionBoundary.process_supervision_authority_granted"
+    ) in script
+    assert (
+        "process_restart_authority_required = [string]$ProcessSupervisionBoundary.process_restart_authority_required"
+    ) in script
+    assert (
+        "process_restart_authority_granted = [bool]$ProcessSupervisionBoundary.process_restart_authority_granted"
+    ) in script
+    assert (
+        "service_install_authority_required = [string]$ProcessSupervisionBoundary.service_install_authority_required"
+    ) in script
+    assert (
+        "service_install_authority_granted = [bool]$ProcessSupervisionBoundary.service_install_authority_granted"
+    ) in script
+    assert (
+        "service_control_authority_required = [string]$ProcessSupervisionBoundary.service_control_authority_required"
+    ) in script
+    assert (
+        "service_control_authority_granted = [bool]$ProcessSupervisionBoundary.service_control_authority_granted"
+    ) in script
+
+
 def test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 

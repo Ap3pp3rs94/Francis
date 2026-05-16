@@ -29777,6 +29777,41 @@ readback gates:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds 2 -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='authority_required';Expression={$_.authority_required}},@{Name='authority_granted';Expression={$_.authority_granted}},@{Name='recommended_handoff_authority_required';Expression={$_.recommended_handoff.authority_required}},@{Name='recommended_handoff_authority_granted';Expression={$_.recommended_handoff.authority_granted}},runtime_handoff_observed,process_supervision_handoff_observed,side_effects_bounded | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=resident_host_process_not_supervised; authority_required=process_supervision_authority; authority_granted=false; recommended_handoff_authority_required=process_supervision_authority; recommended_handoff_authority_granted=false; runtime_handoff_observed=true; process_supervision_handoff_observed=true; side_effects_bounded=true`
 
+Stage 6 Lens process-supervision authority-boundary readback gates on
+`2026-05-16`:
+
+- Updated `scripts\lens-process-supervision-authority-boundary-proof.ps1` so
+  the process-supervision/service-activation boundary proof emits explicit
+  `authority_required=process_supervision_and_service_control` and denied
+  process-supervision, process-restart, service-install, and service-control
+  authority readbacks.
+- Updated `scripts\lens-stage6-completion-audit.ps1` so the Stage 6 completion
+  audit must observe those denied authority readbacks before counting the
+  process-supervision authority-boundary proof as observed, and so the audit
+  payload projects the same fields for operator/audit inspection.
+- Updated focused proof and completion-audit tests for that readback contract.
+- This is completion-audit readback hardening only. It does not run or close the
+  full Stage 6 completion audit, does not grant process supervision, process
+  restart, service install/control, memory, approval-decision, receipt, capture,
+  sensing, or mutation authority. Stage 6 remains active at 2/5 checkpoint
+  criteria.
+
+Latest validation for the Stage 6 Lens process-supervision authority-boundary
+readback gates:
+
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_process_supervision_boundary_authority_gates -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-process-supervision-authority-boundary-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 20 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,@{Name='authority_required';Expression={$_.authority_required}},@{Name='authority_granted';Expression={$_.authority_granted}},@{Name='process_supervision_authority_required';Expression={$_.process_supervision_authority_required}},@{Name='process_supervision_authority_granted';Expression={$_.process_supervision_authority_granted}},@{Name='process_restart_authority_required';Expression={$_.process_restart_authority_required}},@{Name='process_restart_authority_granted';Expression={$_.process_restart_authority_granted}},@{Name='service_install_authority_required';Expression={$_.service_install_authority_required}},@{Name='service_install_authority_granted';Expression={$_.service_install_authority_granted}},@{Name='service_control_authority_required';Expression={$_.service_control_authority_required}},@{Name='service_control_authority_granted';Expression={$_.service_control_authority_granted}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=process_supervision_and_service_control; authority_granted=false; process_supervision_authority_required=process_supervision_authority; process_supervision_authority_granted=false; process_restart_authority_required=process_restart_authority; process_restart_authority_granted=false; service_install_authority_required=service_install_authority; service_install_authority_granted=false; service_control_authority_required=service_control_authority; service_control_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

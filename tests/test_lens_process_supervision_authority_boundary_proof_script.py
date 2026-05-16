@@ -66,6 +66,16 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         assert run["timeout_seconds"] == 360
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
+    assert payload["authority_required"] == "process_supervision_and_service_control"
+    assert payload["authority_granted"] is False
+    assert payload["process_supervision_authority_required"] == "process_supervision_authority"
+    assert payload["process_supervision_authority_granted"] is False
+    assert payload["process_restart_authority_required"] == "process_restart_authority"
+    assert payload["process_restart_authority_granted"] is False
+    assert payload["service_install_authority_required"] == "service_install_authority"
+    assert payload["service_install_authority_granted"] is False
+    assert payload["service_control_authority_required"] == "service_control_authority"
+    assert payload["service_control_authority_granted"] is False
     assert payload["stage6_checkpoint_observed"] is False
     assert payload["resident_overlay_activation_boundary_observed"] is True
     assert payload["host_supervision_boundary_observed"] is True
