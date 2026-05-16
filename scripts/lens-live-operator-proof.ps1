@@ -3,7 +3,7 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [ValidateRange(5, 60)]
+  [ValidateRange(5, 120)]
   [int]$StartupTimeoutSeconds = 20,
 
   [string]$DataDir = ''

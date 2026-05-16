@@ -30201,6 +30201,46 @@ hardening:
 - `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q`
   Result: `passed; 3 tests`
 
+Stage 6 Lens Windows 3.13 CI live-readback and suite-timeout hardening on
+`2026-05-16`:
+
+- Followed up GitHub Actions run `25965616160`, where Ubuntu 3.12, Ubuntu
+  3.13, and Windows 3.12 passed but Windows 3.13 still failed.
+- The remaining Windows 3.13 failure was a live-operator proof miss in the full
+  CI suite, followed by the pytest step being killed at the workflow's
+  60-minute limit before pytest could emit a normal failure summary.
+- Widened the live-operator proof's accepted API startup readback ceiling to 120
+  seconds and updated the direct CI-facing test to request 90 seconds while
+  still requiring `live_http_status_readback=true` from the real local HTTP
+  route.
+- Updated the test assertion to include the proof payload on nonzero exit so
+  future CI failures expose the live readback status and proof diagnostics
+  instead of an empty stderr-only assertion.
+- Increased the GitHub Actions pytest step ceiling to 120 minutes and added
+  `--maxfail=1` so a future real test failure stops at the first failure and
+  prints the failure summary instead of burning the full job budget.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, service, tray, hotkey, overlay, summon, memory,
+  approval-decision, receipt, capture, sensing, window-management, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens Windows 3.13 CI live-readback and
+suite-timeout hardening:
+
+- PowerShell parser check for `scripts\lens-live-operator-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_live_operator_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_live_operator_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
+  Result: `passed; 1 test`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-live-operator-proof.ps1 -Mode Status -StartupTimeoutSeconds 90`
+  Result: `passed; status=proof_passed; live_http_status_readback=true; operator_experience_proof=true; helpful_not_noisy_readback=true; next_smallest_truthful_gap=resident_surface_runtime_missing`
+- `python -m pytest tests\test_lens_host_supervisor_script.py tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
+  Result: `passed; 7 tests`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
