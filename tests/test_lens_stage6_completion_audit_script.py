@@ -501,6 +501,31 @@ def test_lens_stage6_completion_audit_observes_process_supervision_boundary_auth
     ) in script
 
 
+def test_lens_stage6_completion_audit_observes_resident_host_process_supervision_handoff_authority_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$ResidentHostProcessSupervisionBlockerProof.authority_required -eq 'none_new_stage6_completion_audit'"
+    ) in script
+    assert "-not [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted" in script
+    assert (
+        "[string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_required -eq "
+        "'none_new_stage6_completion_audit'"
+    ) in script
+    assert "-not [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_granted" in script
+    assert (
+        "$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff = "
+        "$ResidentHostProcessSupervisionBlockerProof.recommended_handoff"
+    ) in script
+    assert "recommended_handoff = [ordered]@{" in script
+    assert (
+        "authority_required = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_required"
+    ) in script
+    assert (
+        "authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_granted"
+    ) in script
+
+
 def test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 

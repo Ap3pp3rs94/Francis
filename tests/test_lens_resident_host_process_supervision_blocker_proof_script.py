@@ -153,6 +153,16 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert proof["runtime_boundary_process_state"] == "foreground_observed_not_supervised"
     assert proof["process_boundary_status"] == "proof_passed"
     assert proof["process_boundary_next_gap"] == "stage6_lens_completion_audit"
+    assert proof["process_boundary_authority_required"] == "process_supervision_and_service_control"
+    assert proof["process_boundary_authority_granted"] is False
+    assert proof["process_supervision_authority_required"] == "process_supervision_authority"
+    assert proof["process_supervision_authority_granted"] is False
+    assert proof["process_restart_authority_required"] == "process_restart_authority"
+    assert proof["process_restart_authority_granted"] is False
+    assert proof["service_install_authority_required"] == "service_install_authority"
+    assert proof["service_install_authority_granted"] is False
+    assert proof["service_control_authority_required"] == "service_control_authority"
+    assert proof["service_control_authority_granted"] is False
     assert proof["process_boundary_observed"] is True
     assert proof["service_activation_plan_observed"] is True
     assert proof["bounded_local_process_launch_observed"] is True

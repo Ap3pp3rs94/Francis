@@ -361,6 +361,16 @@ $ProcessBoundaryObserved = (
   [int](Get-PropertyValue -Payload $ProcessResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'kind' -Default '') -eq 'lens.process_supervision_authority_boundary.proof' -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_required' -Default '') -eq 'process_supervision_and_service_control' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_required' -Default '') -eq 'process_restart_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_required' -Default '') -eq 'service_install_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_required' -Default '') -eq 'service_control_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_granted' -Default $true) -and
   [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_boundary_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_activation_plan_observed' -Default $false) -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
@@ -491,6 +501,16 @@ $Payload = [ordered]@{
     runtime_boundary_process_state = [string](Get-PropertyValue -Payload $RuntimePayload -Name 'resident_host_process_state' -Default '')
     process_boundary_status = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'status' -Default '')
     process_boundary_next_gap = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'next_smallest_truthful_gap' -Default '')
+    process_boundary_authority_required = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_required' -Default '')
+    process_boundary_authority_granted = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_granted' -Default $false)
+    process_supervision_authority_required = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_required' -Default '')
+    process_supervision_authority_granted = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_granted' -Default $false)
+    process_restart_authority_required = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_required' -Default '')
+    process_restart_authority_granted = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_granted' -Default $false)
+    service_install_authority_required = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_required' -Default '')
+    service_install_authority_granted = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_granted' -Default $false)
+    service_control_authority_required = [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_required' -Default '')
+    service_control_authority_granted = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_granted' -Default $false)
     process_boundary_observed = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_boundary_observed' -Default $false)
     service_activation_plan_observed = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_activation_plan_observed' -Default $false)
     bounded_local_process_launch_observed = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'bounded_local_process_launch_observed' -Default $false)

@@ -348,6 +348,7 @@ $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShel
 )
 $ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
 $ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers
+$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff = $ResidentHostProcessSupervisionBlockerProof.recommended_handoff
 $ResidentHostProcessSupervisionBlockerProofObserved = (
   [int]$ResidentHostProcessSupervisionBlockerProofResult.exit_code -eq 0 -and
   [string]$ResidentHostProcessSupervisionBlockerProof.kind -eq 'lens.resident_host.process_supervision_blocker.proof' -and
@@ -359,6 +360,10 @@ $ResidentHostProcessSupervisionBlockerProofObserved = (
   [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_boundary_observed -and
   [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed -and
   [bool]$ResidentHostProcessSupervisionBlockerProof.authority_denied -and
+  [string]$ResidentHostProcessSupervisionBlockerProof.authority_required -eq 'none_new_stage6_completion_audit' -and
+  -not [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted -and
+  [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
+  -not [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_granted -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'resident_host_process_not_supervised' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_supervision_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_restart_authority_not_granted' -and
@@ -3414,6 +3419,24 @@ $Payload = [ordered]@{
     authority_denied = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_denied
     authority_required = [string]$ResidentHostProcessSupervisionBlockerProof.authority_required
     authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProof.authority_granted
+    recommended_handoff = [ordered]@{
+      id = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.id
+      status = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.status
+      next_step = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.next_step
+      proof_script = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.proof_script
+      route = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.route
+      authority_required = [string]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_required
+      authority_granted = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.authority_granted
+      read_only_contract = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.read_only_contract
+      diagnostic_only = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.diagnostic_only
+      would_execute = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_execute
+      would_mutate = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_mutate
+      would_supervise_process = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_supervise_process
+      would_restart_process = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_restart_process
+      would_install_service = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_install_service
+      would_start_service = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_start_service
+      would_claim_resident = [bool]$ResidentHostProcessSupervisionBlockerProofRecommendedHandoff.would_claim_resident
+    }
     resident_host_process_state = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_state
     resident_host_process_blocker = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_blocker
     supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.supervision_ready
