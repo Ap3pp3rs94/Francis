@@ -142,6 +142,8 @@ def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readb
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "authority_required = [string]$ResidentRuntimeOverlayWindowBoundaryProof.authority_required" in script
+    assert "authority_granted = [bool]$ResidentRuntimeOverlayWindowBoundaryProof.authority_granted" in script
     assert "authority_required = [string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required" in script
     assert "authority_granted = [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted" in script
 
@@ -1340,6 +1342,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_overlay_boundary["authority_blockers_proof_observed"] is True
     assert runtime_overlay_boundary["side_effects_denied"] is True
     assert runtime_overlay_boundary["fifth_authority_family_consumed"] is True
+    assert runtime_overlay_boundary["authority_required"] == "overlay_control_window_management_capture_authority"
+    assert runtime_overlay_boundary["authority_granted"] is False
     assert runtime_overlay_boundary["local_process_launch_authority"] is False
     assert runtime_overlay_boundary["process_supervision_authority"] is False
     assert runtime_overlay_boundary["process_restart_authority"] is False

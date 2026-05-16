@@ -48,6 +48,8 @@ def test_lens_resident_runtime_overlay_window_boundary_is_readback_only() -> Non
     assert payload["authority_family"] == "overlay_window"
     assert payload["previous_authority_family"] == "hotkey_summon"
     assert payload["next_authority_family"] == "resident_claim"
+    assert payload["authority_required"] == "overlay_control_window_management_capture_authority"
+    assert payload["authority_granted"] is False
     assert payload["overlay_window_boundary_observed"] is True
     assert payload["previous_hotkey_summon_family_observed"] is True
     assert payload["overlay_preflight_observed"] is True
