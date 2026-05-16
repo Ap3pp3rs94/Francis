@@ -173,6 +173,22 @@ def test_lens_stage6_completion_audit_preserves_checkpoint_enablement_execution_
     assert "-not [bool]$PersistentSupervisionEnablementExecutionDenial.enablement_authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_preserves_checkpoint_execution_authority_denial_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "[string]$PersistentSupervisionEnablementExecutionDenial."
+        "persistent_supervision_execution_authority_required -eq "
+        "'persistent_supervision_execution_authority'"
+    ) in script
+    assert (
+        "persistent_supervision_execution_authority_required = "
+        "[string]$PersistentSupervisionEnablementExecutionDenial."
+        "persistent_supervision_execution_authority_required"
+    ) in script
+    assert "persistent_supervision_execution_authority = $false" in script
+
+
 def test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -2249,6 +2265,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert execution_denial["process_restart_authority"] is False
     assert execution_denial["persistent_supervision_enablement_authority"] is False
     assert execution_denial["service_config_write_authority"] is False
+    assert execution_denial["persistent_supervision_execution_authority_required"] == (
+        "persistent_supervision_execution_authority"
+    )
     assert execution_denial["persistent_supervision_execution_authority"] is False
     assert execution_denial["service_control_authority"] is False
     assert execution_denial["memory_write"] is False

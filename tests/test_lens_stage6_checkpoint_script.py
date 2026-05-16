@@ -727,6 +727,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert execution_denial["process_restart_authority"] is False
     assert execution_denial["persistent_supervision_enablement_authority"] is False
     assert execution_denial["service_config_write_authority"] is False
+    assert execution_denial["persistent_supervision_execution_authority_required"] == (
+        "persistent_supervision_execution_authority"
+    )
     assert execution_denial["persistent_supervision_execution_authority"] is False
     assert execution_denial["service_control_authority"] is False
     assert execution_denial["memory_write"] is False
