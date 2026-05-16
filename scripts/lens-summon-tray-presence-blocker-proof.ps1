@@ -132,6 +132,10 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 
+$ResidentHostBridgeForegroundRunSeconds = 2
+$ResidentHostBridgeHostLaunchRunSeconds = 3
+$ResidentHostBridgeSupervisorRunSeconds = 8
+
 $SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
@@ -145,7 +149,10 @@ $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 
 $ResidentHostBridgeArgs = @(
   '-Mode', 'Status',
-  '-ConsumeProcessSupervisionHandoff'
+  '-ConsumeProcessSupervisionHandoff',
+  '-ForegroundRunSeconds', [string]$ResidentHostBridgeForegroundRunSeconds,
+  '-HostLaunchRunSeconds', [string]$ResidentHostBridgeHostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$ResidentHostBridgeSupervisorRunSeconds
 )
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $ResidentHostBridgeArgs += @('-DataDir', (Join-Path $DataDir 'proofs\summon-resident-host-bridge\data'))

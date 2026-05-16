@@ -440,6 +440,9 @@ $FamilyChainChildProofCount = 3
 $FamilyChainTimeoutSeconds = (
   $FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount
 ) + 60
+$FirstMissingRequirementForegroundRunSeconds = 2
+$FirstMissingRequirementHostLaunchRunSeconds = 3
+$FirstMissingRequirementResidentCandidateRunSeconds = 3
 $FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\summon-anywhere-family-chain\data'
 $BeforeFamilyChainDataDir = [string]$env:FRANCIS_DATA_DIR
 try {
@@ -477,11 +480,11 @@ try {
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '12',
+    [string]$FirstMissingRequirementForegroundRunSeconds,
     '-HostLaunchRunSeconds',
-    '12',
+    [string]$FirstMissingRequirementHostLaunchRunSeconds,
     '-ResidentCandidateRunSeconds',
-    '12'
+    [string]$FirstMissingRequirementResidentCandidateRunSeconds
   ) -ExpectedKind 'lens.resident_host.runtime_blocker_boundary.proof' -TimeoutSeconds $ChildProofTimeoutSeconds
 } finally {
   if ([string]::IsNullOrWhiteSpace($BeforeFirstMissingRequirementDataDir)) {

@@ -264,6 +264,10 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 
+$ResidentHostBridgeForegroundRunSeconds = 2
+$ResidentHostBridgeHostLaunchRunSeconds = 3
+$ResidentHostBridgeSupervisorRunSeconds = 8
+
 $SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
 $SummonPayload = $SummonResult.payload
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
@@ -273,7 +277,10 @@ $SummonFirstHandoff = Get-PropertyValue -Payload $SummonPayload -Name 'first_blo
 
 $ResidentHostResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostBridgeScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-ConsumeProcessSupervisionHandoff'
+  '-ConsumeProcessSupervisionHandoff',
+  '-ForegroundRunSeconds', [string]$ResidentHostBridgeForegroundRunSeconds,
+  '-HostLaunchRunSeconds', [string]$ResidentHostBridgeHostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$ResidentHostBridgeSupervisorRunSeconds
 )
 $ResidentHostPayload = $ResidentHostResult.payload
 $ResidentHostGovernance = Get-PropertyValue -Payload $ResidentHostPayload -Name 'governance'

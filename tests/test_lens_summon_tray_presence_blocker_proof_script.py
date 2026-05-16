@@ -37,6 +37,17 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_summon_tray_presence_bridge_uses_bounded_resident_host_probe() -> None:
+    script = (_repo_root() / "scripts" / "lens-summon-tray-presence-blocker-proof.ps1").read_text(encoding="utf-8")
+
+    assert "$ResidentHostBridgeForegroundRunSeconds = 2" in script
+    assert "$ResidentHostBridgeHostLaunchRunSeconds = 3" in script
+    assert "$ResidentHostBridgeSupervisorRunSeconds = 8" in script
+    assert "[string]$ResidentHostBridgeForegroundRunSeconds" in script
+    assert "[string]$ResidentHostBridgeHostLaunchRunSeconds" in script
+    assert "[string]$ResidentHostBridgeSupervisorRunSeconds" in script
+
+
 def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path) -> None:
     proc = _run_proof("-Mode", "Status", "-DataDir", str(tmp_path / "data"))
 

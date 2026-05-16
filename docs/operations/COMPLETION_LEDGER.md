@@ -30358,6 +30358,47 @@ readback timeout hardening:
 - `python -m pytest tests\test_lens_live_operator_proof_script.py::test_lens_live_operator_proof_reads_status_over_http_without_authority -q`
   Result: `passed; 1 test`
 
+Stage 6 Lens CI proof-runtime hardening on `2026-05-16`:
+
+- Followed up GitHub Actions run `25969669255`, which passed after the CI
+  recovery fixes but still showed the Stage 6/Lens proof chain dominating CI
+  wall time. The slowest paths were the persistent-supervision transition-plan
+  proof, the persistent-supervision prerequisites proof, and the nested
+  summon-anywhere family chain.
+- Kept the same real readback proof chain, but narrowed duplicated diagnostic
+  observation windows at the parent wrappers:
+  - The persistent-supervision prerequisites proof now invokes the first missing
+    resident-host runtime-boundary proof with the child proof's shorter supported
+    observation windows instead of fixed 12-second foreground, host-launch, and
+    resident-candidate runs.
+  - The summon-anywhere family-chain proof and the tray-presence bridge now
+    invoke the resident-host process-supervision handoff with explicit bounded
+    foreground, host-launch, and 8-second supervisor observation windows.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, service install/control, process
+  supervision/restart, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and the truthful next gap remains
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens CI proof-runtime hardening:
+
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1`,
+  `scripts\lens-summon-anywhere-family-chain-proof.ps1`, and
+  `scripts\lens-summon-tray-presence-blocker-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_bridge_uses_bounded_resident_host_probe -q`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain -q --durations=8 --durations-min=1`
+  Result: `passed; slowest call 265.06s`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only -q --durations=8 --durations-min=1`
+  Result: `passed; slowest call 271.94s`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -50,6 +50,12 @@ def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() 
         "-not [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $true)"
         in script
     )
+    assert "$ResidentHostBridgeForegroundRunSeconds = 2" in script
+    assert "$ResidentHostBridgeHostLaunchRunSeconds = 3" in script
+    assert "$ResidentHostBridgeSupervisorRunSeconds = 8" in script
+    assert "[string]$ResidentHostBridgeForegroundRunSeconds" in script
+    assert "[string]$ResidentHostBridgeHostLaunchRunSeconds" in script
+    assert "[string]$ResidentHostBridgeSupervisorRunSeconds" in script
     assert (
         "[string](Get-PropertyValue -Payload $ResidentHostProcessSupervisionHandoff -Name 'authority_required' "
         "-Default '') -eq 'none_new_stage6_completion_audit'"

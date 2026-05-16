@@ -59,6 +59,12 @@ def test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper(
     assert "'-ChildProofTimeoutSeconds'," in script
     assert "[string]$FamilyChainChildProofTimeoutSeconds" in script
     assert "-TimeoutSeconds $FamilyChainTimeoutSeconds" in script
+    assert "$FirstMissingRequirementForegroundRunSeconds = 2" in script
+    assert "$FirstMissingRequirementHostLaunchRunSeconds = 3" in script
+    assert "$FirstMissingRequirementResidentCandidateRunSeconds = 3" in script
+    assert "[string]$FirstMissingRequirementForegroundRunSeconds" in script
+    assert "[string]$FirstMissingRequirementHostLaunchRunSeconds" in script
+    assert "[string]$FirstMissingRequirementResidentCandidateRunSeconds" in script
 
 
 def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
