@@ -858,6 +858,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_process_boundary["authority_blockers_proof_observed"] is True
     assert runtime_process_boundary["side_effects_denied"] is True
     assert runtime_process_boundary["first_authority_family_consumed"] is True
+    assert runtime_process_boundary["authority_required"] == "process_supervision_authority"
+    assert runtime_process_boundary["authority_granted"] is False
     assert runtime_process_boundary["resident_runtime_execution_authority"] is True
     assert runtime_process_boundary["local_process_launch_authority"] is False
     assert runtime_process_boundary["process_supervision_authority"] is False
