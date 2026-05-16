@@ -59,6 +59,31 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert payload["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
     assert payload["summon_tray_family_observed"] is True
     assert payload["previous_resident_host_bridge_observed"] is True
+    previous_bridge = payload["previous_resident_host_bridge"]
+    assert previous_bridge["status"] == "proof_passed"
+    assert previous_bridge["first_summon_blocker_family"] == "resident_host"
+    assert previous_bridge["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert previous_bridge["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert previous_bridge["authority_required"] == "none_new_stage6_completion_audit"
+    assert previous_bridge["authority_granted"] is False
+    assert previous_bridge["process_supervision_handoff_observed"] is True
+    process_handoff = previous_bridge["process_supervision_handoff"]
+    assert process_handoff["status"] == "proof_passed"
+    assert process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert process_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert process_handoff["authority_granted"] is False
+    recommended_handoff = process_handoff["recommended_handoff"]
+    assert recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_restart_process"] is False
+    assert recommended_handoff["would_install_service"] is False
+    assert recommended_handoff["would_start_service"] is False
+    assert recommended_handoff["would_claim_resident"] is False
     assert payload["tray_presence_boundary_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
@@ -99,6 +124,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
         "wraps_summon_resident_host_blocker_proof": True,
+        "resident_host_process_supervision_handoff_readback": True,
         "wraps_resident_runtime_tray_presence_boundary_proof": True,
         "tray_preflight_readback": True,
         "read_only_contract": True,

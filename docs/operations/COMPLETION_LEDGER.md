@@ -29928,6 +29928,41 @@ process-handoff readback gate:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -DataDir data\test_runs\summon-family-chain-readback -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,authority_required,authority_granted,@{Name='resident_host_next';Expression={$_.resident_host.next_smallest_truthful_gap}},@{Name='resident_host_authority_required';Expression={$_.resident_host.authority_required}},@{Name='resident_host_authority_granted';Expression={$_.resident_host.authority_granted}},@{Name='process_handoff_observed';Expression={$_.resident_host.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.resident_host.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.resident_host.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.resident_host.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.resident_host.process_supervision_handoff.recommended_handoff.authority_granted}},handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
   Result: `passed; status=proof_passed; next_smallest_truthful_gap=stage6_lens_completion_audit; authority_required=summon_hotkey_overlay_and_process_authority; authority_granted=false; resident_host_next=stage6_lens_completion_audit; resident_host_authority_required=none_new_stage6_completion_audit; resident_host_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; handoff_aligned=true; side_effects_denied=true`
 
+Stage 6 Lens summon tray-presence resident-host handoff readback gate on
+`2026-05-16`:
+
+- Updated `scripts\lens-summon-tray-presence-blocker-proof.ps1` so the
+  tray-presence bridge now preserves the previous resident-host bridge through
+  `-ConsumeProcessSupervisionHandoff`, and requires the previous bridge to
+  report `authority_required=none_new_stage6_completion_audit` with
+  `authority_granted=false`.
+- The tray-presence proof now projects the previous resident-host bridge
+  process-supervision handoff and its recommended handoff, including the same
+  no-new-authority readback and read-only/non-mutating contract fields.
+- Updated the focused summon tray-presence proof test for that previous
+  resident-host bridge readback contract.
+- This is summon-anywhere tray-presence bridge readback hardening only. It does
+  not run or close the full Stage 6 completion audit, does not grant process
+  supervision, process restart, service install/control, tray, notification,
+  summon, hotkey, overlay, resident-claim, memory, approval-decision, receipt,
+  capture, sensing, or mutation authority. Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon tray-presence resident-host
+handoff readback gate:
+
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_blocker_proof_is_readback_only -q`
+  Result: `passed; 1 test`
+- `python -m ruff check tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-tray-presence-blocker-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-tray-presence-blocker-proof.ps1 -Mode Status -DataDir data\test_runs\summon-tray-presence-readback | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,previous_resident_host_bridge_observed,@{Name='previous_bridge_next';Expression={$_.previous_resident_host_bridge.next_smallest_truthful_gap}},@{Name='previous_bridge_authority_required';Expression={$_.previous_resident_host_bridge.authority_required}},@{Name='previous_bridge_authority_granted';Expression={$_.previous_resident_host_bridge.authority_granted}},@{Name='process_handoff_observed';Expression={$_.previous_resident_host_bridge.process_supervision_handoff_observed}},@{Name='process_handoff_authority_required';Expression={$_.previous_resident_host_bridge.process_supervision_handoff.authority_required}},@{Name='process_handoff_authority_granted';Expression={$_.previous_resident_host_bridge.process_supervision_handoff.authority_granted}},@{Name='recommended_authority_required';Expression={$_.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_required}},@{Name='recommended_authority_granted';Expression={$_.previous_resident_host_bridge.process_supervision_handoff.recommended_handoff.authority_granted}},tray_presence_boundary_observed,handoff_aligned,side_effects_denied | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_overlay_window_blocker_boundary; previous_resident_host_bridge_observed=true; previous_bridge_next=stage6_lens_completion_audit; previous_bridge_authority_required=none_new_stage6_completion_audit; previous_bridge_authority_granted=false; process_handoff_observed=true; process_handoff_authority_required=none_new_stage6_completion_audit; process_handoff_authority_granted=false; recommended_authority_required=none_new_stage6_completion_audit; recommended_authority_granted=false; tray_presence_boundary_observed=true; handoff_aligned=true; side_effects_denied=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
