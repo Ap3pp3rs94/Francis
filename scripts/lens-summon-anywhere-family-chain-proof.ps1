@@ -431,6 +431,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   resident_host = [ordered]@{
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'next_smallest_truthful_gap' -Default '')
     lifecycle_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'resident_host_lifecycle_next_smallest_truthful_gap' -Default '')
+    authority_required = [string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_required' -Default 'process_supervision_authority')
+    authority_granted = [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $false)
     runtime_blockers = [string[]]@($ResidentHostRuntimeBlockers)
     surface_blockers = [string[]]@($ResidentHostSurfaceBlockers)
   }

@@ -174,6 +174,8 @@ def test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readbac
     assert "authority_granted = [bool]$SummonAuthorityBlockerProof.authority_granted" in script
     assert "authority_required = [string]$SummonAnywhereFamilyChainProof.authority_required" in script
     assert "authority_granted = [bool]$SummonAnywhereFamilyChainProof.authority_granted" in script
+    assert "authority_required = [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required" in script
+    assert "authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted" in script
     assert "authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required" in script
     assert "authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted" in script
 
@@ -1817,6 +1819,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         family_chain_resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     )
+    assert family_chain_resident_host["authority_required"] == "process_supervision_authority"
+    assert family_chain_resident_host["authority_granted"] is False
     assert "lens_host_persistent_supervision_prerequisites_pending" in family_chain_resident_host["runtime_blockers"]
     assert "tray_host_missing" in family_chain_resident_host["surface_blockers"]
     assert "overlay_window_missing" in family_chain_resident_host["surface_blockers"]

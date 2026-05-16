@@ -72,6 +72,8 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["resident_host_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["authority_required"] == "none_new_stage6_completion_audit"
+    assert payload["authority_granted"] is False
     assert payload["summon_first_family_observed"] is True
     assert payload["resident_host_lifecycle_observed"] is True
     assert payload["consume_process_supervision_handoff"] is True
@@ -128,6 +130,8 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff() -> None:
     assert process_handoff["status"] == "proof_passed"
     assert process_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert process_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert process_handoff["authority_granted"] is False
     assert process_handoff["resident_host_process_handoff_observed"] is True
     assert process_handoff["process_supervision_boundary_observed"] is True
     assert process_handoff["handoff_consumed"] is True
@@ -206,6 +210,8 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff()
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == ""
     assert payload["resident_host_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
     assert payload["summon_os_binding_authority_request_readback_observed"] is True

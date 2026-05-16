@@ -446,6 +446,12 @@ $Payload = [ordered]@{
   resident_host_process_supervision_next_smallest_truthful_gap = $ResidentHostProcessSupervisionNextSmallestTruthfulGap
   resident_host_next_smallest_truthful_gap = $ResidentHostNextSmallestTruthfulGap
   next_smallest_truthful_gap = $ResidentHostNextSmallestTruthfulGap
+  authority_required = if ($ConsumeProcessSupervisionHandoff -and $HostProcessSupervisionHandoffObserved) {
+    [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_required' -Default 'none_new_stage6_completion_audit')
+  } else {
+    'process_supervision_authority'
+  }
+  authority_granted = $false
   summon_first_family_observed = $SummonFirstFamilyObserved
   resident_host_lifecycle_observed = $HostLifecycleObserved
   consume_process_supervision_handoff = [bool]$ConsumeProcessSupervisionHandoff
@@ -490,6 +496,8 @@ $Payload = [ordered]@{
     status = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'status' -Default 'missing')
     previous_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'previous_next_smallest_truthful_gap' -Default '')
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'next_smallest_truthful_gap' -Default '')
+    authority_required = [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_required' -Default '')
+    authority_granted = [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_granted' -Default $false)
     resident_host_process_handoff_observed = [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'resident_host_process_handoff_observed' -Default $false)
     process_supervision_boundary_observed = [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'process_supervision_boundary_observed' -Default $false)
     handoff_consumed = [bool](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'handoff_consumed' -Default $false)

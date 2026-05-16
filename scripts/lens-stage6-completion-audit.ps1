@@ -3188,6 +3188,8 @@ $Payload = [ordered]@{
     resident_host = [ordered]@{
       next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap
       lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap
+      authority_required = [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required
+      authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted
       runtime_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers)
       surface_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers)
     }
