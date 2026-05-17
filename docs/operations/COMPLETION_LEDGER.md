@@ -30961,6 +30961,11 @@ Stage 6 Lens resident-runtime boundary checkpoint cache reuse on `2026-05-17`:
   `resident_surface_content_readback_ready` status. The test now requests a
   still-bounded `5s` foreground window while continuing to require the stricter
   `resident_surface_foreground_runtime_observed` proof state.
+- Follow-up CI run `25983858839` showed the same `2s` foreground-surface
+  observation was also too tight for the standalone resident overlay activation
+  boundary proof test on Windows 3.13. That test now requests the same
+  still-bounded `5s` foreground window while keeping the proof script's default
+  behavior and standalone execution path unchanged.
 - This is CI and proof-harness hardening only. It does not close Stage 6, does
   not grant resident runtime, process supervision/restart, service
   install/control, tray, hotkey, overlay, summon, memory, approval-decision,
@@ -30981,6 +30986,14 @@ cache reuse:
   `passed; slowest calls: resident_claim_boundary=18.31s, overlay_window_isolated_data_dir=13.93s, overlay_window=13.64s, hotkey_summon=9.21s`
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=12 --durations-min=1`
   Result: `passed; slowest call 47.79s`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed; slowest call 22.55s`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed; slowest call 22.59s`
+- `python -m ruff check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed; 1 file already formatted; warned that .ruff_cache write was denied`
 - `python -m ruff check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
   Result: `passed; All checks passed`
 - `python -m ruff format --check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
