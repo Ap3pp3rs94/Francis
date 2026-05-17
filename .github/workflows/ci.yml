@@ -13,6 +13,8 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +36,11 @@ jobs:
           enable-cache: true
 
       - name: Install
-        run: uv sync --frozen --extra core --extra web --extra dev
+        run: uv sync --frozen --python ${{ matrix.python-version }} --extra core --extra web --extra dev
+
+      - name: Verify Python matrix
+        run: |
+          uv run python -c "import sys; expected='${{ matrix.python-version }}'; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; assert actual == expected, f'Expected Python {expected}, got {sys.version}'; print(f'Python matrix verified: {actual}')"
 
       - name: Ruff (lint)
         run: uv run -m ruff check .

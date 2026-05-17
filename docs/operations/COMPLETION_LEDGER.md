@@ -31002,6 +31002,32 @@ cache reuse:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens CI Python matrix interpreter truth hardening on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25984276078`, where all matrix jobs
+  passed but the pytest session headers showed that both jobs labeled Python
+  `3.13` were still executing under Python `3.12.12` because uv honored the
+  repository `.python-version` when creating `.venv`.
+- Updated `.github\workflows\ci.yml` so the test job sets `UV_PYTHON` from
+  `matrix.python-version`, runs `uv sync` with
+  `--python ${{ matrix.python-version }}`, and verifies the active interpreter
+  with `uv run python` before lint, type checks, or pytest can proceed.
+- This is CI truthfulness and matrix-coverage hardening only. It does not close
+  Stage 6, does not grant resident runtime, process supervision/restart,
+  service install/control, tray, hotkey, overlay, summon, memory,
+  approval-decision, receipt, capture, sensing, window-management,
+  resident-claim, or mutation authority, and Stage 6 remains active at 2/5
+  checkpoint criteria.
+
+Latest validation for the Stage 6 Lens CI Python matrix interpreter truth
+hardening:
+
+- `python -c "<workflow yaml assertions>"`
+  Result:
+  `passed; workflow env, uv sync --python, and Verify Python matrix assertions present`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
