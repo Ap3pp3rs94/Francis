@@ -30750,6 +30750,46 @@ Latest validation for the Stage 6 Lens summon direct-family contract reuse:
 - `python -m ruff format --check tests\test_lens_summon_binding_blocker_proof_script.py tests\test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
   Result: `passed; 2 files already formatted`
 
+Stage 6 Lens summon tray/overlay contract reuse on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25980537288`, where all matrix jobs
+  passed after direct summon-family contract reuse but the remaining Windows
+  3.13 pytest tail was still concentrated in nested tray/overlay proof calls.
+  The slowest remaining direct summon-family calls were
+  `test_lens_summon_tray_presence_blocker_proof_is_readback_only` at `78.53s`
+  and `test_lens_summon_overlay_window_blocker_proof_is_readback_only` at
+  `79.19s`.
+- Changed `lens-summon-tray-presence-blocker-proof.ps1` so it consumes the
+  `resident_host` contract from `lens-summon-anywhere-blockers-proof.ps1`
+  instead of launching the resident-host bridge proof as a nested child.
+- Changed `lens-summon-overlay-window-blocker-proof.ps1` so it consumes the
+  `tray_presence` contract from the same summon-anywhere blocker readback
+  instead of launching the tray-presence bridge proof as a nested child.
+- The direct current-family checks still run: the tray proof still consumes
+  the resident-runtime tray-presence boundary, and the overlay proof still
+  consumes the resident-runtime overlay-window boundary. This is CI and
+  proof-harness hardening only. It does not close Stage 6, does not grant
+  resident runtime, process supervision/restart, service install/control,
+  tray, hotkey, overlay, summon, memory, approval-decision, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon tray/overlay contract reuse:
+
+- PowerShell parser check for
+  `scripts\lens-summon-tray-presence-blocker-proof.ps1` and
+  `scripts\lens-summon-overlay-window-blocker-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result:
+  `passed; slowest calls: summon_overlay_window=16.80s, summon_tray_presence=7.77s`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
