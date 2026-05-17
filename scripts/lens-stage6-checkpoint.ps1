@@ -1146,6 +1146,7 @@ if ($LiveOperatorProofPassed) {
   $ResidentOverlayRuntimeBlockers = @($ResidentOverlayRuntimeBlockers | Where-Object { $_ -ne 'operator_experience_proof_missing' })
 }
 $LiveOperatorProofCachePath = Write-ProofPayloadCache -Payload $LiveOperatorPayload -FileName 'live-operator-proof.json'
+$ResidentOverlayRuntimeProofCachePath = Write-ProofPayloadCache -Payload $ResidentOverlayRuntimePayload -FileName 'resident-overlay-runtime-proof.json'
 
 $ResidentOverlayActivationBoundaryArgs = @('-Mode', 'Status', '-StartupTimeoutSeconds', [string]$ResidentOverlayActivationStartupTimeoutSeconds, '-SupervisorRunSeconds', [string]$ResidentOverlayActivationSupervisorSeconds, '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentOverlayActivationResidentSurfaceForegroundSeconds, '-DataDir', $CheckpointProofDataRoot)
 if (-not [string]::IsNullOrWhiteSpace($LiveOperatorProofCachePath)) {
@@ -1153,6 +1154,9 @@ if (-not [string]::IsNullOrWhiteSpace($LiveOperatorProofCachePath)) {
 }
 if (-not [string]::IsNullOrWhiteSpace($ResidentSurfaceProofCachePath)) {
   $ResidentOverlayActivationBoundaryArgs += @('-CachedResidentSurfaceProofPath', $ResidentSurfaceProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($ResidentOverlayRuntimeProofCachePath)) {
+  $ResidentOverlayActivationBoundaryArgs += @('-CachedResidentOverlayRuntimeProofPath', $ResidentOverlayRuntimeProofCachePath)
 }
 $ResidentOverlayActivationBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayActivationBoundaryProofPath -ScriptArgs $ResidentOverlayActivationBoundaryArgs -ExpectedKind 'lens.resident_overlay_activation_boundary.proof'
 $ResidentOverlayActivationBoundaryExitCode = -1
@@ -2779,6 +2783,7 @@ $Payload = [ordered]@{
     would_open_overlay = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_open_overlay' -Default $false)
     would_write_memory = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_write_memory' -Default $false)
     would_decide_approval = [bool](Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'would_decide_approval' -Default $false)
+    overlay_runtime_source = [string](Get-PropertyValue -Payload (Get-PropertyValue -Payload $ResidentOverlayActivationBoundaryPayload -Name 'proof') -Name 'overlay_runtime_source' -Default '')
     blockers = $ResidentOverlayActivationBoundaryBlockers
   }
   command_palette_shell_bridge = [ordered]@{

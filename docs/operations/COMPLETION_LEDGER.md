@@ -30790,6 +30790,55 @@ Latest validation for the Stage 6 Lens summon tray/overlay contract reuse:
 - `python -m ruff format --check tests\test_lens_summon_tray_presence_blocker_proof_script.py tests\test_lens_summon_overlay_window_blocker_proof_script.py`
   Result: `passed; 2 files already formatted`
 
+Stage 6 Lens resident overlay activation runtime reuse on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25981164897`, where all matrix jobs
+  passed after the summon tray/overlay contract reuse slice. The remaining
+  Windows 3.13 pytest tail was still concentrated in Stage 6/Lens checkpoint
+  composition: `test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`
+  took `114.19s`, and
+  `test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority`
+  took `92.59s`.
+- Changed `lens-resident-overlay-activation-boundary-proof.ps1` to accept a
+  cached resident overlay runtime proof payload, mirroring the existing cached
+  live-operator and resident-surface proof inputs. The proof now reports
+  `overlay_runtime_source` as either `script_execution` or
+  `checkpoint_cached_payload`, so cache reuse remains visible in the payload.
+- Changed `lens-stage6-checkpoint.ps1` to cache the resident overlay runtime
+  proof it already computed and pass that cache into the activation-boundary
+  proof. The checkpoint still runs the same resident overlay runtime boundary
+  once, but no longer reruns that proof inside activation.
+- Kept the standalone activation proof meaningful by validating the same
+  authority-denied surface with explicit minimum observation windows in the
+  direct test (`StartupTimeoutSeconds=5`, `SupervisorRunSeconds=3`, and
+  `ResidentSurfaceForegroundRunSeconds=2`).
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident overlay activation runtime
+reuse:
+
+- PowerShell parser check for
+  `scripts\lens-resident-overlay-activation-boundary-proof.ps1` and
+  `scripts\lens-stage6-checkpoint.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 20.24s`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 71.79s`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_changing_defaults -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_overlay_activation_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; 2 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

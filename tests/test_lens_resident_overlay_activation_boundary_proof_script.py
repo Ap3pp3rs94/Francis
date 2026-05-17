@@ -38,6 +38,16 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_overlay_activation_boundary_supports_cached_overlay_runtime() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-overlay-activation-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[string]$CachedResidentOverlayRuntimeProofPath = ''" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedResidentOverlayRuntimeProofPath" in script
+    assert "overlay_runtime_source = if ([bool](Get-PropertyValue -Payload $OverlayResult" in script
+
+
 def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority(
     tmp_path: Path,
 ) -> None:
@@ -46,11 +56,11 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
         "-Mode",
         "Status",
         "-StartupTimeoutSeconds",
-        "60",
+        "5",
         "-SupervisorRunSeconds",
-        "30",
+        "3",
         "-ResidentSurfaceForegroundRunSeconds",
-        "40",
+        "2",
         "-DataDir",
         str(data_dir),
     )
@@ -60,9 +70,9 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
     assert payload["kind"] == "lens.resident_overlay_activation_boundary.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["startup_timeout_seconds"] == 60
-    assert payload["supervisor_run_seconds"] == 30
-    assert payload["resident_surface_foreground_run_seconds"] == 40
+    assert payload["startup_timeout_seconds"] == 5
+    assert payload["supervisor_run_seconds"] == 3
+    assert payload["resident_surface_foreground_run_seconds"] == 2
     assert payload["live_operator_experience_proof"] is True
     assert payload["resident_overlay_boundary_observed"] is True
     assert payload["activation_boundary_observed"] is True
@@ -96,6 +106,8 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
+    assert proof["live_operator_source"] == "script_execution"
+    assert proof["overlay_runtime_source"] == "script_execution"
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_http_status_readback"] is True
     assert proof["helpful_not_noisy_readback"] is True

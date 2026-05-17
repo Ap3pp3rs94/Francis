@@ -67,6 +67,8 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
         "$ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds = if "
         "($PSBoundParameters.ContainsKey('ResidentSurfaceForegroundRunSeconds')) { 2 } else { 25 }"
     ) in script
+    assert "$ResidentOverlayRuntimeProofCachePath = Write-ProofPayloadCache" in script
+    assert "'-CachedResidentOverlayRuntimeProofPath', $ResidentOverlayRuntimeProofCachePath" in script
 
 
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
@@ -1352,6 +1354,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_overlay_activation_boundary_proof"]["would_open_overlay"] is False
     assert payload["resident_overlay_activation_boundary_proof"]["would_write_memory"] is False
     assert payload["resident_overlay_activation_boundary_proof"]["would_decide_approval"] is False
+    assert (
+        payload["resident_overlay_activation_boundary_proof"]["overlay_runtime_source"] == "checkpoint_cached_payload"
+    )
     assert (
         "resident_overlay_activation_not_authorized"
         in payload["resident_overlay_activation_boundary_proof"]["blockers"]

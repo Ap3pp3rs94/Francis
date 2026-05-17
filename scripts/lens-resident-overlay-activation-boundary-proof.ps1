@@ -20,7 +20,9 @@ param(
 
   [string]$CachedLiveOperatorProofPath = '',
 
-  [string]$CachedResidentSurfaceProofPath = ''
+  [string]$CachedResidentSurfaceProofPath = '',
+
+  [string]$CachedResidentOverlayRuntimeProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -355,7 +357,12 @@ if ($null -ne $CachedLiveResult) {
     -ScriptArgs $LiveArgs `
     -ExpectedKind 'lens.live_operator_experience.proof'
 }
-$OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $OverlayArgs
+$CachedOverlayResult = Read-CachedJsonScriptResult -Path $CachedResidentOverlayRuntimeProofPath
+if ($null -ne $CachedOverlayResult) {
+  $OverlayResult = $CachedOverlayResult
+} else {
+  $OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $OverlayArgs
+}
 $ActivationResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ProofDataRoot -SelectedApprovalId $ApprovalId -SelectedActor $Actor
 
 $LivePayload = Get-PropertyValue -Payload $LiveResult -Name 'payload'
@@ -490,7 +497,7 @@ $Payload = [ordered]@{
   blockers = @($AllBlockers)
   proof = [ordered]@{
     live_operator_source = if ([bool](Get-PropertyValue -Payload $LiveResult -Name 'cached' -Default $false)) { 'checkpoint_cached_payload' } else { 'script_execution' }
-    overlay_runtime_source = 'script_execution'
+    overlay_runtime_source = if ([bool](Get-PropertyValue -Payload $OverlayResult -Name 'cached' -Default $false)) { 'checkpoint_cached_payload' } else { 'script_execution' }
     live_operator_status = [string](Get-PropertyValue -Payload $LivePayload -Name 'status' -Default '')
     live_http_status_readback = [bool](Get-PropertyValue -Payload $LivePayload -Name 'live_http_status_readback' -Default $false)
     helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LivePayload -Name 'helpful_not_noisy_readback' -Default $false)
