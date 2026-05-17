@@ -733,6 +733,7 @@ $CommandPaletteShellBridgePath = Join-Path $PSScriptRoot 'lens-command-palette.p
 $CommandPaletteOsBindingProofPath = Join-Path $PSScriptRoot 'lens-command-palette-os-binding-proof.ps1'
 $TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
+$ResidentRuntimeHotkeySummonBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-hotkey-summon-boundary-proof.ps1'
 $ResidentRuntimeOverlayWindowBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-overlay-window-boundary-proof.ps1'
 $ResidentRuntimeResidentClaimBoundaryProofPath = Join-Path $PSScriptRoot 'lens-resident-runtime-resident-claim-boundary-proof.ps1'
 $CheckpointProofDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
@@ -1245,6 +1246,7 @@ if ($ResidentRuntimeAuthorityBlockersProof -is [System.Collections.IDictionary])
     $ResidentRuntimeAuthorityBlockersPayload = $ResidentRuntimeAuthorityBlockersProof['payload']
   }
 }
+$ResidentRuntimeAuthorityBlockersProofCachePath = Write-ProofPayloadCache -Payload $ResidentRuntimeAuthorityBlockersPayload -FileName 'resident-runtime-authority-blockers-proof.json'
 $ResidentRuntimeAuthorityBlockerFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'remaining_authority_families' -Default @())
 $ResidentRuntimeAuthorityBlockersSummary = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockersPayload -Name 'summary'
 $ResidentRuntimeAuthorityBlockersProofPassed = (
@@ -1445,8 +1447,43 @@ $ResidentRuntimeHotkeySummonBoundaryProofPassed = (
   $ResidentRuntimeHotkeySummonBoundaryBlockers -contains 'summon_authority_not_granted'
 )
 
+$ResidentRuntimeHotkeySummonBoundaryProofDataRoot = Join-Path $CheckpointProofDataRoot 'resident-runtime-hotkey-summon-boundary'
+$ResidentRuntimeHotkeySummonBoundaryArgs = @('-Mode', 'Status', '-DataDir', $ResidentRuntimeHotkeySummonBoundaryProofDataRoot)
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCachePath)) {
+  $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath)
+}
+$ResidentRuntimeHotkeySummonBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeHotkeySummonBoundaryProofPath -ScriptArgs $ResidentRuntimeHotkeySummonBoundaryArgs -ExpectedKind 'lens.resident_runtime.hotkey_summon_boundary.proof'
+$ResidentRuntimeHotkeySummonBoundaryScriptExitCode = -1
+$ResidentRuntimeHotkeySummonBoundaryPayload = $null
+if ($ResidentRuntimeHotkeySummonBoundaryProof -is [System.Collections.IDictionary]) {
+  if ($ResidentRuntimeHotkeySummonBoundaryProof.Contains('exit_code') -and $null -ne $ResidentRuntimeHotkeySummonBoundaryProof['exit_code']) {
+    $ResidentRuntimeHotkeySummonBoundaryScriptExitCode = [int]$ResidentRuntimeHotkeySummonBoundaryProof['exit_code']
+  }
+  if ($ResidentRuntimeHotkeySummonBoundaryProof.Contains('payload') -and $null -ne $ResidentRuntimeHotkeySummonBoundaryProof['payload']) {
+    $ResidentRuntimeHotkeySummonBoundaryPayload = $ResidentRuntimeHotkeySummonBoundaryProof['payload']
+  }
+}
+$ResidentRuntimeHotkeySummonBoundaryScriptProofPassed = (
+  $ResidentRuntimeHotkeySummonBoundaryScriptExitCode -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.hotkey_summon_boundary.proof' -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -Name 'hotkey_summon_boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -Name 'side_effects_denied' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_runtime_overlay_window_authority_boundary'
+)
+$ResidentRuntimeHotkeySummonBoundaryProofPassed = $ResidentRuntimeHotkeySummonBoundaryProofPassed -and $ResidentRuntimeHotkeySummonBoundaryScriptProofPassed
+$ResidentRuntimeHotkeySummonBoundaryExitCode = $ResidentRuntimeHotkeySummonBoundaryScriptExitCode
+$ResidentRuntimeHotkeySummonBoundaryProofCachePath = Write-ProofPayloadCache -Payload $ResidentRuntimeHotkeySummonBoundaryPayload -FileName 'resident-runtime-hotkey-summon-boundary-proof.json'
+
 $ResidentRuntimeOverlayWindowBoundaryProofDataRoot = Join-Path $CheckpointProofDataRoot 'resident-runtime-overlay-window-boundary'
-$ResidentRuntimeOverlayWindowBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeOverlayWindowBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ResidentRuntimeOverlayWindowBoundaryProofDataRoot) -ExpectedKind 'lens.resident_runtime.overlay_window_boundary.proof'
+$ResidentRuntimeOverlayWindowBoundaryArgs = @('-Mode', 'Status', '-DataDir', $ResidentRuntimeOverlayWindowBoundaryProofDataRoot)
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCachePath)) {
+  $ResidentRuntimeOverlayWindowBoundaryArgs += @('-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeHotkeySummonBoundaryProofCachePath)) {
+  $ResidentRuntimeOverlayWindowBoundaryArgs += @('-CachedHotkeySummonBoundaryProofPath', $ResidentRuntimeHotkeySummonBoundaryProofCachePath)
+}
+$ResidentRuntimeOverlayWindowBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeOverlayWindowBoundaryProofPath -ScriptArgs $ResidentRuntimeOverlayWindowBoundaryArgs -ExpectedKind 'lens.resident_runtime.overlay_window_boundary.proof'
 $ResidentRuntimeOverlayWindowBoundaryExitCode = -1
 $ResidentRuntimeOverlayWindowBoundaryPayload = $null
 if ($ResidentRuntimeOverlayWindowBoundaryProof -is [System.Collections.IDictionary]) {
@@ -1457,6 +1494,7 @@ if ($ResidentRuntimeOverlayWindowBoundaryProof -is [System.Collections.IDictiona
     $ResidentRuntimeOverlayWindowBoundaryPayload = $ResidentRuntimeOverlayWindowBoundaryProof['payload']
   }
 }
+$ResidentRuntimeOverlayWindowBoundaryProofCachePath = Write-ProofPayloadCache -Payload $ResidentRuntimeOverlayWindowBoundaryPayload -FileName 'resident-runtime-overlay-window-boundary-proof.json'
 $ResidentRuntimeOverlayWindowBoundaryBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ResidentRuntimeOverlayWindowBoundaryPayload -Name 'blockers' -Default @()
 )
@@ -1489,7 +1527,14 @@ $ResidentRuntimeOverlayWindowBoundaryProofPassed = (
 )
 
 $ResidentRuntimeResidentClaimBoundaryProofDataRoot = Join-Path $CheckpointProofDataRoot 'resident-runtime-resident-claim-boundary'
-$ResidentRuntimeResidentClaimBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeResidentClaimBoundaryProofPath -ScriptArgs @('-Mode', 'Status', '-DataDir', $ResidentRuntimeResidentClaimBoundaryProofDataRoot) -ExpectedKind 'lens.resident_runtime.resident_claim_boundary.proof'
+$ResidentRuntimeResidentClaimBoundaryArgs = @('-Mode', 'Status', '-DataDir', $ResidentRuntimeResidentClaimBoundaryProofDataRoot)
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCachePath)) {
+  $ResidentRuntimeResidentClaimBoundaryArgs += @('-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeOverlayWindowBoundaryProofCachePath)) {
+  $ResidentRuntimeResidentClaimBoundaryArgs += @('-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath)
+}
+$ResidentRuntimeResidentClaimBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeResidentClaimBoundaryProofPath -ScriptArgs $ResidentRuntimeResidentClaimBoundaryArgs -ExpectedKind 'lens.resident_runtime.resident_claim_boundary.proof'
 $ResidentRuntimeResidentClaimBoundaryExitCode = -1
 $ResidentRuntimeResidentClaimBoundaryPayload = $null
 if ($ResidentRuntimeResidentClaimBoundaryProof -is [System.Collections.IDictionary]) {

@@ -37,6 +37,16 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_authority_blockers() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-runtime-hotkey-summon-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[string]$CachedAuthorityBlockersProofPath = ''" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedAuthorityBlockersProofPath" in script
+    assert "cached_authority_blockers_proof" in script
+
+
 def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None:
     proc = _run_proof("-Mode", "Status")
 

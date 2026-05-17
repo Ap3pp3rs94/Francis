@@ -69,6 +69,12 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     ) in script
     assert "$ResidentOverlayRuntimeProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedResidentOverlayRuntimeProofPath', $ResidentOverlayRuntimeProofCachePath" in script
+    assert "$ResidentRuntimeAuthorityBlockersProofCachePath = Write-ProofPayloadCache" in script
+    assert "'-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath" in script
+    assert "$ResidentRuntimeHotkeySummonBoundaryProofCachePath = Write-ProofPayloadCache" in script
+    assert "'-CachedHotkeySummonBoundaryProofPath', $ResidentRuntimeHotkeySummonBoundaryProofCachePath" in script
+    assert "$ResidentRuntimeOverlayWindowBoundaryProofCachePath = Write-ProofPayloadCache" in script
+    assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 
 
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:

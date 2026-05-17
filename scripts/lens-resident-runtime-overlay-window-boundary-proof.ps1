@@ -1,7 +1,9 @@
 param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+  [string]$CachedAuthorityBlockersProofPath = '',
+  [string]$CachedHotkeySummonBoundaryProofPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +40,48 @@ function Invoke-JsonScript {
   return [ordered]@{ exit_code = $ExitCode; payload = $Payload; output = $Text }
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    cached = $true
+  }
+}
+
 function New-Check {
   param([string]$Id, [string]$Status, [bool]$Passed, [string]$Evidence, [string]$Reason)
   return [ordered]@{ id = $Id; status = $Status; passed = $Passed; evidence = $Evidence; reason = $Reason }
@@ -63,9 +107,22 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $HotkeyArgs += @('-DataDir', $DataDir)
   $OverlayArgs += @('-DataDir', $DataDir)
 }
+if (-not [string]::IsNullOrWhiteSpace($CachedAuthorityBlockersProofPath)) {
+  $HotkeyArgs += @('-CachedAuthorityBlockersProofPath', $CachedAuthorityBlockersProofPath)
+}
 
-$AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $AuthorityScript -ScriptArgs $AuthorityArgs
-$HotkeyResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HotkeyScript -ScriptArgs $HotkeyArgs
+$CachedAuthorityResult = Read-CachedJsonScriptResult -Path $CachedAuthorityBlockersProofPath
+if ($null -ne $CachedAuthorityResult) {
+  $AuthorityResult = $CachedAuthorityResult
+} else {
+  $AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $AuthorityScript -ScriptArgs $AuthorityArgs
+}
+$CachedHotkeyResult = Read-CachedJsonScriptResult -Path $CachedHotkeySummonBoundaryProofPath
+if ($null -ne $CachedHotkeyResult) {
+  $HotkeyResult = $CachedHotkeyResult
+} else {
+  $HotkeyResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HotkeyScript -ScriptArgs $HotkeyArgs
+}
 $OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayScript -ScriptArgs $OverlayArgs
 $Authority = Get-PropertyValue -Payload $AuthorityResult -Name 'payload'
 $Hotkey = Get-PropertyValue -Payload $HotkeyResult -Name 'payload'
@@ -105,6 +162,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   authority_family = 'overlay_window'; previous_authority_family = 'hotkey_summon'; next_authority_family = 'resident_claim'
   authority_required = 'overlay_control_window_management_capture_authority'; authority_granted = $false
   overlay_window_boundary_observed = $OverlayFamilyObserved; previous_hotkey_summon_family_observed = $HotkeyObserved; overlay_preflight_observed = $OverlayPreflightObserved; authority_blockers_proof_observed = $AuthorityObserved; side_effects_denied = $SideEffectsDenied; fifth_authority_family_consumed = $OverlayFamilyObserved
+  cached_authority_blockers_proof = [bool](Get-PropertyValue -Payload $AuthorityResult -Name 'cached' -Default $false); cached_hotkey_summon_boundary_proof = [bool](Get-PropertyValue -Payload $HotkeyResult -Name 'cached' -Default $false)
   local_process_launch_authority = $false; process_supervision_authority = $false; process_restart_authority = $false; service_install_authority = $false; service_control_authority = $false; tray_registration_authority = $false; tray_icon_authority = $false; notification_authority = $false; summon_authority = $false; hotkey_registration_authority = $false; overlay_control_authority = $false; window_management_authority = $false; capture_authority = $false; new_sensing_authority = $false; resident_claim_authority = $false
   would_launch_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_launch_process' -Default $false); would_supervise_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_supervise_process' -Default $false); would_restart_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_restart_process' -Default $false); would_install_service = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_install_service' -Default $false); would_start_service = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_start_service' -Default $false); would_register_tray = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_register_tray' -Default $false); would_register_hotkey = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_register_hotkey' -Default $false); would_open_overlay = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_open_overlay' -Default $false); would_write_memory = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_write_memory' -Default $false); would_claim_resident = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_claim_resident' -Default $false)
   overlay_window = [ordered]@{ status = [string](Get-PropertyValue -Payload $OverlayGroup -Name 'status' -Default 'missing'); ready = [bool](Get-PropertyValue -Payload $OverlayGroup -Name 'ready' -Default $false); authority_granted = [bool](Get-PropertyValue -Payload $OverlayGroup -Name 'authority_granted' -Default $false); would_execute = [bool](Get-PropertyValue -Payload $OverlayGroup -Name 'would_execute' -Default $false); route = [string](Get-PropertyValue -Payload $OverlayGroup -Name 'route' -Default ''); evidence = [string[]]@(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayGroup -Name 'evidence' -Default @())); required_before = [string[]]@($OverlayRequiredBefore); blockers = [string[]]@($OverlayBlockers) }

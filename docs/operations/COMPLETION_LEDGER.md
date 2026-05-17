@@ -30939,6 +30939,50 @@ host-supervision cache reuse:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens resident-runtime boundary checkpoint cache reuse on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25982833331`, where all matrix jobs
+  passed after host-supervision cache reuse. The Windows matrix remained slow
+  around the Stage 6 checkpoint path, with the local targeted checkpoint test
+  measuring `70.77s` before this change.
+- Changed the hotkey-summon, overlay-window, and resident-claim boundary
+  proof scripts to accept optional cached parent-proof payloads while keeping
+  their existing standalone execution path when no cache is supplied. Cached
+  proof consumption is reported in each child payload instead of being
+  implicit.
+- Changed `lens-stage6-checkpoint.ps1` to cache the resident-runtime authority
+  blockers proof, run and cache the hotkey-summon proof once, pass that cached
+  readback into the overlay-window proof, and pass the cached overlay-window
+  proof into the resident-claim proof. This removes repeated nested parent
+  proof execution inside the checkpoint composition path.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-runtime boundary checkpoint
+cache reuse:
+
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-hotkey-summon-boundary-proof.ps1`,
+  `scripts\lens-resident-runtime-overlay-window-boundary-proof.ps1`,
+  `scripts\lens-resident-runtime-resident-claim-boundary-proof.ps1`, and
+  `scripts\lens-stage6-checkpoint.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_changing_defaults -q --tb=short --durations=8 --durations-min=1`
+  Result:
+  `passed; slowest calls: resident_claim_boundary=18.31s, overlay_window_isolated_data_dir=13.93s, overlay_window=13.64s, hotkey_summon=9.21s`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed; slowest call 46.12s`
+- `python -m ruff check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; 4 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

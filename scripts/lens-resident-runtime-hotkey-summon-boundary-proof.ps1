@@ -2,7 +2,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$CachedAuthorityBlockersProofPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +57,48 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    cached = $true
+  }
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -101,14 +145,23 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $AuthorityBlockersArgs += @('-DataDir', $DataDir)
 }
 
-$AuthorityBlockersOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $AuthorityBlockersScript @AuthorityBlockersArgs 2>&1
-$AuthorityBlockersExitCode = $LASTEXITCODE
-$AuthorityBlockersText = ($AuthorityBlockersOutput | ForEach-Object { [string]$_ }) -join "`n"
-$AuthorityBlockersPayload = $null
-try {
-  $AuthorityBlockersPayload = $AuthorityBlockersText | ConvertFrom-Json -ErrorAction Stop
-} catch {
+$AuthorityBlockersProofCached = $false
+$CachedAuthorityBlockersResult = Read-CachedJsonScriptResult -Path $CachedAuthorityBlockersProofPath
+if ($null -ne $CachedAuthorityBlockersResult) {
+  $AuthorityBlockersExitCode = [int](Get-PropertyValue -Payload $CachedAuthorityBlockersResult -Name 'exit_code' -Default 1)
+  $AuthorityBlockersText = [string](Get-PropertyValue -Payload $CachedAuthorityBlockersResult -Name 'output' -Default '')
+  $AuthorityBlockersPayload = Get-PropertyValue -Payload $CachedAuthorityBlockersResult -Name 'payload'
+  $AuthorityBlockersProofCached = [bool](Get-PropertyValue -Payload $CachedAuthorityBlockersResult -Name 'cached' -Default $false)
+} else {
+  $AuthorityBlockersOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $AuthorityBlockersScript @AuthorityBlockersArgs 2>&1
+  $AuthorityBlockersExitCode = $LASTEXITCODE
+  $AuthorityBlockersText = ($AuthorityBlockersOutput | ForEach-Object { [string]$_ }) -join "`n"
   $AuthorityBlockersPayload = $null
+  try {
+    $AuthorityBlockersPayload = $AuthorityBlockersText | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $AuthorityBlockersPayload = $null
+  }
 }
 
 $TrayPresenceArgs = @('-Mode', $Mode)
@@ -266,6 +319,7 @@ $Payload = [ordered]@{
   previous_tray_presence_family_observed = $TrayPresenceFamilyObserved
   summon_preflight_observed = $SummonPreflightObserved
   authority_blockers_proof_observed = $AuthorityBlockersObserved
+  cached_authority_blockers_proof = $AuthorityBlockersProofCached
   side_effects_denied = $BoundaryDenied
   fourth_authority_family_consumed = $HotkeySummonFamilyObserved
   resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $AuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)

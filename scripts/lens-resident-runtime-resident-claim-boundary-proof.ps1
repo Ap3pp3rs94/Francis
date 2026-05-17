@@ -1,7 +1,9 @@
 param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+  [string]$CachedAuthorityBlockersProofPath = '',
+  [string]$CachedOverlayWindowBoundaryProofPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +40,48 @@ function Invoke-JsonScript {
   return [ordered]@{ exit_code = $ExitCode; payload = $Payload; output = $Text }
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    cached = $true
+  }
+}
+
 function New-Check {
   param([string]$Id, [string]$Status, [bool]$Passed, [string]$Evidence, [string]$Reason)
   return [ordered]@{ id = $Id; status = $Status; passed = $Passed; evidence = $Evidence; reason = $Reason }
@@ -60,9 +104,22 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $AuthorityArgs += @('-DataDir', $DataDir)
   $OverlayWindowArgs += @('-DataDir', $DataDir)
 }
+if (-not [string]::IsNullOrWhiteSpace($CachedAuthorityBlockersProofPath)) {
+  $OverlayWindowArgs += @('-CachedAuthorityBlockersProofPath', $CachedAuthorityBlockersProofPath)
+}
 
-$AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $AuthorityScript -ScriptArgs $AuthorityArgs
-$OverlayWindowResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayWindowScript -ScriptArgs $OverlayWindowArgs
+$CachedAuthorityResult = Read-CachedJsonScriptResult -Path $CachedAuthorityBlockersProofPath
+if ($null -ne $CachedAuthorityResult) {
+  $AuthorityResult = $CachedAuthorityResult
+} else {
+  $AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $AuthorityScript -ScriptArgs $AuthorityArgs
+}
+$CachedOverlayWindowResult = Read-CachedJsonScriptResult -Path $CachedOverlayWindowBoundaryProofPath
+if ($null -ne $CachedOverlayWindowResult) {
+  $OverlayWindowResult = $CachedOverlayWindowResult
+} else {
+  $OverlayWindowResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayWindowScript -ScriptArgs $OverlayWindowArgs
+}
 $Authority = Get-PropertyValue -Payload $AuthorityResult -Name 'payload'
 $OverlayWindow = Get-PropertyValue -Payload $OverlayWindowResult -Name 'payload'
 $Groups = Get-PropertyValue -Payload $Authority -Name 'authority_blocker_groups'
@@ -93,6 +150,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   authority_family = 'resident_claim'; previous_authority_family = 'overlay_window'; next_authority_family = ''
   authority_required = 'resident_claim_authority'; authority_granted = $false
   resident_claim_boundary_observed = $ResidentClaimFamilyObserved; previous_overlay_window_family_observed = $OverlayWindowObserved; authority_blockers_proof_observed = $AuthorityObserved; side_effects_denied = $SideEffectsDenied; sixth_authority_family_consumed = $ResidentClaimFamilyObserved
+  cached_authority_blockers_proof = [bool](Get-PropertyValue -Payload $AuthorityResult -Name 'cached' -Default $false); cached_overlay_window_boundary_proof = [bool](Get-PropertyValue -Payload $OverlayWindowResult -Name 'cached' -Default $false)
   local_process_launch_authority = $false; process_supervision_authority = $false; process_restart_authority = $false; service_install_authority = $false; service_control_authority = $false; tray_registration_authority = $false; tray_icon_authority = $false; notification_authority = $false; summon_authority = $false; hotkey_registration_authority = $false; overlay_control_authority = $false; window_management_authority = $false; capture_authority = $false; new_sensing_authority = $false; resident_claim_authority = $false
   would_launch_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_launch_process' -Default $false); would_supervise_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_supervise_process' -Default $false); would_restart_process = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_restart_process' -Default $false); would_install_service = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_install_service' -Default $false); would_start_service = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_start_service' -Default $false); would_register_tray = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_register_tray' -Default $false); would_register_hotkey = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_register_hotkey' -Default $false); would_open_overlay = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_open_overlay' -Default $false); would_write_memory = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_write_memory' -Default $false); would_claim_resident = [bool](Get-PropertyValue -Payload $AuthorityBoundary -Name 'would_claim_resident' -Default $false)
   resident_claim = [ordered]@{ status = [string](Get-PropertyValue -Payload $ResidentClaimGroup -Name 'status' -Default 'missing'); ready = [bool](Get-PropertyValue -Payload $ResidentClaimGroup -Name 'ready' -Default $false); authority_granted = [bool](Get-PropertyValue -Payload $ResidentClaimGroup -Name 'authority_granted' -Default $false); would_execute = [bool](Get-PropertyValue -Payload $ResidentClaimGroup -Name 'would_execute' -Default $false); route = [string](Get-PropertyValue -Payload $ResidentClaimGroup -Name 'route' -Default ''); evidence = [string[]]@(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentClaimGroup -Name 'evidence' -Default @())); required_before = [string[]]@($ResidentClaimRequiredBefore); blockers = [string[]]@($ResidentClaimBlockers) }

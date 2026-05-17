@@ -37,6 +37,18 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_runtime_overlay_window_boundary_accepts_cached_parent_proofs() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-runtime-overlay-window-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[string]$CachedAuthorityBlockersProofPath = ''" in script
+    assert "[string]$CachedHotkeySummonBoundaryProofPath = ''" in script
+    assert "'-CachedAuthorityBlockersProofPath', $CachedAuthorityBlockersProofPath" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedHotkeySummonBoundaryProofPath" in script
+    assert "cached_hotkey_summon_boundary_proof" in script
+
+
 def test_lens_resident_runtime_overlay_window_boundary_is_readback_only() -> None:
     proc = _run_proof("-Mode", "Status")
 
