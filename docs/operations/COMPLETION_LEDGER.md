@@ -31087,6 +31087,41 @@ handoff:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens checkpoint tray-boundary cache handoff on `2026-05-17`:
+
+- Followed up the green CI run after the summon-preflight cache handoff. The
+  remaining CI trend risk is still checkpoint proof-runtime pressure rather
+  than an active red check.
+- Updated the resident-runtime hotkey-summon boundary proof so it can accept a
+  cached tray-presence boundary proof payload, matching the existing cached
+  authority blockers and cached summon preflight readback pattern.
+- Updated the Stage 6 checkpoint so its inline resident-runtime tray-presence
+  boundary readback is written to the checkpoint proof cache and passed into
+  the hotkey-summon boundary proof instead of making that child proof re-run
+  `lens-resident-runtime-tray-presence-boundary-proof.ps1`.
+- This is proof-harness cache reuse only. It does not close Stage 6, does not
+  grant resident runtime, process supervision/restart, service install/control,
+  tray, hotkey, overlay, summon, memory, approval-decision, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens checkpoint tray-boundary cache handoff:
+
+- PowerShell parser check for
+  `scripts\lens-resident-runtime-hotkey-summon-boundary-proof.ps1` and
+  `scripts\lens-stage6-checkpoint.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_changing_defaults -q --tb=short --durations=8 --durations-min=1`
+  Result:
+  `passed; 7 passed; slowest calls: hotkey_summon_readback_only=9.00s, hotkey_summon_cached_summon_preflight=8.79s, hotkey_summon_cached_tray_presence=4.60s`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed; slowest call 43.01s`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

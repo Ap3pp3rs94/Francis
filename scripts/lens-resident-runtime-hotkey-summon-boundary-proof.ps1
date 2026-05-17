@@ -6,6 +6,8 @@ param(
 
   [string]$CachedAuthorityBlockersProofPath = '',
 
+  [string]$CachedTrayPresenceBoundaryProofPath = '',
+
   [string]$CachedSummonPreflightProofPath = ''
 )
 
@@ -171,14 +173,23 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $TrayPresenceArgs += @('-DataDir', $DataDir)
 }
 
-$TrayPresenceOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $TrayPresenceBoundaryScript @TrayPresenceArgs 2>&1
-$TrayPresenceExitCode = $LASTEXITCODE
-$TrayPresenceText = ($TrayPresenceOutput | ForEach-Object { [string]$_ }) -join "`n"
-$TrayPresencePayload = $null
-try {
-  $TrayPresencePayload = $TrayPresenceText | ConvertFrom-Json -ErrorAction Stop
-} catch {
+$TrayPresenceProofCached = $false
+$CachedTrayPresenceResult = Read-CachedJsonScriptResult -Path $CachedTrayPresenceBoundaryProofPath
+if ($null -ne $CachedTrayPresenceResult) {
+  $TrayPresenceExitCode = [int](Get-PropertyValue -Payload $CachedTrayPresenceResult -Name 'exit_code' -Default 1)
+  $TrayPresenceText = [string](Get-PropertyValue -Payload $CachedTrayPresenceResult -Name 'output' -Default '')
+  $TrayPresencePayload = Get-PropertyValue -Payload $CachedTrayPresenceResult -Name 'payload'
+  $TrayPresenceProofCached = [bool](Get-PropertyValue -Payload $CachedTrayPresenceResult -Name 'cached' -Default $false)
+} else {
+  $TrayPresenceOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $TrayPresenceBoundaryScript @TrayPresenceArgs 2>&1
+  $TrayPresenceExitCode = $LASTEXITCODE
+  $TrayPresenceText = ($TrayPresenceOutput | ForEach-Object { [string]$_ }) -join "`n"
   $TrayPresencePayload = $null
+  try {
+    $TrayPresencePayload = $TrayPresenceText | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $TrayPresencePayload = $null
+  }
 }
 
 $SummonPreflightProofCached = $false
@@ -331,6 +342,7 @@ $Payload = [ordered]@{
   summon_preflight_observed = $SummonPreflightObserved
   authority_blockers_proof_observed = $AuthorityBlockersObserved
   cached_authority_blockers_proof = $AuthorityBlockersProofCached
+  cached_tray_presence_boundary_proof = $TrayPresenceProofCached
   cached_summon_preflight = $SummonPreflightProofCached
   side_effects_denied = $BoundaryDenied
   fourth_authority_family_consumed = $HotkeySummonFamilyObserved

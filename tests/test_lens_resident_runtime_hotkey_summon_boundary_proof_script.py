@@ -47,6 +47,16 @@ def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_authority_b
     assert "cached_authority_blockers_proof" in script
 
 
+def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_tray_presence() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-runtime-hotkey-summon-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[string]$CachedTrayPresenceBoundaryProofPath = ''" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedTrayPresenceBoundaryProofPath" in script
+    assert "cached_tray_presence_boundary_proof" in script
+
+
 def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_summon_preflight() -> None:
     script = (_repo_root() / "scripts" / "lens-resident-runtime-hotkey-summon-boundary-proof.ps1").read_text(
         encoding="utf-8"
@@ -99,6 +109,37 @@ def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_summon_preflig
     assert payload["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
 
 
+def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_tray_presence(tmp_path: Path) -> None:
+    tray_presence_cache = tmp_path / "tray-presence-boundary.json"
+    tray_presence_cache.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "lens.resident_runtime.tray_presence_boundary.proof",
+                "status": "proof_passed",
+                "authority_family": "tray_presence",
+                "next_authority_family": "hotkey_summon",
+                "tray_presence_boundary_observed": True,
+                "previous_service_control_family_observed": True,
+                "tray_preflight_observed": True,
+                "authority_blockers_proof_observed": True,
+                "side_effects_denied": True,
+                "third_authority_family_consumed": True,
+                "next_smallest_truthful_gap": "resident_runtime_hotkey_summon_authority_boundary",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", "-CachedTrayPresenceBoundaryProofPath", str(tray_presence_cache))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["cached_tray_presence_boundary_proof"] is True
+    assert payload["previous_tray_presence_family_observed"] is True
+    assert payload["hotkey_summon_boundary_observed"] is True
+
+
 def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None:
     proc = _run_proof("-Mode", "Status")
 
@@ -116,6 +157,7 @@ def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None
     assert payload["previous_tray_presence_family_observed"] is True
     assert payload["summon_preflight_observed"] is True
     assert payload["authority_blockers_proof_observed"] is True
+    assert payload["cached_tray_presence_boundary_proof"] is False
     assert payload["cached_summon_preflight"] is False
     assert payload["side_effects_denied"] is True
     assert payload["fourth_authority_family_consumed"] is True

@@ -1382,6 +1382,22 @@ $ResidentRuntimeTrayPresenceBoundaryProofPassed = (
   $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'tray_icon_authority_not_granted' -and
   $ResidentRuntimeTrayPresenceBoundaryBlockers -contains 'notification_authority_not_granted'
 )
+$ResidentRuntimeTrayPresenceBoundaryCachePayload = [ordered]@{
+  ok = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+  kind = 'lens.resident_runtime.tray_presence_boundary.proof'
+  status = if ($ResidentRuntimeTrayPresenceBoundaryProofPassed) { 'proof_passed' } else { 'proof_failed' }
+  authority_family = 'tray_presence'
+  previous_authority_family = 'service_control'
+  next_authority_family = 'hotkey_summon'
+  tray_presence_boundary_observed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+  previous_service_control_family_observed = $ResidentRuntimeServiceControlBoundaryProofPassed
+  tray_preflight_observed = $TrayPreflightObserved
+  authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
+  side_effects_denied = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+  third_authority_family_consumed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
+  next_smallest_truthful_gap = 'resident_runtime_hotkey_summon_authority_boundary'
+}
+$ResidentRuntimeTrayPresenceBoundaryProofCachePath = Write-ProofPayloadCache -Payload $ResidentRuntimeTrayPresenceBoundaryCachePayload -FileName 'resident-runtime-tray-presence-boundary-proof.json'
 $SummonPreflightResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonPreflightPath -ScriptArgs @('-Mode', 'Status'))
 $SummonPreflightProof = if ($SummonPreflightResult.Count -gt 0) { $SummonPreflightResult[-1] } else { $null }
 $SummonPreflightExitCode = -1
@@ -1452,6 +1468,9 @@ $ResidentRuntimeHotkeySummonBoundaryProofDataRoot = Join-Path $CheckpointProofDa
 $ResidentRuntimeHotkeySummonBoundaryArgs = @('-Mode', 'Status', '-DataDir', $ResidentRuntimeHotkeySummonBoundaryProofDataRoot)
 if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCachePath)) {
   $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeTrayPresenceBoundaryProofCachePath)) {
+  $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedTrayPresenceBoundaryProofPath', $ResidentRuntimeTrayPresenceBoundaryProofCachePath)
 }
 if (-not [string]::IsNullOrWhiteSpace($SummonPreflightProofCachePath)) {
   $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedSummonPreflightProofPath', $SummonPreflightProofCachePath)
