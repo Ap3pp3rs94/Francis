@@ -31288,6 +31288,42 @@ window hardening:
   Result:
   `passed; warned that Git will normalize scripts/lens-stage6-completion-audit.ps1 from LF to CRLF next time Git touches it`
 
+Stage 6 Lens direct resident-host CI window hardening on `2026-05-17`:
+
+- Followed up the stale Dependabot PR failures after `main` and rebased PRs
+  `#13` and `#14` turned green. Manual `--force-with-lease` rebases for
+  Dependabot PRs `#8`, `#10`, and `#11` triggered fresh CI runs on the pinned
+  Windows 2025 VS2026 matrix.
+- Fresh PR `#8` run `25989965468` exposed a real Windows 2025 VS2026 / Python
+  3.12 timing failure in
+  `test_lens_host_resident_mode_writes_runtime_candidate_readback`: the direct
+  resident-host test read the runtime state after the bounded resident process
+  had already exited, yielding `state_present_process_not_running` instead of
+  `process_observed`.
+- Kept the runtime behavior unchanged and widened only the direct resident-host
+  test window from `8s` to `12s`, with the matching process completion timeout
+  moved from `15s` to `20s`. The proof remains bounded and does not add runtime
+  authority.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision, service install/control,
+  tray, hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens direct resident-host CI window
+hardening:
+
+- `python -m pytest tests\test_lens_host_foreground_script.py::test_lens_host_resident_mode_writes_runtime_candidate_readback -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest observed call 12.45s`
+- `python -m pytest tests\test_lens_host_foreground_script.py -q --tb=short --durations=10 --durations-min=1`
+  Result: `passed; 4 tests completed`
+- `python -m ruff check tests\test_lens_host_foreground_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_host_foreground_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
