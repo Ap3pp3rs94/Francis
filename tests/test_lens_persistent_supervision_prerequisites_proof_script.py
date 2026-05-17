@@ -19,14 +19,6 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _family_chain_child_timeout_seconds(child_timeout_seconds: int) -> int:
-    return max(child_timeout_seconds, 240)
-
-
-def _family_chain_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    return (_family_chain_child_timeout_seconds(child_timeout_seconds) * 2) + 60
-
-
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -46,19 +38,18 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper() -> None:
+def test_lens_persistent_supervision_prerequisites_uses_summon_family_contract_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-persistent-supervision-prerequisites-proof.ps1").read_text(
         encoding="utf-8"
     )
 
-    assert "$FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
-    assert "$FamilyChainChildProofCount = 2" in script
-    assert "$FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount" in script
-    assert "$FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\\summon-anywhere-family-chain\\data'" in script
-    assert "$env:FRANCIS_DATA_DIR = $FamilyChainProofDataRoot" in script
-    assert "'-ChildProofTimeoutSeconds'," in script
-    assert "[string]$FamilyChainChildProofTimeoutSeconds" in script
-    assert "-TimeoutSeconds $FamilyChainTimeoutSeconds" in script
+    assert "lens-summon-anywhere-family-chain-proof.ps1" not in script
+    assert "FamilyChainResult" not in script
+    assert "FamilyChainProofDataRoot" not in script
+    assert "uses_summon_family_contract_readback = $true" in script
+    assert "wraps_summon_anywhere_family_chain_proof = $false" in script
+    assert "summon_family_contract_observed = $SummonFamilyContractObserved" in script
+    assert "prerequisites_mapped_to_summon_family_contract" in script
     assert "$FirstMissingRequirementForegroundRunSeconds = 2" in script
     assert "$FirstMissingRequirementHostLaunchRunSeconds = 3" in script
     assert "$FirstMissingRequirementResidentCandidateRunSeconds = 3" in script
@@ -67,7 +58,7 @@ def test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper(
     assert "[string]$FirstMissingRequirementResidentCandidateRunSeconds" in script
 
 
-def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
+def test_lens_persistent_supervision_prerequisites_align_to_summon_family_contract(
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
@@ -92,7 +83,9 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["enablement_route"] == "/lens/host/persistent-supervision/enablement"
     assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert payload["guard_next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
-    assert payload["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["summon_family_contract_next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert (
         payload["recommended_handoff_source"]
@@ -111,8 +104,8 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert payload["first_missing_requirement_observed"] is True
     assert payload["required_before_enable_guard_observed"] is True
     assert payload["dependency_readback_observed"] is True
-    assert payload["family_chain_observed"] is True
-    assert payload["prerequisites_mapped_to_family_chain"] is True
+    assert payload["summon_family_contract_observed"] is True
+    assert payload["prerequisites_mapped_to_summon_family_contract"] is True
     assert payload["first_missing_requirement_proof_observed"] is True
     assert payload["first_missing_requirement_side_effects_bounded"] is True
     assert payload["lens_status_operator_readback_observed"] is True
@@ -186,22 +179,22 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
         },
     }
 
-    family_chain = payload["family_chain"]
-    assert family_chain["status"] == "proof_passed"
-    assert family_chain["exit_code"] == 0
-    assert family_chain["timed_out"] is False
-    assert family_chain["timeout_seconds"] == _family_chain_wrapper_timeout_seconds(180)
-    assert family_chain["blocked_families"] == [
+    summon_family_contract = payload["summon_family_contract"]
+    assert summon_family_contract["status"] == "readback_ready"
+    assert summon_family_contract["source"] == "enablement_dependency_readback"
+    assert summon_family_contract["full_family_chain_proof_reexecuted"] is False
+    assert summon_family_contract["mapped_families"] == [
         "resident_host",
         "tray_presence",
-        "overlay_window",
         "global_hotkey_binding",
+        "overlay_window",
         "summon_binding",
-        "authority",
     ]
-    assert family_chain["handoff_count"] == 6
-    assert family_chain["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert family_chain["side_effects_denied"] is True
+    assert summon_family_contract["requirement_count"] == 5
+    assert (
+        summon_family_contract["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    )
+    assert summon_family_contract["side_effects_denied"] is True
 
     first_missing_proof = payload["first_missing_requirement_proof"]
     assert first_missing_proof["status"] == "proof_passed"
@@ -256,7 +249,7 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
     assert checks["first_missing_requirement_handoff"]["status"] == "first_missing_requirement_bound"
     assert checks["required_before_enable_readiness_guard"]["status"] == "prerequisite_guard_blocks_enablement"
     assert checks["enablement_dependency_readback"]["status"] == "dependency_routes_bound"
-    assert checks["summon_family_chain_alignment"]["status"] == "family_chain_aligned"
+    assert checks["summon_family_contract_alignment"]["status"] == "family_contract_aligned"
     assert checks["first_missing_requirement_proof_consumed"]["status"] == "proof_consumed"
     assert checks["lens_status_operator_readback"]["status"] == "operator_readback_ready"
     assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
@@ -269,7 +262,8 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain(
         "wraps_persistent_supervision_plan_route": True,
         "wraps_persistent_supervision_enablement_route": True,
         "wraps_lens_status": True,
-        "wraps_summon_anywhere_family_chain_proof": True,
+        "uses_summon_family_contract_readback": True,
+        "wraps_summon_anywhere_family_chain_proof": False,
         "wraps_first_missing_requirement_proof": True,
         "readiness_guard_projection": True,
         "bounded_local_process_launch": True,

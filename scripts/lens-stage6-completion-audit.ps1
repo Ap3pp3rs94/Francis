@@ -494,13 +494,8 @@ $PersistentSupervisionPlanObserved = (
   -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
 )
 $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 2
-$PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds = (
-  $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds * $PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount
-) + 60
-$PersistentSupervisionPrerequisitesProofFirstMissingRequirementTimeoutSeconds = $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
 $PersistentSupervisionPrerequisitesProofTimeoutSeconds = (
-  $PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds + $PersistentSupervisionPrerequisitesProofFirstMissingRequirementTimeoutSeconds
+  $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
 ) + 60
 $PersistentSupervisionPrerequisitesProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
@@ -528,7 +523,7 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [string]$PersistentSupervisionPrerequisitesProof.enablement_route -eq '/lens/host/persistent-supervision/enablement' -and
   [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
   [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
-  [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$PersistentSupervisionPrerequisitesProof.summon_family_contract_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string]$PersistentSupervisionPrerequisitesProof.authority_required -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
   -not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted -and
@@ -538,8 +533,8 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_guard_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed -and
-  [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed -and
-  [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain -and
+  [bool]$PersistentSupervisionPrerequisitesProof.summon_family_contract_observed -and
+  [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_summon_family_contract -and
   [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_side_effects_bounded -and
   [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed -and
@@ -561,7 +556,8 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_plan_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_enablement_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_lens_status -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_summon_anywhere_family_chain_proof -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.uses_summon_family_contract_readback -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_summon_anywhere_family_chain_proof -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_first_missing_requirement_proof -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_local_process_launch -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_process_launch -and
@@ -3712,7 +3708,7 @@ $Payload = [ordered]@{
     enablement_route = [string]$PersistentSupervisionPrerequisitesProof.enablement_route
     route_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap
     guard_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap
-    family_chain_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.family_chain_next_smallest_truthful_gap
+    summon_family_contract_next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.summon_family_contract_next_smallest_truthful_gap
     next_smallest_truthful_gap = [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap
     authority_required = [string]$PersistentSupervisionPrerequisitesProof.authority_required
     authority_granted = [bool]$PersistentSupervisionPrerequisitesProof.authority_granted
@@ -3722,8 +3718,8 @@ $Payload = [ordered]@{
     missing_required_before_enable_observed = [bool]$PersistentSupervisionPrerequisitesProof.missing_required_before_enable_observed
     required_before_enable_guard_observed = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_guard_observed
     dependency_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed
-    family_chain_observed = [bool]$PersistentSupervisionPrerequisitesProof.family_chain_observed
-    prerequisites_mapped_to_family_chain = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_family_chain
+    summon_family_contract_observed = [bool]$PersistentSupervisionPrerequisitesProof.summon_family_contract_observed
+    prerequisites_mapped_to_summon_family_contract = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_summon_family_contract
     first_missing_requirement_proof_observed = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_observed
     first_missing_requirement_side_effects_bounded = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_side_effects_bounded
     lens_status_operator_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed
@@ -3734,7 +3730,7 @@ $Payload = [ordered]@{
     first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
     first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
     dependency_readback = @($PersistentSupervisionPrerequisitesProof.dependency_readback)
-    family_chain = $PersistentSupervisionPrerequisitesProof.family_chain
+    summon_family_contract = $PersistentSupervisionPrerequisitesProof.summon_family_contract
     first_missing_requirement_proof = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof
     route_readback = $PersistentSupervisionPrerequisitesProof.route_readback
     guard_readback = $PersistentSupervisionPrerequisitesProof.guard_readback

@@ -422,10 +422,6 @@ try {
   }
 }
 
-$FamilyChainScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
-if (-not (Test-Path -LiteralPath $FamilyChainScript -PathType Leaf)) {
-  throw "Lens summon-anywhere family chain proof script is missing: $FamilyChainScript"
-}
 $FirstMissingRequirementProofScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-boundary-proof.ps1'
 if (-not (Test-Path -LiteralPath $FirstMissingRequirementProofScript -PathType Leaf)) {
   throw "Lens resident-host runtime boundary proof script is missing: $FirstMissingRequirementProofScript"
@@ -435,38 +431,9 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
-$FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$FamilyChainChildProofCount = 2
-$FamilyChainTimeoutSeconds = (
-  $FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount
-) + 60
 $FirstMissingRequirementForegroundRunSeconds = 2
 $FirstMissingRequirementHostLaunchRunSeconds = 3
 $FirstMissingRequirementResidentCandidateRunSeconds = 3
-$FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\summon-anywhere-family-chain\data'
-$BeforeFamilyChainDataDir = [string]$env:FRANCIS_DATA_DIR
-try {
-  $env:FRANCIS_DATA_DIR = $FamilyChainProofDataRoot
-  $FamilyChainResult = Invoke-JsonProcess -FileName $PowerShell.Source -ProcessArgs @(
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    $FamilyChainScript,
-    '-Mode',
-    'Status',
-    '-DataDir',
-    $FamilyChainProofDataRoot,
-    '-ChildProofTimeoutSeconds',
-    [string]$FamilyChainChildProofTimeoutSeconds
-  ) -TimeoutSeconds $FamilyChainTimeoutSeconds
-} finally {
-  if ([string]::IsNullOrWhiteSpace($BeforeFamilyChainDataDir)) {
-    Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
-  } else {
-    $env:FRANCIS_DATA_DIR = $BeforeFamilyChainDataDir
-  }
-}
 $FirstMissingRequirementProofDataRoot = Join-Path $ProofDataRoot 'proofs\resident-host-runtime-boundary\data'
 $BeforeFirstMissingRequirementDataDir = [string]$env:FRANCIS_DATA_DIR
 try {
@@ -503,7 +470,6 @@ $GuardEnablement = Get-PropertyValue -Payload $RequiredPrerequisiteGuard -Name '
 $StatusReadback = Get-PropertyValue -Payload $RoutePayload -Name 'status_readback'
 $StatusPlan = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_plan'
 $StatusEnablement = Get-PropertyValue -Payload $StatusReadback -Name 'persistent_supervision_enablement'
-$FamilyChain = $FamilyChainResult.payload
 $FirstMissingRequirementProof = $FirstMissingRequirementProofResult.payload
 $FirstMissingRequirementProofGovernance = Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'governance'
 $FirstMissingRequirementProofBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'blockers' -Default @())
@@ -522,6 +488,13 @@ $ExpectedFamilyMap = [ordered]@{
   overlay_window = 'overlay_window'
   summon_binding = 'summon_binding'
 }
+$ExpectedPrerequisiteFamilies = @(
+  'resident_host',
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
+)
 $ExpectedDependencyRoutes = [ordered]@{
   resident_host_process = '/lens/host'
   tray_presence = '/lens/tray'
@@ -555,8 +528,6 @@ $PlanFirstMissingRequiredBeforeEnable = [string](Get-PropertyValue -Payload $Pla
 $EnablementFirstMissingRequiredBeforeEnable = [string](Get-PropertyValue -Payload $Enablement -Name 'first_missing_required_before_enable' -Default '')
 $PlanFirstMissingRequirementHandoff = Get-PropertyValue -Payload $Plan -Name 'first_missing_requirement_handoff' -Default ([ordered]@{})
 $EnablementFirstMissingRequirementHandoff = Get-PropertyValue -Payload $Enablement -Name 'first_missing_requirement_handoff' -Default ([ordered]@{})
-$FamilyChainFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FamilyChain -Name 'blocked_families' -Default @())
-$FamilyChainHandoffs = @(Get-PropertyValue -Payload $FamilyChain -Name 'blocked_family_handoffs' -Default @())
 
 $PlanRouteReadbackObserved = (
   [int]$RouteResult.exit_code -eq 0 -and
@@ -631,9 +602,12 @@ foreach ($Prerequisite in @($ExpectedPrerequisites)) {
   $EnablementDependency = Get-DependencyById -Items $EnablementDependencies -Id $Prerequisite
   $Route = [string]$ExpectedDependencyRoutes[$Prerequisite]
   $Blocker = [string]$ExpectedDependencyBlockers[$Prerequisite]
+  $Family = [string]$ExpectedFamilyMap[$Prerequisite]
   $Observed = (
     $null -ne $PlanDependency -and
     $null -ne $EnablementDependency -and
+    [string](Get-PropertyValue -Payload $PlanDependency -Name 'family' -Default '') -eq $Family -and
+    [string](Get-PropertyValue -Payload $EnablementDependency -Name 'family' -Default '') -eq $Family -and
     [string](Get-PropertyValue -Payload $PlanDependency -Name 'route' -Default '') -eq $Route -and
     [string](Get-PropertyValue -Payload $EnablementDependency -Name 'route' -Default '') -eq $Route -and
     [string](Get-PropertyValue -Payload $PlanDependency -Name 'status' -Default '') -eq 'blocked' -and
@@ -648,28 +622,28 @@ foreach ($Prerequisite in @($ExpectedPrerequisites)) {
   }
   $DependencyReadback += [ordered]@{
     id = $Prerequisite
-    family = [string]$ExpectedFamilyMap[$Prerequisite]
+    family = [string](Get-PropertyValue -Payload $EnablementDependency -Name 'family' -Default '')
     route = $Route
     blocker = $Blocker
     observed = $Observed
   }
 }
 
-$PrerequisitesMappedToFamilyChain = $true
+$PrerequisitesMappedToSummonFamilyContract = $true
+$DependencyFamilies = @()
 foreach ($Prerequisite in @($ExpectedPrerequisites)) {
   $Family = [string]$ExpectedFamilyMap[$Prerequisite]
-  if ($FamilyChainFamilies -notcontains $Family) {
-    $PrerequisitesMappedToFamilyChain = $false
+  $Dependency = Get-DependencyById -Items $EnablementDependencies -Id $Prerequisite
+  $DependencyFamily = [string](Get-PropertyValue -Payload $Dependency -Name 'family' -Default '')
+  $DependencyFamilies += $DependencyFamily
+  if ($DependencyFamily -ne $Family) {
+    $PrerequisitesMappedToSummonFamilyContract = $false
   }
 }
-$FamilyChainObserved = (
-  [int]$FamilyChainResult.exit_code -eq 0 -and
-  [string](Get-PropertyValue -Payload $FamilyChain -Name 'kind' -Default '') -eq 'lens.summon_anywhere_family_chain.proof' -and
-  [string](Get-PropertyValue -Payload $FamilyChain -Name 'status' -Default '') -eq 'proof_passed' -and
-  [bool](Get-PropertyValue -Payload $FamilyChain -Name 'family_chain_observed' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $FamilyChain -Name 'handoff_aligned' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false) -and
-  $PrerequisitesMappedToFamilyChain
+$SummonFamilyContractObserved = (
+  $DependenciesObserved -and
+  $PrerequisitesMappedToSummonFamilyContract -and
+  (Test-StringArrayExact -Actual $DependencyFamilies -Expected $ExpectedPrerequisiteFamilies)
 )
 $FirstMissingRequirementProofObserved = (
   [int]$FirstMissingRequirementProofResult.exit_code -eq 0 -and
@@ -732,7 +706,6 @@ $EnablementGovernance = Get-PropertyValue -Payload $Enablement -Name 'governance
 $SideEffectsDenied = (
   (Test-GovernanceDenied -Governance $PlanGovernance -FalseKeys $DeniedKeys) -and
   (Test-GovernanceDenied -Governance $EnablementGovernance -FalseKeys $DeniedKeys) -and
-  [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false) -and
   $FirstMissingRequirementSideEffectsBounded -and
   -not (Test-Path -LiteralPath (Join-Path $ProofDataRoot 'runtime\lens-host\status.json') -PathType Leaf) -and
   -not (Test-Path -LiteralPath (Join-Path $ProofDataRoot 'runtime\lens-host\lens-host.pid') -PathType Leaf) -and
@@ -747,10 +720,10 @@ $Checks = @(
   (New-Check -Id 'first_missing_requirement_handoff' -Status $(if ($FirstMissingRequirementObserved) { 'first_missing_requirement_bound' } else { 'missing_or_unexpected' }) -Passed $FirstMissingRequirementObserved -Evidence 'first_missing_requirement_handoff on plan and enablement routes' -Reason 'The route must name the first concrete prerequisite to resolve before persistent supervision enablement.'),
   (New-Check -Id 'required_before_enable_readiness_guard' -Status $(if ($RequiredPrerequisiteGuardObserved) { 'prerequisite_guard_blocks_enablement' } else { 'missing_or_unexpected' }) -Passed $RequiredPrerequisiteGuardObserved -Evidence 'synthetic manifest projection of otherwise-ready persistent supervision routes' -Reason 'If authority and enablement toggles are otherwise ready, missing resident-host, tray, hotkey, overlay, and summon surfaces must still block persistent supervision.'),
   (New-Check -Id 'enablement_dependency_readback' -Status $(if ($DependenciesObserved) { 'dependency_routes_bound' } else { 'missing_or_unexpected' }) -Passed $DependenciesObserved -Evidence 'enablement_dependency_readback on plan and enablement routes' -Reason 'Each prerequisite must name a concrete readback route and blocker.'),
-  (New-Check -Id 'summon_family_chain_alignment' -Status $(if ($FamilyChainObserved) { 'family_chain_aligned' } else { 'missing_or_unexpected' }) -Passed $FamilyChainObserved -Evidence 'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status' -Reason 'Persistent-supervision prerequisites must align with the already-proven Stage 6 summon-anywhere blocker family chain.'),
+  (New-Check -Id 'summon_family_contract_alignment' -Status $(if ($SummonFamilyContractObserved) { 'family_contract_aligned' } else { 'missing_or_unexpected' }) -Passed $SummonFamilyContractObserved -Evidence 'enablement_dependency_readback family fields on plan and enablement routes' -Reason 'Persistent-supervision prerequisites must align with the summon-family taxonomy without rerunning the full summon family-chain proof.'),
   (New-Check -Id 'first_missing_requirement_proof_consumed' -Status $(if ($FirstMissingRequirementProofObserved) { 'proof_consumed' } else { 'missing_or_unexpected' }) -Passed $FirstMissingRequirementProofObserved -Evidence 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Reason 'The advertised first missing resident-host prerequisite must be consumed by the bounded runtime boundary proof.'),
   (New-Check -Id 'lens_status_operator_readback' -Status $(if ($StatusReadbackObserved) { 'operator_readback_ready' } else { 'missing_or_unexpected' }) -Passed $StatusReadbackObserved -Evidence '/lens/status resident_host persistent-supervision readback' -Reason 'The operator status payload must carry the same persistent-supervision plan and enablement readback.'),
-  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + family-chain governance + first missing proof governance + proof data root' -Reason 'This proof may consume one bounded diagnostic host-runtime proof but must not mutate service config, write memory, claim residence, or grant product/API execution, process, service, tray, hotkey, overlay, summon, approval, or resident authority.')
+  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + dependency readback + first missing proof governance + proof data root' -Reason 'This proof may consume one bounded diagnostic host-runtime proof but must not mutate service config, write memory, claim residence, or grant product/API execution, process, service, tray, hotkey, overlay, summon, approval, or resident authority.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 
@@ -768,7 +741,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   enablement_route = '/lens/host/persistent-supervision/enablement'
   route_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Enablement -Name 'next_smallest_truthful_gap' -Default '')
   guard_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $GuardEnablement -Name 'next_smallest_truthful_gap' -Default '')
-  family_chain_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $FamilyChain -Name 'next_smallest_truthful_gap' -Default '')
+  summon_family_contract_next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
   recommended_handoff_source = 'persistent_supervision_prerequisites_first_missing_requirement_handoff'
   recommended_next_slice = [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_step' -Default '')
@@ -783,8 +756,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   first_missing_requirement_observed = $FirstMissingRequirementObserved
   required_before_enable_guard_observed = $RequiredPrerequisiteGuardObserved
   dependency_readback_observed = $DependenciesObserved
-  family_chain_observed = $FamilyChainObserved
-  prerequisites_mapped_to_family_chain = $PrerequisitesMappedToFamilyChain
+  summon_family_contract_observed = $SummonFamilyContractObserved
+  prerequisites_mapped_to_summon_family_contract = $PrerequisitesMappedToSummonFamilyContract
   first_missing_requirement_proof_observed = $FirstMissingRequirementProofObserved
   first_missing_requirement_side_effects_bounded = $FirstMissingRequirementSideEffectsBounded
   lens_status_operator_readback_observed = $StatusReadbackObserved
@@ -795,16 +768,14 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   first_missing_required_before_enable = $EnablementFirstMissingRequiredBeforeEnable
   first_missing_requirement_handoff = $EnablementFirstMissingRequirementHandoff
   dependency_readback = @($DependencyReadback)
-  family_chain = [ordered]@{
-    status = if ($FamilyChainObserved) { [string](Get-PropertyValue -Payload $FamilyChain -Name 'status' -Default '') } else { 'missing_or_failed' }
-    exit_code = [int]$FamilyChainResult.exit_code
-    timed_out = [bool]$FamilyChainResult.timed_out
-    timeout_seconds = [int]$FamilyChainResult.timeout_seconds
-    duration_ms = [int]$FamilyChainResult.duration_ms
-    blocked_families = [string[]]@($FamilyChainFamilies)
-    handoff_count = @($FamilyChainHandoffs).Count
-    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $FamilyChain -Name 'next_smallest_truthful_gap' -Default '')
-    side_effects_denied = [bool](Get-PropertyValue -Payload $FamilyChain -Name 'side_effects_denied' -Default $false)
+  summon_family_contract = [ordered]@{
+    status = if ($SummonFamilyContractObserved) { 'readback_ready' } else { 'missing_or_failed' }
+    source = 'enablement_dependency_readback'
+    full_family_chain_proof_reexecuted = $false
+    mapped_families = [string[]]@($DependencyFamilies)
+    requirement_count = @($ExpectedPrerequisites).Count
+    next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
+    side_effects_denied = $SideEffectsDenied
   }
   first_missing_requirement_proof = [ordered]@{
     status = if ($FirstMissingRequirementProofObserved) { [string](Get-PropertyValue -Payload $FirstMissingRequirementProof -Name 'status' -Default '') } else { 'missing_or_failed' }
@@ -852,7 +823,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     '/lens/host/persistent-supervision/enablement',
     '/lens/status',
     'synthetic manifest required-before-enable readiness guard projection',
-    'scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status',
+    'enablement_dependency_readback summon-family contract',
     'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',
     'docs/canonical/ROADMAP.md#4.12'
   )
@@ -863,7 +834,8 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     wraps_persistent_supervision_plan_route = $true
     wraps_persistent_supervision_enablement_route = $true
     wraps_lens_status = $true
-    wraps_summon_anywhere_family_chain_proof = $true
+    uses_summon_family_contract_readback = $true
+    wraps_summon_anywhere_family_chain_proof = $false
     wraps_first_missing_requirement_proof = $true
     readiness_guard_projection = $true
     bounded_local_process_launch = $true
@@ -890,7 +862,7 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes; the required-before-enable guard still blocks an otherwise-ready projection on missing resident-host, tray, hotkey, overlay, and summon surfaces, and the first missing resident-host proof is consumed only as a bounded diagnostic launch without granting product/API execution, supervision, service, summon, memory, or resident authority.'
+  message = 'Persistent-supervision enablement prerequisites are readable from the plan, enablement, and operator status routes; the required-before-enable guard still blocks an otherwise-ready projection on missing resident-host, tray, hotkey, overlay, and summon surfaces, the summon-family contract is consumed from dependency readback without rerunning the full family-chain proof, and the first missing resident-host proof is consumed only as a bounded diagnostic launch without granting product/API execution, supervision, service, summon, memory, or resident authority.'
 } | ConvertTo-Json -Depth 8
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

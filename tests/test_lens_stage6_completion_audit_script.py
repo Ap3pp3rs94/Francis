@@ -51,8 +51,7 @@ def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
 
 
 def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    prerequisites_child_timeout = _prerequisites_child_timeout_seconds(child_timeout_seconds)
-    return _family_chain_wrapper_timeout_seconds(prerequisites_child_timeout) + prerequisites_child_timeout + 60
+    return _prerequisites_child_timeout_seconds(child_timeout_seconds) + 60
 
 
 def _transition_plan_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
@@ -132,9 +131,10 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
         "$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)"
         in script
     )
-    assert "$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 2" in script
     assert "$PersistentSupervisionPrerequisitesProofTimeoutSeconds" in script
     assert "[string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds" in script
+    assert "PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount" not in script
+    assert "PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds" not in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
     assert (
         "$ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount"
@@ -2571,7 +2571,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_proof["guard_next_smallest_truthful_gap"] == (
         "persistent_supervision_required_prerequisites_missing"
     )
-    assert prerequisites_proof["family_chain_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert prerequisites_proof["summon_family_contract_next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
     assert prerequisites_proof["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert prerequisites_proof["authority_required"] == (
         "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
@@ -2583,8 +2585,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_proof["missing_required_before_enable_observed"] is True
     assert prerequisites_proof["required_before_enable_guard_observed"] is True
     assert prerequisites_proof["dependency_readback_observed"] is True
-    assert prerequisites_proof["family_chain_observed"] is True
-    assert prerequisites_proof["prerequisites_mapped_to_family_chain"] is True
+    assert prerequisites_proof["summon_family_contract_observed"] is True
+    assert prerequisites_proof["prerequisites_mapped_to_summon_family_contract"] is True
     assert prerequisites_proof["first_missing_requirement_proof_observed"] is True
     assert prerequisites_proof["first_missing_requirement_side_effects_bounded"] is True
     assert prerequisites_proof["lens_status_operator_readback_observed"] is True
@@ -2592,6 +2594,13 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_proof["side_effects_bounded"] is True
     expected_persistent_prerequisites = [
         "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    expected_persistent_prerequisite_families = [
+        "resident_host",
         "tray_presence",
         "global_hotkey_binding",
         "overlay_window",
@@ -2613,13 +2622,16 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisite_dependency_readback["global_hotkey_binding"]["blocker"] == "global_hotkey_binding_missing"
     assert prerequisite_dependency_readback["overlay_window"]["blocker"] == "overlay_window_missing"
     assert prerequisite_dependency_readback["summon_binding"]["route"] == "/lens/summon"
-    prerequisites_family_chain = prerequisites_proof["family_chain"]
-    assert prerequisites_family_chain["status"] == "proof_passed"
-    assert prerequisites_family_chain["timed_out"] is False
-    assert prerequisites_family_chain["blocked_families"] == expected_summon_family_ids
-    assert prerequisites_family_chain["handoff_count"] == 6
-    assert prerequisites_family_chain["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert prerequisites_family_chain["side_effects_denied"] is True
+    prerequisites_family_contract = prerequisites_proof["summon_family_contract"]
+    assert prerequisites_family_contract["status"] == "readback_ready"
+    assert prerequisites_family_contract["source"] == "enablement_dependency_readback"
+    assert prerequisites_family_contract["full_family_chain_proof_reexecuted"] is False
+    assert prerequisites_family_contract["mapped_families"] == expected_persistent_prerequisite_families
+    assert prerequisites_family_contract["requirement_count"] == 5
+    assert prerequisites_family_contract["next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert prerequisites_family_contract["side_effects_denied"] is True
     prerequisites_first_missing_proof = prerequisites_proof["first_missing_requirement_proof"]
     assert prerequisites_first_missing_proof["status"] == "proof_passed"
     assert prerequisites_first_missing_proof["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
@@ -2639,7 +2651,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert prerequisites_governance["wraps_persistent_supervision_plan_route"] is True
     assert prerequisites_governance["wraps_persistent_supervision_enablement_route"] is True
     assert prerequisites_governance["wraps_lens_status"] is True
-    assert prerequisites_governance["wraps_summon_anywhere_family_chain_proof"] is True
+    assert prerequisites_governance["uses_summon_family_contract_readback"] is True
+    assert prerequisites_governance["wraps_summon_anywhere_family_chain_proof"] is False
     assert prerequisites_governance["wraps_first_missing_requirement_proof"] is True
     assert prerequisites_governance["bounded_local_process_launch"] is True
     assert prerequisites_governance["bounded_process_launch"] is True

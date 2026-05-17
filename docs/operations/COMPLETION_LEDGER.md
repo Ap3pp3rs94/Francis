@@ -30671,6 +30671,45 @@ reuse:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens prerequisites summon-family contract reuse on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25978131500`, where the transition-plan
+  prerequisite readback reuse slice passed but left the Stage 6/Lens Windows
+  slow tail concentrated in
+  `test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain`
+  at `135.45s` on Windows 3.12 and `137.25s` on Windows 3.13.
+- Changed `lens-persistent-supervision-prerequisites-proof.ps1` so it no
+  longer launches `lens-summon-anywhere-family-chain-proof.ps1` just to prove
+  persistent-supervision prerequisite family alignment. The proof now consumes
+  the `enablement_dependency_readback` family fields from the persistent
+  supervision plan and enablement routes, reports this as
+  `summon_family_contract_observed`, and still runs the bounded first-missing
+  resident-host runtime-boundary proof.
+- Updated the Stage 6 completion audit timeout budget and assertions for the
+  prerequisites proof. The audit now treats this as summon-family contract
+  readback, not a nested family-chain proof rerun.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens prerequisites summon-family contract
+reuse:
+
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_persistent_supervision_prerequisites_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 22.35s`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped; full live audit remains opt-in`
+- `python -m ruff check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
