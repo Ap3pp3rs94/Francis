@@ -30619,6 +30619,58 @@ honoring:
   Result:
   `passed; warned that Git will normalize scripts\lens-stage6-checkpoint.ps1 from LF to CRLF next time Git touches it`
 
+Stage 6 Lens transition-plan prerequisite readback reuse on `2026-05-17`:
+
+- Followed up green GitHub Actions run `25977258961`, which confirmed there are
+  no current `main` CI failures after the checkpoint observation-window slice.
+  The remaining CI trend is still the Windows Stage 6/Lens runtime tail:
+  Windows 3.12 Pytest took `33m01s` and the top slow calls were
+  `persistent_supervision_enablement_transition_plan=192.75s`,
+  `persistent_supervision_prerequisites=170.07s`, and
+  `summon_anywhere_family_chain=121.75s`.
+- Measured the prerequisites proof locally before changing the transition
+  wrapper. The proof returned `proof_passed` in `108644ms`, with
+  `family_chain_duration_ms=86110` and
+  `first_missing_requirement_proof.duration_ms=19271`. That confirmed the
+  transition-plan wrapper was paying for the full prerequisites proof even
+  though the transition plan only needs the required-before-enable readback.
+- Changed `lens-persistent-supervision-enablement-transition-plan-proof.ps1` to
+  consume the already-called persistent-supervision plan readback for
+  `required_before_enable` and `missing_required_before_enable` instead of
+  launching `lens-persistent-supervision-prerequisites-proof.ps1` as a nested
+  child proof. The transition proof still wraps the service-install plan, the
+  resident-claim boundary, and the persistent-supervision plan, and still
+  reports the same blocked product gap:
+  `persistent_supervision_required_prerequisites_missing`.
+- Updated the Stage 6 completion audit and tests to name this as
+  `persistent_supervision_prerequisites_readback_observed` with governance
+  `uses_persistent_supervision_plan_prerequisite_readback`, instead of claiming
+  that the transition wrapper re-ran the full prerequisites proof.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens transition-plan prerequisite readback
+reuse:
+
+- PowerShell parser check for
+  `scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1`
+  and `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py -q --tb=short --durations=5 --durations-min=1`
+  Result: `passed; slowest call 5.78s`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped; full live audit remains opt-in`
+- `python -m ruff check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

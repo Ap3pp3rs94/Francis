@@ -20,17 +20,6 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
-    return max(child_timeout_seconds, 240)
-
-
-def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    prerequisites_child_timeout = _prerequisites_child_timeout_seconds(child_timeout_seconds)
-    family_chain_timeout = (prerequisites_child_timeout * 2) + 60
-    first_missing_requirement_timeout = prerequisites_child_timeout
-    return family_chain_timeout + first_missing_requirement_timeout + 60
-
-
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -50,20 +39,19 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper() -> None:
+def test_lens_persistent_supervision_enablement_transition_plan_uses_plan_prerequisite_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-persistent-supervision-enablement-transition-plan-proof.ps1").read_text(
         encoding="utf-8"
     )
 
-    assert "$PrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
-    assert "$PrerequisitesProofFamilyChainChildProofCount = 2" in script
-    assert "$PrerequisitesProofFamilyChainTimeoutSeconds" in script
-    assert "$PrerequisitesProofFirstMissingRequirementTimeoutSeconds" in script
-    assert "$PrerequisitesProofTimeoutSeconds" in script
-    assert "francis-lens-persistent-supervision-prerequisites-proof" in script
-    assert "'-DataDir', $PrerequisitesProofDataDir" in script
-    assert "'-ChildProofTimeoutSeconds', [string]$PrerequisitesProofChildTimeoutSeconds" in script
-    assert "-TimeoutSeconds $PrerequisitesProofTimeoutSeconds" in script
+    assert "Test-StringArrayExact -Actual $RequiredBeforeEnable -Expected $ExpectedRequiredBeforeEnable" in script
+    assert (
+        "Test-StringArrayExact -Actual $MissingRequiredBeforeEnable -Expected $ExpectedRequiredBeforeEnable" in script
+    )
+    assert "uses_persistent_supervision_plan_prerequisite_readback" in script
+    assert "persistent_supervision_prerequisites_readback_observed" in script
+    assert "francis-lens-persistent-supervision-prerequisites-proof" not in script
+    assert "lens-persistent-supervision-prerequisites-proof.ps1" not in script
 
 
 def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only(
@@ -81,13 +69,11 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["child_proof_timeouts"] == []
     child_runs = payload["child_proof_runs"]
     assert [item["name"] for item in child_runs] == [
-        "persistent_supervision_prerequisites",
         "service_install_plan",
         "resident_claim_boundary",
         "persistent_supervision_plan",
     ]
     expected_child_timeouts = {
-        "persistent_supervision_prerequisites": _prerequisites_wrapper_timeout_seconds(240),
         "service_install_plan": 240,
         "resident_claim_boundary": 240,
         "persistent_supervision_plan": 240,
@@ -102,7 +88,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["transition_plan_ready"] is False
     assert payload["persistent_supervision_config_gate_enabled"] is True
     assert payload["persistent_supervision_enablement_disabled"] is False
-    assert payload["persistent_supervision_prerequisites_proof_observed"] is True
+    assert payload["persistent_supervision_prerequisites_readback_observed"] is True
     assert payload["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert payload["persistent_supervision_service_install_plan_proof_observed"] is True
     assert payload["persistent_supervision_resident_claim_boundary_observed"] is True
@@ -175,7 +161,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert all(step["would_mutate"] is False for step in steps.values())
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["persistent_supervision_prerequisites_proof"]["status"] == "proof_observed"
+    assert checks["persistent_supervision_prerequisites_readback"]["status"] == "readback_ready"
     assert checks["service_install_plan_boundary"]["status"] == payload["service_plan_status"]
     assert checks["persistent_supervision_authority_chain"]["status"] == "resident_claim_boundary_observed"
     assert checks["required_prerequisite_guard_readback"]["status"] == "blocked_prerequisites"
@@ -189,7 +175,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_is_readback_only
     assert payload["governance"] == {
         "diagnostic_only": True,
         "read_only_transition_plan": True,
-        "wraps_existing_prerequisite_proof": True,
+        "uses_persistent_supervision_plan_prerequisite_readback": True,
         "wraps_existing_service_install_plan_proof": True,
         "wraps_existing_resident_claim_boundary_proof": True,
         "test_fixture_approval_requests": True,

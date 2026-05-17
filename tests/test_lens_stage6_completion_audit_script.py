@@ -56,11 +56,7 @@ def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
 
 
 def _transition_plan_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    return (
-        _prerequisites_wrapper_timeout_seconds(child_timeout_seconds)
-        + (child_timeout_seconds * 3)
-        + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
-    )
+    return (child_timeout_seconds * 3) + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
 
 
 def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str, int]:
@@ -139,17 +135,12 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     assert "$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 2" in script
     assert "$PersistentSupervisionPrerequisitesProofTimeoutSeconds" in script
     assert "[string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds" in script
-    assert (
-        "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesChildTimeoutSeconds = "
-        "[Math]::Max($ChildProofTimeoutSeconds, 240)" in script
-    )
-    assert "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainChildProofCount = 2" in script
-    assert "$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
     assert (
         "$ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount"
         in script
     )
+    assert "PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" not in script
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
     assert "$SummonAnywhereFamilyChainProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
     assert "$SummonAnywhereFamilyChainProofChildProofCount = 2" in script
@@ -1505,7 +1496,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert transition_plan["transition_plan_ready"] is False
     assert transition_plan["persistent_supervision_config_gate_enabled"] is True
     assert transition_plan["persistent_supervision_enablement_disabled"] is False
-    assert transition_plan["persistent_supervision_prerequisites_proof_observed"] is True
+    assert transition_plan["persistent_supervision_prerequisites_readback_observed"] is True
     assert transition_plan["persistent_supervision_required_prerequisites_guard_observed"] is True
     assert transition_plan["persistent_supervision_service_install_plan_proof_observed"] is True
     assert transition_plan["persistent_supervision_resident_claim_boundary_observed"] is True
@@ -1571,7 +1562,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     transition_governance = transition_plan["governance"]
     assert transition_governance["diagnostic_only"] is True
     assert transition_governance["read_only_transition_plan"] is True
-    assert transition_governance["wraps_existing_prerequisite_proof"] is True
+    assert transition_governance["uses_persistent_supervision_plan_prerequisite_readback"] is True
     assert transition_governance["wraps_existing_service_install_plan_proof"] is True
     assert transition_governance["wraps_existing_resident_claim_boundary_proof"] is True
     assert transition_governance["product_execution_authority"] is False
