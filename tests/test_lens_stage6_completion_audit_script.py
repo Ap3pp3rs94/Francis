@@ -590,12 +590,12 @@ def test_lens_stage6_completion_audit_preserves_summon_authority_handoff_readbac
     assert "authority_required = [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required" in script
     assert "authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted" in script
     assert (
-        "authority_required = [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_required"
+        "authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required"
         in script
     )
     assert (
-        "authority_required = [string]"
-        "$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_required" in script
+        "authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted"
+        in script
     )
     assert "authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required" in script
     assert "authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted" in script
@@ -621,23 +621,13 @@ def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gat
     ) in script
     assert "-not [bool]$SummonAnywhereFamilyChainProof.authority_granted" in script
     assert (
-        "[string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'none_new_stage6_completion_audit'"
+        "[string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'resident_runtime_execution_authority'"
     ) in script
     assert "-not [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted" in script
-    assert "[bool]$SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff_observed" in script
     assert (
-        "[string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_required -eq "
-        "'none_new_stage6_completion_audit'"
+        "[string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_authority'"
     ) in script
-    assert "-not [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_granted" in script
-    assert (
-        "[string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_required "
-        "-eq 'none_new_stage6_completion_audit'"
-    ) in script
-    assert (
-        "-not [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_granted"
-        in script
-    )
+    assert "-not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted" in script
     assert (
         "[string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required -eq "
         "'summon_hotkey_overlay_and_process_authority'"
@@ -2153,7 +2143,10 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert (
         "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status" in (summon_authority_blocker_proof["evidence"])
     )
-    assert "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status" in (summon_authority_blocker_proof["evidence"])
+    assert (
+        "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[summon_binding]"
+        in (summon_authority_blocker_proof["evidence"])
+    )
     assert "scripts/lens-summon-preflight.ps1 -Mode Status" in summon_authority_blocker_proof["evidence"]
     assert summon_authority_blocker_proof["acceptance_criterion"] == "summon_anywhere"
     assert summon_authority_blocker_proof["previous_summon_blocker_family"] == "summon_binding"
@@ -2171,7 +2164,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_authority_blocker_proof["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert summon_authority_blocker_proof["authority_granted"] is False
     assert summon_authority_blocker_proof["summon_authority_family_observed"] is True
-    assert summon_authority_blocker_proof["previous_summon_binding_bridge_observed"] is True
+    assert summon_authority_blocker_proof["previous_summon_binding_contract_observed"] is True
+    assert summon_authority_blocker_proof["previous_summon_binding_contract_readback_observed"] is True
     assert summon_authority_blocker_proof["summon_preflight_authority_observed"] is True
     assert summon_authority_blocker_proof["all_summon_blocker_families_consumed"] is True
     assert summon_authority_blocker_proof["handoff_aligned"] is True
@@ -2225,7 +2219,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     summon_authority_governance = summon_authority_blocker_proof["governance"]
     assert summon_authority_governance["diagnostic_only"] is True
     assert summon_authority_governance["wraps_summon_anywhere_blockers_proof"] is True
-    assert summon_authority_governance["wraps_summon_binding_blocker_proof"] is True
+    assert summon_authority_governance["wraps_summon_binding_blocker_proof"] is False
+    assert summon_authority_governance["uses_summon_binding_family_contract_readback"] is True
     assert summon_authority_governance["wraps_summon_preflight"] is True
     assert summon_authority_governance["read_only_contract"] is True
     assert summon_authority_governance["approval_request_write"] is False
@@ -2268,7 +2263,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["family_chain_observed"] is True
     assert summon_anywhere_family_chain_proof["resident_host_family_handoff_observed"] is True
     assert summon_anywhere_family_chain_proof["final_summon_authority_handoff_observed"] is True
-    assert summon_anywhere_family_chain_proof["final_summon_authority_handoff_readback_observed"] is True
+    assert summon_anywhere_family_chain_proof["final_summon_authority_contract_readback_observed"] is True
     assert summon_anywhere_family_chain_proof["all_summon_blocker_families_consumed"] is True
     assert summon_anywhere_family_chain_proof["handoff_aligned"] is True
     assert summon_anywhere_family_chain_proof["side_effects_denied"] is True
@@ -2293,36 +2288,23 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["first_blocker_family"] == "resident_host"
     assert summon_anywhere_family_chain_proof["first_blocker_family_handoff"] == expected_first_summon_handoff
     family_chain_resident_host = summon_anywhere_family_chain_proof["resident_host"]
-    assert family_chain_resident_host["handoff_source"] == "summon_authority_previous_handoff_readback"
-    assert family_chain_resident_host["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert family_chain_resident_host["handoff_source"] == "summon_anywhere_blockers_first_family_handoff"
+    assert family_chain_resident_host["id"] == "resident_host"
+    assert family_chain_resident_host["status"] == "blocked"
     assert (
-        family_chain_resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+        family_chain_resident_host["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
     )
-    assert family_chain_resident_host["process_supervision_handoff_observed"] is True
-    assert family_chain_resident_host["authority_required"] == "none_new_stage6_completion_audit"
+    assert family_chain_resident_host["route"] == "/lens/host"
+    assert family_chain_resident_host["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert family_chain_resident_host["next_step"] == "run_resident_host_blocker_proof"
+    assert family_chain_resident_host["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert family_chain_resident_host["authority_required"] == "resident_runtime_execution_authority"
     assert family_chain_resident_host["authority_granted"] is False
-    family_chain_process_handoff = family_chain_resident_host["process_supervision_handoff"]
-    assert family_chain_process_handoff["status"] == "proof_passed"
-    assert family_chain_process_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert family_chain_process_handoff["authority_required"] == "none_new_stage6_completion_audit"
-    assert family_chain_process_handoff["authority_granted"] is False
-    family_chain_process_recommended = family_chain_process_handoff["recommended_handoff"]
-    assert family_chain_process_recommended["authority_required"] == "none_new_stage6_completion_audit"
-    assert family_chain_process_recommended["authority_granted"] is False
-    assert family_chain_process_recommended["read_only_contract"] is True
-    assert family_chain_process_recommended["diagnostic_only"] is True
-    assert family_chain_process_recommended["would_execute"] is False
-    assert family_chain_process_recommended["would_mutate"] is False
-    assert family_chain_process_recommended["would_supervise_process"] is False
-    assert family_chain_process_recommended["would_restart_process"] is False
-    assert family_chain_process_recommended["would_install_service"] is False
-    assert family_chain_process_recommended["would_start_service"] is False
-    assert family_chain_process_recommended["would_claim_resident"] is False
-    assert "lens_host_persistent_supervision_prerequisites_pending" in family_chain_resident_host["runtime_blockers"]
-    assert "tray_host_missing" in family_chain_resident_host["surface_blockers"]
-    assert "overlay_window_missing" in family_chain_resident_host["surface_blockers"]
-    assert "global_hotkey_binding_missing" in family_chain_resident_host["surface_blockers"]
-    assert "summon_binding_missing" in family_chain_resident_host["surface_blockers"]
+    assert family_chain_resident_host["read_only_contract"] is True
+    assert family_chain_resident_host["diagnostic_only"] is True
+    assert family_chain_resident_host["would_execute"] is False
+    assert family_chain_resident_host["would_mutate"] is False
+    assert family_chain_resident_host["blockers"] == ["local_process_launch_authority_not_granted"]
     family_chain_final_authority = summon_anywhere_family_chain_proof["final_authority"]
     assert family_chain_final_authority["previous_summon_blocker_family"] == "summon_binding"
     assert family_chain_final_authority["summon_authority_blocker_family"] == "authority"
@@ -2331,80 +2313,39 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert family_chain_final_authority["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert family_chain_final_authority["authority_granted"] is False
     assert family_chain_final_authority["all_summon_blocker_families_consumed"] is True
-    assert family_chain_final_authority["previous_summon_binding_bridge_handoff_readback_observed"] is True
+    assert family_chain_final_authority["previous_summon_binding_contract_observed"] is True
+    assert family_chain_final_authority["previous_summon_binding_contract_readback_observed"] is True
     family_chain_previous_binding = family_chain_final_authority["previous_binding_handoff"]
-    assert family_chain_previous_binding["status"] == "proof_passed"
+    assert family_chain_previous_binding["source"] == "summon_anywhere_blockers.blocked_family_handoffs"
+    assert family_chain_previous_binding["status"] == "contract_projected"
+    assert family_chain_previous_binding["contract_status"] == "blocked"
+    assert family_chain_previous_binding["proof_script"] == "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status"
     assert family_chain_previous_binding["previous_summon_blocker_family"] == "global_hotkey_binding"
     assert family_chain_previous_binding["summon_binding_blocker_family"] == "summon_binding"
     assert family_chain_previous_binding["next_summon_blocker_family"] == "authority"
     assert family_chain_previous_binding["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
+    assert family_chain_previous_binding["authority_required"] == "summon_authority"
+    assert family_chain_previous_binding["authority_granted"] is False
+    assert family_chain_previous_binding["read_only_contract"] is True
+    assert family_chain_previous_binding["diagnostic_only"] is True
+    assert family_chain_previous_binding["would_execute"] is False
+    assert family_chain_previous_binding["would_mutate"] is False
     assert family_chain_previous_binding["handoff_aligned"] is True
     assert family_chain_previous_binding["side_effects_denied"] is True
-    assert family_chain_previous_binding["previous_global_hotkey_bridge_handoff_readback_observed"] is True
-    family_chain_previous_global = family_chain_previous_binding["previous_global_hotkey_bridge"]
-    assert family_chain_previous_global["status"] == "proof_passed"
-    assert family_chain_previous_global["next_summon_blocker_family"] == "summon_binding"
-    assert family_chain_previous_global["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
-    assert family_chain_previous_global["previous_overlay_window_bridge_handoff_readback_observed"] is True
-    family_chain_previous_overlay = family_chain_previous_global["previous_overlay_window_bridge"]
-    assert family_chain_previous_overlay["status"] == "proof_passed"
-    assert family_chain_previous_overlay["next_summon_blocker_family"] == "global_hotkey_binding"
-    assert family_chain_previous_overlay["next_smallest_truthful_gap"] == (
-        "summon_global_hotkey_binding_blocker_boundary"
-    )
-    assert family_chain_previous_overlay["previous_tray_presence_bridge_resident_host_readback_observed"] is True
-    family_chain_previous_tray = family_chain_previous_overlay["previous_tray_presence_bridge"]
-    assert family_chain_previous_tray["status"] == "proof_passed"
-    assert family_chain_previous_tray["next_summon_blocker_family"] == "overlay_window"
-    assert family_chain_previous_tray["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
-    assert family_chain_previous_tray["previous_resident_host_bridge_observed"] is True
-    family_chain_previous_resident_host = family_chain_previous_tray["previous_resident_host_bridge"]
-    assert family_chain_previous_resident_host["status"] == "proof_passed"
-    assert family_chain_previous_resident_host["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert family_chain_previous_resident_host["authority_required"] == "none_new_stage6_completion_audit"
-    assert family_chain_previous_resident_host["authority_granted"] is False
-    assert (
-        family_chain_previous_resident_host["lifecycle_next_smallest_truthful_gap"]
-        == "resident_host_runtime_blocker_boundary"
-    )
-    assert family_chain_previous_resident_host["handoff_aligned"] is True
-    assert family_chain_previous_resident_host["side_effects_denied"] is True
-    assert family_chain_previous_resident_host["bounded_local_process_launch"] is True
-    assert family_chain_previous_resident_host["temporary_runtime_state_write"] is True
-    assert (
-        "lens_host_persistent_supervision_prerequisites_pending"
-        in family_chain_previous_resident_host["runtime_blockers"]
-    )
-    assert "tray_host_missing" in family_chain_previous_resident_host["surface_blockers"]
-    assert "overlay_window_missing" in family_chain_previous_resident_host["surface_blockers"]
-    assert "global_hotkey_binding_missing" in family_chain_previous_resident_host["surface_blockers"]
-    assert "summon_binding_missing" in family_chain_previous_resident_host["surface_blockers"]
-    assert family_chain_previous_resident_host["process_supervision_handoff_observed"] is True
-    family_chain_previous_process = family_chain_previous_resident_host["process_supervision_handoff"]
-    assert family_chain_previous_process["authority_required"] == "none_new_stage6_completion_audit"
-    assert family_chain_previous_process["authority_granted"] is False
-    family_chain_previous_recommended = family_chain_previous_process["recommended_handoff"]
-    assert family_chain_previous_recommended["authority_required"] == "none_new_stage6_completion_audit"
-    assert family_chain_previous_recommended["authority_granted"] is False
-    assert family_chain_previous_recommended["read_only_contract"] is True
-    assert family_chain_previous_recommended["diagnostic_only"] is True
-    assert family_chain_previous_recommended["would_execute"] is False
-    assert family_chain_previous_recommended["would_mutate"] is False
-    assert family_chain_previous_recommended["would_supervise_process"] is False
-    assert family_chain_previous_recommended["would_restart_process"] is False
-    assert family_chain_previous_recommended["would_install_service"] is False
-    assert family_chain_previous_recommended["would_start_service"] is False
-    assert family_chain_previous_recommended["would_claim_resident"] is False
+    assert family_chain_previous_binding["blockers"] == [
+        "lens_summon_binding_disabled_pending_authority",
+        "summon_authority_not_granted",
+    ]
     assert "summon_authority_not_granted" in family_chain_final_authority["blockers"]
     family_chain_governance = summon_anywhere_family_chain_proof["governance"]
     assert family_chain_governance["diagnostic_only"] is True
     assert family_chain_governance["wraps_summon_anywhere_blockers_proof"] is True
-    assert family_chain_governance["reuses_authority_previous_resident_host_bridge_readback"] is True
+    assert family_chain_governance["uses_summon_anywhere_family_handoff_contract"] is True
     assert family_chain_governance["wraps_summon_authority_blocker_proof"] is True
-    assert family_chain_governance["final_authority_previous_handoff_readback"] is True
+    assert family_chain_governance["final_authority_previous_contract_readback"] is True
     assert family_chain_governance["read_only_contract"] is True
-    assert family_chain_governance["bounded_local_process_launch"] is True
-    assert family_chain_governance["temporary_runtime_state_write"] is True
+    assert family_chain_governance["bounded_local_process_launch"] is False
+    assert family_chain_governance["temporary_runtime_state_write"] is False
     assert family_chain_governance["product_execution_authority"] is False
     assert family_chain_governance["execution_authority"] is False
     assert family_chain_governance["approval_decision_authority"] is False

@@ -1709,7 +1709,8 @@ $SummonAuthorityBlockerProofObserved = (
   [string]$SummonAuthorityBlockerProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
   -not [bool]$SummonAuthorityBlockerProof.authority_granted -and
   [bool]$SummonAuthorityBlockerProof.summon_authority_family_observed -and
-  [bool]$SummonAuthorityBlockerProof.previous_summon_binding_bridge_observed -and
+  [bool]$SummonAuthorityBlockerProof.previous_summon_binding_contract_observed -and
+  [bool]$SummonAuthorityBlockerProof.previous_summon_binding_contract_readback_observed -and
   [bool]$SummonAuthorityBlockerProof.summon_preflight_authority_observed -and
   [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed -and
   [bool]$SummonAuthorityBlockerProof.handoff_aligned -and
@@ -1751,7 +1752,8 @@ $SummonAuthorityBlockerProofObserved = (
   $SummonAuthorityBoundaryAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
   [bool]$SummonAuthorityBlockerProofGovernance.diagnostic_only -and
   [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
-  [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof -and
+  -not [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof -and
+  [bool]$SummonAuthorityBlockerProofGovernance.uses_summon_binding_family_contract_readback -and
   [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_preflight -and
   [bool]$SummonAuthorityBlockerProofGovernance.read_only_contract -and
   -not [bool]$SummonAuthorityBlockerProofGovernance.approval_request_write -and
@@ -1780,28 +1782,14 @@ $SummonAuthorityBlockerProofObserved = (
 )
 $SummonAnywhereFamilyChainProofGovernance = $SummonAnywhereFamilyChainProof.governance
 $SummonAnywhereFamilyChainProofResidentHost = $SummonAnywhereFamilyChainProof.resident_host
-$SummonAnywhereFamilyChainProofResidentHostProcessHandoff = $SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff
-$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff = $SummonAnywhereFamilyChainProofResidentHostProcessHandoff.recommended_handoff
 $SummonAnywhereFamilyChainProofFinalAuthority = $SummonAnywhereFamilyChainProof.final_authority
 $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding = $SummonAnywhereFamilyChainProofFinalAuthority.previous_binding_handoff
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_global_hotkey_bridge
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.previous_overlay_window_bridge
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.previous_tray_presence_bridge
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.previous_resident_host_bridge
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.process_supervision_handoff
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff = $SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.recommended_handoff
 $SummonAnywhereFamilyChainProofBlockedFamilies = ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.blocked_families
-$SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers = ConvertTo-StringArray -Value (
-  $SummonAnywhereFamilyChainProofResidentHost.runtime_blockers
+$SummonAnywhereFamilyChainProofResidentHostBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofResidentHost.blockers
 )
-$SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers = ConvertTo-StringArray -Value (
-  $SummonAnywhereFamilyChainProofResidentHost.surface_blockers
-)
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers = ConvertTo-StringArray -Value (
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.runtime_blockers
-)
-$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers = ConvertTo-StringArray -Value (
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.surface_blockers
+$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.blockers
 )
 $SummonAnywhereFamilyChainProofFinalAuthorityBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthority.blockers
@@ -1838,27 +1826,27 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProof.family_chain_observed -and
   [bool]$SummonAnywhereFamilyChainProof.resident_host_family_handoff_observed -and
   [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_observed -and
-  [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_readback_observed -and
+  [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_contract_readback_observed -and
   [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed -and
   [bool]$SummonAnywhereFamilyChainProof.handoff_aligned -and
   [bool]$SummonAnywhereFamilyChainProof.side_effects_denied -and
   [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq 'resident_host' -and
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_authority_previous_handoff_readback' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff_observed -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'none_new_stage6_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers_first_family_handoff' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq 'resident_host' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'blocked' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.route -eq '/lens/host' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.readiness_route -eq '/lens/host/runtime-loop/readiness' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.next_step -eq 'run_resident_host_blocker_proof' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'resident_runtime_execution_authority' -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted -and
-  [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
-  -not [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_granted -and
-  [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
-  -not [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_granted -and
-  $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
-  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
-  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
-  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and
-  $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers -contains 'summon_binding_missing' -and
+  [bool]$SummonAnywhereFamilyChainProofResidentHost.read_only_contract -and
+  [bool]$SummonAnywhereFamilyChainProofResidentHost.diagnostic_only -and
+  -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_execute -and
+  -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_mutate -and
+  $SummonAnywhereFamilyChainProofResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'summon_binding' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family -eq 'authority' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
@@ -1866,53 +1854,33 @@ $SummonAnywhereFamilyChainProofObserved = (
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_bridge_handoff_readback_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'proof_passed' -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_observed -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_readback_observed -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source -eq 'summon_anywhere_blockers.blocked_family_handoffs' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'contract_projected' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status -eq 'blocked' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script -eq 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_summon_blocker_family -eq 'global_hotkey_binding' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.summon_binding_blocker_family -eq 'summon_binding' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family -eq 'authority' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_global_hotkey_bridge_handoff_readback_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.status -eq 'proof_passed' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.next_summon_blocker_family -eq 'summon_binding' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.next_smallest_truthful_gap -eq 'summon_binding_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.previous_overlay_window_bridge_handoff_readback_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.status -eq 'proof_passed' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.next_summon_blocker_family -eq 'global_hotkey_binding' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.next_smallest_truthful_gap -eq 'summon_global_hotkey_binding_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.previous_tray_presence_bridge_resident_host_readback_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.status -eq 'proof_passed' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.next_summon_blocker_family -eq 'overlay_window' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.next_smallest_truthful_gap -eq 'summon_overlay_window_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.previous_resident_host_bridge_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.status -eq 'proof_passed' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_required -eq 'none_new_stage6_completion_audit' -and
-  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_granted -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.handoff_aligned -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.side_effects_denied -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.bounded_local_process_launch -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.temporary_runtime_state_write -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'summon_binding_missing' -and
-  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.process_supervision_handoff_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
-  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_granted -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
-  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.authority_granted -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_authority' -and
+  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.read_only_contract -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.diagnostic_only -and
+  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_execute -and
+  -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_mutate -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof -and
-  [bool]$SummonAnywhereFamilyChainProofGovernance.reuses_authority_previous_resident_host_bridge_readback -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.uses_summon_anywhere_family_handoff_contract -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof -and
-  [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_handoff_readback -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_contract_readback -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract -and
-  [bool]$SummonAnywhereFamilyChainProofGovernance.bounded_local_process_launch -and
-  [bool]$SummonAnywhereFamilyChainProofGovernance.temporary_runtime_state_write -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.bounded_local_process_launch -and
+  -not [bool]$SummonAnywhereFamilyChainProofGovernance.temporary_runtime_state_write -and
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.product_execution_authority -and
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.execution_authority -and
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.approval_decision_authority -and
@@ -3250,7 +3218,8 @@ $Payload = [ordered]@{
     authority_required = [string]$SummonAuthorityBlockerProof.authority_required
     authority_granted = [bool]$SummonAuthorityBlockerProof.authority_granted
     summon_authority_family_observed = [bool]$SummonAuthorityBlockerProof.summon_authority_family_observed
-    previous_summon_binding_bridge_observed = [bool]$SummonAuthorityBlockerProof.previous_summon_binding_bridge_observed
+    previous_summon_binding_contract_observed = [bool]$SummonAuthorityBlockerProof.previous_summon_binding_contract_observed
+    previous_summon_binding_contract_readback_observed = [bool]$SummonAuthorityBlockerProof.previous_summon_binding_contract_readback_observed
     summon_preflight_authority_observed = [bool]$SummonAuthorityBlockerProof.summon_preflight_authority_observed
     all_summon_blocker_families_consumed = [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed
     handoff_aligned = [bool]$SummonAuthorityBlockerProof.handoff_aligned
@@ -3278,6 +3247,7 @@ $Payload = [ordered]@{
       diagnostic_only = [bool]$SummonAuthorityBlockerProofGovernance.diagnostic_only
       wraps_summon_anywhere_blockers_proof = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_anywhere_blockers_proof
       wraps_summon_binding_blocker_proof = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof
+      uses_summon_binding_family_contract_readback = [bool]$SummonAuthorityBlockerProofGovernance.uses_summon_binding_family_contract_readback
       wraps_summon_preflight = [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_preflight
       read_only_contract = [bool]$SummonAuthorityBlockerProofGovernance.read_only_contract
       approval_request_write = $false
@@ -3318,7 +3288,7 @@ $Payload = [ordered]@{
     family_chain_observed = [bool]$SummonAnywhereFamilyChainProof.family_chain_observed
     resident_host_family_handoff_observed = [bool]$SummonAnywhereFamilyChainProof.resident_host_family_handoff_observed
     final_summon_authority_handoff_observed = [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_observed
-    final_summon_authority_handoff_readback_observed = [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_handoff_readback_observed
+    final_summon_authority_contract_readback_observed = [bool]$SummonAnywhereFamilyChainProof.final_summon_authority_contract_readback_observed
     all_summon_blocker_families_consumed = [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed
     handoff_aligned = [bool]$SummonAnywhereFamilyChainProof.handoff_aligned
     side_effects_denied = [bool]$SummonAnywhereFamilyChainProof.side_effects_denied
@@ -3331,32 +3301,20 @@ $Payload = [ordered]@{
     first_blocker_family_handoff = $SummonAnywhereFamilyChainProof.first_blocker_family_handoff
     resident_host = [ordered]@{
       handoff_source = [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source
+      id = [string]$SummonAnywhereFamilyChainProofResidentHost.id
+      status = [string]$SummonAnywhereFamilyChainProofResidentHost.status
+      proof_script = [string]$SummonAnywhereFamilyChainProofResidentHost.proof_script
+      route = [string]$SummonAnywhereFamilyChainProofResidentHost.route
+      readiness_route = [string]$SummonAnywhereFamilyChainProofResidentHost.readiness_route
+      next_step = [string]$SummonAnywhereFamilyChainProofResidentHost.next_step
       next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap
-      lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap
-      process_supervision_handoff_observed = [bool]$SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff_observed
       authority_required = [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required
       authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted
-      process_supervision_handoff = [ordered]@{
-        status = [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.status
-        next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.next_smallest_truthful_gap
-        authority_required = [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_required
-        authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoff.authority_granted
-        recommended_handoff = [ordered]@{
-          authority_required = [string]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_required
-          authority_granted = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.authority_granted
-          read_only_contract = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.read_only_contract
-          diagnostic_only = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.diagnostic_only
-          would_execute = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_execute
-          would_mutate = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_mutate
-          would_supervise_process = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_supervise_process
-          would_restart_process = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_restart_process
-          would_install_service = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_install_service
-          would_start_service = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_start_service
-          would_claim_resident = [bool]$SummonAnywhereFamilyChainProofResidentHostProcessHandoffRecommendedHandoff.would_claim_resident
-        }
-      }
-      runtime_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers)
-      surface_blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers)
+      read_only_contract = [bool]$SummonAnywhereFamilyChainProofResidentHost.read_only_contract
+      diagnostic_only = [bool]$SummonAnywhereFamilyChainProofResidentHost.diagnostic_only
+      would_execute = [bool]$SummonAnywhereFamilyChainProofResidentHost.would_execute
+      would_mutate = [bool]$SummonAnywhereFamilyChainProofResidentHost.would_mutate
+      blockers = [string[]]@($SummonAnywhereFamilyChainProofResidentHostBlockers)
     }
     final_authority = [ordered]@{
       previous_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family
@@ -3366,78 +3324,35 @@ $Payload = [ordered]@{
       authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthority.authority_required
       authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted
       all_summon_blocker_families_consumed = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed
-      previous_summon_binding_bridge_handoff_readback_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_bridge_handoff_readback_observed
+      previous_summon_binding_contract_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_observed
+      previous_summon_binding_contract_readback_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_readback_observed
       previous_binding_handoff = [ordered]@{
+        source = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source
         status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status
+        contract_status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status
+        proof_script = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script
         previous_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_summon_blocker_family
         summon_binding_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.summon_binding_blocker_family
         next_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family
         next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap
+        authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required
+        authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted
+        read_only_contract = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.read_only_contract
+        diagnostic_only = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.diagnostic_only
+        would_execute = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_execute
+        would_mutate = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_mutate
         handoff_aligned = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.handoff_aligned
         side_effects_denied = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.side_effects_denied
-        previous_global_hotkey_bridge_handoff_readback_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_global_hotkey_bridge_handoff_readback_observed
-        previous_global_hotkey_bridge = [ordered]@{
-          status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.status
-          next_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.next_summon_blocker_family
-          next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.next_smallest_truthful_gap
-          previous_overlay_window_bridge_handoff_readback_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousGlobal.previous_overlay_window_bridge_handoff_readback_observed
-          previous_overlay_window_bridge = [ordered]@{
-            status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.status
-            next_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.next_summon_blocker_family
-            next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.next_smallest_truthful_gap
-            previous_tray_presence_bridge_resident_host_readback_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousOverlay.previous_tray_presence_bridge_resident_host_readback_observed
-            previous_tray_presence_bridge = [ordered]@{
-              status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.status
-              next_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.next_summon_blocker_family
-              next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.next_smallest_truthful_gap
-              previous_resident_host_bridge_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousTray.previous_resident_host_bridge_observed
-              previous_resident_host_bridge = [ordered]@{
-                status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.status
-                first_summon_blocker_family = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.first_summon_blocker_family
-                summon_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.summon_next_smallest_truthful_gap
-                next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.next_smallest_truthful_gap
-                authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_required
-                authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_granted
-                lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.lifecycle_next_smallest_truthful_gap
-                handoff_aligned = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.handoff_aligned
-                side_effects_denied = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.side_effects_denied
-                bounded_local_process_launch = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.bounded_local_process_launch
-                temporary_runtime_state_write = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.temporary_runtime_state_write
-                runtime_blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers)
-                surface_blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers)
-                process_supervision_handoff_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.process_supervision_handoff_observed
-                process_supervision_handoff = [ordered]@{
-                  status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.status
-                  next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.next_smallest_truthful_gap
-                  authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_required
-                  authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_granted
-                  recommended_handoff = [ordered]@{
-                    authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.authority_required
-                    authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.authority_granted
-                    read_only_contract = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.read_only_contract
-                    diagnostic_only = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.diagnostic_only
-                    would_execute = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_execute
-                    would_mutate = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_mutate
-                    would_supervise_process = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_supervise_process
-                    would_restart_process = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_restart_process
-                    would_install_service = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_install_service
-                    would_start_service = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_start_service
-                    would_claim_resident = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousRecommendedHandoff.would_claim_resident
-                  }
-                }
-              }
-            }
-          }
-        }
+        blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers)
       }
       blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityBlockers)
     }
     governance = [ordered]@{
       diagnostic_only = [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only
       wraps_summon_anywhere_blockers_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof
-      reuses_authority_previous_resident_host_bridge_readback = [bool]$SummonAnywhereFamilyChainProofGovernance.reuses_authority_previous_resident_host_bridge_readback
+      uses_summon_anywhere_family_handoff_contract = [bool]$SummonAnywhereFamilyChainProofGovernance.uses_summon_anywhere_family_handoff_contract
       wraps_summon_authority_blocker_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof
-      final_authority_previous_handoff_readback = [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_handoff_readback
+      final_authority_previous_contract_readback = [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_contract_readback
       read_only_contract = [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract
       bounded_local_process_launch = [bool]$SummonAnywhereFamilyChainProofGovernance.bounded_local_process_launch
       temporary_runtime_state_write = [bool]$SummonAnywhereFamilyChainProofGovernance.temporary_runtime_state_write
