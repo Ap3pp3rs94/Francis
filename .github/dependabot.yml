@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Legacy pip install profiles use editable local paths (`-e .[...]`);
+    # Dependabot's uv graph scan cannot resolve them as dependency manifests.
+    exclude-paths:
+      - "requirements/**"

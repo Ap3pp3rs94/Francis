@@ -31209,6 +31209,38 @@ Latest validation for the Stage 6 Lens CI job timeout containment:
 - `git diff --check`
   Result: `passed`
 
+Dependency Graph uv path-dependency containment on `2026-05-17`:
+
+- Followed up the broader GitHub Actions surface after the repo `ci` workflow
+  turned green. The only non-`ci` failure found was a GitHub-managed Dependency
+  Graph `uv` update run from `2026-05-09` that failed because
+  `requirements\base.txt` contains the legacy editable install profile
+  `-e .[core]`.
+- Added `.github\dependabot.yml` with a root `uv` update entry and
+  `exclude-paths: ["requirements/**"]` so Dependabot scans the root `uv`
+  manifest instead of treating the legacy pip install-profile files as graph
+  manifests.
+- Added a Dependabot config contract test that preserves the root `uv` entry,
+  the weekly schedule, the `requirements/**` exclusion, and the absence of a
+  `/requirements` update directory.
+- This is GitHub-managed dependency graph containment only. It does not close
+  Stage 6, does not change Francis runtime behavior, does not grant resident
+  runtime, process supervision, service install/control, tray, hotkey, overlay,
+  summon, approval-decision, memory, receipt, capture, sensing,
+  window-management, resident-claim, or mutation authority, and Stage 6 remains
+  active at 2/5 checkpoint criteria.
+
+Latest validation for Dependency Graph uv path-dependency containment:
+
+- `python -m ruff check tests\test_dependabot_config_contract.py tests\test_ci_workflow_contract.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_dependabot_config_contract.py tests\test_ci_workflow_contract.py -q --tb=short`
+  Result: `passed; 6 tests completed`
+- `python -c "<dependabot.yml parse>"`
+  Result: `passed; printed uv requirements/**`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
