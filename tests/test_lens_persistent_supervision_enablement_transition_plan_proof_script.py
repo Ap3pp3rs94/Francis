@@ -26,7 +26,7 @@ def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
 
 def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
     prerequisites_child_timeout = _prerequisites_child_timeout_seconds(child_timeout_seconds)
-    family_chain_timeout = (prerequisites_child_timeout * 3) + 60
+    family_chain_timeout = (prerequisites_child_timeout * 2) + 60
     first_missing_requirement_timeout = prerequisites_child_timeout
     return family_chain_timeout + first_missing_requirement_timeout + 60
 
@@ -56,7 +56,7 @@ def test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequi
     )
 
     assert "$PrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
-    assert "$PrerequisitesProofFamilyChainChildProofCount = 3" in script
+    assert "$PrerequisitesProofFamilyChainChildProofCount = 2" in script
     assert "$PrerequisitesProofFamilyChainTimeoutSeconds" in script
     assert "$PrerequisitesProofFirstMissingRequirementTimeoutSeconds" in script
     assert "$PrerequisitesProofTimeoutSeconds" in script

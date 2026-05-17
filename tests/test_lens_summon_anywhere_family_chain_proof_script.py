@@ -41,7 +41,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
 def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() -> None:
     script = (_repo_root() / "scripts" / "lens-summon-anywhere-family-chain-proof.ps1").read_text(encoding="utf-8")
 
-    assert "'-ConsumeProcessSupervisionHandoff'" in script
+    assert "summon_authority_previous_handoff_readback" in script
     assert (
         "[string](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_required' -Default '') "
         "-eq 'none_new_stage6_completion_audit'"
@@ -50,12 +50,9 @@ def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() 
         "-not [bool](Get-PropertyValue -Payload $ResidentHostPayload -Name 'authority_granted' -Default $true)"
         in script
     )
-    assert "$ResidentHostBridgeForegroundRunSeconds = 2" in script
-    assert "$ResidentHostBridgeHostLaunchRunSeconds = 3" in script
-    assert "$ResidentHostBridgeSupervisorRunSeconds = 3" in script
-    assert "[string]$ResidentHostBridgeForegroundRunSeconds" in script
-    assert "[string]$ResidentHostBridgeHostLaunchRunSeconds" in script
-    assert "[string]$ResidentHostBridgeSupervisorRunSeconds" in script
+    assert "reuses_authority_previous_resident_host_bridge_readback" in script
+    assert "wraps_summon_resident_host_blocker_proof" not in script
+    assert "New-ChildProofRunSummary -Name 'summon_resident_host_blocker'" not in script
     assert (
         "[string](Get-PropertyValue -Payload $ResidentHostProcessSupervisionHandoff -Name 'authority_required' "
         "-Default '') -eq 'none_new_stage6_completion_audit'"
@@ -107,7 +104,6 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
         "summon_anywhere_blockers",
-        "summon_resident_host_blocker",
         "summon_authority_blocker",
     }
     for run in child_proof_runs.values():
@@ -131,6 +127,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     )
 
     resident_host = payload["resident_host"]
+    assert resident_host["handoff_source"] == "summon_authority_previous_handoff_readback"
     assert resident_host["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert resident_host["lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert resident_host["process_supervision_handoff_observed"] is True
@@ -201,6 +198,22 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert previous_resident_host_bridge["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert previous_resident_host_bridge["authority_required"] == "none_new_stage6_completion_audit"
     assert previous_resident_host_bridge["authority_granted"] is False
+    assert previous_resident_host_bridge["lifecycle_next_smallest_truthful_gap"] == (
+        "resident_host_runtime_blocker_boundary"
+    )
+    assert previous_resident_host_bridge["handoff_aligned"] is True
+    assert previous_resident_host_bridge["side_effects_denied"] is True
+    assert previous_resident_host_bridge["bounded_local_process_launch"] is True
+    assert previous_resident_host_bridge["temporary_runtime_state_write"] is True
+    assert previous_resident_host_bridge["runtime_blockers"] == [
+        "lens_host_persistent_supervision_prerequisites_pending"
+    ]
+    assert previous_resident_host_bridge["surface_blockers"] == [
+        "tray_host_missing",
+        "global_hotkey_binding_missing",
+        "overlay_window_missing",
+        "summon_binding_missing",
+    ]
     assert previous_resident_host_bridge["process_supervision_handoff_observed"] is True
     previous_process_handoff = previous_resident_host_bridge["process_supervision_handoff"]
     assert previous_process_handoff["status"] == "proof_passed"
@@ -238,8 +251,8 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["governance"] == {
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
-        "wraps_summon_resident_host_blocker_proof": True,
         "wraps_summon_authority_blocker_proof": True,
+        "reuses_authority_previous_resident_host_bridge_readback": True,
         "final_authority_previous_handoff_readback": True,
         "read_only_contract": True,
         "bounded_local_process_launch": True,

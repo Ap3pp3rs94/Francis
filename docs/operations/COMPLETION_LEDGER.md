@@ -30521,6 +30521,59 @@ narrowing:
 - `python -m ruff format --check tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
   Result: `passed; 3 files already formatted`
 
+Stage 6 Lens summon-family resident-host proof reuse on `2026-05-16`:
+
+- Followed up green GitHub Actions run `25974731621`, which confirmed the
+  prior direct proof-test supervisor-window narrowing passed on `main`. The
+  remaining CI trend is still Stage 6/Lens proof-runtime concentration, with
+  Windows 3.13 spending `32m43s` in Pytest and the slowest proof paths still
+  concentrated in persistent-supervision and summon-family readbacks.
+- Removed the summon-family chain's duplicate direct
+  `lens-summon-resident-host-blocker-proof.ps1` child invocation. The family
+  chain now reuses the resident-host bridge readback already preserved inside
+  the final summon-authority proof at
+  `previous_binding_handoff.previous_resident_host_bridge`.
+- Propagated the resident-host bridge lifecycle gap, governance-bounded flags,
+  handoff alignment, side-effect denial, runtime blockers, and surface blockers
+  through the tray, overlay, global-hotkey, binding, authority, and family-chain
+  readbacks so the reused handoff stays explicit instead of becoming synthetic.
+- Updated the parent proof budgets that wrap this family chain from three child
+  proofs to two child proofs in the prerequisites, transition-plan, and Stage 6
+  completion-audit wrappers. The Stage 6 completion audit now serializes with
+  `ConvertTo-Json -Depth 12` so the deep nested recommended handoff remains a
+  structured readback instead of a string.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens summon-family resident-host proof reuse:
+
+- PowerShell parser check for the touched Lens proof scripts:
+  `lens-summon-tray-presence-blocker-proof.ps1`,
+  `lens-summon-overlay-window-blocker-proof.ps1`,
+  `lens-summon-global-hotkey-binding-blocker-proof.ps1`,
+  `lens-summon-binding-blocker-proof.ps1`,
+  `lens-summon-authority-blocker-proof.ps1`,
+  `lens-summon-anywhere-family-chain-proof.ps1`,
+  `lens-persistent-supervision-prerequisites-proof.ps1`,
+  `lens-persistent-supervision-enablement-transition-plan-proof.ps1`, and
+  `lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks tests\test_lens_summon_anywhere_family_chain_proof_script.py::test_lens_summon_anywhere_family_chain_consumes_handoffs tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper tests\test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_align_to_summon_family_chain tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_budgets_prerequisites_wrapper tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py::test_lens_persistent_supervision_enablement_transition_plan_is_readback_only tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper -q --tb=short --durations=12 --durations-min=1`
+  Result:
+  `passed; slowest calls: transition_plan=112.88s, prerequisites=105.27s, summon_family_chain=84.29s`
+- `$env:FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST='1'; python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed; slowest call 656.01s`
+- `python -m ruff check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_persistent_supervision_prerequisites_proof_script.py tests\test_lens_persistent_supervision_enablement_transition_plan_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 4 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

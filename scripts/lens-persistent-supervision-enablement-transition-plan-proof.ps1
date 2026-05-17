@@ -223,7 +223,7 @@ if ([string]::IsNullOrWhiteSpace($ProofDataDir)) {
 }
 $ProofDataDir = [System.IO.Path]::GetFullPath($ProofDataDir)
 $PrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$PrerequisitesProofFamilyChainChildProofCount = 3
+$PrerequisitesProofFamilyChainChildProofCount = 2
 $PrerequisitesProofFamilyChainTimeoutSeconds = (
   $PrerequisitesProofChildTimeoutSeconds * $PrerequisitesProofFamilyChainChildProofCount
 ) + 60

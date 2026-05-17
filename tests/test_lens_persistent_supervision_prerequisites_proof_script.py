@@ -24,7 +24,7 @@ def _family_chain_child_timeout_seconds(child_timeout_seconds: int) -> int:
 
 
 def _family_chain_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    return (_family_chain_child_timeout_seconds(child_timeout_seconds) * 3) + 60
+    return (_family_chain_child_timeout_seconds(child_timeout_seconds) * 2) + 60
 
 
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
@@ -52,7 +52,7 @@ def test_lens_persistent_supervision_prerequisites_budgets_family_chain_wrapper(
     )
 
     assert "$FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
-    assert "$FamilyChainChildProofCount = 3" in script
+    assert "$FamilyChainChildProofCount = 2" in script
     assert "$FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount" in script
     assert "$FamilyChainProofDataRoot = Join-Path $ProofDataRoot 'proofs\\summon-anywhere-family-chain\\data'" in script
     assert "$env:FRANCIS_DATA_DIR = $FamilyChainProofDataRoot" in script

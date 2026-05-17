@@ -287,7 +287,7 @@ $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShe
 ) -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 $SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
 $SummonAnywhereFamilyChainProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$SummonAnywhereFamilyChainProofChildProofCount = 3
+$SummonAnywhereFamilyChainProofChildProofCount = 2
 $SummonAnywhereFamilyChainProofTimeoutSeconds = (
   $SummonAnywhereFamilyChainProofChildTimeoutSeconds * $SummonAnywhereFamilyChainProofChildProofCount
 ) + 60
@@ -494,7 +494,7 @@ $PersistentSupervisionPlanObserved = (
   -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
 )
 $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 3
+$PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount = 2
 $PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds = (
   $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds * $PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount
 ) + 60
@@ -766,7 +766,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
 $PersistentSupervisionEnablementTransitionPlanProofPrerequisitesChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainChildProofCount = 3
+$PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainChildProofCount = 2
 $PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainTimeoutSeconds = (
   $PersistentSupervisionEnablementTransitionPlanProofPrerequisitesChildTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofPrerequisitesFamilyChainChildProofCount
 ) + 60
@@ -1814,6 +1814,12 @@ $SummonAnywhereFamilyChainProofResidentHostRuntimeBlockers = ConvertTo-StringArr
 $SummonAnywhereFamilyChainProofResidentHostSurfaceBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofResidentHost.surface_blockers
 )
+$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.runtime_blockers
+)
+$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.surface_blockers
+)
 $SummonAnywhereFamilyChainProofFinalAuthorityBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthority.blockers
 )
@@ -1855,6 +1861,7 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProof.side_effects_denied -and
   [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq 'resident_host' -and
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_authority_previous_handoff_readback' -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
   [bool]$SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff_observed -and
@@ -1899,6 +1906,16 @@ $SummonAnywhereFamilyChainProofObserved = (
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_required -eq 'none_new_stage6_completion_audit' -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_granted -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.handoff_aligned -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.side_effects_denied -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.bounded_local_process_launch -and
+  [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.temporary_runtime_state_write -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'tray_host_missing' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'overlay_window_missing' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'global_hotkey_binding_missing' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers -contains 'summon_binding_missing' -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.process_supervision_handoff_observed -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.authority_granted -and
@@ -1907,7 +1924,7 @@ $SummonAnywhereFamilyChainProofObserved = (
   $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof -and
-  [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_resident_host_blocker_proof -and
+  [bool]$SummonAnywhereFamilyChainProofGovernance.reuses_authority_previous_resident_host_bridge_readback -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_handoff_readback -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract -and
@@ -3330,6 +3347,7 @@ $Payload = [ordered]@{
     first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
     first_blocker_family_handoff = $SummonAnywhereFamilyChainProof.first_blocker_family_handoff
     resident_host = [ordered]@{
+      handoff_source = [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source
       next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap
       lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofResidentHost.lifecycle_next_smallest_truthful_gap
       process_supervision_handoff_observed = [bool]$SummonAnywhereFamilyChainProofResidentHost.process_supervision_handoff_observed
@@ -3397,6 +3415,13 @@ $Payload = [ordered]@{
                 next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.next_smallest_truthful_gap
                 authority_required = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_required
                 authority_granted = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.authority_granted
+                lifecycle_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.lifecycle_next_smallest_truthful_gap
+                handoff_aligned = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.handoff_aligned
+                side_effects_denied = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.side_effects_denied
+                bounded_local_process_launch = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.bounded_local_process_launch
+                temporary_runtime_state_write = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.temporary_runtime_state_write
+                runtime_blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostRuntimeBlockers)
+                surface_blockers = [string[]]@($SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHostSurfaceBlockers)
                 process_supervision_handoff_observed = [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousResidentHost.process_supervision_handoff_observed
                 process_supervision_handoff = [ordered]@{
                   status = [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousProcessHandoff.status
@@ -3427,7 +3452,7 @@ $Payload = [ordered]@{
     governance = [ordered]@{
       diagnostic_only = [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only
       wraps_summon_anywhere_blockers_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof
-      wraps_summon_resident_host_blocker_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_resident_host_blocker_proof
+      reuses_authority_previous_resident_host_bridge_readback = [bool]$SummonAnywhereFamilyChainProofGovernance.reuses_authority_previous_resident_host_bridge_readback
       wraps_summon_authority_blocker_proof = [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_authority_blocker_proof
       final_authority_previous_handoff_readback = [bool]$SummonAnywhereFamilyChainProofGovernance.final_authority_previous_handoff_readback
       read_only_contract = [bool]$SummonAnywhereFamilyChainProofGovernance.read_only_contract
@@ -4121,5 +4146,5 @@ $Payload = [ordered]@{
   }
 }
 
-$Payload | ConvertTo-Json -Depth 8
+$Payload | ConvertTo-Json -Depth 12
 exit 0

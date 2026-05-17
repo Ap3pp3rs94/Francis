@@ -436,7 +436,7 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 $FamilyChainChildProofTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
-$FamilyChainChildProofCount = 3
+$FamilyChainChildProofCount = 2
 $FamilyChainTimeoutSeconds = (
   $FamilyChainChildProofTimeoutSeconds * $FamilyChainChildProofCount
 ) + 60
