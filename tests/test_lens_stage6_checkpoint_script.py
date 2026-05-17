@@ -44,6 +44,31 @@ def _run_checkpoint(*args: str) -> subprocess.CompletedProcess[str]:
         )
 
 
+def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_changing_defaults() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert (
+        "$ResidentSurfaceForegroundMinimumSeconds = if "
+        "($PSBoundParameters.ContainsKey('ResidentSurfaceForegroundRunSeconds')) { 2 } else { 25 }"
+    ) in script
+    assert (
+        "$SupervisorObservationMinimumSeconds = if ($PSBoundParameters.ContainsKey('SupervisorRunSeconds')) "
+        "{ 3 } else { 12 }"
+    ) in script
+    assert (
+        "$ResidentOverlayActivationStartupMinimumSeconds = if "
+        "($PSBoundParameters.ContainsKey('StartupTimeoutSeconds')) { 5 } else { 20 }"
+    ) in script
+    assert (
+        "$ResidentOverlayActivationSupervisorMinimumSeconds = if "
+        "($PSBoundParameters.ContainsKey('SupervisorRunSeconds')) { 3 } else { 25 }"
+    ) in script
+    assert (
+        "$ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds = if "
+        "($PSBoundParameters.ContainsKey('ResidentSurfaceForegroundRunSeconds')) { 2 } else { 25 }"
+    ) in script
+
+
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
     proc = _run_checkpoint(
         "-Mode",
@@ -68,20 +93,20 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["ready_to_close"] is False
     assert payload["observation_windows"] == {
         "resident_surface_foreground_requested_seconds": 2,
-        "resident_surface_foreground_effective_seconds": 25,
-        "resident_surface_foreground_minimum_seconds": 25,
+        "resident_surface_foreground_effective_seconds": 2,
+        "resident_surface_foreground_minimum_seconds": 2,
         "supervisor_requested_seconds": 3,
-        "supervisor_effective_seconds": 12,
-        "supervisor_minimum_seconds": 12,
+        "supervisor_effective_seconds": 3,
+        "supervisor_minimum_seconds": 3,
         "resident_overlay_activation_startup_requested_seconds": 5,
-        "resident_overlay_activation_startup_effective_seconds": 20,
-        "resident_overlay_activation_startup_minimum_seconds": 20,
-        "resident_overlay_activation_supervisor_requested_seconds": 12,
-        "resident_overlay_activation_supervisor_effective_seconds": 25,
-        "resident_overlay_activation_supervisor_minimum_seconds": 25,
-        "resident_overlay_activation_resident_surface_foreground_requested_seconds": 25,
-        "resident_overlay_activation_resident_surface_foreground_effective_seconds": 25,
-        "resident_overlay_activation_resident_surface_foreground_minimum_seconds": 25,
+        "resident_overlay_activation_startup_effective_seconds": 5,
+        "resident_overlay_activation_startup_minimum_seconds": 5,
+        "resident_overlay_activation_supervisor_requested_seconds": 3,
+        "resident_overlay_activation_supervisor_effective_seconds": 3,
+        "resident_overlay_activation_supervisor_minimum_seconds": 3,
+        "resident_overlay_activation_resident_surface_foreground_requested_seconds": 2,
+        "resident_overlay_activation_resident_surface_foreground_effective_seconds": 2,
+        "resident_overlay_activation_resident_surface_foreground_minimum_seconds": 2,
     }
     assert payload["summary"] == {
         "criteria_total": 5,
@@ -1293,8 +1318,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_overlay_runtime_proof"]["status"] == "proof_passed"
     assert payload["resident_overlay_runtime_proof"]["ok"] is True
     assert payload["resident_overlay_runtime_proof"]["exit_code"] == 0
-    assert payload["resident_overlay_runtime_proof"]["requested_resident_surface_foreground_run_seconds"] == 25
-    assert payload["resident_overlay_runtime_proof"]["resident_surface_foreground_run_seconds"] == 25
+    assert payload["resident_overlay_runtime_proof"]["requested_resident_surface_foreground_run_seconds"] == 2
+    assert payload["resident_overlay_runtime_proof"]["resident_surface_foreground_run_seconds"] == 2
     assert payload["resident_overlay_runtime_proof"]["bounded_supervisor_observed"] is True
     assert payload["resident_overlay_runtime_proof"]["resident_overlay_runtime_ready"] is False
     assert payload["resident_overlay_runtime_proof"]["resident_overlay_runtime"] is False
@@ -1309,9 +1334,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_overlay_activation_boundary_proof"]["status"] == "proof_passed"
     assert payload["resident_overlay_activation_boundary_proof"]["ok"] is True
     assert payload["resident_overlay_activation_boundary_proof"]["exit_code"] == 0
-    assert payload["resident_overlay_activation_boundary_proof"]["startup_timeout_seconds"] == 20
-    assert payload["resident_overlay_activation_boundary_proof"]["supervisor_run_seconds"] == 25
-    assert payload["resident_overlay_activation_boundary_proof"]["resident_surface_foreground_run_seconds"] == 25
+    assert payload["resident_overlay_activation_boundary_proof"]["startup_timeout_seconds"] == 5
+    assert payload["resident_overlay_activation_boundary_proof"]["supervisor_run_seconds"] == 3
+    assert payload["resident_overlay_activation_boundary_proof"]["resident_surface_foreground_run_seconds"] == 2
     assert payload["resident_overlay_activation_boundary_proof"]["live_operator_experience_proof"] is True
     assert payload["resident_overlay_activation_boundary_proof"]["resident_overlay_boundary_observed"] is True
     assert payload["resident_overlay_activation_boundary_proof"]["activation_boundary_observed"] is True

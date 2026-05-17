@@ -738,27 +738,27 @@ $ResidentRuntimeResidentClaimBoundaryProofPath = Join-Path $PSScriptRoot 'lens-r
 $CheckpointProofDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
   'francis-lens-stage6-checkpoint-{0}-{1}' -f $PID, [guid]::NewGuid().ToString('N')
 )
-$ResidentSurfaceForegroundMinimumSeconds = 25
+$ResidentSurfaceForegroundMinimumSeconds = if ($PSBoundParameters.ContainsKey('ResidentSurfaceForegroundRunSeconds')) { 2 } else { 25 }
 $ResidentSurfaceForegroundObservationSeconds = [Math]::Max(
   $ResidentSurfaceForegroundRunSeconds,
   $ResidentSurfaceForegroundMinimumSeconds
 )
-$SupervisorObservationMinimumSeconds = 12
+$SupervisorObservationMinimumSeconds = if ($PSBoundParameters.ContainsKey('SupervisorRunSeconds')) { 3 } else { 12 }
 $SupervisorObservationSeconds = [Math]::Max(
   $SupervisorRunSeconds,
   $SupervisorObservationMinimumSeconds
 )
-$ResidentOverlayActivationStartupMinimumSeconds = 20
+$ResidentOverlayActivationStartupMinimumSeconds = if ($PSBoundParameters.ContainsKey('StartupTimeoutSeconds')) { 5 } else { 20 }
 $ResidentOverlayActivationStartupTimeoutSeconds = [Math]::Max(
   $StartupTimeoutSeconds,
   $ResidentOverlayActivationStartupMinimumSeconds
 )
-$ResidentOverlayActivationSupervisorMinimumSeconds = 25
+$ResidentOverlayActivationSupervisorMinimumSeconds = if ($PSBoundParameters.ContainsKey('SupervisorRunSeconds')) { 3 } else { 25 }
 $ResidentOverlayActivationSupervisorSeconds = [Math]::Max(
   $SupervisorObservationSeconds,
   $ResidentOverlayActivationSupervisorMinimumSeconds
 )
-$ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds = 25
+$ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds = if ($PSBoundParameters.ContainsKey('ResidentSurfaceForegroundRunSeconds')) { 2 } else { 25 }
 $ResidentOverlayActivationResidentSurfaceForegroundSeconds = [Math]::Max(
   $ResidentSurfaceForegroundObservationSeconds,
   $ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds

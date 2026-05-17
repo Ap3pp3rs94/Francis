@@ -30574,6 +30574,51 @@ Latest validation for the Stage 6 Lens summon-family resident-host proof reuse:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens checkpoint explicit observation-window honoring on `2026-05-16`:
+
+- Followed up green GitHub Actions run `25976441130`, which confirmed there are
+  no active CI failures on `main` after the summon-family resident-host proof
+  reuse slice. The remaining CI trend is the Stage 6/Lens runtime tail: Windows
+  3.12 Pytest took `33m01s`, Windows 3.13 Pytest took `29m19s`, and the
+  checkpoint test was the slowest single test on both Windows legs
+  (`162.68s` on Windows 3.12 and `150.90s` on Windows 3.13).
+- The checkpoint test already requested short bounded diagnostic windows
+  (`StartupTimeoutSeconds=5`, `ResidentSurfaceForegroundRunSeconds=2`,
+  `SupervisorRunSeconds=3`), but `lens-stage6-checkpoint.ps1` silently raised
+  those requests to larger hidden minimums (`20s`, `25s`, and `12s`/`25s`).
+- Changed the checkpoint proof to preserve its conservative default behavior
+  when no explicit parameter is supplied, while honoring explicitly supplied
+  bounded diagnostic windows within the declared parameter ranges. The
+  checkpoint still runs the same proof surfaces and preserves the same
+  authority-denied contract; only caller-requested observation lengths are no
+  longer inflated.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens checkpoint explicit observation-window
+honoring:
+
+- Direct child proof sanity checks with short explicit windows:
+  `lens-resident-surface-proof.ps1 -ForegroundRunSeconds 2`,
+  `lens-host-supervisor-observation-proof.ps1 -RunSeconds 3`, and
+  `lens-resident-overlay-activation-boundary-proof.ps1 -StartupTimeoutSeconds 5 -SupervisorRunSeconds 3 -ResidentSurfaceForegroundRunSeconds 2`.
+  Result: `passed; each proof returned proof_passed`
+- PowerShell parser check for `scripts\lens-stage6-checkpoint.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_changing_defaults tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 74.84s`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py`
+  Result:
+  `passed; 1 file already formatted; Ruff reported an access-denied cache write warning for .ruff_cache`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize scripts\lens-stage6-checkpoint.ps1 from LF to CRLF next time Git touches it`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
