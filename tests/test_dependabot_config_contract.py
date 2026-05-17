@@ -13,11 +13,7 @@ def _dependabot_config() -> dict:
 def test_dependabot_uv_scan_excludes_legacy_requirements_profiles() -> None:
     config = _dependabot_config()
     updates = config["updates"]
-    uv_entries = [
-        entry
-        for entry in updates
-        if entry["package-ecosystem"] == "uv" and entry["directory"] == "/"
-    ]
+    uv_entries = [entry for entry in updates if entry["package-ecosystem"] == "uv" and entry["directory"] == "/"]
 
     assert config["version"] == 2
     assert len(uv_entries) == 1

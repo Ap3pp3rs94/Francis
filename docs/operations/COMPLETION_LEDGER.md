@@ -31234,6 +31234,8 @@ Latest validation for Dependency Graph uv path-dependency containment:
 
 - `python -m ruff check tests\test_dependabot_config_contract.py tests\test_ci_workflow_contract.py`
   Result: `passed; All checks passed`
+- `python -m ruff format --check .`
+  Result: `passed; 671 files already formatted`
 - `python -m pytest tests\test_dependabot_config_contract.py tests\test_ci_workflow_contract.py -q --tb=short`
   Result: `passed; 6 tests completed`
 - `python -c "<dependabot.yml parse>"`
