@@ -3,6 +3,15 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
+  [ValidateRange(2, 30)]
+  [int]$ForegroundRunSeconds = 10,
+
+  [ValidateRange(2, 30)]
+  [int]$HostLaunchRunSeconds = 10,
+
+  [ValidateRange(3, 30)]
+  [int]$ResidentCandidateRunSeconds = 10,
+
   [string]$DataDir = '',
 
   [ValidateRange(30, 240)]
@@ -293,11 +302,11 @@ try {
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '10',
+    [string]$ForegroundRunSeconds,
     '-HostLaunchRunSeconds',
-    '10',
+    [string]$HostLaunchRunSeconds,
     '-ResidentCandidateRunSeconds',
-    '10'
+    [string]$ResidentCandidateRunSeconds
   ) -TimeoutSeconds $ChildProofTimeoutSeconds
 } finally {
   if ([string]::IsNullOrWhiteSpace($BeforeResidentDataDir)) {
@@ -525,6 +534,9 @@ $Payload = [ordered]@{
   recommended_proof_script = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
   recommended_route = '/lens/host/persistent-supervision/enablement/authority'
   recommended_readiness_route = '/lens/host/persistent-supervision/enablement/authority/readiness'
+  foreground_run_seconds = $ForegroundRunSeconds
+  host_launch_run_seconds = $HostLaunchRunSeconds
+  resident_candidate_run_seconds = $ResidentCandidateRunSeconds
   resident_candidate_boundary_proof_observed = $ResidentCandidateProofObserved
   persistent_supervision_plan_candidate_readback_observed = $PlanCandidateReadbackObserved
   persistent_supervision_enablement_candidate_readback_observed = $EnablementCandidateReadbackObserved

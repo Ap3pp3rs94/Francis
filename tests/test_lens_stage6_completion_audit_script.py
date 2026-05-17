@@ -142,6 +142,10 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     )
     assert "PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" not in script
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
+    assert "'-ForegroundRunSeconds'" in script
+    assert "'-HostLaunchRunSeconds'" in script
+    assert "[string]$ChildHostLaunchRunSeconds" in script
+    assert "'-ResidentCandidateRunSeconds'" in script
     assert "$SummonAnywhereFamilyChainProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
     assert "$SummonAnywhereFamilyChainProofChildProofCount = 2" in script
     assert (

@@ -30839,6 +30839,54 @@ reuse:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens resident-supervision persistence observation narrowing on
+`2026-05-17`:
+
+- Followed up green GitHub Actions run `25981701068`, where all matrix jobs
+  passed after resident overlay activation runtime reuse. The Windows 3.13
+  slowest list still showed Stage 6/Lens proof-runtime concentration, with
+  `test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority`
+  at `94.94s` and
+  `test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback`
+  at `45.28s`.
+- Changed `lens-resident-supervision-persistence-boundary-proof.ps1` so callers
+  can explicitly set the child resident-host runtime boundary observation
+  windows: `ForegroundRunSeconds`, `HostLaunchRunSeconds`, and
+  `ResidentCandidateRunSeconds`. The defaults remain `10s`, preserving the
+  existing standalone conservative behavior unless a caller asks for a bounded
+  diagnostic window.
+- Updated the direct persistence-boundary proof test to use the minimum
+  meaningful windows (`2s`, `3s`, and `3s`) and assert that the proof payload
+  reports those requested windows while still proving the same
+  authority-denied persistent-supervision handoff.
+- Updated the Stage 6 completion-audit wrapper to pass bounded windows into the
+  persistence-boundary proof instead of accepting its default `10s` child
+  observation windows.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-supervision persistence
+observation narrowing:
+
+- PowerShell parser check for
+  `scripts\lens-resident-supervision-persistence-boundary-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 22.34s`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

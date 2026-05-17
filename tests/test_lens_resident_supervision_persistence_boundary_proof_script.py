@@ -38,6 +38,19 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_supervision_persistence_boundary_supports_explicit_windows() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-supervision-persistence-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[int]$ForegroundRunSeconds = 10" in script
+    assert "[int]$HostLaunchRunSeconds = 10" in script
+    assert "[int]$ResidentCandidateRunSeconds = 10" in script
+    assert "[string]$ForegroundRunSeconds" in script
+    assert "[string]$HostLaunchRunSeconds" in script
+    assert "[string]$ResidentCandidateRunSeconds" in script
+
+
 def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback(
     tmp_path: Path,
 ) -> None:
@@ -45,6 +58,12 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     proc = _run_proof(
         "-Mode",
         "Status",
+        "-ForegroundRunSeconds",
+        "2",
+        "-HostLaunchRunSeconds",
+        "3",
+        "-ResidentCandidateRunSeconds",
+        "3",
         "-DataDir",
         str(data_dir),
         "-ChildProofTimeoutSeconds",
@@ -74,6 +93,9 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     assert payload["recommended_readiness_route"] == (
         "/lens/host/persistent-supervision/enablement/authority/readiness"
     )
+    assert payload["foreground_run_seconds"] == 2
+    assert payload["host_launch_run_seconds"] == 3
+    assert payload["resident_candidate_run_seconds"] == 3
     assert payload["resident_candidate_boundary_proof_observed"] is True
     assert payload["persistent_supervision_plan_candidate_readback_observed"] is True
     assert payload["persistent_supervision_enablement_candidate_readback_observed"] is True
