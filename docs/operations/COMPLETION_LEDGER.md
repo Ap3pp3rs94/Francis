@@ -30955,6 +30955,12 @@ Stage 6 Lens resident-runtime boundary checkpoint cache reuse on `2026-05-17`:
   readback into the overlay-window proof, and pass the cached overlay-window
   proof into the resident-claim proof. This removes repeated nested parent
   proof execution inside the checkpoint composition path.
+- Follow-up CI run `25983470238` showed that the checkpoint test's previous
+  explicit `2s` foreground-surface observation window could still be too tight
+  on Windows 3.12, producing the truthful weaker
+  `resident_surface_content_readback_ready` status. The test now requests a
+  still-bounded `5s` foreground window while continuing to require the stricter
+  `resident_surface_foreground_runtime_observed` proof state.
 - This is CI and proof-harness hardening only. It does not close Stage 6, does
   not grant resident runtime, process supervision/restart, service
   install/control, tray, hotkey, overlay, summon, memory, approval-decision,
@@ -30974,7 +30980,7 @@ cache reuse:
   Result:
   `passed; slowest calls: resident_claim_boundary=18.31s, overlay_window_isolated_data_dir=13.93s, overlay_window=13.64s, hotkey_summon=9.21s`
 - `python -m pytest tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority -q --tb=short --durations=12 --durations-min=1`
-  Result: `passed; slowest call 46.12s`
+  Result: `passed; slowest call 47.79s`
 - `python -m ruff check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
   Result: `passed; All checks passed`
 - `python -m ruff format --check tests\test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py tests\test_lens_resident_runtime_overlay_window_boundary_proof_script.py tests\test_lens_resident_runtime_resident_claim_boundary_proof_script.py tests\test_lens_stage6_checkpoint_script.py`

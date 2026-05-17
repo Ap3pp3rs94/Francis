@@ -86,7 +86,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "-HostLaunchRunSeconds",
         "2",
         "-ResidentSurfaceForegroundRunSeconds",
-        "2",
+        "5",
         "-SupervisorRunSeconds",
         "3",
     )
@@ -100,8 +100,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["stage_claim"] == "backend_readback_contract_only"
     assert payload["ready_to_close"] is False
     assert payload["observation_windows"] == {
-        "resident_surface_foreground_requested_seconds": 2,
-        "resident_surface_foreground_effective_seconds": 2,
+        "resident_surface_foreground_requested_seconds": 5,
+        "resident_surface_foreground_effective_seconds": 5,
         "resident_surface_foreground_minimum_seconds": 2,
         "supervisor_requested_seconds": 3,
         "supervisor_effective_seconds": 3,
@@ -112,8 +112,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_overlay_activation_supervisor_requested_seconds": 3,
         "resident_overlay_activation_supervisor_effective_seconds": 3,
         "resident_overlay_activation_supervisor_minimum_seconds": 3,
-        "resident_overlay_activation_resident_surface_foreground_requested_seconds": 2,
-        "resident_overlay_activation_resident_surface_foreground_effective_seconds": 2,
+        "resident_overlay_activation_resident_surface_foreground_requested_seconds": 5,
+        "resident_overlay_activation_resident_surface_foreground_effective_seconds": 5,
         "resident_overlay_activation_resident_surface_foreground_minimum_seconds": 2,
     }
     assert payload["summary"] == {
@@ -1326,8 +1326,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_overlay_runtime_proof"]["status"] == "proof_passed"
     assert payload["resident_overlay_runtime_proof"]["ok"] is True
     assert payload["resident_overlay_runtime_proof"]["exit_code"] == 0
-    assert payload["resident_overlay_runtime_proof"]["requested_resident_surface_foreground_run_seconds"] == 2
-    assert payload["resident_overlay_runtime_proof"]["resident_surface_foreground_run_seconds"] == 2
+    assert payload["resident_overlay_runtime_proof"]["requested_resident_surface_foreground_run_seconds"] == 5
+    assert payload["resident_overlay_runtime_proof"]["resident_surface_foreground_run_seconds"] == 5
     assert payload["resident_overlay_runtime_proof"]["bounded_supervisor_observed"] is True
     assert payload["resident_overlay_runtime_proof"]["resident_overlay_runtime_ready"] is False
     assert payload["resident_overlay_runtime_proof"]["resident_overlay_runtime"] is False
@@ -1344,7 +1344,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_overlay_activation_boundary_proof"]["exit_code"] == 0
     assert payload["resident_overlay_activation_boundary_proof"]["startup_timeout_seconds"] == 5
     assert payload["resident_overlay_activation_boundary_proof"]["supervisor_run_seconds"] == 3
-    assert payload["resident_overlay_activation_boundary_proof"]["resident_surface_foreground_run_seconds"] == 2
+    assert payload["resident_overlay_activation_boundary_proof"]["resident_surface_foreground_run_seconds"] == 5
     assert payload["resident_overlay_activation_boundary_proof"]["live_operator_experience_proof"] is True
     assert payload["resident_overlay_activation_boundary_proof"]["resident_overlay_boundary_observed"] is True
     assert payload["resident_overlay_activation_boundary_proof"]["activation_boundary_observed"] is True
