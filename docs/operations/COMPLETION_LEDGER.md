@@ -31374,8 +31374,8 @@ Stage 6 Lens cross-platform host-activation CI contract hardening on
   `bounded_foreground_launch_failed`.
 - Kept the runtime behavior unchanged and tightened the API contract test so
   Windows still requires the observed bounded foreground launch while
-  non-Windows runners prove the truthful failed-launch receipt and execution
-  readback path when foreground observation is unavailable.
+  non-Windows runners prove the status-accurate receipt and execution readback
+  path for either observed launch or truthful failed launch.
 - This is CI and contract hardening only. It does not close Stage 6, does not
   grant resident runtime, process supervision, service install/control, tray,
   hotkey, overlay, summon, approval-decision, memory, receipt, capture,
@@ -31386,7 +31386,7 @@ Latest validation for the Stage 6 Lens cross-platform host-activation CI
 contract hardening:
 
 - `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch -q --tb=short --durations=8 --durations-min=1`
-  Result: `passed; slowest observed call 2.72s`
+  Result: `passed; slowest observed call 2.23s`
 - `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m ruff check tests\test_api_lens.py`
   Result: `passed; All checks passed`
 - `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m ruff format --check tests\test_api_lens.py`

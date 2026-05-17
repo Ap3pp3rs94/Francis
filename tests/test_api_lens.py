@@ -8982,6 +8982,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     executed_body = executed.json()
     powershell_available = bool(shutil.which("pwsh") or shutil.which("powershell"))
     expects_observed_foreground_launch = powershell_available and os.name == "nt"
+    launch_observed = executed_body["status"] == "bounded_foreground_launch_observed"
     assert executed_body["kind"] == "lens.host.activation.execution"
     assert executed_body["approval_id"] == approval_id
     assert executed_body["run_seconds"] == 1
@@ -8997,6 +8998,8 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executed_body["receipt"]["approval_id"] == approval_id
     assert executed_body["receipt"]["resident_claim"]["resident_host_process_claimed"] is False
     if expects_observed_foreground_launch:
+        assert launch_observed is True
+    if launch_observed:
         assert executed_body["status"] == "bounded_foreground_launch_observed"
         assert executed_body["executed"] is True
         assert executed_body["launch"]["ok"] is True
@@ -9026,7 +9029,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executions_body["status"] == "readback_ready"
     assert executions_body["total"] == 1
     assert executions_body["latest"]["receipt_id"] == executed_body["receipt"]["receipt_id"]
-    if expects_observed_foreground_launch:
+    if launch_observed:
         assert executions_body["latest_bounded_process_launch"] is True
         assert executions_body["latest_observed_process"] is True
         assert executions_body["latest_execution_handoff_observed"] is True
