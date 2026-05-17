@@ -31324,6 +31324,46 @@ hardening:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident-supervision persistence post-merge CI window hardening on
+`2026-05-17`:
+
+- After the bounded `urllib3` dependency merge on `main`, fresh Dependabot PR
+  `#13` CI run `25991533757` exposed another Windows 2025 VS2026 / Python
+  3.12 timing failure in
+  `test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback`.
+  The proof still returned `resident_host_process_not_supervised` with the
+  earlier `3s/5s/5s` CI-facing observation window under full-suite load.
+- Kept the proof bounded but widened the CI-facing resident-supervision
+  persistence child observation from `3s/5s/5s` to `3s/8s/8s` in the direct
+  proof test and the Stage 6 completion-audit wrapper. Standalone proof
+  defaults remain `10s`, preserving the conservative diagnostic path.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision, service install/control,
+  tray, hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-supervision persistence
+post-merge CI window hardening:
+
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest observed call 32.67s`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 2 tests completed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-resident-supervision-persistence-boundary-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize scripts/lens-stage6-completion-audit.ps1 from LF to CRLF next time Git touches it`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
