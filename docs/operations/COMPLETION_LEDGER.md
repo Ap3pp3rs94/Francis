@@ -31151,6 +31151,36 @@ Latest validation for the Stage 6 Lens CI pytest timeout containment:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens CI workflow drift contract on `2026-05-17`:
+
+- Followed up the green CI run after pytest timeout containment. The latest
+  seven `main` CI runs are now green, so the active red-check trend is no
+  longer present in the newest repo evidence. The two visible failures below
+  that green stack were already tied to the earlier Windows Lens foreground
+  observation-window fixes.
+- Tightened `tests\test_ci_workflow_contract.py` so the CI workflow contract
+  preserves the push and pull request triggers, stale-run cancellation,
+  `fail-fast: false`, exact OS/Python matrix, pinned Windows runner,
+  `UV_PYTHON` binding, `uv sync --python`, and the explicit Python matrix
+  verification step.
+- This is CI workflow-truth hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision, service install/control,
+  tray, hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens CI workflow drift contract:
+
+- `python -m ruff check tests\test_ci_workflow_contract.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_ci_workflow_contract.py -q --tb=short`
+  Result: `passed; 4 passed`
+- `git diff --check`
+  Result: `passed`
+- GitHub Actions run `25987238566` on commit `d392a175`.
+  Result:
+  `passed; windows-2025-vs2026/3.12=17m03s, windows-2025-vs2026/3.13=16m49s, ubuntu-latest/3.12=14m08s, ubuntu-latest/3.13=11m39s`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
