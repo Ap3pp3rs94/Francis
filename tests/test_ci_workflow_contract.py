@@ -40,6 +40,13 @@ def test_ci_pytest_step_has_bounded_timeout_and_failure_receipts() -> None:
     assert pytest_step["run"] == "uv run -m pytest -vv --maxfail=1 --durations=25 --durations-min=1"
 
 
+def test_ci_job_has_bounded_timeout() -> None:
+    workflow = _workflow()
+    job = workflow["jobs"]["test"]
+
+    assert job["timeout-minutes"] == 55
+
+
 def test_ci_matrix_keeps_exact_runners_and_python_versions() -> None:
     workflow = _workflow()
     job = workflow["jobs"]["test"]

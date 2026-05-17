@@ -31181,6 +31181,34 @@ Latest validation for the Stage 6 Lens CI workflow drift contract:
   Result:
   `passed; windows-2025-vs2026/3.12=17m03s, windows-2025-vs2026/3.13=16m49s, ubuntu-latest/3.12=14m08s, ubuntu-latest/3.13=11m39s`
 
+Stage 6 Lens CI job timeout containment on `2026-05-17`:
+
+- Followed up the green CI workflow drift contract run. The latest eight
+  `main` CI runs are green, so the remaining CI trend risk is not an active
+  red check; it is a future non-pytest hang escaping the pytest step timeout
+  and consuming the default GitHub Actions job budget.
+- Added a `55` minute job-level timeout to the CI matrix job while preserving
+  the existing `45` minute `Pytest` step timeout. Recent green evidence still
+  fits inside the new job bound: the slowest observed job in the latest run
+  was Windows 2025 VS2026 / Python 3.12 at `17m34s`.
+- Tightened `tests\test_ci_workflow_contract.py` so the job-level bound is
+  contract-tested alongside the existing trigger, matrix, interpreter, and
+  pytest failure-receipt checks.
+- This is CI containment only. It does not close Stage 6, does not grant
+  resident runtime, process supervision, service install/control, tray,
+  hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens CI job timeout containment:
+
+- `python -m ruff check tests\test_ci_workflow_contract.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_ci_workflow_contract.py -q --tb=short`
+  Result: `passed; 5 tests completed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

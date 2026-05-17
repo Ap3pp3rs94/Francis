@@ -13,6 +13,7 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     strategy:
