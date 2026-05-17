@@ -19,7 +19,9 @@ param(
   [int]$ResidentSurfaceForegroundRunSeconds = 40,
 
   [ValidateRange(30, 600)]
-  [int]$ChildProofTimeoutSeconds = 360
+  [int]$ChildProofTimeoutSeconds = 360,
+
+  [string]$CachedHostSupervisionProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -301,6 +303,54 @@ function Invoke-JsonScriptWithProofRetry {
   return $LastProof
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    timeout_seconds = $ChildProofTimeoutSeconds
+    duration_ms = 0
+    cached = $true
+  }
+}
+
 function Invoke-ActivationBoundary {
   param(
     [string]$PythonPath,
@@ -438,11 +488,16 @@ $ActivationBoundaryDataRoot = [System.IO.Path]::GetFullPath(
 $EffectiveResidentSurfaceForegroundRunSeconds = 0
 
 $ActivationBoundaryResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ActivationBoundaryDataRoot
-$HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
-  '-Mode', 'Status',
-  '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
-) -ExpectedKind 'lens.host.supervision_readiness_proof'
+$CachedHostSupervisionResult = Read-CachedJsonScriptResult -Path $CachedHostSupervisionProofPath
+if ($null -ne $CachedHostSupervisionResult) {
+  $HostSupervisionResult = $CachedHostSupervisionResult
+} else {
+  $HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
+    '-Mode', 'Status',
+    '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
+    '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
+  ) -ExpectedKind 'lens.host.supervision_readiness_proof'
+}
 $ChildProofRuns = @(
   (New-ChildProofRunSummary -Name 'resident_surface_activation_boundary' -Result $ActivationBoundaryResult),
   (New-ChildProofRunSummary -Name 'host_supervision' -Result $HostSupervisionResult)
@@ -560,6 +615,7 @@ $Payload = [ordered]@{
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
+  cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
   authority_required = 'process_supervision_and_service_control'
   authority_granted = $false
   process_supervision_authority_required = 'process_supervision_authority'
@@ -628,6 +684,7 @@ $Payload = [ordered]@{
     checkpoint_readback = $false
     resident_surface_activation_boundary_readback = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_readback = $ActivationBoundaryObserved
+    cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
     live_http_readback = $false
     temporary_api_process = $false
     bounded_host_launch = [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'bounded_host_launch' -Default $false)

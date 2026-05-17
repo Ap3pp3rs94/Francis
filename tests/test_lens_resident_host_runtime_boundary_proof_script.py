@@ -116,6 +116,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert payload["runtime_boundary_blocked"] is True
     assert payload["process_supervision_handoff_observed"] is True
     assert payload["side_effects_bounded"] is True
+    assert payload["cached_host_supervision_proof"] is False
     assert payload["requested_foreground_run_seconds"] == 2
     assert payload["foreground_run_seconds"] >= 5
     assert payload["host_launch_run_seconds"] == 3
@@ -183,6 +184,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
         "diagnostic_only": True,
         "wraps_summon_resident_host_blocker_proof": True,
         "wraps_host_supervision_proof": True,
+        "cached_host_supervision_proof": False,
         "wraps_resident_candidate_supervisor_proof": True,
         "bounded_local_process_launch": True,
         "bounded_process_launch": True,

@@ -13,7 +13,9 @@ param(
   [int]$ResidentCandidateRunSeconds = 3,
 
   [ValidateRange(30, 240)]
-  [int]$ChildProofTimeoutSeconds = 180
+  [int]$ChildProofTimeoutSeconds = 180,
+
+  [string]$CachedHostSupervisionProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -245,6 +247,54 @@ function Invoke-JsonScript {
   }
 }
 
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    timeout_seconds = $ChildProofTimeoutSeconds
+    duration_ms = 0
+    cached = $true
+  }
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -272,11 +322,16 @@ $HostSupervisorPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
 $PowerShellPath = Get-PowerShellPath
 
 $SummonResidentHostResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $SummonResidentHostProofPath -ScriptArgs @('-Mode', 'Status')
-$HostSupervisionResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
-  '-Mode', 'Status',
-  '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
-)
+$CachedHostSupervisionResult = Read-CachedJsonScriptResult -Path $CachedHostSupervisionProofPath
+if ($null -ne $CachedHostSupervisionResult) {
+  $HostSupervisionResult = $CachedHostSupervisionResult
+} else {
+  $HostSupervisionResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofPath -ScriptArgs @(
+    '-Mode', 'Status',
+    '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
+    '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
+  )
+}
 $ResidentCandidateResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisorPath -ScriptArgs @(
   '-Mode', 'SuperviseResidentOnce',
   '-RunSeconds', [string]$ResidentCandidateRunSeconds
@@ -473,6 +528,7 @@ $Payload = [ordered]@{
   runtime_boundary_blocked = $RuntimeBoundaryBlocked
   process_supervision_handoff_observed = $ProcessSupervisionHandoffObserved
   side_effects_bounded = $SideEffectsBounded
+  cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
   foreground_run_seconds = [Math]::Max($ForegroundRunSeconds, 5)
   requested_foreground_run_seconds = $ForegroundRunSeconds
   host_launch_run_seconds = $HostLaunchRunSeconds
@@ -525,6 +581,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     wraps_summon_resident_host_blocker_proof = $true
     wraps_host_supervision_proof = $true
+    cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
     wraps_resident_candidate_supervisor_proof = $true
     bounded_local_process_launch = $true
     bounded_process_launch = $true

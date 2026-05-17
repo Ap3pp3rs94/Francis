@@ -101,6 +101,9 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["process_supervision_boundary_observed"] is True
     assert payload["handoff_consumed"] is True
     assert payload["authority_denied"] is True
+    assert payload["host_supervision_cache_observed"] is True
+    assert payload["runtime_boundary_cached_host_supervision_proof"] is True
+    assert payload["process_boundary_cached_host_supervision_proof"] is True
     assert payload["startup_timeout_seconds"] == 20
     assert payload["foreground_run_seconds"] == 2
     assert payload["host_launch_run_seconds"] == 3
@@ -109,6 +112,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["child_proof_timeouts"] == []
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
+        "host_supervision_cache",
         "resident_host_runtime_boundary",
         "process_supervision_boundary",
     }
@@ -135,6 +139,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert payload["would_decide_approval"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["host_supervision_cache"]["status"] == "cache_written"
     assert checks["resident_host_process_handoff"]["status"] == "process_blocker_handoff_observed"
     assert checks["process_supervision_boundary"]["status"] == "process_supervision_blocked"
     assert checks["handoff_consumed"]["status"] == "blocker_consumed"
@@ -148,6 +153,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
     assert "service_control_authority_not_granted" in payload["blockers"]
 
     proof = payload["proof"]
+    assert proof["host_supervision_cache_status"] == "proof_passed"
     assert proof["runtime_boundary_status"] == "proof_passed"
     assert proof["runtime_boundary_next_gap"] == "resident_host_process_not_supervised"
     assert proof["runtime_boundary_process_state"] == "foreground_observed_not_supervised"
@@ -173,6 +179,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
         "diagnostic_only": True,
         "wraps_resident_host_runtime_boundary_proof": True,
         "wraps_process_supervision_authority_boundary_proof": True,
+        "cached_host_supervision_proof": True,
         "child_proof_timeout_seconds": 180,
         "bounded_local_process_launch": True,
         "temporary_runtime_state_write": True,

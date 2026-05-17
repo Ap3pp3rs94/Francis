@@ -30887,6 +30887,58 @@ observation narrowing:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens resident-host process-supervision host-supervision cache reuse on
+`2026-05-17`:
+
+- Followed up green GitHub Actions run `25982143333`, where all matrix jobs
+  passed after resident-supervision persistence observation narrowing. The
+  Windows 3.13 slowest list still showed Stage 6/Lens proof-runtime
+  concentration, including
+  `test_lens_summon_resident_host_blocker_proof_aligns_handoff` at `42.37s`
+  and
+  `test_lens_resident_host_process_supervision_blocker_consumes_handoff` at
+  `37.11s`.
+- Changed `lens-resident-host-runtime-boundary-proof.ps1` and
+  `lens-process-supervision-authority-boundary-proof.ps1` to accept a cached
+  host-supervision proof payload. Cached payload reads remain explicit and
+  report `cached_host_supervision_proof`, so cache reuse is visible in proof
+  output instead of being implicit.
+- Changed `lens-resident-host-process-supervision-blocker-proof.ps1` to run
+  the host-supervision proof once, cache that payload, and pass the same
+  readback into both child boundaries. The composed proof now reports the
+  cache write plus whether both children consumed the cached proof.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision/restart, service
+  install/control, tray, hotkey, overlay, summon, memory, approval-decision,
+  receipt, capture, sensing, window-management, resident-claim, or mutation
+  authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-host process-supervision
+host-supervision cache reuse:
+
+- PowerShell parser check for
+  `scripts\lens-resident-host-runtime-boundary-proof.ps1`,
+  `scripts\lens-process-supervision-authority-boundary-proof.ps1`, and
+  `scripts\lens-resident-host-process-supervision-blocker-proof.ps1`.
+  Result: `passed; parser ok`
+- `python -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 21.73s`
+- `python -m pytest tests\test_lens_process_supervision_authority_boundary_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result:
+  `passed; slowest calls: resident_host_runtime_boundary=17.94s, process_supervision_boundary=12.04s`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result:
+  `passed; slowest calls: summon_resident_host_handoff=24.86s, default_bridge=3.97s`
+- `$env:FRANCIS_RUN_STAGE6_FULL_COMPLETION_AUDIT_TEST='1'; python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_blocks_transition_without_authority -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest call 222.58s`
+- `python -m ruff check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_host_process_supervision_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; 3 files already formatted`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

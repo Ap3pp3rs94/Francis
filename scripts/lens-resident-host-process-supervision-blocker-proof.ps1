@@ -297,6 +297,25 @@ function New-ChildProofRunSummary {
   }
 }
 
+function Write-ProofPayloadCache {
+  param(
+    [AllowNull()]
+    [object]$Payload,
+    [string]$FileName
+  )
+
+  if ($null -eq $Payload) {
+    return ''
+  }
+
+  $CacheRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'francis-lens-proof-cache'
+  New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
+  $CachePath = Join-Path $CacheRoot ([guid]::NewGuid().ToString('N') + '-' + $FileName)
+  $Json = $Payload | ConvertTo-Json -Depth 12
+  Set-Content -LiteralPath $CachePath -Value $Json -Encoding UTF8
+  return $CachePath
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -320,22 +339,50 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 $RuntimeBoundaryScript = Join-Path $PSScriptRoot 'lens-resident-host-runtime-boundary-proof.ps1'
 $ProcessBoundaryScript = Join-Path $PSScriptRoot 'lens-process-supervision-authority-boundary-proof.ps1'
+$HostSupervisionProofScript = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
 $PowerShellPath = Get-PowerShellPath
 
-$RuntimeResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $RuntimeBoundaryScript -ScriptArgs @(
+$HostSupervisionResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $HostSupervisionProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
-) -ExpectedKind 'lens.resident_host.runtime_blocker_boundary.proof'
-$ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs @(
+) -ExpectedKind 'lens.host.supervision_readiness_proof'
+$HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
+$HostSupervisionCachePath = ''
+$HostSupervisionCacheObserved = (
+  [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'kind' -Default '') -eq 'lens.host.supervision_readiness_proof' -and
+  [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '') -eq 'proof_passed'
+)
+if ($HostSupervisionCacheObserved) {
+  $HostSupervisionCachePath = Write-ProofPayloadCache -Payload $HostSupervisionPayload -FileName 'host-supervision-proof.json'
+  $HostSupervisionCacheObserved = -not [string]::IsNullOrWhiteSpace($HostSupervisionCachePath)
+}
+
+$RuntimeArgs = @(
+  '-Mode', 'Status',
+  '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
+  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds
+)
+if ($HostSupervisionCacheObserved) {
+  $RuntimeArgs += @('-CachedHostSupervisionProofPath', $HostSupervisionCachePath)
+}
+$RuntimeResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $RuntimeBoundaryScript -ScriptArgs $RuntimeArgs -ExpectedKind 'lens.resident_host.runtime_blocker_boundary.proof'
+
+$ProcessArgs = @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
   '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
-) -ExpectedKind 'lens.process_supervision_authority_boundary.proof'
+)
+if ($HostSupervisionCacheObserved) {
+  $ProcessArgs += @('-CachedHostSupervisionProofPath', $HostSupervisionCachePath)
+}
+$ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs $ProcessArgs -ExpectedKind 'lens.process_supervision_authority_boundary.proof'
 $ChildProofRuns = @(
+  (New-ChildProofRunSummary -Name 'host_supervision_cache' -Result $HostSupervisionResult),
   (New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $RuntimeResult),
   (New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessResult)
 )
@@ -407,6 +454,7 @@ $AuthorityDenied = (
 )
 
 $Checks = @(
+  (New-Check -Id 'host_supervision_cache' -Status $(if ($HostSupervisionCacheObserved) { 'cache_written' } else { 'missing_or_unexpected' }) -Passed $HostSupervisionCacheObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The composed process-supervision proof must reuse one host-supervision readback across both child boundaries instead of proving the same bounded host launch twice.'),
   (New-Check -Id 'resident_host_process_handoff' -Status $(if ($RuntimeHandoffObserved) { 'process_blocker_handoff_observed' } else { 'missing_or_unexpected' }) -Passed $RuntimeHandoffObserved -Evidence 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Reason 'The resident-host runtime boundary must hand off to resident_host_process_not_supervised.'),
   (New-Check -Id 'process_supervision_boundary' -Status $(if ($ProcessBoundaryObserved) { 'process_supervision_blocked' } else { 'missing_or_unexpected' }) -Passed $ProcessBoundaryObserved -Evidence 'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status' -Reason 'The process-supervision authority boundary must consume the unsupervised process blocker and return to Stage 6 completion audit.'),
   (New-Check -Id 'handoff_consumed' -Status $(if ($HandoffConsumed) { 'blocker_consumed' } else { 'handoff_mismatch' }) -Passed $HandoffConsumed -Evidence 'resident-host runtime blockers + process-supervision blockers' -Reason 'The same unsupervised resident-host process blocker must be preserved across both proof payloads.'),
@@ -470,6 +518,9 @@ $Payload = [ordered]@{
   process_supervision_boundary_observed = $ProcessBoundaryObserved
   handoff_consumed = $HandoffConsumed
   authority_denied = $AuthorityDenied
+  host_supervision_cache_observed = $HostSupervisionCacheObserved
+  runtime_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $RuntimePayload -Name 'cached_host_supervision_proof' -Default $false)
+  process_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'cached_host_supervision_proof' -Default $false)
   startup_timeout_seconds = $StartupTimeoutSeconds
   foreground_run_seconds = $ForegroundRunSeconds
   host_launch_run_seconds = $HostLaunchRunSeconds
@@ -496,6 +547,7 @@ $Payload = [ordered]@{
   checks = @($Checks)
   blockers = $AllBlockers
   proof = [ordered]@{
+    host_supervision_cache_status = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '')
     runtime_boundary_status = [string](Get-PropertyValue -Payload $RuntimePayload -Name 'status' -Default '')
     runtime_boundary_next_gap = [string](Get-PropertyValue -Payload $RuntimePayload -Name 'next_smallest_truthful_gap' -Default '')
     runtime_boundary_process_state = [string](Get-PropertyValue -Payload $RuntimePayload -Name 'resident_host_process_state' -Default '')
@@ -527,6 +579,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     wraps_resident_host_runtime_boundary_proof = $true
     wraps_process_supervision_authority_boundary_proof = $true
+    cached_host_supervision_proof = $HostSupervisionCacheObserved
     child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     bounded_local_process_launch = $true
     temporary_runtime_state_write = $true

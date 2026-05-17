@@ -61,6 +61,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["effective_resident_surface_foreground_run_seconds"] == 0
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
+    assert payload["cached_host_supervision_proof"] is False
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {"resident_surface_activation_boundary", "host_supervision"}
     for run in child_proof_runs.values():
@@ -160,6 +161,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert governance["checkpoint_readback"] is False
     assert governance["resident_surface_activation_boundary_readback"] is True
     assert governance["resident_overlay_activation_boundary_readback"] is True
+    assert governance["cached_host_supervision_proof"] is False
     assert governance["live_http_readback"] is False
     assert governance["temporary_api_process"] is False
     assert governance["bounded_host_launch"] is True
