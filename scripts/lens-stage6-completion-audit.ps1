@@ -384,11 +384,11 @@ $ResidentSupervisionPersistenceBoundaryProofResult = Invoke-JsonScript `
     '-Mode',
     'Status',
     '-ForegroundRunSeconds',
-    '2',
+    '3',
     '-HostLaunchRunSeconds',
     [string]$ChildHostLaunchRunSeconds,
     '-ResidentCandidateRunSeconds',
-    '3',
+    '5',
     '-ChildProofTimeoutSeconds',
     [string]$ResidentSupervisionPersistenceBoundaryProofChildTimeoutSeconds
   ) `

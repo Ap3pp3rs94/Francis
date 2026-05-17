@@ -31243,6 +31243,51 @@ Latest validation for Dependency Graph uv path-dependency containment:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens resident-supervision persistence CI window hardening on
+`2026-05-17`:
+
+- Followed up the Dependabot CI trend after corrected `main` CI run
+  `25988557048` passed on all four lanes. Rebased Dependabot PRs `#13` and
+  `#14` to clear stale format failures from intermediate commit `34c516d9`;
+  `#14` then passed, while `#13` exposed a real Windows 2025 VS2026 / Python
+  3.13 pytest failure in
+  `test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback`.
+- The failed `#13` log showed the nested
+  `lens-resident-supervision-persistence-boundary-proof.ps1` child proof
+  returning `proof_failed` with child exit code `1` and
+  `resident_host_process_not_supervised` after the earlier minimum
+  `2s/3s/3s` observation window. Install, lint, format, and mypy had already
+  cleared, so the failure was a Stage 6 proof-harness timing edge rather than
+  the Dependabot graph-config failure.
+- Kept the proof bounded but widened the CI-facing resident-supervision
+  persistence observation window to `3s/5s/5s` in the direct proof test and in
+  the Stage 6 completion-audit wrapper. Standalone proof defaults remain
+  `10s`, preserving the conservative live diagnostic path.
+- This is CI and proof-harness hardening only. It does not close Stage 6, does
+  not grant resident runtime, process supervision, service install/control,
+  tray, hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens resident-supervision persistence CI
+window hardening:
+
+- PowerShell parser check for
+  `scripts\lens-resident-supervision-persistence-boundary-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `python -m ruff check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_resident_supervision_persistence_boundary_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests\test_lens_resident_supervision_persistence_boundary_proof_script.py::test_lens_resident_supervision_persistence_boundary_promotes_candidate_readback -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed twice; slowest observed call 26.82s then 26.20s`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize scripts/lens-stage6-completion-audit.ps1 from LF to CRLF next time Git touches it`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

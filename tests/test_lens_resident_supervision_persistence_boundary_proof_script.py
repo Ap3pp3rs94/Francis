@@ -59,11 +59,11 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
         "-Mode",
         "Status",
         "-ForegroundRunSeconds",
-        "2",
+        "3",
         "-HostLaunchRunSeconds",
-        "3",
+        "5",
         "-ResidentCandidateRunSeconds",
-        "3",
+        "5",
         "-DataDir",
         str(data_dir),
         "-ChildProofTimeoutSeconds",
@@ -93,9 +93,9 @@ def test_lens_resident_supervision_persistence_boundary_promotes_candidate_readb
     assert payload["recommended_readiness_route"] == (
         "/lens/host/persistent-supervision/enablement/authority/readiness"
     )
-    assert payload["foreground_run_seconds"] == 2
-    assert payload["host_launch_run_seconds"] == 3
-    assert payload["resident_candidate_run_seconds"] == 3
+    assert payload["foreground_run_seconds"] == 3
+    assert payload["host_launch_run_seconds"] == 5
+    assert payload["resident_candidate_run_seconds"] == 5
     assert payload["resident_candidate_boundary_proof_observed"] is True
     assert payload["persistent_supervision_plan_candidate_readback_observed"] is True
     assert payload["persistent_supervision_enablement_candidate_readback_observed"] is True
