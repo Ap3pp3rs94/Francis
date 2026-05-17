@@ -1417,6 +1417,7 @@ $SummonPreflightObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'local_process_launch_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'overlay_control_authority' -Default $true)
 )
+$SummonPreflightProofCachePath = Write-ProofPayloadCache -Payload $SummonPreflightPayload -FileName 'summon-preflight.json'
 $ResidentRuntimeHotkeySummonBoundaryGroup = Get-PropertyValue -Payload $ResidentRuntimeAuthorityBlockerGroups -Name 'hotkey_summon'
 $ResidentRuntimeHotkeySummonBoundaryBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ResidentRuntimeHotkeySummonBoundaryGroup -Name 'blockers' -Default @()
@@ -1451,6 +1452,9 @@ $ResidentRuntimeHotkeySummonBoundaryProofDataRoot = Join-Path $CheckpointProofDa
 $ResidentRuntimeHotkeySummonBoundaryArgs = @('-Mode', 'Status', '-DataDir', $ResidentRuntimeHotkeySummonBoundaryProofDataRoot)
 if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCachePath)) {
   $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath)
+}
+if (-not [string]::IsNullOrWhiteSpace($SummonPreflightProofCachePath)) {
+  $ResidentRuntimeHotkeySummonBoundaryArgs += @('-CachedSummonPreflightProofPath', $SummonPreflightProofCachePath)
 }
 $ResidentRuntimeHotkeySummonBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeHotkeySummonBoundaryProofPath -ScriptArgs $ResidentRuntimeHotkeySummonBoundaryArgs -ExpectedKind 'lens.resident_runtime.hotkey_summon_boundary.proof'
 $ResidentRuntimeHotkeySummonBoundaryScriptExitCode = -1

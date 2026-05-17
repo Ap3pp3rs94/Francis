@@ -4,7 +4,9 @@ param(
 
   [string]$DataDir = '',
 
-  [string]$CachedAuthorityBlockersProofPath = ''
+  [string]$CachedAuthorityBlockersProofPath = '',
+
+  [string]$CachedSummonPreflightProofPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -179,14 +181,23 @@ try {
   $TrayPresencePayload = $null
 }
 
-$SummonPreflightOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $SummonPreflightScript -Mode Status 2>&1
-$SummonPreflightExitCode = $LASTEXITCODE
-$SummonPreflightText = ($SummonPreflightOutput | ForEach-Object { [string]$_ }) -join "`n"
-$SummonPreflightPayload = $null
-try {
-  $SummonPreflightPayload = $SummonPreflightText | ConvertFrom-Json -ErrorAction Stop
-} catch {
+$SummonPreflightProofCached = $false
+$CachedSummonPreflightResult = Read-CachedJsonScriptResult -Path $CachedSummonPreflightProofPath
+if ($null -ne $CachedSummonPreflightResult) {
+  $SummonPreflightExitCode = [int](Get-PropertyValue -Payload $CachedSummonPreflightResult -Name 'exit_code' -Default 1)
+  $SummonPreflightText = [string](Get-PropertyValue -Payload $CachedSummonPreflightResult -Name 'output' -Default '')
+  $SummonPreflightPayload = Get-PropertyValue -Payload $CachedSummonPreflightResult -Name 'payload'
+  $SummonPreflightProofCached = [bool](Get-PropertyValue -Payload $CachedSummonPreflightResult -Name 'cached' -Default $false)
+} else {
+  $SummonPreflightOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $SummonPreflightScript -Mode Status 2>&1
+  $SummonPreflightExitCode = $LASTEXITCODE
+  $SummonPreflightText = ($SummonPreflightOutput | ForEach-Object { [string]$_ }) -join "`n"
   $SummonPreflightPayload = $null
+  try {
+    $SummonPreflightPayload = $SummonPreflightText | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $SummonPreflightPayload = $null
+  }
 }
 
 $AuthorityBlockerGroups = Get-PropertyValue -Payload $AuthorityBlockersPayload -Name 'authority_blocker_groups'
@@ -320,6 +331,7 @@ $Payload = [ordered]@{
   summon_preflight_observed = $SummonPreflightObserved
   authority_blockers_proof_observed = $AuthorityBlockersObserved
   cached_authority_blockers_proof = $AuthorityBlockersProofCached
+  cached_summon_preflight = $SummonPreflightProofCached
   side_effects_denied = $BoundaryDenied
   fourth_authority_family_consumed = $HotkeySummonFamilyObserved
   resident_runtime_execution_authority = [bool](Get-PropertyValue -Payload $AuthorityBlockersGovernance -Name 'resident_runtime_execution_authority' -Default $false)

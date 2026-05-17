@@ -47,6 +47,58 @@ def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_authority_b
     assert "cached_authority_blockers_proof" in script
 
 
+def test_lens_resident_runtime_hotkey_summon_boundary_accepts_cached_summon_preflight() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-runtime-hotkey-summon-boundary-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[string]$CachedSummonPreflightProofPath = ''" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedSummonPreflightProofPath" in script
+    assert "cached_summon_preflight" in script
+
+
+def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_summon_preflight(tmp_path: Path) -> None:
+    summon_preflight_cache = tmp_path / "summon-preflight.json"
+    summon_preflight_cache.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "lens.summon.preflight",
+                "status": "blocked",
+                "ready": False,
+                "summon_name": "Francis Lens Summon",
+                "config_path": "config/runtime/lens/summon.json",
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "palette_route": "/lens/status",
+                "required_before_enable": ["operator_authority"],
+                "blockers": [
+                    "global_hotkey_binding_disabled",
+                    "global_hotkey_registration_disabled",
+                    "summon_authority_not_granted",
+                    "hotkey_registration_authority_not_granted",
+                ],
+                "governance": {
+                    "read_only_contract": True,
+                    "summon_authority": False,
+                    "hotkey_registration_authority": False,
+                    "local_process_launch_authority": False,
+                    "overlay_control_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", "-CachedSummonPreflightProofPath", str(summon_preflight_cache))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["cached_summon_preflight"] is True
+    assert payload["summon_preflight_observed"] is True
+    assert payload["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+
+
 def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None:
     proc = _run_proof("-Mode", "Status")
 
@@ -64,6 +116,7 @@ def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None
     assert payload["previous_tray_presence_family_observed"] is True
     assert payload["summon_preflight_observed"] is True
     assert payload["authority_blockers_proof_observed"] is True
+    assert payload["cached_summon_preflight"] is False
     assert payload["side_effects_denied"] is True
     assert payload["fourth_authority_family_consumed"] is True
     assert payload["resident_runtime_execution_authority"] is True
