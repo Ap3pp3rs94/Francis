@@ -31028,6 +31028,28 @@ hardening:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens CI Windows runner alias pinning on `2026-05-17`:
+
+- Followed up GitHub Actions run `25984739033`, which passed with the verified
+  Python matrix interpreters but emitted GitHub's Windows hosted-runner
+  migration annotation for jobs using `windows-latest`.
+- Updated `.github\workflows\ci.yml` so the CI matrix targets
+  `windows-2025-vs2026` explicitly instead of relying on the moving
+  `windows-latest` alias during the Visual Studio 2026 migration window.
+- This is CI runner-truth hardening only. It does not close Stage 6, does not
+  grant resident runtime, process supervision/restart, service install/control,
+  tray, hotkey, overlay, summon, memory, approval-decision, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens CI Windows runner alias pinning:
+
+- `python -c "<workflow runner and python matrix assertions>"`
+  Result:
+  `passed; workflow os matrix pins windows-2025-vs2026 and keeps interpreter verification`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
