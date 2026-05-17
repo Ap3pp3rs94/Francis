@@ -8981,6 +8981,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executed.status_code == 200
     executed_body = executed.json()
     powershell_available = bool(shutil.which("pwsh") or shutil.which("powershell"))
+    expects_observed_foreground_launch = powershell_available and os.name == "nt"
     assert executed_body["kind"] == "lens.host.activation.execution"
     assert executed_body["approval_id"] == approval_id
     assert executed_body["run_seconds"] == 1
@@ -8995,7 +8996,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executed_body["receipt"]["kind"] == "lens.host.activation.execution.receipt"
     assert executed_body["receipt"]["approval_id"] == approval_id
     assert executed_body["receipt"]["resident_claim"]["resident_host_process_claimed"] is False
-    if powershell_available:
+    if expects_observed_foreground_launch:
         assert executed_body["status"] == "bounded_foreground_launch_observed"
         assert executed_body["executed"] is True
         assert executed_body["launch"]["ok"] is True
@@ -9007,9 +9008,14 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     else:
         assert executed_body["status"] == "bounded_foreground_launch_failed"
         assert executed_body["executed"] is False
-        assert executed_body["launch"]["status"] == "powershell_runtime_missing"
-        assert "powershell_runtime_missing" in executed_body["blockers"]
+        assert executed_body["launch"]["ok"] is False
+        if powershell_available:
+            assert executed_body["launch"]["status"] in {"launch_timeout", "launch_failed"}
+        else:
+            assert executed_body["launch"]["status"] == "powershell_runtime_missing"
+            assert "powershell_runtime_missing" in executed_body["blockers"]
         assert executed_body["receipt"]["execution"]["bounded_process_launch"] is False
+        assert executed_body["receipt"]["execution"]["observed_process"] is False
         assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
         assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
 
@@ -9020,7 +9026,7 @@ def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatc
     assert executions_body["status"] == "readback_ready"
     assert executions_body["total"] == 1
     assert executions_body["latest"]["receipt_id"] == executed_body["receipt"]["receipt_id"]
-    if powershell_available:
+    if expects_observed_foreground_launch:
         assert executions_body["latest_bounded_process_launch"] is True
         assert executions_body["latest_observed_process"] is True
         assert executions_body["latest_execution_handoff_observed"] is True

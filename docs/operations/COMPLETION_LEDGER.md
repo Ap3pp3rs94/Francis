@@ -31364,6 +31364,34 @@ post-merge CI window hardening:
   Result:
   `passed; warned that Git will normalize scripts/lens-stage6-completion-audit.ps1 from LF to CRLF next time Git touches it`
 
+Stage 6 Lens cross-platform host-activation CI contract hardening on
+`2026-05-17`:
+
+- Fresh Dependabot PR `#30` CI run `25997516189` exposed a Linux-only Lens
+  host-activation contract failure: Ubuntu / Python 3.13 had `pwsh`
+  available, but the bounded foreground launch was not observed, so
+  `/lens/host/activation/execute` truthfully returned
+  `bounded_foreground_launch_failed`.
+- Kept the runtime behavior unchanged and tightened the API contract test so
+  Windows still requires the observed bounded foreground launch while
+  non-Windows runners prove the truthful failed-launch receipt and execution
+  readback path when foreground observation is unavailable.
+- This is CI and contract hardening only. It does not close Stage 6, does not
+  grant resident runtime, process supervision, service install/control, tray,
+  hotkey, overlay, summon, approval-decision, memory, receipt, capture,
+  sensing, window-management, resident-claim, or mutation authority, and Stage
+  6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens cross-platform host-activation CI
+contract hardening:
+
+- `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m pytest tests\test_api_lens.py::test_lens_host_activation_authority_grant_executes_bounded_launch -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; slowest observed call 2.72s`
+- `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m ruff check tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m ruff format --check tests\test_api_lens.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
