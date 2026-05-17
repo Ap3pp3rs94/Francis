@@ -31122,6 +31122,35 @@ Latest validation for the Stage 6 Lens checkpoint tray-boundary cache handoff:
   Result:
   `passed; warned that Git will normalize the touched PowerShell scripts from LF to CRLF next time Git touches them`
 
+Stage 6 Lens CI pytest timeout containment on `2026-05-17`:
+
+- Followed up the green CI run after the tray-boundary cache handoff. The last
+  five `main` CI runs are green; the remaining CI trend risk is a future pytest
+  hang or runaway proof-runtime path rather than an active failing check.
+- Tightened `.github\workflows\ci.yml` so the `Pytest` step times out after
+  `45` minutes instead of `120` minutes. Recent green evidence still fits well
+  inside the new bound: the slowest observed job in the prior run was Windows
+  2025 VS2026 / Python 3.12 at `17m36s`.
+- Added a workflow contract test that parses the CI workflow and preserves the
+  pytest timeout, failure-receipt flags, pinned Windows runner, `UV_PYTHON`
+  matrix environment, and interpreter verification step.
+- This is CI containment only. It does not change the pytest selection, does
+  not close Stage 6, does not grant resident runtime, process supervision,
+  service install/control, tray, hotkey, overlay, summon, approval-decision,
+  memory, receipt, capture, sensing, window-management, resident-claim, or
+  mutation authority, and Stage 6 remains active at 2/5 checkpoint criteria.
+
+Latest validation for the Stage 6 Lens CI pytest timeout containment:
+
+- `python -m ruff check tests\test_ci_workflow_contract.py`
+  Result: `passed; All checks passed`
+- `python -m pytest tests\test_ci_workflow_contract.py -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -c "<workflow pytest timeout assertion>"`
+  Result: `passed; printed 45`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
