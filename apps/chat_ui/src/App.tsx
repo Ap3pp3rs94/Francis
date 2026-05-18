@@ -2442,8 +2442,8 @@ function CommandPalette(props: {
             }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 8, fontSize: 11, color: THEME.muted }}>
-            <span>Command palette</span>
-            <span>Summon with Ctrl/Cmd K</span>
+            <span>Local command palette</span>
+            <span>Open with Ctrl/Cmd K</span>
           </div>
         </div>
 
@@ -2585,7 +2585,7 @@ function ResidentHud(props: {
         }}
       >
         <button style={buttonStyle} onClick={props.onTogglePalette}>
-          {props.paletteOpen ? "Close" : "Summon"}
+          {props.paletteOpen ? "Close" : "Palette"}
         </button>
         <button style={buttonStyle} onClick={props.onOpenApprovals}>
           Approvals
@@ -3248,7 +3248,7 @@ export default function App() {
                   {telemetry.label} / {telemetry.scopeLabel}
                 </span>
                 <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
-                <span style={{ fontSize: 11, color: THEME.muted }}>Summon with Ctrl/Cmd K</span>
+                <span style={{ fontSize: 11, color: THEME.muted }}>Local palette: Ctrl/Cmd K</span>
               </div>
             </div>
 

@@ -33528,6 +33528,53 @@ Latest validation for Stage 6 Lens applied-receipt precedence:
   `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
   Result: `passed; errors=0`
 
+Stage 6 Lens summon-anywhere authority-readback proof hardening on
+`2026-05-18`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1` now accepts the current
+  OS-binding authority readback when the authority request status is
+  `authority_granted`, as long as the same readback still reports
+  `os_level_command_palette=false`, `summon_anywhere=false`, and no palette
+  open, hotkey registration, process launch, or overlay control effect.
+- `scripts/lens-command-palette-os-binding-proof.ps1` now treats missing
+  optional execution-readiness capability booleans as false and allows granted
+  hotkey/local-process authority in the execution-readiness governance readback
+  while still requiring `execution_authority=false`,
+  `approval_decision_authority=false`, and `memory_write=false`.
+- The chat UI local palette affordance no longer labels the in-app
+  `Ctrl/Cmd K` command palette as “Summon.” The visible copy now says local
+  palette/open, matching the backend truth that OS-wide summon remains blocked.
+- This does not close Stage 6. The live proof still reports
+  `summon_anywhere=false` and the closure handoff remains
+  `summon_anywhere_blockers`.
+
+Latest validation for Stage 6 Lens summon-anywhere authority-readback proof
+hardening:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py -q`
+  Result: `passed; 4 tests`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,@{Name='authority_status';Expression={$_.os_binding_authority_request_readback.status}},@{Name='authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='summon_anywhere';Expression={$_.os_binding_authority_request_readback.summon_anywhere}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=summon_anywhere_blockers,
+  authority_status=authority_granted, authority_granted=true,
+  summon_anywhere=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,@{Name='execution_status';Expression={$_.execution_readiness.status}},@{Name='os_level';Expression={$_.execution_readiness.os_level_command_palette}},@{Name='summon_anywhere';Expression={$_.execution_readiness.summon_anywhere}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=os_level_command_palette_binding,
+  execution_status=blocked, os_level=false, summon_anywhere=false`
+- `npm run test` from `apps\chat_ui`
+  Result: `passed; 107 tests`
+- `npm run build` from `apps\chat_ui`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-summon-anywhere-blockers-proof.ps1` and
+  `scripts\lens-command-palette-os-binding-proof.ps1`
+  Result: `passed; errors=0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

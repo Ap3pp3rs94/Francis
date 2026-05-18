@@ -452,17 +452,15 @@ $ExecutionReadinessObserved = (
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "denials_route") -eq "/lens/os-binding/denials" -and
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "ready") -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "execution_ready") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "summon_anywhere") -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false) -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "summon_anywhere" -Default $false) -eq $false -and
     $ExecutionReadinessBlockedRequirements -contains "global_hotkey_binding" -and
     $ExecutionReadinessBlockedRequirements -contains "summon_binding" -and
     $ExecutionReadinessBlockers -contains "os_binding_execution_boundary_not_implemented" -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "read_only_contract") -eq $true -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "execution_authority") -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "approval_decision_authority") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "memory_write") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "hotkey_registration_authority") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "summon_authority") -eq $false
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "memory_write") -eq $false
 )
 $ExecutionReadinessSatisfied = if ($ExecutionReadinessRequired) { $ExecutionReadinessObserved } else { $true }
 
@@ -547,6 +545,8 @@ $Payload = [ordered]@{
         denials_route = [string](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denials_route" -Default "")
         ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "ready" -Default $false)
         execution_ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "execution_ready" -Default $false)
+        os_level_command_palette = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false)
+        summon_anywhere = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "summon_anywhere" -Default $false)
         denial_boundary_observed = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denial_boundary_observed" -Default $false)
         denial_receipt_readback_ready = [bool](Get-PropertyValue -Object $ExecutionReadinessJson -Name "denial_receipt_readback_ready" -Default $false)
         blocked_requirements = $ExecutionReadinessBlockedRequirements

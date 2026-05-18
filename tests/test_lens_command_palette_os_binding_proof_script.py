@@ -111,11 +111,14 @@ def _write_execution_readiness(path: Path) -> None:
                 "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
                 "governance": {
                     "read_only_contract": True,
+                    "authority_granted": True,
+                    "os_level_command_palette_binding_authority": True,
                     "execution_authority": False,
                     "approval_decision_authority": False,
                     "memory_write": False,
-                    "hotkey_registration_authority": False,
+                    "hotkey_registration_authority": True,
                     "summon_authority": False,
+                    "local_process_launch_authority": True,
                 },
             }
         ),

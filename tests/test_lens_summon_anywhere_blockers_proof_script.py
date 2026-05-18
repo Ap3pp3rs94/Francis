@@ -99,6 +99,32 @@ def _write_lens_status(path: Path) -> None:
     )
 
 
+def _write_lens_status_with_active_os_binding_grant(path: Path) -> None:
+    _write_lens_status(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    authority = payload["os_binding_authority_requests"]
+    authority.update(
+        {
+            "status": "authority_granted",
+            "approved_count": 1,
+            "total_count": 1,
+            "authority_granted": True,
+            "os_level_command_palette_binding_authority": True,
+            "active_grant_receipt_id": "losbag_test",
+        }
+    )
+    criterion = payload["stage6_readiness"]["criteria"][0]
+    criterion.update(
+        {
+            "authority_request_readback_status": "authority_granted",
+            "authority_granted": True,
+            "os_level_command_palette_binding_authority": True,
+            "active_grant_receipt_id": "losbag_test",
+        }
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
     _write_lens_status(status_path)
@@ -269,3 +295,29 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_summon_anywhere_blockers_proof_accepts_granted_os_binding_authority(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_active_os_binding_grant(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["os_binding_authority_request_readback_observed"] is True
+
+    authority_request_readback = payload["os_binding_authority_request_readback"]
+    assert authority_request_readback["status"] == "authority_granted"
+    assert authority_request_readback["stage6_criterion_status"] == "authority_granted"
+    assert authority_request_readback["authority_granted"] is True
+    assert authority_request_readback["os_level_command_palette_binding_authority"] is True
+    assert authority_request_readback["os_level_command_palette"] is False
+    assert authority_request_readback["summon_anywhere"] is False
+    assert authority_request_readback["opens_palette"] is False
+    assert authority_request_readback["registers_hotkey"] is False
+    assert authority_request_readback["launches_process"] is False
+    assert authority_request_readback["controls_overlay"] is False
