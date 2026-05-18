@@ -992,3 +992,220 @@ def test_lens_stage6_next_handoff_promotes_supervised_runtime_receipt_to_tray(tm
     assert payload["governance"]["local_process_launch_authority"] is False
     assert payload["governance"]["process_supervision_authority"] is False
     assert payload["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    service_config_path = tmp_path / "service-config" / "lens-host.json"
+    service_config_source = _repo_root() / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_source.read_text(encoding="utf-8"))
+    service_config.update(
+        {
+            "process_supervision_enabled": True,
+            "persistent_supervision_enabled": True,
+            "supervision_ready": True,
+            "supervision_blocked_reason": "",
+            "blocked_reason": "",
+        }
+    )
+    service_config_path.parent.mkdir(parents=True, exist_ok=True)
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+
+    summon_config = json.loads((_repo_root() / "config" / "runtime" / "lens" / "summon.json").read_text())
+    overlay_config = json.loads((_repo_root() / "config" / "runtime" / "lens" / "overlay.json").read_text())
+    pid = os.getpid()
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    created_ts = int(datetime.now(UTC).timestamp())
+
+    def write_json(path: Path, payload: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    for runtime_name, pid_name in {
+        "lens-host": "lens-host.pid",
+        "lens-tray": "lens-tray.pid",
+        "lens-hotkey": "lens-hotkey.pid",
+        "lens-overlay": "lens-overlay.pid",
+    }.items():
+        pid_path = data_root / "runtime" / runtime_name / pid_name
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text(str(pid), encoding="ascii")
+
+    write_json(
+        data_root / "runtime" / "lens-host" / "status.json",
+        {
+            "kind": "lens.host.runtime_state",
+            "status": "resident_running",
+            "mode": "resident",
+            "pid": pid,
+            "updated_at": now,
+        },
+    )
+    write_json(
+        data_root / "runtime" / "lens-tray" / "status.json",
+        {
+            "kind": "lens.tray.runtime_state",
+            "status": "tray_running",
+            "pid": pid,
+            "tray_icon_visible": True,
+            "updated_at": now,
+        },
+    )
+    write_json(
+        data_root / "runtime" / "lens-hotkey" / "status.json",
+        {
+            "kind": "lens.hotkey.runtime_state",
+            "status": "hotkey_bound",
+            "pid": pid,
+            "hotkey_bound": True,
+            "global_hotkey": summon_config["global_hotkey"],
+            "binding_scope": summon_config["binding_scope"],
+            "launch_on_hotkey": False,
+            "summon_runner": "scripts/lens-summon.ps1",
+            "press_count": 0,
+            "updated_at": now,
+        },
+    )
+    write_json(
+        data_root / "runtime" / "lens-overlay" / "status.json",
+        {
+            "kind": "lens.overlay.runtime_state",
+            "status": "overlay_running",
+            "pid": pid,
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_name": overlay_config["overlay_name"],
+            "overlay_scope": overlay_config["overlay_scope"],
+            "updated_at": now,
+        },
+    )
+    write_json(
+        data_root / "runtime" / "lens-summon" / "status.json",
+        {
+            "kind": "lens.summon.runtime_state",
+            "status": "summon_binding_observed",
+            "global_hotkey": summon_config["global_hotkey"],
+            "binding_scope": summon_config["binding_scope"],
+            "bounded_handoff_ready": True,
+            "local_open_ready": False,
+            "opened": False,
+            "no_launch": True,
+            "summon_anywhere": False,
+            "os_level_summon": False,
+            "updated_at": now,
+        },
+    )
+    write_json(
+        data_root / "lens" / "host_supervision_executions" / "lhse_test_resident_start.json",
+        {
+            "kind": "lens.host.supervision.execution.receipt",
+            "receipt_id": "lhse_test_resident_start",
+            "status": "resident_supervision_started",
+            "created_ts": created_ts,
+            "execution": {
+                "supervision_mode": "resident_start",
+                "bounded_supervised_session": False,
+                "temporary_host_process_observed": True,
+                "resident_host_process": True,
+                "resident_runtime_candidate_supervised": True,
+                "resident_supervised_runtime": True,
+                "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                "stop_command": "scripts/lens-host-supervisor.ps1 -Mode StopResident",
+            },
+            "resident_claim": {
+                "resident_host_process_claimed": False,
+                "resident_runtime_claimed": False,
+                "resident_claim_authority": False,
+            },
+        },
+    )
+    write_json(
+        data_root / "lens" / "pse_executions" / "lpsee_test_applied.json",
+        {
+            "kind": "lens.host.persistent_supervision_enablement_execution.receipt",
+            "receipt_id": "lpsee_test_applied",
+            "id": "lpsee_test_applied",
+            "status": "service_config_updated",
+            "route": "/lens/host/persistent-supervision/enablement/execution/apply",
+            "method": "POST",
+            "source_kind": "lens.host.persistent_supervision_enablement_execution.execution",
+            "source_route": "/lens/host/persistent-supervision/enablement/execution/apply",
+            "approval_id": "test-execution-approval",
+            "actor": "test.system.write",
+            "reason": "test applied persistent supervision enablement receipt",
+            "created_ts": created_ts,
+            "service_config": {
+                "path": str(service_config_path.resolve()),
+                "updated": True,
+                "changed_fields": ["persistent_supervision_enabled"],
+                "before": {"persistent_supervision_enabled": False},
+                "after": {"persistent_supervision_enabled": True},
+            },
+            "result": {
+                "applied": True,
+                "executed": True,
+                "service_config_updated": True,
+                "persistent_supervision_enablement_allowed": True,
+                "persistent_supervision_ready": True,
+                "resident_claim_allowed": False,
+            },
+            "post_plan": {
+                "status": "blocked",
+                "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+                "blocked_requirements": [],
+                "blockers": [],
+            },
+            "governance": {
+                "gate": "lens_host_persistent_supervision_enablement_execution_receipt",
+                "persistent_supervision_boundary": True,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+            },
+        },
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        env={
+            "FRANCIS_DATA_DIR": str(data_root),
+            "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH": str(service_config_path),
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["next_smallest_truthful_gap"] == payload["stage6_prerequisite_bringup_plan"]["current_truthful_gap"]
+    assert payload["recommended_next_slice"] == "review_persistent_supervision_enablement_receipt"
+    assert payload["authority_required"] == "none_readback_only"
+    assert payload["authority_granted"] is True
+    assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert payload["next_operator_action"]["method"] == "GET"
+    assert payload["next_operator_command"]["mode"] == "Status"
+    assert payload["stage6_prerequisite_bringup_plan_observed"] is True
+    assert payload["stage6_prerequisite_bringup_plan"]["status"] == "persistent_supervision_enablement_applied"
+    assert payload["stage6_prerequisite_bringup_operator_plan_handoff"]["status"] == (
+        "persistent_supervision_enablement_applied"
+    )
+    assert (
+        payload["stage6_prerequisite_bringup_operator_plan_handoff"]["next_smallest_truthful_gap"]
+        == (payload["stage6_prerequisite_bringup_plan"]["current_truthful_gap"])
+    )
+    assert payload["stage6_prerequisite_bringup_operator_plan_handoff"]["next_step"] == (
+        "review_persistent_supervision_enablement_receipt"
+    )
+    assert payload["persistent_supervision_enablement_authority_handoff_observed"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["persistent_supervision_required_prerequisites"]["status"] == "not_applicable_enablement_applied"
+    assert checks["persistent_supervision_first_missing_requirement"]["status"] == "not_applicable_enablement_applied"
+    assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
+    assert all(item["passed"] for item in payload["checks"])
