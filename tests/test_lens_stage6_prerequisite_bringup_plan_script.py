@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import shutil
 import subprocess
 import time
@@ -15,6 +16,11 @@ def _powershell() -> str:
     if not exe:
         pytest.skip("PowerShell is not available")
     return exe
+
+
+def _skip_live_stage6_execution_if_not_windows() -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Stage 6 prerequisite execution proof is Windows-hosted.")
 
 
 def _repo_root() -> Path:
@@ -1202,6 +1208,8 @@ def test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
     resident_request = _run_plan(
         "-Mode",
@@ -1369,6 +1377,8 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
 
     resident_request = _request_next(data_dir, "test request resident runtime before tray handoff")
@@ -1476,6 +1486,8 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
 
     resident_request = _request_next(data_dir, "test request resident runtime before hotkey handoff")
@@ -1604,6 +1616,8 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
 
     resident_approval_id, _, _ = _request_approve_grant_next(
@@ -1794,6 +1808,8 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
     chain = _execute_prerequisites_through_overlay_window(data_dir, monkeypatch)
     assert chain["overlay_execution"]["execute_result"]["result"]["overlay_window"] is True
@@ -1889,6 +1905,8 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_live_stage6_execution_if_not_windows()
+
     data_dir = tmp_path / "data"
     service_config_path = _write_disabled_temp_service_config(tmp_path)
     live_service_config_path = _repo_root() / "config" / "runtime" / "services" / "lens-host.json"
