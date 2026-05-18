@@ -33594,9 +33594,11 @@ Stage 6 Lens approved-without-authority summon readback hardening on
   booleans to remain false.
 - This does not close Stage 6. `/lens/status` still reports
   `ready_to_close=false`, `ready_total=2`, `blocked_total=3`, and closure gap
-  `summon_anywhere_blockers`. After the focused proof-chain validation, the
-  next resident-host handoff readback reports
-  `resident_supervision_not_persistent`, not a resident/summon capability claim.
+  `summon_anywhere_blockers`. The focused proof-chain validation exercised the
+  bounded resident-candidate path through `resident_supervision_not_persistent`,
+  but the final persistent `/lens/status` readback still reports
+  `resident_host_process_not_supervised`, not a resident/summon capability
+  claim.
 
 Latest validation for Stage 6 Lens approved-without-authority summon readback
 hardening:
