@@ -1915,6 +1915,7 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     chain = _execute_prerequisites_through_summon_binding(
         data_dir,
         monkeypatch,
+        service_config_path=service_config_path,
     )
     assert chain["summon_execution"]["execute_result"]["result"]["bounded_handoff_ready"] is True
 
