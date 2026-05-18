@@ -809,6 +809,36 @@ def _execute_next(
     return json.loads(proc.stdout)
 
 
+def _refresh_resident_host_lease(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    resident_approval_id: str,
+    *,
+    reason: str,
+    service_config_path: Path | None = None,
+) -> dict[str, Any]:
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    from francis.lens.activation import (
+        LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        execute_lens_resident_runtime_activation,
+    )
+
+    result = execute_lens_resident_runtime_activation(
+        approval_id=resident_approval_id,
+        actor="test.system.write",
+        reason=reason,
+        route=LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        run_seconds=60,
+    )
+    assert result["ok"] is True, json.dumps(result, indent=2)
+    assert result["status"] == "resident_supervision_started"
+    assert result["receipt_written"] is True
+    assert result["resident_supervised_runtime"] is True
+    return result
+
+
 def _request_approve_grant_next(
     data_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1027,6 +1057,13 @@ def _execute_prerequisites_through_overlay_window(
         grant_reason="test grant tray presence before summon handoff",
         service_config_path=service_config_path,
     )
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before tray execution",
+        service_config_path=service_config_path,
+    )
     tray_execution = _execute_next(
         data_dir,
         tray_approval_id,
@@ -1051,6 +1088,13 @@ def _execute_prerequisites_through_overlay_window(
         grant_reason="test grant hotkey binding before summon handoff",
         service_config_path=service_config_path,
     )
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before hotkey execution",
+        service_config_path=service_config_path,
+    )
     hotkey_execution = _execute_next(
         data_dir,
         hotkey_approval_id,
@@ -1073,6 +1117,13 @@ def _execute_prerequisites_through_overlay_window(
         request_reason="test request overlay window before summon handoff",
         approval_comment="approved only as an overlay window authority review decision",
         grant_reason="test grant overlay window before summon handoff",
+        service_config_path=service_config_path,
+    )
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before overlay execution",
         service_config_path=service_config_path,
     )
     overlay_execution = _execute_next(
@@ -1773,6 +1824,25 @@ def _execute_prerequisites_through_summon_binding(
         grant_reason="test grant summon binding before persistent supervision enablement",
         service_config_path=service_config_path,
     )
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        chain["resident_approval_id"],
+        reason="test refresh resident host lease before summon execution",
+        service_config_path=service_config_path,
+    )
+    summon_execute_ready = _run_plan(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        *_service_config_args(service_config_path),
+    )
+    assert summon_execute_ready.returncode == 0, summon_execute_ready.stderr or summon_execute_ready.stdout
+    summon_execute_ready_payload = json.loads(summon_execute_ready.stdout)
+    assert summon_execute_ready_payload["next_operator_action_requirement"] == "summon_binding"
+    assert summon_execute_ready_payload["next_operator_action"]["id"] == "execute_summon_binding"
+    assert summon_execute_ready_payload["next_operator_action"]["active_approval_id"] == summon_approval_id
     summon_execution = _execute_next(
         data_dir,
         summon_approval_id,
@@ -1852,6 +1922,19 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
         "requires_approval_id": True,
         "requires_operator_approval_decision": False,
     }
+
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        chain["resident_approval_id"],
+        reason="test refresh resident host lease before summon execution",
+    )
+    refreshed_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
+    assert refreshed_ready.returncode == 0, refreshed_ready.stderr or refreshed_ready.stdout
+    refreshed_ready_payload = json.loads(refreshed_ready.stdout)
+    assert refreshed_ready_payload["next_operator_action_requirement"] == "summon_binding"
+    assert refreshed_ready_payload["next_operator_action"]["id"] == "execute_summon_binding"
+    assert refreshed_ready_payload["next_operator_action"]["active_approval_id"] == summon_approval_id
 
     summon_execution = _execute_next(
         data_dir,
