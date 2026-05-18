@@ -65,6 +65,22 @@ def _service_config_args(service_config_path: Path | None) -> tuple[str, ...]:
     return ("-ServiceConfigPath", str(service_config_path))
 
 
+def _set_stage6_env(
+    monkeypatch: pytest.MonkeyPatch,
+    data_dir: Path,
+    *,
+    service_config_path: Path | None = None,
+) -> None:
+    monkeypatch.setenv("FRANCIS_ROOT", str(_repo_root()))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+    if service_config_path is None:
+        monkeypatch.delenv("FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH", raising=False)
+    else:
+        monkeypatch.setenv("FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH", str(service_config_path.resolve()))
+
+
 def _status_payload(
     data_dir: Path,
     *,
@@ -697,10 +713,7 @@ def _approve_request(
     approval_id: str,
     comment: str,
 ) -> None:
-    monkeypatch.setenv("FRANCIS_ROOT", str(_repo_root()))
-    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_dir))
-    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
-    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+    _set_stage6_env(monkeypatch, data_dir)
     from francis.governance.approvals import decide
 
     decision = decide(
@@ -803,6 +816,162 @@ def _request_approve_grant_next(
     return approval_id, request, grant
 
 
+def _request_approve_grant_surface_in_process(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    surface: str,
+    request_reason: str,
+    approval_comment: str,
+    grant_reason: str,
+    service_config_path: Path | None = None,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    if surface == "tray_presence":
+        from francis.lens.tray_authority import (
+            LENS_TRAY_AUTHORITY_REQUEST_ACTION as approval_action,
+            LENS_TRAY_AUTHORITY_REQUEST_ROUTE as request_route,
+            LENS_TRAY_AUTHORITY_ROUTE as authority_route,
+            grant_lens_tray_authority as grant_authority,
+            request_lens_tray_authority as request_authority,
+        )
+    elif surface == "global_hotkey_binding":
+        from francis.lens.os_binding_authority import (
+            LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION as approval_action,
+            LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE as request_route,
+            LENS_OS_BINDING_AUTHORITY_ROUTE as authority_route,
+            grant_lens_os_binding_authority as grant_authority,
+            request_lens_os_binding_authority as request_authority,
+        )
+    elif surface == "overlay_window":
+        from francis.lens.overlay_authority import (
+            LENS_OVERLAY_AUTHORITY_REQUEST_ACTION as approval_action,
+            LENS_OVERLAY_AUTHORITY_REQUEST_ROUTE as request_route,
+            LENS_OVERLAY_AUTHORITY_ROUTE as authority_route,
+            grant_lens_overlay_authority as grant_authority,
+            request_lens_overlay_authority as request_authority,
+        )
+    elif surface == "summon_binding":
+        from francis.lens.summon_authority import (
+            LENS_SUMMON_AUTHORITY_REQUEST_ACTION as approval_action,
+            LENS_SUMMON_AUTHORITY_REQUEST_ROUTE as request_route,
+            LENS_SUMMON_AUTHORITY_ROUTE as authority_route,
+            grant_lens_summon_authority as grant_authority,
+            request_lens_summon_authority as request_authority,
+        )
+    else:
+        raise AssertionError(f"unknown surface fixture: {surface}")
+
+    request = request_authority(
+        actor="test.system.write",
+        reason=request_reason,
+        route=request_route,
+        method="POST",
+    )
+    assert request["ok"] is True
+    assert request["approval_requested"] is True
+    assert request["action"] == approval_action
+    approval_id = request["approval_id"]
+    _approve_request(monkeypatch, data_dir, approval_id, approval_comment)
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    grant = grant_authority(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason=grant_reason,
+        route=authority_route,
+        method="POST",
+        record_receipt=True,
+    )
+    assert grant["authority_granted"] is True
+    return approval_id, request, grant
+
+
+def _request_approve_grant_persistent_supervision_enablement_in_process(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    service_config_path: Path,
+) -> dict[str, Any]:
+    # Keep the temp-config mutation proof inside the 60s live prerequisite lease.
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    from francis.lens.activation import (
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ACTION,
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_ROUTE,
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ACTION,
+        LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE,
+        grant_lens_host_persistent_supervision_enablement_authority,
+        grant_lens_host_persistent_supervision_enablement_execution_authority,
+        request_lens_host_persistent_supervision_enablement_authority,
+        request_lens_host_persistent_supervision_enablement_execution_authority,
+    )
+
+    enablement_request = request_lens_host_persistent_supervision_enablement_authority(
+        actor="test.system.write",
+        reason="test request persistent supervision enablement authority after prerequisites",
+        route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ROUTE,
+        method="POST",
+    )
+    assert enablement_request["ok"] is True
+    assert enablement_request["approval_requested"] is True
+    assert enablement_request["action"] == LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_REQUEST_ACTION
+    enablement_approval_id = enablement_request["approval_id"]
+    _approve_request(
+        monkeypatch,
+        data_dir,
+        enablement_approval_id,
+        "approved only as a persistent supervision enablement authority review decision",
+    )
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    enablement_grant = grant_lens_host_persistent_supervision_enablement_authority(
+        approval_id=enablement_approval_id,
+        actor="test.system.write",
+        reason="test grant persistent supervision enablement authority after prerequisites",
+        route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_AUTHORITY_ROUTE,
+        method="POST",
+        record_receipt=True,
+    )
+    assert enablement_grant["authority_granted"] is True
+
+    execution_request = request_lens_host_persistent_supervision_enablement_execution_authority(
+        actor="test.system.write",
+        reason="test request persistent supervision execution authority after enablement authority",
+        route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ROUTE,
+        method="POST",
+    )
+    assert execution_request["ok"] is True
+    assert execution_request["approval_requested"] is True
+    assert execution_request["action"] == LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_REQUEST_ACTION
+    execution_approval_id = execution_request["approval_id"]
+    _approve_request(
+        monkeypatch,
+        data_dir,
+        execution_approval_id,
+        "approved only as a persistent supervision execution authority review decision",
+    )
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    execution_grant = grant_lens_host_persistent_supervision_enablement_execution_authority(
+        approval_id=execution_approval_id,
+        actor="test.system.write",
+        reason="test grant persistent supervision execution authority after review",
+        route=LENS_HOST_PERSISTENT_SUPERVISION_ENABLEMENT_EXECUTION_AUTHORITY_ROUTE,
+        method="POST",
+        record_receipt=True,
+    )
+    assert execution_grant["authority_granted"] is True
+    assert execution_grant["service_config_write_authority"] is True
+
+    return {
+        "enablement_approval_id": enablement_approval_id,
+        "enablement_request": enablement_request,
+        "enablement_grant": enablement_grant,
+        "execution_approval_id": execution_approval_id,
+        "execution_request": execution_request,
+        "execution_grant": execution_grant,
+    }
+
+
 def _execute_prerequisites_through_overlay_window(
     data_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -840,9 +1009,10 @@ def _execute_prerequisites_through_overlay_window(
         service_config_path=service_config_path,
     )
 
-    tray_approval_id, _, _ = _request_approve_grant_next(
+    tray_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="tray_presence",
         request_reason="test request tray presence before summon handoff",
         approval_comment="approved only as a tray presence authority review decision",
         grant_reason="test grant tray presence before summon handoff",
@@ -863,9 +1033,10 @@ def _execute_prerequisites_through_overlay_window(
         service_config_path=service_config_path,
     )
 
-    hotkey_approval_id, _, _ = _request_approve_grant_next(
+    hotkey_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="global_hotkey_binding",
         request_reason="test request hotkey binding before summon handoff",
         approval_comment="approved only as a global hotkey binding authority review decision",
         grant_reason="test grant hotkey binding before summon handoff",
@@ -886,9 +1057,10 @@ def _execute_prerequisites_through_overlay_window(
         service_config_path=service_config_path,
     )
 
-    overlay_approval_id, _, _ = _request_approve_grant_next(
+    overlay_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="overlay_window",
         request_reason="test request overlay window before summon handoff",
         approval_comment="approved only as an overlay window authority review decision",
         grant_reason="test grant overlay window before summon handoff",
@@ -1131,7 +1303,7 @@ def test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded
         "-Reason",
         "test execute bounded resident runtime next action",
         "-RunSeconds",
-        "1",
+        "2",
         "-ConfirmExecute",
     )
     assert executed.returncode == 0, executed.stderr or executed.stdout
@@ -1147,7 +1319,7 @@ def test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded
     assert execute_result["action_id"] == "execute_supervised_resident_host_start"
     assert execute_result["route"] == "/lens/resident-runtime/execute"
     assert execute_result["approval_id"] == resident_approval_id
-    assert execute_result["run_seconds"] == 1
+    assert execute_result["run_seconds"] == 2
     assert execute_result["result"]["executed"] is True
     assert execute_result["result"]["resident_supervision_lease_started"] is True
     assert execute_result["result"]["resident_claim_allowed"] is False
@@ -1333,15 +1505,14 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     )
     assert resident_execution["status"] == "resident_supervision_started"
 
-    tray_request = _request_next(data_dir, "test request tray presence before hotkey execution")
-    tray_approval_id = tray_request["request_result"]["approval_id"]
-    _approve_request(
-        monkeypatch,
+    tray_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
-        tray_approval_id,
-        "approved only as a tray presence authority review decision",
+        monkeypatch,
+        surface="tray_presence",
+        request_reason="test request tray presence before hotkey execution",
+        approval_comment="approved only as a tray presence authority review decision",
+        grant_reason="test grant tray presence before hotkey execution",
     )
-    _grant_next(data_dir, tray_approval_id, "test grant tray presence before hotkey execution")
     tray_execution = _execute_next(
         data_dir,
         tray_approval_id,
@@ -1457,9 +1628,10 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     )
     assert resident_execution["status"] == "resident_supervision_started"
 
-    tray_approval_id, _, _ = _request_approve_grant_next(
+    tray_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="tray_presence",
         request_reason="test request tray presence before overlay handoff",
         approval_comment="approved only as a tray presence authority review decision",
         grant_reason="test grant tray presence before overlay handoff",
@@ -1472,9 +1644,10 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     )
     assert tray_execution["status"] == "tray_presence_started"
 
-    hotkey_approval_id, _, _ = _request_approve_grant_next(
+    hotkey_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="global_hotkey_binding",
         request_reason="test request hotkey binding before overlay execution",
         approval_comment="approved only as a global hotkey binding authority review decision",
         grant_reason="test grant hotkey binding before overlay execution",
@@ -1574,9 +1747,10 @@ def _execute_prerequisites_through_summon_binding(
         monkeypatch,
         service_config_path=service_config_path,
     )
-    summon_approval_id, summon_request, summon_grant = _request_approve_grant_next(
+    summon_approval_id, summon_request, summon_grant = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
+        surface="summon_binding",
         request_reason="test request summon binding before persistent supervision enablement",
         approval_comment="approved only as a summon action authority review decision",
         grant_reason="test grant summon binding before persistent supervision enablement",
@@ -1738,46 +1912,13 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert ready_payload["status"] == "ready_for_persistent_supervision_enablement_sequence"
     assert ready_payload["next_operator_action"]["id"] == "request_persistent_supervision_enablement_authority"
 
-    enablement_approval_id, enablement_request, enablement_grant = _request_approve_grant_next(
+    enablement_chain = _request_approve_grant_persistent_supervision_enablement_in_process(
         data_dir,
         monkeypatch,
-        request_reason="test request persistent supervision enablement authority after prerequisites",
-        approval_comment="approved only as a persistent supervision enablement authority review decision",
-        grant_reason="test grant persistent supervision enablement authority after prerequisites",
         service_config_path=service_config_path,
     )
-    assert enablement_request["request_result"]["action_id"] == ("request_persistent_supervision_enablement_authority")
-    assert enablement_request["request_result"]["approval_action"] == (
-        "lens.host.persistent_supervision_enablement_authority"
-    )
-    assert enablement_grant["grant_result"]["action_id"] == "grant_persistent_supervision_enablement_authority"
-    assert enablement_grant["grant_result"]["authority_granted"] is True
-
-    execution_request = _request_next(
-        data_dir,
-        "test request persistent supervision execution authority after enablement authority",
-        service_config_path=service_config_path,
-    )
-    execution_approval_id = execution_request["request_result"]["approval_id"]
-    assert execution_request["request_result"]["action_id"] == "request_persistent_supervision_execution_authority"
-    assert execution_request["request_result"]["approval_action"] == (
-        "lens.host.persistent_supervision_enablement_execution_authority"
-    )
-    _approve_request(
-        monkeypatch,
-        data_dir,
-        execution_approval_id,
-        "approved only as a persistent supervision execution authority review decision",
-    )
-    execution_grant = _grant_next(
-        data_dir,
-        execution_approval_id,
-        "test grant persistent supervision execution authority after review",
-        service_config_path=service_config_path,
-    )
-    assert execution_grant["grant_result"]["action_id"] == "grant_persistent_supervision_execution_authority"
-    assert execution_grant["grant_result"]["authority_granted"] is True
-    assert execution_grant["grant_result"]["result"]["service_config_write_authority"] is True
+    enablement_approval_id = enablement_chain["enablement_approval_id"]
+    execution_approval_id = enablement_chain["execution_approval_id"]
 
     apply_ready = _run_plan(
         "-Mode",
