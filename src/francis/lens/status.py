@@ -2744,6 +2744,12 @@ def _stage6_readiness(
     supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
+    os_binding_authority_summary = _as_dict(os_binding_readiness.get("authority_request_readback"))
+    os_binding_authority_latest_approval_id = (
+        _safe_str(os_binding_authority_summary.get("latest_approval_id")).strip()
+        or _safe_str(_as_dict(os_binding_authority_requests.get("latest")).get("id")).strip()
+        or _safe_str(os_binding_authority_requests.get("latest_approval_id")).strip()
+    )
     os_binding_execution_denial = _as_dict(os_binding_execution_readiness.get("execution_denial"))
     closure_readback = _stage6_closure_readback(
         mode=mode,
@@ -2861,9 +2867,7 @@ def _stage6_readiness(
                 "authority_request_rejected_count": _safe_int(os_binding_authority_requests.get("rejected_count")),
                 "authority_request_emergency_count": _safe_int(os_binding_authority_requests.get("emergency_count")),
                 "authority_request_total_count": _safe_int(os_binding_authority_requests.get("total_count")),
-                "authority_request_latest_approval_id": _safe_str(
-                    os_binding_authority_requests.get("latest_approval_id")
-                ).strip(),
+                "authority_request_latest_approval_id": os_binding_authority_latest_approval_id,
                 "authority_granted": bool(os_binding_authority_requests.get("authority_granted")),
                 "os_level_command_palette_binding_authority": bool(
                     os_binding_authority_requests.get("os_level_command_palette_binding_authority")
