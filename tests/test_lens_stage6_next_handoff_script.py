@@ -883,3 +883,112 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
     assert payload["governance"]["local_process_launch_authority"] is False
     assert payload["governance"]["process_supervision_authority"] is False
     assert payload["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_stage6_next_handoff_promotes_supervised_runtime_receipt_to_tray(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    runtime_root = data_root / "runtime" / "lens-host"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    pid = os.getpid()
+    (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "mode": "resident",
+                "pid": pid,
+                "process_alive": True,
+                "resident": False,
+                "service_managed": False,
+                "tray_presence": False,
+                "global_hotkey": False,
+                "overlay_window": False,
+                "summon_anywhere": False,
+                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    receipt_root = data_root / "lens" / "host_supervision_executions"
+    receipt_root.mkdir(parents=True, exist_ok=True)
+    receipt_id = "lhse_test_supervised_runtime"
+    (receipt_root / f"{receipt_id}.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervision.execution.receipt",
+                "receipt_id": receipt_id,
+                "status": "resident_supervision_started",
+                "created_ts": int(datetime.now(UTC).timestamp()),
+                "execution": {
+                    "supervision_mode": "resident_start",
+                    "bounded_supervised_session": False,
+                    "temporary_host_process_observed": True,
+                    "resident_host_process": True,
+                    "resident_runtime_candidate_supervised": True,
+                    "resident_supervised_runtime": True,
+                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                    "stop_command": "scripts/lens-host-supervisor.ps1 -Mode StopResident",
+                },
+                "resident_claim": {
+                    "resident_host_process_claimed": False,
+                    "resident_runtime_claimed": False,
+                    "resident_claim_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_tray_presence"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert payload["next_operator_action_requirement"] == "tray_presence"
+    assert payload["next_operator_action"]["id"] == "request_tray_presence_authority"
+    assert payload["persistent_supervision_first_missing_required_before_enable"] == "tray_presence"
+    assert payload["persistent_supervision_missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert payload["resident_runtime_candidate_handoff_observed"] is False
+    assert payload["resident_runtime_candidate_handoff"] == {}
+
+    first_missing_handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
+    assert first_missing_handoff["id"] == "tray_presence"
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert first_missing_handoff["proof_script"] == "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    assert first_missing_handoff["read_only_contract"] is True
+    assert first_missing_handoff["diagnostic_only"] is True
+    assert first_missing_handoff["would_execute"] is False
+    assert first_missing_handoff["would_mutate"] is False
+
+    bringup_plan = payload["stage6_prerequisite_bringup_plan"]
+    assert bringup_plan["current_first_missing_requirement"] == "tray_presence"
+    assert bringup_plan["current_first_missing_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert bringup_plan["next_operator_action_requirement"] == "tray_presence"
+    assert bringup_plan["next_operator_action"]["id"] == "request_tray_presence_authority"
+    assert "resident_host_process" not in bringup_plan["missing_required_before_enable"]
+    assert (
+        "resident_host_process_not_supervised" not in payload["persistent_supervision_missing_required_before_enable"]
+    )
+    assert "resident_supervision_not_persistent" not in payload["persistent_supervision_missing_required_before_enable"]
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_runtime_candidate_handoff"]["status"] == "not_observed"
+    assert all(item["passed"] for item in payload["checks"])
+    assert payload["governance"]["local_process_launch_authority"] is False
+    assert payload["governance"]["process_supervision_authority"] is False
+    assert payload["governance"]["resident_claim_authority"] is False

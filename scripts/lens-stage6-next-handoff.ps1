@@ -192,8 +192,15 @@ $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness = Get-PropertyValu
 $Stage6PrerequisiteBringupPlanCommandAvailability = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'operator_sequence_command_availability' -Default ([ordered]@{})
 $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
   'resident_host_process_not_supervised',
-  'resident_supervision_not_persistent'
+  'resident_supervision_not_persistent',
+  'summon_tray_presence_blocker_boundary',
+  'os_level_command_palette_binding',
+  'summon_overlay_window_blocker_boundary',
+  'summon_anywhere_blockers'
 )
+$Stage6PrerequisiteBringupPlanFirstMissingRequirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_requirement' -Default '')
+$Stage6PrerequisiteBringupPlanFirstMissingTruthfulGap = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '')
+$Stage6PrerequisiteBringupPlanNextOperatorRequirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
 $Stage6PrerequisiteBringupPlanObserved = (
   [int]$Stage6PrerequisiteBringupPlanResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'kind' -Default '') -eq 'lens.stage6.prerequisite_bringup.plan' -and
@@ -204,10 +211,12 @@ $Stage6PrerequisiteBringupPlanObserved = (
   [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'acceptance_criterion' -Default '') -eq 'system_resident_presence' -and
   [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap_basis' -Default '') -eq 'missing_required_before_enable' -and
-  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_requirement' -Default '') -eq 'resident_host_process' -and
-  $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '') -and
+  -not [string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupPlanFirstMissingRequirement) -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains $Stage6PrerequisiteBringupPlanFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains $Stage6PrerequisiteBringupPlanFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains $Stage6PrerequisiteBringupPlanFirstMissingTruthfulGap -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $true) -and
-  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '') -eq 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanNextOperatorRequirement -eq $Stage6PrerequisiteBringupPlanFirstMissingRequirement -and
   -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'id' -Default '')) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_mutate' -Default $true) -and
@@ -218,7 +227,6 @@ $Stage6PrerequisiteBringupPlanObserved = (
   $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'global_hotkey_binding' -and
   $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'overlay_window' -and
   $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'summon_binding' -and
-  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and
   [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'diagnostic_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'plan_only' -Default $false) -and

@@ -869,20 +869,25 @@ def _lens_host_missing_required_before_enable(
     surface_blockers = set(_as_str_list(blocker_groups.get("surface_dependencies")))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
+    supervision_execution_readback = _as_dict(launch_manifest.get("supervision_execution_readback"))
     tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
     overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     summon_runtime_readback = _as_dict(launch_manifest.get("summon_runtime_readback"))
+    process_alive = bool(process_readback.get("process_alive"))
     resident_supervised_runtime = (
-        bool(process_readback.get("process_alive"))
+        process_alive
         and bool(supervisor_readback.get("fresh_readback"))
         and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
+    supervised_runtime_receipt_observed = bool(
+        supervision_execution_readback.get("resident_supervised_runtime_receipt_observed")
     )
     resident_host_process_blocked = bool(
         {"resident_host_process_missing", "resident_host_not_supervised"} & process_blockers
     )
-    resident_host_process_ready = bool(process_readback.get("process_alive")) and (
-        resident_supervised_runtime or not resident_host_process_blocked
+    resident_host_process_ready = process_alive and (
+        resident_supervised_runtime or supervised_runtime_receipt_observed or not resident_host_process_blocked
     )
     tray_presence_ready = bool(tray_runtime_readback.get("ready")) or "tray_host_missing" not in surface_blockers
     hotkey_binding_ready = (

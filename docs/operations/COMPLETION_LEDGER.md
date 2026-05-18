@@ -33636,6 +33636,56 @@ hardening:
 - PowerShell parser check for `scripts\lens-summon-anywhere-blockers-proof.ps1`
   Result: `passed; errors=0`
 
+Stage 6 Lens supervised-runtime receipt prerequisite handoff hardening on
+`2026-05-18`:
+
+- `src/francis/lens/host_manifest.py` now treats a live Lens host process plus
+  a supervised resident-runtime execution receipt as satisfying the
+  `resident_host_process` prerequisite for the ordered Stage 6 prerequisite
+  bring-up chain. A receipt alone is not enough; the process readback must still
+  report a live process.
+- `scripts/lens-stage6-next-handoff.ps1` no longer hard-codes the prerequisite
+  bring-up plan to `resident_host_process`. It now validates the ordered Stage 6
+  prerequisite handoff for resident host, tray, global hotkey, overlay, and
+  summon gaps while preserving the same read-only, diagnostic-only, no-mutation
+  governance contract.
+- `tests/test_lens_stage6_next_handoff_script.py` now covers the supervised
+  runtime receipt path: when a live resident host process and a supervised
+  runtime receipt are both present, the next operator handoff advances to
+  `tray_presence` / `summon_tray_presence_blocker_boundary` instead of staying
+  on `resident_host_process_not_supervised` or
+  `resident_supervision_not_persistent`.
+- This does not close Stage 6 and does not claim resident autonomy. The current
+  persistent `/lens/status` readback still reports `ready_to_close=false`,
+  `ready_total=2`, `blocked_total=3`, closure gap `summon_anywhere_blockers`,
+  and first handoff gap `resident_host_process_not_supervised` because the live
+  resident host process is not currently supervised/running.
+
+Latest validation for Stage 6 Lens supervised-runtime receipt prerequisite
+handoff hardening:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback tests\test_api_lens.py::test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease -q`
+  Result: `passed; 10 tests`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_next_slice,recommended_handoff_source,recommended_proof_script,next_operator_action_requirement,persistent_supervision_first_missing_required_before_enable,persistent_supervision_missing_required_before_enable,resident_runtime_candidate_handoff_observed | ConvertTo-Json -Depth 8`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  persistent_supervision_first_missing_required_before_enable=resident_host_process,
+  resident_runtime_candidate_handoff_observed=false`
+- `/lens/status` direct readback:
+  Result: `passed; ready_to_close=false, ready_total=2, blocked_total=3,
+  blocked_criteria=[summon_anywhere, helpful_not_noisy,
+  system_resident_presence], closure_next=summon_anywhere_blockers,
+  next_handoff_gap=resident_host_process_not_supervised`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
