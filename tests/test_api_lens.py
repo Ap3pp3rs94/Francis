@@ -5708,6 +5708,25 @@ def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions(
     assert review_action["method"] == "GET"
     assert review_action["latest_receipt_id"] == "lpsee_1"
 
+    stale_grants_review_action = select_next(
+        enablement_requests={
+            "approved_count": 1,
+            "latest": {"status": "approved", "id": "approval-enable-stale"},
+        },
+        execution_receipts={
+            "route": "/lens/host/persistent-supervision/enablement/executions",
+            "persistent_supervision_enablement_allowed": True,
+            "persistent_supervision_ready": True,
+            "latest": {
+                "status": "service_config_updated",
+                "receipt_id": "lpsee_stale_grants",
+            },
+        },
+    )
+    assert stale_grants_review_action["id"] == "review_persistent_supervision_enablement_receipt"
+    assert stale_grants_review_action["method"] == "GET"
+    assert stale_grants_review_action["latest_receipt_id"] == "lpsee_stale_grants"
+
 
 def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:
     from francis.lens.status import (

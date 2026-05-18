@@ -2018,3 +2018,19 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup_payload["next_operator_action"]["method"] == "GET"
     assert followup_payload["next_operator_action"]["script_would_mutate"] is False
     assert followup_payload["next_operator_command"]["mode"] == "Status"
+
+    shutil.rmtree(data_dir / "lens" / "pse_authority_grants", ignore_errors=True)
+    shutil.rmtree(data_dir / "lens" / "pse_execution_authority_grants", ignore_errors=True)
+    stale_grants_followup = _run_plan(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        *_service_config_args(service_config_path),
+    )
+    assert stale_grants_followup.returncode == 0, stale_grants_followup.stderr or stale_grants_followup.stdout
+    stale_grants_payload = json.loads(stale_grants_followup.stdout)
+    assert stale_grants_payload["status"] == "persistent_supervision_enablement_applied"
+    assert stale_grants_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert stale_grants_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert stale_grants_payload["next_operator_action"]["method"] == "GET"

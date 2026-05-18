@@ -2155,6 +2155,9 @@ def _stage6_next_persistent_supervision_enablement_action(
     execution_grants = status_readbacks["persistent_supervision_enablement_execution_authority_grants"]
     execution_receipts = status_readbacks["persistent_supervision_enablement_execution_receipts"]
 
+    if _stage6_persistent_supervision_enablement_execution_applied(execution_receipts):
+        return _stage6_persistent_supervision_enablement_execution_review_action(execution_receipts)
+
     if not bool(enablement_grants.get("authority_granted")):
         if _stage6_approved_count(enablement_requests) > 0:
             grant_action = dict(actions[1])
@@ -2182,9 +2185,6 @@ def _stage6_next_persistent_supervision_enablement_action(
                 approval_action="lens.host.persistent_supervision_enablement_execution_authority",
             )
         return actions[2]
-
-    if _stage6_persistent_supervision_enablement_execution_applied(execution_receipts):
-        return _stage6_persistent_supervision_enablement_execution_review_action(execution_receipts)
 
     apply_action = dict(actions[-1])
     apply_action["active_approval_id"] = _stage6_active_approval_id(execution_grants)

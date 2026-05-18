@@ -33479,6 +33479,55 @@ readback hardening:
   current_first_missing_requirement=tray_presence,
   missing_required_before_enable=["tray_presence","global_hotkey_binding","overlay_window"]`
 
+Stage 6 Lens prerequisite bring-up applied-receipt precedence on
+`2026-05-18`:
+
+- A governed live bring-up sequence progressed through resident host, tray,
+  global hotkey, and overlay prerequisites. With all prerequisite surfaces live,
+  the bring-up readback correctly detected the prior persistent supervision
+  execution receipt as applied, but the next action still fell back to
+  `grant_persistent_supervision_enablement_authority` when the older enablement
+  authority grants were no longer active.
+- `src/francis/lens/status.py` and
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now let an applied
+  persistent supervision enablement execution receipt win before stale or
+  missing authority-grant readbacks are considered. The next action becomes the
+  read-only `review_persistent_supervision_enablement_receipt` action whenever
+  the latest execution receipt is `service_config_updated` or
+  `service_config_already_enabled` and reports
+  `persistent_supervision_enablement_allowed=true` plus
+  `persistent_supervision_ready=true`.
+- This does not close Stage 6. After prerequisite bring-up is no longer the
+  first blocker, `/lens/status` still reports Stage 6 active with
+  `ready_to_close=false` and `next_smallest_truthful_gap=summon_anywhere_blockers`.
+  Live tray, hotkey, overlay, and resident leases were stopped after validation
+  to avoid interfering with isolated temp-data tests.
+
+Latest validation for Stage 6 Lens applied-receipt precedence:
+
+- Live readback before cleanup:
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied,
+  current_truthful_gap=persistent_supervision_execution_boundary,
+  next_operator_action_requirement=persistent_supervision_enablement_receipt,
+  next_action=review_persistent_supervision_enablement_receipt,
+  method=GET, required_before_enable_ready=true`
+- `/lens/status` direct readback:
+  `python -c "from francis.lens.status import lens_status; ..."`
+  Result: `passed; stage_state=active, ready_to_close=false,
+  closure_next_smallest_truthful_gap=summon_anywhere_blockers,
+  prerequisite_status=persistent_supervision_enablement_applied,
+  prerequisite_next_action=review_persistent_supervision_enablement_receipt`
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed; 2 tests`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `passed; errors=0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
