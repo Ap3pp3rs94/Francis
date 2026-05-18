@@ -5624,6 +5624,7 @@ def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions(
         enablement_grants: dict[str, Any] | None = None,
         execution_requests: dict[str, Any] | None = None,
         execution_grants: dict[str, Any] | None = None,
+        execution_receipts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return _stage6_next_persistent_supervision_enablement_action(
             actions=actions,
@@ -5632,6 +5633,7 @@ def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions(
                 "persistent_supervision_enablement_authority_grants": enablement_grants or {},
                 "persistent_supervision_enablement_execution_requests": execution_requests or {},
                 "persistent_supervision_enablement_execution_authority_grants": execution_grants or {},
+                "persistent_supervision_enablement_execution_receipts": execution_receipts or {},
             },
         )
 
@@ -5682,6 +5684,29 @@ def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions(
     assert apply_action["id"] == "apply_persistent_supervision_enablement"
     assert apply_action["active_approval_id"] == "approval-execute-1"
     assert apply_action["enablement_active_approval_id"] == "approval-enable-1"
+
+    review_action = select_next(
+        enablement_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-enable-1"},
+        },
+        execution_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-execute-1"},
+        },
+        execution_receipts={
+            "route": "/lens/host/persistent-supervision/enablement/executions",
+            "persistent_supervision_enablement_allowed": True,
+            "persistent_supervision_ready": True,
+            "latest": {
+                "status": "service_config_already_enabled",
+                "receipt_id": "lpsee_1",
+            },
+        },
+    )
+    assert review_action["id"] == "review_persistent_supervision_enablement_receipt"
+    assert review_action["method"] == "GET"
+    assert review_action["latest_receipt_id"] == "lpsee_1"
 
 
 def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:

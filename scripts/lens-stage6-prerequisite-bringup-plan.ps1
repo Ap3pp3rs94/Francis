@@ -627,11 +627,39 @@ def _enablement_steps(handoff: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _enablement_execution_applied(readback: dict[str, Any]) -> bool:
+    latest = _as_dict(readback.get("latest"))
+    latest_status = _safe_str(latest.get("status"))
+    return (
+        latest_status in {"service_config_updated", "service_config_already_enabled"}
+        and bool(readback.get("persistent_supervision_enablement_allowed"))
+        and bool(readback.get("persistent_supervision_ready"))
+    )
+
+
+def _enablement_execution_review_action(readback: dict[str, Any]) -> dict[str, Any]:
+    latest = _as_dict(readback.get("latest"))
+    return {
+        "id": "review_persistent_supervision_enablement_receipt",
+        "route": _safe_str(readback.get("route")) or "/lens/host/persistent-supervision/enablement/executions",
+        "method": "GET",
+        "approval_action": "lens.host.persistent_supervision_enablement_execution_authority",
+        "requires": ["persistent supervision enablement execution receipt readback"],
+        "mode": "readback",
+        "live_effect": "persistent supervision enablement execution receipt is recorded; review resident claim boundary next",
+        "operator_supplied_values_required": False,
+        "script_would_execute": False,
+        "script_would_mutate": False,
+        "latest_receipt_id": _safe_str(latest.get("receipt_id")),
+    }
+
+
 def _next_enablement_action(actions: list[dict[str, Any]], resident_host: dict[str, Any]) -> dict[str, Any]:
     enablement_requests = _as_dict(resident_host.get("persistent_supervision_enablement_authority_requests"))
     enablement_grants = _as_dict(resident_host.get("persistent_supervision_enablement_authority_grants"))
     execution_requests = _as_dict(resident_host.get("persistent_supervision_enablement_execution_requests"))
     execution_grants = _as_dict(resident_host.get("persistent_supervision_enablement_execution_authority_grants"))
+    execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
 
     if not bool(enablement_grants.get("authority_granted")):
         if _approved_count(enablement_requests) > 0:
@@ -662,6 +690,9 @@ def _next_enablement_action(actions: list[dict[str, Any]], resident_host: dict[s
                 readback=execution_requests,
             )
         return actions[2]
+
+    if _enablement_execution_applied(execution_receipts):
+        return _enablement_execution_review_action(execution_receipts)
 
     apply_action = dict(actions[-1])
     apply_action["active_approval_id"] = _active_approval_id(execution_grants)
@@ -864,6 +895,9 @@ def _next_operator_actor_scope_readiness(actor: str, action: dict[str, Any]) -> 
         "actor_scope_policy_contract": policy_contract,
         "evidence": decision.evidence,
     }
+
+
+_MAX_STAGE6_PREREQUISITE_RUN_SECONDS = 15 * 60
 
 
 def _check(check_id: str, status: str, passed: bool, evidence: str, reason: str) -> dict[str, Any]:
@@ -1075,7 +1109,7 @@ def _safe_run_seconds(value: str) -> int:
         parsed = int(float(value or "2"))
     except (TypeError, ValueError):
         return 2
-    return max(1, min(parsed, 60))
+    return max(1, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))
 
 
 def _execute_next_action(
@@ -1272,6 +1306,8 @@ def _run() -> tuple[int, dict[str, Any]]:
     ]
     missing_steps = [step for step in ordered_steps if step["id"] in missing or not bool(step["ready"])]
     enablement_sequence = _enablement_steps(handoff)
+    enablement_execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
+    enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
     next_operator_action = (
         missing_steps[0]["next_operator_action"]
         if missing_steps
@@ -1417,6 +1453,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             if mode in {"requestnext", "grantnext", "executenext"}
             else "blocked"
             if missing_steps
+            else "persistent_supervision_enablement_applied"
+            if enablement_execution_applied
             else "ready_for_persistent_supervision_enablement_sequence"
         ),
         "mode": mode,
@@ -1441,7 +1479,13 @@ def _run() -> tuple[int, dict[str, Any]]:
         "ordered_prerequisite_steps": ordered_steps,
         "persistent_supervision_enablement_steps": enablement_sequence,
         "next_operator_action": next_operator_action,
-        "next_operator_action_requirement": missing_steps[0]["id"] if missing_steps else "persistent_supervision_enablement",
+        "next_operator_action_requirement": (
+            missing_steps[0]["id"]
+            if missing_steps
+            else "persistent_supervision_enablement_receipt"
+            if enablement_execution_applied
+            else "persistent_supervision_enablement"
+        ),
         "next_operator_command": next_operator_command,
         "next_operator_actor_scope_readiness": next_operator_actor_scope_readiness,
         "operator_sequence": operator_sequence,

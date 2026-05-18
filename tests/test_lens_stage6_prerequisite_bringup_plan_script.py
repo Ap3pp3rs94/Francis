@@ -286,6 +286,9 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "[switch]$ConfirmExecute" in script
     assert "[string]$ApprovalId" in script
     assert "[int]$RunSeconds" in script
+    assert "_MAX_STAGE6_PREREQUISITE_RUN_SECONDS = 15 * 60" in script
+    assert "min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS)" in script
+    assert "min(parsed, 60)" not in script
     assert "refused_confirmation_required" in script
     assert "request_lens_resident_runtime_execution_authority" in script
     assert "grant_lens_resident_runtime_execution_authority" in script
@@ -1999,3 +2002,19 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert temp_service_config["service_control_authority"] is False
     assert temp_service_config["resident_claim_authority"] is False
     assert live_service_config_path.read_text(encoding="utf-8") == live_service_config_before
+
+    followup = _run_plan(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        *_service_config_args(service_config_path),
+    )
+    assert followup.returncode == 0, followup.stderr or followup.stdout
+    followup_payload = json.loads(followup.stdout)
+    assert followup_payload["status"] == "persistent_supervision_enablement_applied"
+    assert followup_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert followup_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert followup_payload["next_operator_action"]["method"] == "GET"
+    assert followup_payload["next_operator_action"]["script_would_mutate"] is False
+    assert followup_payload["next_operator_command"]["mode"] == "Status"

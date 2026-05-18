@@ -2117,6 +2117,33 @@ def _stage6_persistent_supervision_enablement_steps(handoff: dict[str, Any]) -> 
     ]
 
 
+def _stage6_persistent_supervision_enablement_execution_applied(readback: dict[str, Any]) -> bool:
+    latest = _as_dict(readback.get("latest"))
+    latest_status = _safe_str(latest.get("status")).strip()
+    return (
+        latest_status in {"service_config_updated", "service_config_already_enabled"}
+        and bool(readback.get("persistent_supervision_enablement_allowed"))
+        and bool(readback.get("persistent_supervision_ready"))
+    )
+
+
+def _stage6_persistent_supervision_enablement_execution_review_action(readback: dict[str, Any]) -> dict[str, Any]:
+    latest = _as_dict(readback.get("latest"))
+    return {
+        "id": "review_persistent_supervision_enablement_receipt",
+        "route": _safe_str(readback.get("route")).strip() or "/lens/host/persistent-supervision/enablement/executions",
+        "method": "GET",
+        "approval_action": "lens.host.persistent_supervision_enablement_execution_authority",
+        "requires": ["persistent supervision enablement execution receipt readback"],
+        "mode": "readback",
+        "live_effect": "persistent supervision enablement execution receipt is recorded; review resident claim boundary next",
+        "operator_supplied_values_required": False,
+        "script_would_execute": False,
+        "script_would_mutate": False,
+        "latest_receipt_id": _safe_str(latest.get("receipt_id")).strip(),
+    }
+
+
 def _stage6_next_persistent_supervision_enablement_action(
     *,
     actions: list[dict[str, Any]],
@@ -2126,6 +2153,7 @@ def _stage6_next_persistent_supervision_enablement_action(
     enablement_grants = status_readbacks["persistent_supervision_enablement_authority_grants"]
     execution_requests = status_readbacks["persistent_supervision_enablement_execution_requests"]
     execution_grants = status_readbacks["persistent_supervision_enablement_execution_authority_grants"]
+    execution_receipts = status_readbacks["persistent_supervision_enablement_execution_receipts"]
 
     if not bool(enablement_grants.get("authority_granted")):
         if _stage6_approved_count(enablement_requests) > 0:
@@ -2154,6 +2182,9 @@ def _stage6_next_persistent_supervision_enablement_action(
                 approval_action="lens.host.persistent_supervision_enablement_execution_authority",
             )
         return actions[2]
+
+    if _stage6_persistent_supervision_enablement_execution_applied(execution_receipts):
+        return _stage6_persistent_supervision_enablement_execution_review_action(execution_receipts)
 
     apply_action = dict(actions[-1])
     apply_action["active_approval_id"] = _stage6_active_approval_id(execution_grants)
@@ -2211,6 +2242,9 @@ def _stage6_prerequisite_bringup_readback(
         "persistent_supervision_enablement_execution_authority_grants": _as_dict(
             resident_host.get("persistent_supervision_enablement_execution_authority_grants")
         ),
+        "persistent_supervision_enablement_execution_receipts": _as_dict(
+            resident_host.get("persistent_supervision_enablement_execution_receipts")
+        ),
     }
     ordered_steps = [
         _stage6_prerequisite_step(
@@ -2226,6 +2260,8 @@ def _stage6_prerequisite_bringup_readback(
     ]
     missing_steps = [item for item in ordered_steps if _safe_str(item.get("id")).strip() in missing_required]
     enablement_steps = _stage6_persistent_supervision_enablement_steps(first_missing_handoff)
+    execution_receipts = status_readbacks["persistent_supervision_enablement_execution_receipts"]
+    enablement_execution_applied = _stage6_persistent_supervision_enablement_execution_applied(execution_receipts)
     next_operator_action = (
         _as_dict(missing_steps[0].get("next_operator_action"))
         if missing_steps
@@ -2249,7 +2285,11 @@ def _stage6_prerequisite_bringup_readback(
     first_missing_requirement = _safe_str(first_missing_step.get("id")).strip()
     first_missing_truthful_gap = _safe_str(first_missing_step.get("next_smallest_truthful_gap")).strip()
     next_operator_action_requirement = (
-        first_missing_requirement if missing_steps else "persistent_supervision_enablement"
+        first_missing_requirement
+        if missing_steps
+        else "persistent_supervision_enablement_receipt"
+        if enablement_execution_applied
+        else "persistent_supervision_enablement"
     )
     operator_sequence = _stage6_operator_sequence_with_commands(
         [_as_dict(item.get("next_operator_action")) for item in missing_steps] or [next_operator_action],
@@ -2269,7 +2309,11 @@ def _stage6_prerequisite_bringup_readback(
     return {
         "ok": True,
         "kind": "lens.stage6.prerequisite_bringup.plan",
-        "status": "blocked" if missing_steps else "ready",
+        "status": "blocked"
+        if missing_steps
+        else "persistent_supervision_enablement_applied"
+        if enablement_execution_applied
+        else "ready",
         "mode": "status",
         "stage": "Stage 6 / Lens MVP",
         "stage_state": "active" if not bool(closure_readback.get("ready_to_close")) else "ready_to_close",

@@ -33434,6 +33434,51 @@ command preview:
   handoff_request_command_route=/lens/resident-runtime/authority-grant/request,
   handoff_request_command_would_request_if_run=true`
 
+Stage 6 Lens prerequisite bring-up lease and post-apply readback hardening on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now allows a
+  15-minute bounded prerequisite lease for operator-supplied `-RunSeconds`.
+  The default command preview remains `-RunSeconds 2`, but live tray, hotkey,
+  overlay, and summon prerequisites no longer have to fit inside the previous
+  flat 60-second wrapper cap.
+- `src/francis/lens/status.py` and the bring-up script now treat a persistent
+  supervision enablement execution receipt as applied when the latest receipt
+  is either `service_config_updated` or `service_config_already_enabled` and
+  the receipt readback reports
+  `persistent_supervision_enablement_allowed=true` and
+  `persistent_supervision_ready=true`.
+- After that receipt is observed, the Stage 6 bring-up readback returns
+  `persistent_supervision_enablement_applied` with a read-only
+  `review_persistent_supervision_enablement_receipt` action instead of
+  repeatedly offering `apply_persistent_supervision_enablement`.
+- This does not close Stage 6. The live runtime proof remains bounded by
+  temporary leases; when those leases expire, the truthful readback falls back
+  to the missing prerequisite surface, such as `tray_presence`.
+
+Latest validation for Stage 6 Lens prerequisite bring-up lease and post-apply
+readback hardening:
+
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_boundaries tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions -q`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `passed; errors=0`
+- `git diff --check`
+  Result: `passed`
+- Live readback after bounded leases expired:
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  current_first_missing_requirement=tray_presence,
+  missing_required_before_enable=["tray_presence","global_hotkey_binding","overlay_window"]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
