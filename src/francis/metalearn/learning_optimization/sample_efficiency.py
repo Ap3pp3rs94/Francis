@@ -4,10 +4,12 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from importlib import import_module
 from typing import Any
 
+np: Any
 try:  # pragma: no cover - optional dependency
-    import numpy as np
+    np = import_module("numpy")
 except Exception:  # pragma: no cover
     np = None
 

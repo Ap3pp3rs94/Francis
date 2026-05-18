@@ -19,6 +19,15 @@ REQUIRED_BEFORE_ENABLE = [
 ]
 
 
+def _fresh_supervisor_readback() -> dict[str, Any]:
+    return {
+        "fresh_readback": True,
+        "freshness_status": "fresh",
+        "state_age_seconds": 0,
+        "resident_supervised_runtime": True,
+    }
+
+
 def _manifest(
     *,
     process_alive: bool,
@@ -30,6 +39,8 @@ def _manifest(
     tray_runtime_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     process_blockers = [process_blocker] if process_blocker else []
+    if supervisor_readback is None and process_alive and not process_blocker:
+        supervisor_readback = _fresh_supervisor_readback()
     return {
         "required_before_enable": REQUIRED_BEFORE_ENABLE,
         "declared_entrypoint": {"exists": True},

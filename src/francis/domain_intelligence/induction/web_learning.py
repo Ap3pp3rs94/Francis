@@ -5,16 +5,19 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from importlib import import_module
 from typing import Any
 from urllib.parse import urlparse
 
+aiohttp: Any
 try:  # pragma: no cover - optional dependency
-    import aiohttp
+    aiohttp = import_module("aiohttp")
 except Exception:  # pragma: no cover
     aiohttp = None
 
+BeautifulSoup: Any
 try:  # pragma: no cover - optional dependency
-    from bs4 import BeautifulSoup
+    BeautifulSoup = getattr(import_module("bs4"), "BeautifulSoup")
 except Exception:  # pragma: no cover
     BeautifulSoup = None
 

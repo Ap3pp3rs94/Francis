@@ -33686,6 +33686,74 @@ handoff hardening:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 Lens supervised-runtime freshness prerequisite correction on
+`2026-05-18`:
+
+- `src/francis/lens/host_manifest.py` now requires fresh live supervisor
+  readback with `resident_supervised_runtime=true` before the ordered Stage 6
+  prerequisite chain can mark `resident_host_process` ready. A durable
+  supervised-runtime execution receipt remains evidence, but it no longer
+  advances the handoff to `tray_presence` when the supervisor readback is
+  stale or missing.
+- `tests/test_lens_stage6_next_handoff_script.py` now covers both sides of the
+  contract: stale supervised-runtime receipt evidence routes back to
+  `resident_host_process_not_supervised`, while a fresh supervisor readback plus
+  receipt can advance to the tray prerequisite.
+- This corrects the live denial observed after tray authority was granted:
+  tray execution refused to start because resident supervision was stale. The
+  next truthful Stage 6 handoff is therefore back to resident host supervision,
+  not tray execution.
+- This does not close Stage 6. The live handoff still reports
+  `ready_to_close=false`, first missing prerequisite `resident_host_process`,
+  first truthful gap `resident_supervision_not_persistent`, and remaining
+  required prerequisites `resident_host_process`, `tray_presence`,
+  `global_hotkey_binding`, and `overlay_window`.
+
+Latest validation for Stage 6 Lens supervised-runtime freshness prerequisite
+correction:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; 9 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q`
+  Result: `passed; 14 tests`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_next_for_resident_host_process,
+  next_operator_action_requirement=resident_host_process,
+  action=grant_resident_runtime_execution_authority,
+  persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=blocked, ok=true,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  current_first_missing_requirement=resident_host_process,
+  current_first_missing_truthful_gap=resident_supervision_not_persistent,
+  action=grant_resident_runtime_execution_authority,
+  required_before_enable_ready=false, ready_to_close=false`
+- `.\scripts\check.ps1`
+  Result: `passed; ruff check, ruff format check, mypy over 501 source
+  files, and pytest completed with exit code 0`
+
+Python 3.13 mypy optional-dependency fallback repair on `2026-05-18`:
+
+- `src/francis/metalearn/learning_optimization/sample_efficiency.py`,
+  `src/francis/domain_intelligence/induction/web_learning.py`, and
+  `src/francis/adversarial/defense/adversarial_training.py` now load optional
+  dependencies through `importlib.import_module` into `Any`-typed module
+  handles. This preserves the existing disabled-when-missing behavior while
+  removing Python 3.13/mypy assignment errors for missing optional modules.
+- `tests/test_lens_summon_preflight_script.py` and
+  `tests/test_lens_tray_preflight_script.py` now isolate default script runs in
+  a temporary `DataDir`, so local live Lens runtime state does not masquerade as
+  a test fixture.
+- Validation: `.\scripts\check.ps1` passed after the repair.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

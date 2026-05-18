@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,15 @@ def _repo_root() -> Path:
 
 
 def _run_preflight(*args: str) -> subprocess.CompletedProcess[str]:
+    command_args = list(args)
+    if "-DataDir" not in command_args:
+        with tempfile.TemporaryDirectory() as raw_data_parent:
+            command_args.extend(["-DataDir", str(Path(raw_data_parent) / "data")])
+            return _run_preflight_with_args(command_args)
+    return _run_preflight_with_args(command_args)
+
+
+def _run_preflight_with_args(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             _powershell(),

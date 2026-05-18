@@ -865,11 +865,9 @@ def _lens_host_missing_required_before_enable(
     launch_manifest: dict[str, Any],
 ) -> list[str]:
     blocker_groups = _as_dict(launch_manifest.get("blocker_groups"))
-    process_blockers = set(_as_str_list(blocker_groups.get("process_readback")))
     surface_blockers = set(_as_str_list(blocker_groups.get("surface_dependencies")))
     process_readback = _as_dict(launch_manifest.get("process_readback"))
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
-    supervision_execution_readback = _as_dict(launch_manifest.get("supervision_execution_readback"))
     tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
     overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
@@ -880,15 +878,7 @@ def _lens_host_missing_required_before_enable(
         and bool(supervisor_readback.get("fresh_readback"))
         and bool(supervisor_readback.get("resident_supervised_runtime"))
     )
-    supervised_runtime_receipt_observed = bool(
-        supervision_execution_readback.get("resident_supervised_runtime_receipt_observed")
-    )
-    resident_host_process_blocked = bool(
-        {"resident_host_process_missing", "resident_host_not_supervised"} & process_blockers
-    )
-    resident_host_process_ready = process_alive and (
-        resident_supervised_runtime or supervised_runtime_receipt_observed or not resident_host_process_blocked
-    )
+    resident_host_process_ready = resident_supervised_runtime
     tray_presence_ready = bool(tray_runtime_readback.get("ready")) or "tray_host_missing" not in surface_blockers
     hotkey_binding_ready = (
         bool(hotkey_runtime_readback.get("ready")) or "global_hotkey_binding_missing" not in surface_blockers
@@ -1168,14 +1158,8 @@ def _lens_host_resident_process_requirement_readback(
     supervision_execution_candidate_observed = bool(
         supervision_execution_readback.get("supervision_execution_receipt_observed")
     )
-    supervision_execution_supervised_runtime_observed = bool(
-        supervision_execution_readback.get("supervision_execution_supervised_runtime_receipt_observed")
-    )
     durable_resident_candidate_supervised = resident_candidate_supervised or bool(
         supervision_execution_readback.get("supervision_execution_resident_runtime_candidate_supervised")
-    )
-    durable_resident_supervised_runtime = resident_supervised_runtime or (
-        process_alive and supervision_execution_supervised_runtime_observed
     )
     if not missing:
         return {
@@ -1186,7 +1170,7 @@ def _lens_host_resident_process_requirement_readback(
             "blocked_reason": "",
             "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
-            "resident_supervised_runtime": durable_resident_supervised_runtime,
+            "resident_supervised_runtime": resident_supervised_runtime,
             "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
             "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
         }
@@ -1219,6 +1203,8 @@ def _lens_host_resident_process_requirement_readback(
             "resident_runtime_candidate_supervised": durable_resident_candidate_supervised,
             "fresh_resident_runtime_candidate_supervised": fresh_resident_candidate_supervised,
             "resident_supervised_runtime": False,
+            "supervisor_freshness_status": str(supervisor_readback.get("freshness_status") or ""),
+            "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
         }
     return {
         **activation_execution_readback,

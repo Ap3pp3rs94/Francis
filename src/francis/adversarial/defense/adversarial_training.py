@@ -4,13 +4,16 @@ import logging
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+torch: Any
+nn: Any
 try:  # pragma: no cover - optional dependency
-    import torch
-    import torch.nn as nn
+    torch = import_module("torch")
+    nn = import_module("torch.nn")
 except Exception:  # pragma: no cover
     torch = None
     nn = None

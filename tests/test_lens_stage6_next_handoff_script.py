@@ -70,6 +70,105 @@ def _run_bringup(*args: str, env: dict[str, str] | None = None) -> subprocess.Co
     )
 
 
+def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
+    runtime_root = data_root / "runtime" / "lens-host"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "mode": "resident",
+                "pid": pid,
+                "process_alive": True,
+                "resident": False,
+                "service_managed": False,
+                "tray_presence": False,
+                "global_hotkey": False,
+                "overlay_window": False,
+                "summon_anywhere": False,
+                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_host_supervisor_state(
+    data_root: Path,
+    *,
+    pid: int,
+    updated_at: str | None = None,
+) -> None:
+    runtime_root = data_root / "runtime" / "lens-host-supervisor"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    observed_at = updated_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "mode": "resident_start",
+                "host_mode": "resident",
+                "observed_pid": pid,
+                "observed_state": "resident_running",
+                "restarted_process": False,
+                "managed_service": False,
+                "resident_supervised_runtime": True,
+                "resident_claim_allowed": False,
+                "process_supervision_authority": True,
+                "process_restart_authority": False,
+                "service_control_authority": False,
+                "updated_at": observed_at,
+                "governance": {
+                    "memory_write": False,
+                    "service_control_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_host_supervised_runtime_receipt(data_root: Path) -> None:
+    receipt_root = data_root / "lens" / "host_supervision_executions"
+    receipt_root.mkdir(parents=True, exist_ok=True)
+    receipt_id = "lhse_test_supervised_runtime"
+    (receipt_root / f"{receipt_id}.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervision.execution.receipt",
+                "receipt_id": receipt_id,
+                "status": "resident_supervision_started",
+                "created_ts": int(datetime.now(UTC).timestamp()),
+                "execution": {
+                    "supervision_mode": "resident_start",
+                    "bounded_supervised_session": False,
+                    "temporary_host_process_observed": True,
+                    "resident_host_process": True,
+                    "resident_runtime_candidate_supervised": True,
+                    "resident_supervised_runtime": True,
+                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                    "stop_command": "scripts/lens-host-supervisor.ps1 -Mode StopResident",
+                },
+                "resident_claim": {
+                    "resident_host_process_claimed": False,
+                    "resident_runtime_claimed": False,
+                    "resident_claim_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _assert_actor_scope_policy_contract(
     readiness: dict[str, Any],
     *,
@@ -885,65 +984,47 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
     assert payload["governance"]["resident_claim_authority"] is False
 
 
+def test_lens_stage6_next_handoff_does_not_promote_stale_supervised_runtime_receipt_to_tray(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid)
+    _write_lens_host_supervisor_state(data_root, pid=pid, updated_at="2026-01-01T00:00:00Z")
+    _write_lens_host_supervised_runtime_receipt(data_root)
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    _assert_stage6_prerequisite_bringup_operator_handoff(
+        payload,
+        first_missing_truthful_gap="resident_host_process_not_supervised",
+    )
+    assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    assert payload["next_operator_action_requirement"] == "resident_host_process"
+    assert payload["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
+    assert payload["persistent_supervision_missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+
+    first_missing_handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
+    assert first_missing_handoff["id"] == "resident_host_process"
+    assert first_missing_handoff["blocker"] == "resident_host_process_not_supervised"
+    assert first_missing_handoff["supervisor_freshness_status"] == "stale"
+    assert first_missing_handoff["supervision_execution_supervised_runtime_receipt_observed"] is True
+
+
 def test_lens_stage6_next_handoff_promotes_supervised_runtime_receipt_to_tray(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
-    runtime_root = data_root / "runtime" / "lens-host"
-    runtime_root.mkdir(parents=True, exist_ok=True)
     pid = os.getpid()
-    (runtime_root / "lens-host.pid").write_text(str(pid), encoding="ascii")
-    (runtime_root / "status.json").write_text(
-        json.dumps(
-            {
-                "kind": "lens.host.runtime_state",
-                "status": "resident_running",
-                "mode": "resident",
-                "pid": pid,
-                "process_alive": True,
-                "resident": False,
-                "service_managed": False,
-                "tray_presence": False,
-                "global_hotkey": False,
-                "overlay_window": False,
-                "summon_anywhere": False,
-                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                "governance": {
-                    "memory_write": False,
-                    "service_control_authority": False,
-                    "local_process_launch_authority": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    receipt_root = data_root / "lens" / "host_supervision_executions"
-    receipt_root.mkdir(parents=True, exist_ok=True)
-    receipt_id = "lhse_test_supervised_runtime"
-    (receipt_root / f"{receipt_id}.json").write_text(
-        json.dumps(
-            {
-                "kind": "lens.host.supervision.execution.receipt",
-                "receipt_id": receipt_id,
-                "status": "resident_supervision_started",
-                "created_ts": int(datetime.now(UTC).timestamp()),
-                "execution": {
-                    "supervision_mode": "resident_start",
-                    "bounded_supervised_session": False,
-                    "temporary_host_process_observed": True,
-                    "resident_host_process": True,
-                    "resident_runtime_candidate_supervised": True,
-                    "resident_supervised_runtime": True,
-                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
-                    "stop_command": "scripts/lens-host-supervisor.ps1 -Mode StopResident",
-                },
-                "resident_claim": {
-                    "resident_host_process_claimed": False,
-                    "resident_runtime_claimed": False,
-                    "resident_claim_authority": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_lens_host_runtime_state(data_root, pid=pid)
+    _write_lens_host_supervisor_state(data_root, pid=pid)
+    _write_lens_host_supervised_runtime_receipt(data_root)
 
     proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
 
@@ -1043,6 +1124,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
             "updated_at": now,
         },
     )
+    _write_lens_host_supervisor_state(data_root, pid=pid, updated_at=now)
     write_json(
         data_root / "runtime" / "lens-tray" / "status.json",
         {
