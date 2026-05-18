@@ -9684,7 +9684,8 @@ def test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lea
 
     pid = os.getpid()
 
-    def fake_resident_supervision_action(*, mode: str) -> dict[str, Any]:
+    def fake_resident_supervision_action(*, mode: str, run_seconds: Any = 5) -> dict[str, Any]:
+        assert run_seconds == 2
         if mode == "resident_stop":
             host_root = data_root / "runtime" / "lens-host"
             host_root.mkdir(parents=True, exist_ok=True)
@@ -10629,8 +10630,9 @@ def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
 
     pid = os.getpid()
 
-    def fake_resident_supervision_action(*, mode: str) -> dict[str, Any]:
+    def fake_resident_supervision_action(*, mode: str, run_seconds: Any = 5) -> dict[str, Any]:
         assert mode == "resident_start"
+        assert run_seconds == 1
         _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
         _write_lens_host_supervisor_state(
             data_root,
