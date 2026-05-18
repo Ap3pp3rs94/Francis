@@ -1760,6 +1760,29 @@ def _powershell_path() -> str:
     return shutil.which("pwsh") or shutil.which("powershell") or ""
 
 
+def _lens_host_runtime_state_paths() -> tuple[Path, Path]:
+    runtime_dir = data_dir() / "runtime" / "lens-host"
+    return runtime_dir / "status.json", runtime_dir / "lens-host.pid"
+
+
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def _remove_created_lens_host_runtime_state(*, state_existed: bool, pid_existed: bool) -> None:
+    state_path, pid_path = _lens_host_runtime_state_paths()
+    for path, existed in ((state_path, state_existed), (pid_path, pid_existed)):
+        if existed:
+            continue
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
 def _parse_json_process_stdout(stdout: str) -> dict[str, Any]:
     cleaned = stdout.strip()
     if not cleaned:
@@ -1815,6 +1838,9 @@ def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
     env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
+    state_path, pid_path = _lens_host_runtime_state_paths()
+    state_existed = _path_exists(state_path)
+    pid_existed = _path_exists(pid_path)
     try:
         completed = subprocess.run(
             command,
@@ -1826,6 +1852,7 @@ def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
             check=False,
         )
     except subprocess.TimeoutExpired:
+        _remove_created_lens_host_runtime_state(state_existed=state_existed, pid_existed=pid_existed)
         return {
             "ok": False,
             "status": "launch_timeout",
@@ -1834,6 +1861,7 @@ def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
             "script": "scripts/lens-host.ps1",
         }
     except OSError as exc:
+        _remove_created_lens_host_runtime_state(state_existed=state_existed, pid_existed=pid_existed)
         return {
             "ok": False,
             "status": "launch_failed",
@@ -1845,6 +1873,8 @@ def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
 
     payload = _parse_json_process_stdout(completed.stdout)
     runner_ok = completed.returncode == 0 and bool(payload.get("ok"))
+    if not runner_ok:
+        _remove_created_lens_host_runtime_state(state_existed=state_existed, pid_existed=pid_existed)
     stderr = (completed.stderr or "").strip()
     return {
         "ok": runner_ok,

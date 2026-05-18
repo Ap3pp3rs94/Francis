@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -9242,6 +9243,40 @@ def test_lens_host_activation_request_creates_approval_only_receipt(monkeypatch,
     assert status_body["resident_host"]["activation_request_route"] == "/lens/host/activation/request"
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_activation_timeout_clears_created_runtime_state(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_lens_host_status_runner(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    import francis.lens.activation as activation_module
+
+    runtime_root = data_root / "runtime" / "lens-host"
+    state_path = runtime_root / "status.json"
+    pid_path = runtime_root / "lens-host.pid"
+
+    def fake_run(*_args: Any, **kwargs: Any) -> Any:
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"kind": "lens.host.runtime_state", "status": "foreground_running"}),
+            encoding="utf-8",
+        )
+        pid_path.write_text("1234", encoding="ascii")
+        raise subprocess.TimeoutExpired(cmd="pwsh", timeout=kwargs.get("timeout", 20))
+
+    monkeypatch.setattr(activation_module, "_powershell_path", lambda: "pwsh")
+    monkeypatch.setattr(activation_module.subprocess, "run", fake_run)
+
+    result = activation_module._run_bounded_lens_host_activation(run_seconds=1)
+
+    assert result["status"] == "launch_timeout"
+    assert result["ok"] is False
+    assert "lens_host_activation_launch_timeout" in result["blockers"]
+    assert not state_path.exists()
+    assert not pid_path.exists()
 
 
 def test_lens_host_activation_authority_grant_executes_bounded_launch(monkeypatch, tmp_path: Path) -> None:
